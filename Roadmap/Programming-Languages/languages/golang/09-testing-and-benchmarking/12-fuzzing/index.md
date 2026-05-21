@@ -11,24 +11,18 @@ permalink: /roadmap/programming-languages/golang/09-testing-and-benchmarking/12-
 
 # Native Fuzzing
 
-Native fuzzing landed in Go 1.18 alongside generics. It is exposed through
-`testing.F` and the `go test -fuzz` flag. Coverage-guided mutation makes the
-runtime synthesize new inputs that explore unseen code paths.
+[← Back](../)
 
-## Subsections
+Native fuzzing landed in Go 1.18 alongside generics. It is exposed through `testing.F` and the `go test -fuzz` flag. Coverage-guided mutation makes the runtime synthesize new inputs that explore unseen code paths, and saved failing inputs become permanent regression cases in `testdata/fuzz/`.
 
-1. [Fuzzing — Junior](01-junior/)
-2. [Fuzzing — Middle](02-middle/)
-3. [Fuzzing — Senior](03-senior/)
-4. [Fuzzing — Professional](04-professional/)
-5. [Fuzzing — Specification](05-specification/)
-6. [Fuzzing — Interview](06-interview/)
-7. [Fuzzing — Tasks](07-tasks/)
-8. [Fuzzing — Find the Bug](08-find-the-bug/)
-9. [Fuzzing — Optimize](09-optimize/)
+## Sub-pages
 
-## References
-
-- Go 1.18 release notes — fuzzing section, March 2022.
-- testing package godoc — type `F`.
-- Proposal: cmd/go: add fuzz testing (golang/go#44551).
+- [junior.md](junior.md) — First Fuzz function, testing.F API, f.Add seed corpus, f.Fuzz body, running with `-fuzz=`
+- [middle.md](middle.md) — Mutation strategies, coverage feedback, structured inputs, reproducing saved failures, corpus minimization
+- [senior.md](senior.md) — Native fuzz vs dvyukov/go-fuzz, OSS-Fuzz integration, differential fuzzing, ClusterFuzzLite, fuzz CL history
+- [professional.md](professional.md) — What to fuzz in production, crash triage, CI fuzz budgets, vuln disclosure workflow
+- [specification.md](specification.md) — testing.F godoc, `-fuzz` flag semantics, corpus format, Go 1.18 release notes (golang/go#44551)
+- [interview.md](interview.md) — 20+ interview questions on fuzz vs PBT, input types, reproducing failures
+- [tasks.md](tasks.md) — Hands-on: fuzz a reverse function, fuzz JSON unmarshal, fuzz a parser, reproduce a saved failure
+- [find-bug.md](find-bug.md) — Common traps: non-deterministic body, shared global state, missing corpus seed
+- [optimize.md](optimize.md) — Fuzz time budgeting, parallel fuzzing, corpus reuse, coverage signal interpretation
