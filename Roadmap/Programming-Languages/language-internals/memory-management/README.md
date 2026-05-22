@@ -8,7 +8,7 @@ This roadmap is about **how programs use, share, and reclaim memory** — from t
 >
 > Looking for *performance-tuning* of an existing program? See [Performance → Memory Optimization](../../quality-engineering/performance/05-memory-optimization/) and [Performance → Memory Profiling](../../quality-engineering/performance/01-profiling/02-memory-profiling/).
 >
-> Looking for *Go-specific* internals? See [Golang → Runtime → Memory Allocator](../../languages/golang/25-runtime-and-internals/04-memory-allocator/) and [Golang → Memory Management in Depth](../../languages/golang/12-advanced-topics/01-memory-management-in-depth/).
+> Looking for *Go-specific* internals? See [Golang → Runtime → Memory Allocator](../../languages/golang/16-runtime-and-internals/04-memory-allocator/) and [Golang → Memory Management in Depth](../../languages/golang/11-advanced-topics/01-memory-management-in-depth/).
 
 ---
 

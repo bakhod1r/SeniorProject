@@ -55,5 +55,5 @@ when `strconv`, `strings.Builder`, or `slog` is the right answer.
 - [`05-error-handling/04-fmt-errorf`](../../05-error-handling/04-fmt-errorf/)
   — focused deep dive on `fmt.Errorf` and `%w`. This leaf covers the
   surface and the traps; that one covers the wrapping graph.
-- [`11-go-toolchain/01-core-go-commands/04-go-fmt`](../../11-go-toolchain/01-core-go-commands/04-go-fmt/)
+- [`10-go-toolchain/01-core-go-commands/04-go-fmt`](../../10-go-toolchain/01-core-go-commands/04-go-fmt/)
   — the `gofmt` CLI tool, unrelated to this package despite the name.
