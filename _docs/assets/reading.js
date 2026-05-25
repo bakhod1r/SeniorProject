@@ -374,14 +374,29 @@
   }
 
   // ---------- F10: Per-section read stats -----------------------
-  function getManifest() {
-    const m = window.SP_READ_MANIFEST;
-    if (!m || !Array.isArray(m.sections)) return null;
-    return m;
+  // Manifest is fetched once per origin from the URL declared by the
+  // <link id="sp-read-manifest"> tag in <head>. Browsers cache the
+  // response, so subsequent page navigations don't re-download or re-parse.
+  let manifestPromise = null;
+  function loadManifest() {
+    if (manifestPromise) return manifestPromise;
+    const link = document.getElementById("sp-read-manifest");
+    const href = link && link.getAttribute("href");
+    if (!href) {
+      manifestPromise = Promise.resolve(null);
+      return manifestPromise;
+    }
+    manifestPromise = fetch(href, { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (m) {
+        return m && Array.isArray(m.sections) ? m : null;
+      })
+      .catch(function () { return null; });
+    return manifestPromise;
   }
 
-  function computeStats(set) {
-    const m = getManifest();
+  function computeStats(set, manifest) {
+    const m = manifest;
     if (!m) return null;
     const out = [];
     let oRead = 0, oTotal = 0;
@@ -487,10 +502,12 @@
   }
 
   function refreshAllStats() {
-    const stats = computeStats(readSet());
-    if (!stats) return;
-    renderSidebarSectionStats(stats);
-    renderHomeStatsCard(stats);
+    loadManifest().then(function (manifest) {
+      const stats = computeStats(readSet(), manifest);
+      if (!stats) return;
+      renderSidebarSectionStats(stats);
+      renderHomeStatsCard(stats);
+    });
   }
 
   // ---------- Reader-settings panel -----------------------------

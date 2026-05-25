@@ -1,10 +1,11 @@
 """MkDocs hook that builds the read-progress section manifest.
 
 Walks the build's documentation files, groups each page by its top-level
-section, and attaches the result to ``config['extra']['read_manifest']``.
-The theme template inlines the resulting dict as ``window.SP_READ_MANIFEST``,
-so the client-side reading-comfort pack can compute per-section read counts
-without a separate fetch.
+section, and writes the result to ``<site_dir>/sp-read-manifest.json``.
+
+The client-side reading-comfort pack (`reading.js`) fetches this file once
+per origin (HTTP-cached), so per-section read counts can be computed without
+inlining the full manifest into every HTML page.
 
 Section keys:
   * Pages under ``Roadmap/<X>/...`` group by ``<X>`` (AI, Backend, Data, ...).
@@ -15,11 +16,14 @@ Section keys:
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timezone
 
 TOP_LEVEL_SECTIONS = {"Leetcode", "System Design"}
 ROADMAP_TOP = "Roadmap"
 SKIP_LEAF_FILES = {"index.md", "TEMPLATE.md"}
+MANIFEST_FILENAME = "sp-read-manifest.json"
 
 
 def _section_key(src_uri: str) -> str | None:
@@ -53,7 +57,7 @@ def _label_for(key: str) -> str:
     return key.replace("-", " ")
 
 
-def on_files(files, config):
+def _build_manifest(files) -> dict:
     sections: dict[str, list[str]] = {}
     for f in files:
         if not f.is_documentation_page():
@@ -71,11 +75,24 @@ def on_files(files, config):
             "paths": sorted(sections[key]),
         })
 
-    manifest = {
+    return {
         "generated": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "sections": manifest_sections,
     }
 
-    extra = config.setdefault("extra", {})
-    extra["read_manifest"] = manifest
+
+_manifest_cache: dict | None = None
+
+
+def on_files(files, config):
+    global _manifest_cache
+    _manifest_cache = _build_manifest(files)
     return files
+
+
+def on_post_build(config):
+    if not _manifest_cache:
+        return
+    out_path = os.path.join(config["site_dir"], MANIFEST_FILENAME)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(_manifest_cache, fh, separators=(",", ":"), ensure_ascii=False)
