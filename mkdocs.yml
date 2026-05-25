@@ -39,9 +39,6 @@ theme:
     - navigation.top
     - navigation.indexes
     - navigation.footer
-    - search.suggest
-    - search.highlight
-    - search.share
     - content.code.copy
     - content.code.annotate
     - content.tabs.link
@@ -83,7 +80,6 @@ hooks:
   - mkdocs/hooks/read_manifest.py
 
 plugins:
-  - search
   - awesome-pages:
       strict: false
       order: asc
@@ -100,11 +96,13 @@ plugins:
         - assets/eink.js
         - assets/fontsize.js
         - assets/reading.js
+        - assets/pagefind-init.js
       css_files:
         - assets/extra.css
         - assets/eink.css
         - assets/fontsize.css
         - assets/reading.css
+        - assets/pagefind-init.css
         - assets/fonts/intel-one-mono.css
   - redirects:
       # Programming-Languages restructure: legacy URLs that external
@@ -198,9 +196,11 @@ extra_css:
   - assets/eink.css
   - assets/fontsize.css
   - assets/reading.css
+  - assets/pagefind-init.css
 
 extra_javascript:
   - assets/extra.js
   - assets/eink.js
   - assets/fontsize.js
   - assets/reading.js
+  - assets/pagefind-init.js

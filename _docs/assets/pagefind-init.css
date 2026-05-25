@@ -1,0 +1,224 @@
+/* ================================================================
+   Pagefind UI — terminal/phosphor styling
+   Companion to pagefind-init.js.
+
+   Layout:
+     .sp-pagefind-trigger  — floating bottom-LEFT button (the reader
+                             panel gear sits bottom-right, so we use
+                             the opposite corner to avoid collisions).
+     .sp-pagefind-dialog   — native <dialog> opened via showModal().
+                             ::backdrop dims the page; the inner card
+                             holds the PagefindUI mount point.
+     .pagefind-ui__*       — overrides on Pagefind's own classes so
+                             the bundled /pagefind/pagefind-ui.css
+                             blends with the site's terminal theme.
+   ================================================================ */
+
+/* ---- Floating trigger button (bottom-left) -------------------- */
+.sp-pagefind-trigger {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  appearance: none;
+  background: rgba(10, 10, 10, 0.85);
+  color: var(--md-default-fg-color, #d4d4d4);
+  border: 1px solid rgba(57, 255, 122, 0.35);
+  border-radius: 4px;
+  font: 12px/1 "Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.75;
+  transition: opacity 120ms ease, border-color 120ms ease;
+}
+.sp-pagefind-trigger:hover,
+.sp-pagefind-trigger:focus-visible {
+  opacity: 1;
+  border-color: var(--md-primary-fg-color, #39ff7a);
+  outline: none;
+}
+
+.sp-pagefind-trigger__icon {
+  color: var(--md-primary-fg-color, #39ff7a);
+  font-weight: 600;
+}
+.sp-pagefind-trigger__label {
+  letter-spacing: 0.02em;
+}
+.sp-pagefind-trigger__kbd {
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--md-default-fg-color--light, #a0a0a0);
+}
+
+/* Light scheme — softer surfaces */
+[data-md-color-scheme="default"] .sp-pagefind-trigger {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(31, 138, 62, 0.4);
+}
+[data-md-color-scheme="default"] .sp-pagefind-trigger__kbd {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Sepia scheme */
+[data-md-color-scheme="senior-sepia"] .sp-pagefind-trigger {
+  background: rgba(245, 236, 217, 0.96);
+  border-color: rgba(122, 74, 31, 0.4);
+}
+[data-md-color-scheme="senior-sepia"] .sp-pagefind-trigger__kbd {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Hide trigger when reader is in focus-mode (matches reader-panel toggle) */
+html[data-focus="1"] .sp-pagefind-trigger { display: none; }
+
+/* ---- Dialog overlay ------------------------------------------- */
+.sp-pagefind-dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: min(720px, 92vw);
+  width: 100%;
+  max-height: 80vh;
+  border-radius: 6px;
+  overflow: hidden;
+  color: var(--md-default-fg-color, #d4d4d4);
+}
+.sp-pagefind-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+html.sp-pagefind-open {
+  overflow: hidden;
+}
+
+.sp-pagefind-dialog__inner {
+  position: relative;
+  background: var(--md-default-bg-color, #050505);
+  border: 1px solid rgba(57, 255, 122, 0.25);
+  border-radius: 6px;
+  padding: 14px 16px 12px;
+  font: 14px/1.5 "Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+[data-md-color-scheme="default"] .sp-pagefind-dialog__inner {
+  border-color: rgba(31, 138, 62, 0.3);
+}
+[data-md-color-scheme="senior-sepia"] .sp-pagefind-dialog__inner {
+  border-color: rgba(122, 74, 31, 0.35);
+}
+
+.sp-pagefind-dialog__close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  appearance: none;
+  background: transparent;
+  border: none;
+  font: 20px/1 inherit;
+  color: var(--md-default-fg-color--light, #a0a0a0);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+.sp-pagefind-dialog__close:hover {
+  color: var(--md-primary-fg-color, #39ff7a);
+}
+
+#sp-pagefind-mount {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+/* ---- PagefindUI restyle --------------------------------------- */
+/* The bundled pagefind-ui.css defines reasonable defaults; we
+   override fonts and colors via its CSS custom-property hooks so
+   it reads as part of the site rather than a foreign widget. */
+.pagefind-ui {
+  --pagefind-ui-scale: 0.85;
+  --pagefind-ui-primary: var(--md-primary-fg-color, #39ff7a);
+  --pagefind-ui-text: var(--md-default-fg-color, #d4d4d4);
+  --pagefind-ui-background: transparent;
+  --pagefind-ui-border: rgba(255, 255, 255, 0.12);
+  --pagefind-ui-tag: rgba(57, 255, 122, 0.1);
+  --pagefind-ui-border-width: 1px;
+  --pagefind-ui-border-radius: 4px;
+  --pagefind-ui-font: "Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+[data-md-color-scheme="default"] .pagefind-ui {
+  --pagefind-ui-border: rgba(0, 0, 0, 0.12);
+  --pagefind-ui-tag: rgba(31, 138, 62, 0.1);
+}
+[data-md-color-scheme="senior-sepia"] .pagefind-ui {
+  --pagefind-ui-border: rgba(122, 74, 31, 0.2);
+  --pagefind-ui-tag: rgba(122, 74, 31, 0.1);
+}
+
+.pagefind-ui .pagefind-ui__search-input {
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--md-default-fg-color, #d4d4d4);
+}
+[data-md-color-scheme="default"] .pagefind-ui .pagefind-ui__search-input {
+  background: rgba(0, 0, 0, 0.04);
+}
+.pagefind-ui .pagefind-ui__search-input:focus {
+  outline: none;
+  border-color: var(--md-primary-fg-color, #39ff7a);
+}
+
+.pagefind-ui .pagefind-ui__result-title,
+.pagefind-ui .pagefind-ui__result-link {
+  color: var(--md-typeset-a-color, #39ff7a);
+}
+.pagefind-ui .pagefind-ui__result-excerpt mark {
+  background: rgba(57, 255, 122, 0.18);
+  color: var(--md-primary-fg-color, #39ff7a);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+[data-md-color-scheme="default"] .pagefind-ui .pagefind-ui__result-excerpt mark {
+  background: rgba(31, 138, 62, 0.15);
+  color: var(--md-primary-fg-color, #1f8a3e);
+}
+
+/* Error state shown when /pagefind/ isn't deployed (typically dev) */
+.sp-pagefind-error {
+  padding: 8px 4px;
+  font: 13px/1.5 "Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--md-default-fg-color, #d4d4d4);
+}
+.sp-pagefind-error code,
+.sp-pagefind-error pre {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+}
+.sp-pagefind-error code {
+  padding: 1px 5px;
+}
+.sp-pagefind-error pre {
+  padding: 8px 10px;
+  margin-top: 6px;
+  overflow-x: auto;
+}
+
+/* E-ink mode — drop chrome accents, keep contrast */
+html[data-eink="1"] .sp-pagefind-trigger,
+html[data-eink="1"] .sp-pagefind-dialog__inner {
+  border-color: #000;
+}
+html[data-eink="1"] .sp-pagefind-trigger__icon {
+  color: #000;
+}

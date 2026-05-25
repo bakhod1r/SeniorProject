@@ -31,11 +31,18 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-docs.txt
 
+      - name: Setup Node (for Pagefind)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install dependencies
         run: pip install -r requirements-docs.txt
 
-      - name: Build site
-        run: mkdocs build --no-strict
+      - name: Build site (mkdocs + pagefind)
+        run: |
+          mkdocs build --no-strict
+          npx -y pagefind@latest --site _site
 
       - name: Disable Jekyll on Pages
         run: touch _site/.nojekyll
