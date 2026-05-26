@@ -65,30 +65,70 @@
     }
   }
 
-  function renderMermaid() {
-    // Only load Mermaid if this page actually has a diagram.
-    // Material's superfences renders mermaid blocks as <pre class="mermaid">.
-    const hasMermaid = document.querySelector('pre.mermaid, .mermaid');
-    if (!hasMermaid) return;
+  // Render one block at a time on idle callbacks so we never block the main
+  // thread for more than one diagram's worth of work. Heavy types (mindmap,
+  // sankey, large graph) used to freeze the page when run() was called with
+  // all nodes at once, triggering Chrome's "Page Unresponsive" dialog.
+  function renderBlock(block) {
+    return loadMermaid()
+      .then((m) => m.run({ nodes: [block] }))
+      .then(() => fixMermaidSize(block))
+      .catch((err) => {
+        block.style.display = "none";
+        console.warn("[sp] mermaid render failed:", err);
+      });
+  }
 
-    // Find unprocessed mermaid blocks. We skip ones already rendered
-    // (have a child SVG) so SPA navigation re-render is idempotent.
+  const mermaidQueue = [];
+  let mermaidDraining = false;
+  function scheduleIdle(fn) {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(fn, { timeout: 500 });
+    } else {
+      setTimeout(fn, 16);
+    }
+  }
+  function drainMermaidQueue() {
+    if (mermaidDraining) return;
+    mermaidDraining = true;
+    const step = () => {
+      const next = mermaidQueue.shift();
+      if (!next) { mermaidDraining = false; return; }
+      renderBlock(next).then(() => scheduleIdle(step));
+    };
+    scheduleIdle(step);
+  }
+  function enqueueMermaid(block) {
+    if (block.dataset.spMermaidQueued === "1") return;
+    block.dataset.spMermaidQueued = "1";
+    mermaidQueue.push(block);
+    drainMermaidQueue();
+  }
+
+  function renderMermaid() {
+    // Material's superfences renders mermaid blocks as <pre class="mermaid">
+    // or <div class="mermaid">. Skip ones already rendered (have a child SVG)
+    // so SPA navigation re-render is idempotent.
     const blocks = Array.from(document.querySelectorAll(".mermaid")).filter(
       (b) => !b.querySelector("svg") && b.textContent.trim().length > 0
     );
     if (blocks.length === 0) return;
-    loadMermaid()
-      .then((m) => m.run({ nodes: blocks }))
-      .then(() => {
-        blocks.forEach(fixMermaidSize);
-      })
-      .catch((err) => {
-        // Hide blocks we can't render rather than showing raw source
-        blocks.forEach((b) => {
-          b.style.display = "none";
-        });
-        console.warn("[sp] mermaid render failed:", err);
+
+    // Lazy-render: only kick off the work when a diagram scrolls near the
+    // viewport. The first one is enqueued eagerly so the top-of-page diagram
+    // shows up without scrolling.
+    if (typeof IntersectionObserver === "undefined") {
+      blocks.forEach(enqueueMermaid);
+      return;
+    }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        io.unobserve(entry.target);
+        enqueueMermaid(entry.target);
       });
+    }, { rootMargin: "400px 0px" });
+    blocks.forEach((b) => io.observe(b));
   }
 
   function inject() {
