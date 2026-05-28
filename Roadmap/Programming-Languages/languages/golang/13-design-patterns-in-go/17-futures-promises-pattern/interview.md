@@ -141,12 +141,7 @@ Producer and consumer contexts can be different. A consumer may give up while th
 
 ### Q10. Explain `errgroup.Group` semantics in detail.
 
-**Short answer:** `errgroup.Group` is a Future of "all goroutines done, or first error". You construct it (often with `WithContext` so the group has a derived cancellable context), launch goroutines via `g.Go(fn)`, and call `g.Wait()` to await the collective result. Key semantics:
-
-- `Wait()` returns the first non-nil error, or nil if all succeeded.
-- The first error cancels the group's context, signalling other goroutines to bail out.
-- Subsequent errors are silently dropped — only the first is reported.
-- `SetLimit(n)` (Go 1.20+) bounds concurrent goroutines; `Go` blocks until a slot is free.
+**Short answer:** A Future of "all done, or first error". Use `WithContext` so the group has a derived cancellable context, launch via `g.Go(fn)`, await via `g.Wait()`. Key semantics: `Wait` returns first non-nil error or nil; first error cancels the group context; subsequent errors are dropped; `SetLimit(n)` bounds concurrency, `Go` blocks until a slot is free.
 
 ```go
 g, ctx := errgroup.WithContext(parent)
@@ -158,60 +153,44 @@ for _, item := range items {
 if err := g.Wait(); err != nil { /* first failure */ }
 ```
 
-**Follow-up:** Best-effort fan-out? Answer: `errgroup` is the wrong tool — it cancels on first error. Use `sync.WaitGroup` + an error slice (mutex-protected) so all goroutines run to completion regardless. Common mismatch.
+**Follow-up:** Best-effort fan-out? Answer: `errgroup` is wrong — it cancels on first error. Use `sync.WaitGroup` + mutex-protected error slice so all complete regardless. Common mismatch.
 
 ---
 
 ### Q11. What problem does `singleflight` solve and what is its Future shape?
 
-**Short answer:** `singleflight` deduplicates concurrent calls for the same key. If 1000 goroutines all call `Get("alice")` at once, only one underlying fetch runs; the other 999 wait for that same result. Every caller sees the same return value and error — they share one Future.
+**Short answer:** Deduplicates concurrent calls for the same key. 1000 goroutines call `Get("alice")` simultaneously; only one fetch runs; all share the result.
 
 ```go
 var g singleflight.Group
 v, err, shared := g.Do(key, func() (any, error) { return fetch(key) })
 ```
 
-Used for: cache stampede prevention (Thundering Herd), RPC client memoization, deduplicating expensive validators. The `shared` boolean is useful for metrics, not correctness.
+Used for cache stampede prevention, RPC memoization, deduplicating expensive validators. `shared` is for metrics, not correctness.
 
-**Follow-up:** Failure mode? Answer: the inner function's context. If goroutine A starts the flight with a short context and B waits with a longer deadline, A's cancellation propagates to B even though B would have happily waited. Use `DoChan` or detach via a background context inside the function. Watch for this in code review.
+**Follow-up:** Failure mode? Answer: inner function's context. If A starts the flight with a short context and B waits longer, A's cancellation propagates to B. Use `DoChan` or detach via background context inside the function.
 
 ---
 
 ### Q12. When do you use a channel-shaped Future vs a struct-shaped Future?
 
-**Short answer:** Channels when the consumer needs to **`select`** on the result alongside other signals (`ctx.Done()`, another channel, a timer). Structs when the consumer needs to **hold** the Future as a value, pass it around, attach combinators (`Map`, `All`, `First`), or have multiple awaiters share one underlying result.
+**Short answer:** Channels when the consumer needs to `select` on the result alongside other signals (`ctx.Done()`, another channel, a timer). Structs when the consumer needs to hold the Future as a value, pass it around, attach combinators, or have multiple awaiters share one result. Many real codebases mix both: struct holds a channel internally, exposes `Done() <-chan struct{}` for `select` and `Await(ctx)` for ergonomic blocking with cancellation.
 
-```go
-// Channel shape: simple, selectable.
-result := <-future
-
-// Struct shape: pass to combinators, multiple awaiters.
-val, err := future.Await(ctx)
-```
-
-Many real codebases mix both: struct holds a channel internally, exposes `Done() <-chan struct{}` for `select` and `Await(ctx)` for ergonomic blocking with cancellation.
-
-**Follow-up:** Multiple awaiters on a channel-shaped Future? Answer: only one receives a value sent over a capacity-1 channel; the rest block forever. Closed channels deliver the zero value to all receivers but you lose the actual value. The struct shape (`val` field + `chan struct{}` for done) is strictly more powerful — why it dominates production code.
+**Follow-up:** Multiple awaiters on a channel-shaped Future? Answer: only one receives a value sent over a capacity-1 channel; the rest block forever. Closed channels deliver zero to all receivers but you lose the actual value. The struct shape (`val` field + `chan struct{}` done) is strictly more powerful — why it dominates production code.
 
 ---
 
 ### Q13. How do you prevent goroutine leaks in Future-heavy code?
 
-**Short answer:** Every goroutine that produces a Future must be able to exit when its consumer gives up. Three rules.
+**Short answer:** Three rules. (1) Producer accepts a context and selects on `ctx.Done()` at every blocking call. (2) Channels written by the producer are buffered or owned — never send unbuffered to a channel the consumer may have abandoned. (3) Cleanup paths exist for "consumer gone" — if the producer cannot detect that, ensure work is short or bounded. Common leak: producer does `out <- result` to an unbuffered channel; consumer's `Await` returned on `ctx.Done()`; producer blocks forever. Fix: buffer the channel or select on `ctx.Done()` around the send.
 
-1. **Producer accepts a context** and selects on `ctx.Done()` at every blocking call.
-2. **Channels written to by the producer are buffered or owned** — never send unbuffered to a channel a consumer may have abandoned.
-3. **Cleanup paths exist for "consumer gone"** — if the producer cannot detect that, you must ensure the work is short or bounded.
-
-Common leak: producer does `out <- result` to an unbuffered channel; consumer's `Await` returned on `ctx.Done()`; producer blocks forever on send. Fix: buffer the channel or have the producer select on `ctx.Done()` around the send.
-
-**Follow-up:** Detect leaks in tests? Answer: `goleak` from Uber. `goleak.VerifyNone(t)` at test end fails on any non-system goroutine survival. Adopt once, fix everything, catches the bugs reviews miss.
+**Follow-up:** Detect leaks in tests? Answer: `goleak` from Uber. `goleak.VerifyNone(t)` at test end fails on non-system goroutine survival. Adopt once, fix everything, catches what reviews miss.
 
 ---
 
 ### Q14. How do you propagate a panic from a Future producer to the awaiter?
 
-**Short answer:** A panic in a goroutine that the runtime cannot map back to a caller crashes the whole program. So the producer must `recover()` and convert the panic into a `Reject(err)`. Pattern:
+**Short answer:** A panic in a goroutine crashes the whole program. Producer must `recover()` and convert to `Reject(err)`:
 
 ```go
 go func() {
@@ -225,7 +204,7 @@ go func() {
 }()
 ```
 
-Awaiter sees an ordinary error. Logging the stack at recovery is essential — otherwise the panic site is lost and you debug from "future failed: nil map access" with no clue where.
+Logging the stack at recovery is essential — otherwise you debug "future failed: nil map access" with no panic site.
 
 **Follow-up:** Should the awaiter re-panic? Answer: usually no. Re-panicking moves the crash without fixing the bug. Log stack at recovery, return error, let the caller decide.
 
@@ -233,28 +212,7 @@ Awaiter sees an ordinary error. Logging the stack at recovery is essential — o
 
 ### Q15. How do you time-box a Future?
 
-**Short answer:** Two patterns, choose based on whether you can cancel the work.
-
-**Context with timeout** — kills both consumer and producer:
-
-```go
-ctx, cancel := context.WithTimeout(parent, 5*time.Second)
-defer cancel()
-v, err := future.Await(ctx) // producer also sees ctx.Done()
-```
-
-**Awaiter-side timeout** — only the consumer gives up, producer keeps running:
-
-```go
-select {
-case r := <-future:
-    use(r)
-case <-time.After(5 * time.Second):
-    return errors.New("timeout")
-}
-```
-
-Prefer the first whenever the producer accepts a context — only way to free producer resources. The second is a leak in waiting; acceptable only when the producer truly cannot be cancelled (e.g. C library ignoring signals).
+**Short answer:** Two patterns. **Context with timeout** kills both producer and consumer: `ctx, cancel := context.WithTimeout(parent, 5*time.Second); defer cancel(); future.Await(ctx)`. **Awaiter-side timeout** with `select { case r := <-future: ...; case <-time.After(5*time.Second): ... }` only the consumer gives up; producer keeps running. Prefer the first whenever the producer accepts context — only way to free producer resources. The second is a leak in waiting, acceptable only when the producer truly cannot be cancelled (e.g. C library ignoring signals).
 
 **Follow-up:** `time.After` in a loop pitfall? Answer: every call leaks a fresh timer until expiry. Use `time.NewTimer` once outside the loop with `t.Reset(d)` each iteration, or `context.WithTimeout` with `defer cancel()`. Convenient at function scope, treacherous in loops.
 
@@ -264,37 +222,9 @@ Prefer the first whenever the producer accepts a context — only way to free pr
 
 ### Q16. Show a generic `Future[T]` and explain the design choices.
 
-**Short answer:**
+**Short answer:** See Live-Coding Prompt 1 for the implementation. Design choices: (1) generics over `any` to avoid boxing; (2) `sync.Once` for idempotent crash-safe fulfilment; (3) `Await(ctx)` so consumers can give up; (4) `Done()` exposed so callers can compose in their own `select`; (5) channel is `chan struct{}` not `chan T` — the channel signals readiness, the value lives in the struct, which lets multiple awaiters share one value.
 
-```go
-type Future[T any] struct {
-    done chan struct{}
-    val  T
-    err  error
-    once sync.Once
-}
-
-func New[T any]() *Future[T] { return &Future[T]{done: make(chan struct{})} }
-
-func (f *Future[T]) Resolve(v T) { f.once.Do(func() { f.val = v; close(f.done) }) }
-func (f *Future[T]) Reject(err error) { f.once.Do(func() { f.err = err; close(f.done) }) }
-
-func (f *Future[T]) Await(ctx context.Context) (T, error) {
-    select {
-    case <-f.done:
-        return f.val, f.err
-    case <-ctx.Done():
-        var zero T
-        return zero, ctx.Err()
-    }
-}
-
-func (f *Future[T]) Done() <-chan struct{} { return f.done }
-```
-
-Design choices: (1) generics over `any` to avoid boxing; (2) `sync.Once` for idempotent crash-safe fulfilment; (3) `Await(ctx)` so consumers can give up; (4) `Done()` so callers can compose in their own `select`; (5) channel is `chan struct{}` not `chan T` because the channel signals readiness, the value lives in the struct — separating the two lets multiple awaiters share one value.
-
-**Follow-up:** Why expose `Done()` not the channel directly? Answer: receive-only `<-chan struct{}` prevents callers from accidentally closing it (which would panic on the next `Resolve`). Same reasoning as `context.Context.Done()`.
+**Follow-up:** Why expose `Done()` not the channel? Answer: receive-only `<-chan struct{}` prevents callers from accidentally closing it (panic on next `Resolve`). Same reasoning as `context.Context.Done()`.
 
 ---
 
@@ -324,51 +254,9 @@ Real systems: Temporal signals, AWS Step Functions task tokens, Google Cloud Tas
 
 ### Q19. Implement `All` and `First` combinators on `Future[T]`.
 
-**Short answer:**
+**Short answer:** `All` uses `errgroup.WithContext` — first error cancels the group, `Wait` returns it, siblings bail out; collect successes in a result slice indexed by input position. `First` launches one awaiter goroutine per Future, sending results to a channel buffered to `len(fs)` so losers never block; main loop returns on the first non-error result, falls through to the last error otherwise. Both accept a `ctx` argument and propagate it to each `Await`. See Live-Coding Prompt 2 for the full implementation.
 
-```go
-// All resolves to all values, or rejects with the first error.
-func All[T any](ctx context.Context, fs ...*Future[T]) ([]T, error) {
-    out := make([]T, len(fs))
-    g, gctx := errgroup.WithContext(ctx)
-    for i, f := range fs {
-        i, f := i, f
-        g.Go(func() error {
-            v, err := f.Await(gctx)
-            if err != nil { return err }
-            out[i] = v
-            return nil
-        })
-    }
-    if err := g.Wait(); err != nil { return nil, err }
-    return out, nil
-}
-
-// First resolves to the first successful value; ignores later results.
-func First[T any](ctx context.Context, fs ...*Future[T]) (T, error) {
-    type result struct { v T; err error }
-    ch := make(chan result, len(fs))
-    for _, f := range fs {
-        f := f
-        go func() {
-            v, err := f.Await(ctx)
-            select { case ch <- result{v, err}: case <-ctx.Done(): }
-        }()
-    }
-    var lastErr error
-    for i := 0; i < len(fs); i++ {
-        r := <-ch
-        if r.err == nil { return r.v, nil }
-        lastErr = r.err
-    }
-    var zero T
-    return zero, lastErr
-}
-```
-
-Senior moves: (1) `All` uses `errgroup` for cancel-on-first-error semantics for free; (2) `First` buffers `ch` to `len(fs)` so loser goroutines never block; (3) both accept `ctx` so callers can give up; (4) `First` returns the *last* error if all fail — matches JavaScript `Promise.any`.
-
-**Follow-up:** What is missing? Answer: loser cancellation in `First`. If three RPCs race and one wins, the other two keep running. If the caller used `context.WithCancel` + `defer cancel()`, producers see it. Otherwise document that callers must cancel, or wrap `First` in its own `context.WithCancel`.
+**Follow-up:** What is missing? Answer: loser cancellation in `First`. If three RPCs race and one wins, the other two keep running until they observe context cancellation. Caller must use `context.WithCancel` + `defer cancel()`, or wrap `First` in its own derived context.
 
 ---
 
@@ -432,49 +320,49 @@ Durable workflows are not magical — Futures whose state lives in a database, w
 
 ### Q23. Design a Future-based RPC fanout layer for a microservices platform.
 
-**Short answer:** Seven decisions, each grounded in production reality.
+**Short answer:** Seven decisions grounded in production reality.
 
-1. **One Future type with explicit producer/consumer roles.** `NewPromise[T]() (Promise[T], Future[T])` is the constructor; consumers get the read end, the calling service gets the write end. Prevents accidental double-resolve from caller code.
-2. **Context propagation is mandatory.** Every Future producer accepts the caller's context; cancellation is end-to-end. No exceptions, enforced by linter.
-3. **Bounded concurrency by default.** Every fanout site uses `errgroup.SetLimit(N)` with N tuned per downstream. The default of "unlimited" is the leak waiting to happen.
-4. **Combinators in a shared library.** `All`, `First`, `Map`, `Any`, `Race` written once with consistent cancellation semantics. Every team using their own ad-hoc combinators ends up with subtle differences that bite during incidents.
-5. **Timeouts at every layer.** Per-Future timeout (caller's context with deadline), per-RPC timeout (HTTP client timeout), per-host circuit breaker. Defense in depth.
-6. **Observability built in.** Every Future emits `created`, `resolved`, `rejected`, `await_duration` to Prometheus. Trace context propagated automatically. No team should be allowed to ship an unobserved fanout.
-7. **Idempotency by request ID.** Every RPC call carries an idempotency key derived from the request ID. Retries inside the Future layer (transient errors, leader elections) are safe because the downstream deduplicates.
+1. **One Future type with explicit producer/consumer roles** via two-interface constructor — prevents accidental double-resolve from caller code.
+2. **Context propagation is mandatory.** Every producer accepts caller's context; cancellation end-to-end; enforced by linter.
+3. **Bounded concurrency by default.** Every fanout uses `errgroup.SetLimit(N)`; "unlimited" is the leak in waiting.
+4. **Combinators in a shared library.** `All`, `First`, `Map`, `Any`, `Race` written once with consistent semantics. Ad-hoc combinators bite during incidents.
+5. **Timeouts at every layer.** Per-Future, per-RPC, per-host circuit breaker. Defense in depth.
+6. **Observability built in.** Every Future emits created/resolved/rejected/duration; trace context auto-propagated; no unobserved fanout ships.
+7. **Idempotency by request ID.** Retries inside the Future layer are safe because the downstream deduplicates.
 
-A staff candidate names what is **not** in scope: durable retries, cross-deploy state, scheduled fanout — workflow engine territory, not in-process Future. Keep the in-process layer small and observable.
+Staff move: name what is **not** in scope — durable retries, cross-deploy state, scheduled fanout belong to a workflow engine, not the in-process Future layer.
 
-**Follow-up:** Partial failures in fanout? Answer: depends on semantics. "All-or-nothing" → `errgroup`, accept that observed errors do not roll back completed RPCs. "Best-effort" → separate combinator returning result-per-input. Worst prod bug: `errgroup` used when you want best-effort — first error cancels everyone, partial completions confuse downstream state.
+**Follow-up:** Partial failures? Answer: depends on semantics. "All-or-nothing" → `errgroup`, accept observed errors do not roll back completed RPCs. "Best-effort" → separate combinator returning result-per-input. Worst prod bug: `errgroup` used when you want best-effort.
 
 ---
 
 ### Q24. Multi-region promise replication — how do you make a Future-backed system survive a region outage?
 
-**Short answer:** A Future is just a one-shot slot transitioning from pending to resolved/rejected. Replicating that across regions reduces to "replicate a small piece of state with a single transition". Three architectures.
+**Short answer:** A Future is a one-shot slot transitioning to a terminal state — replicating across regions reduces to "replicate small state with a single transition". Three architectures.
 
-1. **Active-passive durable store.** Primary region writes promise state to a database with cross-region replication (Aurora Global, Spanner). Secondary region is read-only during steady state; on failover, it becomes the new primary. Promises in-flight may resolve to "unknown" until replication catches up. RTO measured in seconds; RPO in milliseconds.
-2. **Active-active with conflict resolution.** Both regions accept resolve requests. Conflicts are resolved by last-write-wins or by a CRDT-style merge (impossible for general promises, possible if the value type has a join). Risk: a promise resolves to value V in region A and value V' in region B, and observers see different results. Only viable if your value type tolerates divergence.
-3. **Region-affine promises.** Each promise belongs to one region (encoded in the ID). All resolves and awaits route to that region. On region outage, all promises in that region are unrecoverable until failover; promises in other regions are unaffected. Simpler consistency, blast radius equal to one region's worth of promises.
+1. **Active-passive durable store.** Primary writes promise state to a cross-region-replicated DB (Aurora Global, Spanner). Failover promotes secondary. In-flight may resolve to "unknown" until replication catches up. RTO seconds, RPO ms.
+2. **Active-active with conflict resolution.** Both regions accept resolves; conflicts resolved by last-write-wins or CRDT merge. Risk: divergence — promise resolves to V in A, V' in B. Only viable if values tolerate divergence.
+3. **Region-affine.** Each promise belongs to one region (encoded in ID). Outage = that region's promises lost until failover; other regions unaffected. Simpler consistency, blast radius bounded.
 
-Staff move: name the **observability gap**. Replication lag is invisible to app code. Build a `replication_lag_seconds` SLO + alert, otherwise failover discovers the secondary is hours behind. Practice failover quarterly.
+Staff move: name the **observability gap** — replication lag is invisible to app code. Build a `replication_lag_seconds` SLO + alert. Practice failover quarterly.
 
-**Follow-up:** Future awaited but never resolved across failover? Answer: depends on lifecycle. Awaiter in the failed region died with it — fine. Awaiter elsewhere waits on a promise that may resolve after failover (if replicated in time) or be lost forever. Defensive: every awaiter has a deadline; on timeout, retry the originating action via normal retry. Future was the optimization, durable retry is the correctness guarantee.
+**Follow-up:** Future awaited but never resolved across failover? Answer: depends on lifecycle. Awaiter in failed region died with it — fine. Awaiter elsewhere waits on a promise that may resolve after failover or be lost. Defensive: every awaiter has a deadline; on timeout, retry the originating action. Future is the optimization, durable retry is the correctness guarantee.
 
 ---
 
-### Q25. Debug story — a production service is leaking 10,000 goroutines per hour. The leaked goroutines are all blocked on Future awaits. Walk me through the diagnosis.
+### Q25. Debug story — a service leaks 10,000 goroutines per hour, all blocked on Future awaits. Walk me through diagnosis.
 
-**Short answer:** Five steps, each driven by data, not guess.
+**Short answer:** Five data-driven steps.
 
-1. **Capture a goroutine dump.** Hit the `/debug/pprof/goroutine?debug=2` endpoint, save the output. Every goroutine's stack and current blocking site is named. Group by top stack frame.
-2. **Identify the bottleneck stack.** 10,000 goroutines blocked on the same `<-future.done` or `<-chan` — that is the leak site. The stack tells you the call chain that created them.
-3. **Walk back the goroutine's producer.** For each leaked awaiter, who was supposed to resolve the Future? Find the producer goroutine in the same dump. If there is no producer, the Future was created but never had `Resolve` or `Reject` called — likely a bug in the code that constructed the promise.
-4. **Check context propagation.** If the producer exists but is blocked on its own downstream call, the issue is upstream. If the awaiter's context is not threaded into the producer, cancellation never propagates and both goroutines wait forever.
-5. **Reproduce with a unit test.** Once the leak site is identified, write a test that creates the Future, exercises the cancellation path, and uses `goleak.VerifyNone` to assert no goroutine survives. Fix until the test passes.
+1. **Capture a goroutine dump** via `/debug/pprof/goroutine?debug=2`. Every blocking site is named. Group by top stack frame.
+2. **Identify the bottleneck stack.** 10K goroutines blocked on the same `<-future.done` is the leak site; stack gives the call chain.
+3. **Walk back to the producer.** Who was supposed to resolve? If no producer exists, the Future was created and abandoned — bug in constructor code.
+4. **Check context propagation.** If producer is blocked on its own downstream, the issue is upstream. If awaiter's ctx is not threaded into producer, cancellation never propagates.
+5. **Reproduce with a unit test** + `goleak.VerifyNone`. Fix until it passes.
 
-Common root causes in priority order: (a) unbuffered channel where sender blocks because receiver gave up; (b) `errgroup.Wait` not called, parent returns while children run; (c) producer ignores context, cancellation does not abort it; (d) panic in producer with no recovery, `Resolve`/`Reject` never called; (e) circular dependency — A waits on B, B waits on A.
+Common root causes: (a) unbuffered channel, sender blocks because receiver gave up; (b) `errgroup.Wait` not called, parent returns while children run; (c) producer ignores context; (d) panic in producer with no recovery, Resolve/Reject never called; (e) circular dependency — A waits on B, B waits on A.
 
-**Follow-up:** Metrics that would have caught this earlier? Answer: `runtime_goroutines` gauge with alert on 1-hour slope > 0. `futures_in_flight` per topic to localize. `futures_abandoned_total` to find the inverse leak — producers waiting on vanished consumers. Teams that watch goroutine counts catch leaks at hundreds, not 10K.
+**Follow-up:** Earlier-warning metrics? Answer: `runtime_goroutines` gauge with alert on 1-hour slope > 0. `futures_in_flight` per topic to localize. `futures_abandoned_total` for the inverse leak. Teams watching goroutine counts catch leaks at hundreds, not 10K.
 
 ---
 
@@ -634,14 +522,8 @@ import (
 )
 
 // Pool processes jobs from `in` with at most `workers` goroutines.
-// For each job, it produces a Future[Result] and sends it to `out`.
-// The pool itself is a single goroutine that owns the worker
-// dispatch loop; workers are launched on demand up to the cap.
-//
-// Closing `in` drains remaining work, then closes `out`. Cancelling
-// ctx causes workers to bail out at their next ctx check; remaining
-// jobs in `in` are still dispatched but their Futures reject with
-// ctx.Err() — callers awaiting them see the cancellation.
+// Each job becomes a Future[R] sent to `out`. Closing `in` drains
+// then closes `out`. Cancelling ctx exits cleanly.
 func Pool[J, R any](
     ctx context.Context,
     in <-chan J,
@@ -649,28 +531,19 @@ func Pool[J, R any](
     process func(context.Context, J) (R, error),
 ) <-chan *Future[R] {
     out := make(chan *Future[R])
-
-    // Token-bucket of size `workers`: acquire before launching,
-    // release on completion. Bounds concurrency.
-    sem := make(chan struct{}, workers)
+    sem := make(chan struct{}, workers) // bounded-concurrency token bucket
 
     go func() {
         var wg sync.WaitGroup
-        defer func() {
-            wg.Wait() // wait for in-flight workers before closing out
-            close(out)
-        }()
+        defer func() { wg.Wait(); close(out) }()
 
         for {
             select {
             case <-ctx.Done():
                 return
             case job, ok := <-in:
-                if !ok {
-                    return // input drained
-                }
+                if !ok { return }
 
-                // Acquire a worker slot; blocks when pool is full.
                 select {
                 case sem <- struct{}{}:
                 case <-ctx.Done():
@@ -681,17 +554,13 @@ func Pool[J, R any](
                 wg.Add(1)
                 go func(job J, f *Future[R]) {
                     defer wg.Done()
-                    defer func() { <-sem }() // release slot
-
+                    defer func() { <-sem }()
                     v, err := process(ctx, job)
                     if err != nil { f.Reject(err) } else { f.Resolve(v) }
                 }(job, f)
 
-                // Hand the Future to the consumer. If consumer is
-                // slow, we block here — propagates backpressure
-                // upstream to whoever fills `in`.
                 select {
-                case out <- f:
+                case out <- f: // backpressure propagates upstream
                 case <-ctx.Done():
                     return
                 }
@@ -701,16 +570,9 @@ func Pool[J, R any](
 
     return out
 }
-
-// Caller pattern:
-//   futures := Pool(ctx, jobs, 10, processJob)
-//   for f := range futures {
-//       v, err := f.Await(ctx)
-//       // handle result
-//   }
 ```
 
-Senior moves: (a) semaphore channel (`chan struct{}` with buffer = N) is the standard bounded-concurrency primitive in Go; (b) `sync.WaitGroup` ensures `out` is closed only after all in-flight workers finish — closing early would race with workers still sending to their Futures; (c) every blocking step (`in`, `sem`, `out`) also selects on `ctx.Done()` so the pool drains cleanly on cancellation; (d) backpressure on `out` propagates to whoever fills `in` — slow consumers slow the producer, no unbounded buffering; (e) Futures emitted after ctx cancel reject with `ctx.Err()`, so awaiters see the cancellation rather than wait forever.
+Senior moves: (a) semaphore channel of buffer = N is the standard bounded-concurrency primitive; (b) `sync.WaitGroup` ensures `out` closes only after workers finish — closing early would race with workers still resolving Futures; (c) every blocking step selects on `ctx.Done()`; (d) backpressure on `out` propagates upstream — no unbounded buffering; (e) Futures emitted after cancel reject with `ctx.Err()` so awaiters see the cancellation.
 
 ---
 

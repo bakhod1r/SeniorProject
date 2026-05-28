@@ -76,12 +76,9 @@ type Future[T any] struct {
     mu sync.Mutex; cond *sync.Cond
     done bool; val T; err error
 }
-
 func (f *Future[T]) Await() (T, error) {
-    f.mu.Lock()
-    for !f.done { f.cond.Wait() }
-    v, err := f.val, f.err
-    f.mu.Unlock()
+    f.mu.Lock(); for !f.done { f.cond.Wait() }
+    v, err := f.val, f.err; f.mu.Unlock()
     return v, err
 }
 ```
@@ -111,11 +108,8 @@ func (f *Future[T]) Resolve(v T) {
 func (f *Future[T]) Await(ctx context.Context) (T, error) {
     if r := f.res.Load(); r != nil { return r.val, r.err } // fast path
     select {
-    case <-f.done:
-        r := f.res.Load()
-        return r.val, r.err
-    case <-ctx.Done():
-        var z T; return z, ctx.Err()
+    case <-f.done: r := f.res.Load(); return r.val, r.err
+    case <-ctx.Done(): var z T; return z, ctx.Err()
     }
 }
 ```
@@ -145,11 +139,7 @@ The textbook Future uses `make(chan T)`. The send blocks until *someone* awaits.
 ```go
 func NewFuture[T any]() *Future[T] { return &Future[T]{ch: make(chan T)} }
 func (f *Future[T]) Resolve(v T)   { f.ch <- v }  // blocks until Await
-
-f := NewFuture[int]()
-go func() { f.Resolve(42) }()         // parks for 10 ms
-time.Sleep(10 * time.Millisecond)
-v := f.Await()
+// producer resolves immediately, consumer awaits 10 ms later → producer parks 10 ms
 ```
 
 ```
@@ -541,15 +531,13 @@ BenchmarkBatchedChain-8    100000    18000 ns/op
 
 ## 12. Exercise 11 — `singleflight` on every call
 
-A handler wraps every cache read in `singleflight.Group.Do`. For unique keys (high-cardinality per-user data), the dedup never fires — but you still pay the map lookup, mutex, and iface box.
+A handler wraps every cache read in `singleflight.Group.Do`. For unique keys (high-cardinality per-user data) dedup never fires — but you still pay the map lookup, mutex, and iface box.
 
 **Before:**
 
 ```go
 func GetUser(ctx context.Context, id string) (User, error) {
-    v, err, _ := g.Do(id, func() (any, error) {
-        return fetchUser(ctx, id)
-    })
+    v, err, _ := g.Do(id, func() (any, error) { return fetchUser(ctx, id) })
     return v.(User), err
 }
 ```
@@ -558,7 +546,7 @@ func GetUser(ctx context.Context, id string) (User, error) {
 BenchmarkSingleflightAlways-8    2000000     780 ns/op    240 B/op    5 allocs/op
 ```
 
-The fetch is ~200 ns when cache-hit. Singleflight adds ~580 ns of mutex+map+box.
+The fetch is ~200 ns when cache-hit; singleflight adds ~580 ns of mutex+map+box.
 
 <details><summary>After</summary>
 
@@ -584,11 +572,11 @@ BenchmarkSingleflightOnMiss-8   50000000      24 ns/op  (cache hit)
 
 ~32× faster on the common path.
 
-**Why faster:** Singleflight's `Do` always takes its mutex and indexes its map by key. For 99% cache-hit traffic, that mutex is hot for no reason. Reserving singleflight for the miss path means the dedup runs only when there's something to dedup.
+**Why faster:** `Do` always takes its mutex and indexes its map. For 99% cache-hit traffic, that mutex is hot for no reason. Reserving singleflight for the miss path runs dedup only when needed.
 
-**Trade-off:** Cache-then-singleflight is two cache reads on a miss (the double-check inside `Do`). Fine — cache reads are nanoseconds. If traffic is not cache-hit-dominated, the cache lookup is wasted overhead.
+**Trade-off:** Two cache reads on a miss (the double-check inside `Do`) — cache reads are nanoseconds. If traffic is not cache-hit-dominated, the outer lookup is wasted.
 
-**When NOT:** When the fetch is so expensive that even one duplicate is catastrophic (paid third-party API). Singleflight-on-every-miss is correct there.
+**When NOT:** When the fetch is so expensive that even one duplicate is catastrophic (paid third-party API).
 </details>
 
 ---
