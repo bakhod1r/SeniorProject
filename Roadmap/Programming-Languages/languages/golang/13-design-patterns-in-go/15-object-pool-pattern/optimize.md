@@ -2,13 +2,9 @@
 
 ## 1. How to use this file
 
-Twelve scenarios where object-pool code is slower, allocates more, or wastes memory it didn't need to. Each entry has a **Scenario**, a **Before** (code + benchmark), and a collapsible **After** (optimized code + benchmark + why + trade-offs + when NOT).
+Twelve scenarios where object-pool code is slower, allocates more, or wastes memory it didn't need to. Each entry has a **Scenario**, a **Before** (code + benchmark), and a collapsible **After** (optimized code + benchmark + why + trade-offs + when NOT). Anchored at Go 1.23, amd64. Numbers are reproducible-shape — run `go test -bench=. -benchmem` on your hardware before quoting them.
 
-Anchored at Go 1.23, amd64. Numbers are reproducible-shape — run `go test -bench=. -benchmem` on your hardware before quoting them.
-
-Pooling is the rare pattern where the wrong default does worse than no pattern at all. A pool adds ~5 ns per `Get`/`Put`, a `sync.Pool` may evict items every GC cycle, and a poorly-bounded pool can hold tens of MB indefinitely. The trade is one of: code clarity, memory ceiling, or generality. Make it only when a benchmark or a flame graph points at it.
-
-Reading order: Exercise 1 (should I pool at all?), then 2 and 8 (generics + cap), then 5 (sizing), then the rest in any order.
+Pooling is the rare pattern where the wrong default does worse than no pattern at all. A pool adds ~5 ns per `Get`/`Put`, a `sync.Pool` may evict items every GC cycle, and a poorly-bounded pool can hold tens of MB indefinitely. The trade is one of: code clarity, memory ceiling, or generality. Make it only when a benchmark or a flame graph points at it. Reading order: Exercise 1 (should I pool?), then 2 and 8 (generics + cap), then 5 (sizing), then the rest.
 
 ---
 
@@ -34,12 +30,10 @@ BenchmarkNoPool-8    20000000    78 ns/op    64 B/op    1 allocs/op
 
 <details><summary>After</summary>
 
-Pool the buffer. Reset on borrow, Put on return. The first request still allocates; every subsequent one reuses the same backing array.
+Pool the buffer. Reset on borrow, Put on return — first request allocates, every subsequent one reuses.
 
 ```go
-var bufPool = sync.Pool{
-    New: func() any { return new(bytes.Buffer) },
-}
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 func renderHello(w io.Writer, name string) {
     buf := bufPool.Get().(*bytes.Buffer)
@@ -151,12 +145,7 @@ BenchmarkAllocSlice-8    5000000    230 ns/op    4096 B/op    1 allocs/op
 Pool a `*[]byte` with a fixed cap. Use a pointer to a slice header so `sync.Pool`'s "stored as `any`" path doesn't box the slice header.
 
 ```go
-var bytePool = sync.Pool{
-    New: func() any {
-        b := make([]byte, 4096)
-        return &b
-    },
-}
+var bytePool = sync.Pool{New: func() any { b := make([]byte, 4096); return &b }}
 
 func handle(conn net.Conn) error {
     bp := bytePool.Get().(*[]byte)
@@ -345,13 +334,12 @@ BenchmarkBufWorkers-8    8000000    140 ns/op
 
 ## 8. Exercise 7 — `interface{}` boxing on Get
 
-Pre-generics pools returned `interface{}` and the caller cast back. Even with `any` (Go 1.18+) the API signature still materializes an `eface`/`iface` pair per Put for non-pointer types.
+Pre-generics pools returned `interface{}` and the caller cast back. Even with `any` (Go 1.18+) the API signature materializes an `eface`/`iface` pair per Put for non-pointer types.
 
 **Before:**
 
 ```go
 type Pool struct{ pool sync.Pool }
-
 func (p *Pool) Get() any  { return p.pool.Get() }
 func (p *Pool) Put(v any) { p.pool.Put(v) }
 ```
@@ -360,7 +348,7 @@ func (p *Pool) Put(v any) { p.pool.Put(v) }
 BenchmarkAnyPool-8    50000000    32 ns/op    0 B/op    0 allocs/op
 ```
 
-0 B/op here because `*bytes.Buffer` is a pointer — its iface fits in registers. Pool a value type or a struct and the box allocates.
+0 B/op because `*bytes.Buffer` is a pointer — its iface fits in registers. Pool a value type and the box allocates.
 
 <details><summary>After</summary>
 
@@ -614,9 +602,7 @@ type Conn struct{ fd int }
 
 func newConn() *Conn {
     c := &Conn{fd: openSocket()}
-    runtime.SetFinalizer(c, func(c *Conn) {
-        syscall.Close(c.fd)
-    })
+    runtime.SetFinalizer(c, func(c *Conn) { syscall.Close(c.fd) })
     return c
 }
 
@@ -632,8 +618,6 @@ BenchmarkPoolWithFinalizer-8    5000000    520 ns/op    72 B/op    1 allocs/op
 Drop the finalizer. Use a real typed pool with explicit `Close`. `sync.Pool` is the wrong tool for anything with an FD.
 
 ```go
-type Conn struct{ fd int }
-
 type ConnPool struct {
     mu   sync.Mutex
     idle []*Conn
@@ -641,8 +625,7 @@ type ConnPool struct {
 }
 
 func (p *ConnPool) Get() *Conn {
-    p.mu.Lock()
-    defer p.mu.Unlock()
+    p.mu.Lock(); defer p.mu.Unlock()
     if n := len(p.idle); n > 0 {
         c := p.idle[n-1]; p.idle = p.idle[:n-1]
         return c
@@ -682,13 +665,11 @@ BenchmarkPoolNoFinalizer-8    20000000    140 ns/op    0 B/op    0 allocs/op
 
 ## 14. When NOT to optimize
 
-Most Go programs do not need a pool. The default allocator handles small short-lived objects efficiently; escape analysis already places many objects on the stack. A handler at 100 req/s allocating a 256-byte struct generates 25 KB/s of garbage — noise to the GC. A CLI that runs once should never pool. A 5-byte field is too cheap to recover from pooling overhead.
+Most Go programs do not need a pool. The default allocator handles small short-lived objects efficiently; escape analysis places many on the stack. A handler at 100 req/s allocating a 256-byte struct generates 25 KB/s of garbage — noise. A CLI that runs once should never pool.
 
 **Profile first.** Run `go test -bench=. -benchmem` and `pprof -alloc_objects`. If the suspect type isn't in the top 10 by allocation count *and* not a CPU bottleneck, leave it alone.
 
-**Common premature optimizations:** pooling structs ≤256 bytes (the allocator wins below that), pooling objects used once per program lifetime, pooling without `Reset` (a correctness bug, not a perf win), pooling with no cap (Exercise 8), sharding (Exercise 11) under low contention, and putting back a connection whose health you didn't check.
-
-The pool is a hint, not a guarantee. Design for the case where `New` runs on every call.
+**Common premature optimizations:** pooling structs ≤256 bytes (the allocator wins), pooling objects used once per program lifetime, pooling without `Reset` (a correctness bug, not a perf win), pooling with no cap (Exercise 8), sharding (Exercise 11) under low contention, and putting back a connection whose health you didn't check. The pool is a hint, not a guarantee — design for the case where `New` runs every call.
 
 ---
 
@@ -710,9 +691,9 @@ The pool is a hint, not a guarantee. Design for the case where `New` runs on eve
 - Size connection pools with Little's Law (Exercise 5) when queue waits show up in p99 latency.
 - Buffer worker channels (Exercise 6) when Submit throughput matters more than per-job latency.
 
-**Specialty** (only when the design calls for it):
+**Specialty:**
 
 - Shard a custom pool by P or goroutine ID (Exercise 11) when a flame graph shows acquire contention.
-- Build a typed pool with explicit `Close` for resources with OS handles (Exercise 12 after-form).
+- Build a typed pool with explicit `Close` for resources with OS handles (Exercise 12).
 
-Object pooling is a precision instrument: bloats memory on the wrong target, cuts GC pressure dramatically on the right one (large, hot, short-lived, costly-to-init objects). Measure, profile, then pool.
+Object pooling is a precision instrument: bloats memory on the wrong target, cuts GC pressure dramatically on the right one. Measure, profile, then pool.

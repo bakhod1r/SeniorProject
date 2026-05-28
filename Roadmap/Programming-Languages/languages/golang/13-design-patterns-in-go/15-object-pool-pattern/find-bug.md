@@ -2,9 +2,7 @@
 
 ## 1. How to use this file
 
-Fifteen buggy Object-Pool snippets. Read each one, spot the defect in 30-60 seconds, then expand `<details>` for the answer. Every bug here has shown up in real Go production code — pools look like a five-line copy-paste from a blog post, and that's exactly why they regress so quietly.
-
-Pooling bugs rarely crash. They corrupt one response per million, leak a megabyte an hour, or quietly disable themselves until the pool degenerates into a worse-than-allocator path. The skill is reading a `Get`/`Put` block and asking: *what does the next borrower see, and what does the previous one still hold?*
+Fifteen buggy Object-Pool snippets. Read each one, spot the defect in 30-60 seconds, then expand `<details>` for the answer. Every bug here has shown up in real Go production code — pools look like a five-line copy-paste, which is exactly why they regress so quietly. Pooling bugs rarely crash; they corrupt one response per million, leak a megabyte an hour, or silently disable themselves. The skill is reading `Get`/`Put` and asking: *what does the next borrower see, and what does the previous one still hold?*
 
 ---
 
@@ -137,11 +135,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `renderToken` returns `buf.Bytes()` — a slice aliasing the buffer's internal array. The deferred `Put` runs at return, so by the time `handler` reads `token`, the buffer is back in the pool. The next goroutine calls `Get`, `Reset`, writes — corrupting `token` mid-handler. `string(token)` and `w.Write(token)` see a partial overlap of two users' data.
+**Bug:** `renderToken` returns `buf.Bytes()` — a slice aliasing the buffer's internal array. The deferred `Put` runs at return, so by the time `handler` reads `token`, the buffer is back in the pool. The next goroutine calls `Get`, `Reset`, writes — corrupting `token` mid-handler.
 
-**Why it's subtle:** It looks like a clean borrow-return cycle. The bug is the slice lifetime — it outlives the borrow.
+**Why it's subtle:** Looks like a clean borrow-return cycle. The bug is the slice lifetime — it outlives the borrow.
 
-**Spot in review:** Any function that `Put`s a pooled buffer and returns `buf.Bytes()` or a sub-slice of the internal array. The data must be copied before `Put` runs.
+**Spot in review:** Any function that `Put`s a pooled buffer and returns `buf.Bytes()` or a sub-slice. Data must be copied before `Put` runs.
 
 **Fix:** copy out of the pool before `Put` runs:
 
@@ -182,9 +180,9 @@ func encodeReport(records []Record) []byte {
 
 <details><summary>Answer</summary>
 
-**Bug:** `Put` accepts the buffer regardless of how large it grew. A nightly job that encodes a 50 MB report fills the buffer to 50 MB; on `Put` the buffer returns to the pool retaining that 50 MB backing array. Across 16 Ps, that's up to 800 MB of pooled memory holding a one-time spike forever. RSS goes up; allocs/op stays low; nobody can find where the memory went.
+**Bug:** `Put` accepts the buffer regardless of size. A nightly 50 MB report fills the buffer; on `Put` the buffer goes back to the pool retaining that 50 MB array. Across 16 Ps, up to 800 MB of pooled memory holds a one-time spike. RSS climbs; nobody can find where the memory went.
 
-**Why it's subtle:** The function is correct. The pool works. Memory is technically reclaimable on GC — but the next borrow re-anchors the giant buffer.
+**Why it's subtle:** Function correct, pool works, memory technically reclaimable on GC — but the next borrow re-anchors the giant buffer.
 
 **Spot in review:** Any pool `Put` of a growable container (`*bytes.Buffer`, `[]byte`, `*strings.Builder`) without a size-based gate.
 
@@ -276,13 +274,13 @@ func call(ctx context.Context, req *Req) (*Resp, error) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `sync.Pool` may evict any item at any GC cycle. For `*bytes.Buffer` that's fine. For `*grpc.ClientConn` it's a disaster: `New` dials the upstream (30-200 ms), so every GC throws away connections and tail latency spikes on the first request after each GC. Evicted connections are *never closed* — `sync.Pool` just drops the reference. You leak file descriptors until the process is killed. Bonus: `New`'s `panic(err)` on dial failure kills whatever goroutine called `Get`.
+**Bug:** `sync.Pool` may evict any item at any GC. For `*bytes.Buffer` that's fine. For `*grpc.ClientConn` it's a disaster: `New` dials the upstream (30-200 ms), so every GC throws away connections and tail latency spikes on the first request after each GC. Evicted connections are *never closed* — `sync.Pool` just drops the reference — so you leak FDs until the process is killed. Bonus: `New`'s `panic(err)` on dial failure kills the calling goroutine.
 
-**Why it's subtle:** It works in development (no GC pressure, dial is fast). It works in short load tests. Then a long-running test or production triggers GC and everything degrades.
+**Why it's subtle:** Works in dev (no GC pressure, fast dial) and short load tests. Long-running production triggers GC and everything degrades.
 
 **Spot in review:** `sync.Pool` of any kernel-FD resource (`net.Conn`, `*grpc.ClientConn`, `*sql.DB`, `*os.File`). These belong in typed pools with explicit eviction, health checks, and `Close`.
 
-**Fix:** use a typed channel-pool with bounded size and explicit close on overflow:
+**Fix:** use a typed channel-pool — bounded size, explicit `Close` on overflow:
 
 ```go
 type ConnPool struct {
@@ -292,23 +290,20 @@ type ConnPool struct {
 
 func (p *ConnPool) Get() (*grpc.ClientConn, error) {
     select {
-    case c := <-p.pool:
-        return c, nil
-    default:
-        return p.factory()
+    case c := <-p.pool: return c, nil
+    default:            return p.factory()
     }
 }
 
 func (p *ConnPool) Put(c *grpc.ClientConn) {
     select {
     case p.pool <- c:
-    default:
-        c.Close()                            // pool full; close, don't drop
+    default: c.Close()                       // pool full; close, don't drop
     }
 }
 ```
 
-For SQL, use `database/sql.DB` — it implements all of this for you.
+For SQL, `database/sql.DB` implements all of this for you.
 
 **Why common:** `sync.Pool` is the only "pool" most Go developers know. The GC-eviction caveat is buried in the docs.
 </details>
@@ -387,13 +382,11 @@ func (p *WorkerPool) Submit(f func()) { p.jobs <- f }      // blocks if all busy
 
 <details><summary>Answer</summary>
 
-**Bug:** `jobs` is unbuffered. `Submit` blocks until a worker is actively receiving. With N workers all running long jobs, the (N+1)th `Submit` blocks indefinitely. In an HTTP handler the request hangs; the client retries; the retry also hangs. Callers can't tell that the pool is saturated.
+**Bug:** `jobs` is unbuffered. `Submit` blocks until a worker is actively receiving. With N workers all busy, the (N+1)th `Submit` blocks indefinitely. The request hangs; the client retries; the retry hangs too. Callers can't tell the pool is saturated. Buffering with capacity N just delays the deadlock by N jobs — the real fix is a bounded queue *plus* a backpressure signal.
 
-Buffering with capacity N alone isn't enough — it just delays the deadlock by N jobs. The real fix is a bounded queue *plus* a backpressure signal to the caller.
+**Why it's subtle:** Unbuffered channels are idiomatic for handoffs. The failure mode "no worker ready" is modeled as "block forever".
 
-**Why it's subtle:** Unbuffered channels are idiomatic for handoffs and look correct here. The failure mode "no worker ready" is modeled as "block forever".
-
-**Spot in review:** Any worker-pool channel with `make(chan T)` (no buffer) plus a `Submit` that just sends. Compare against a real bounded queue with non-blocking try-send.
+**Spot in review:** Any worker-pool with `make(chan T)` (no buffer) and a `Submit` that just sends.
 
 **Fix:** bound the queue and expose backpressure (deadline-aware or non-blocking):
 
@@ -479,9 +472,9 @@ func waitFor(d time.Duration, ch <-chan struct{}) bool {
 
 <details><summary>Answer</summary>
 
-**Bug:** Two layered bugs. *(a)* `time.Timer.Reset(d)` is only safe on a timer that has expired-and-been-received-from, or has been stopped with a successful return. Calling `Reset` on a still-armed timer (left by the previous borrower) races with the original tick — a stale value may land on `t.C`. *(b)* On the `ch` success path, `t.C` may still receive after `Put`. The pool now holds a timer with a queued tick; the next borrower's `select <-t.C` returns immediately, seeing a fake "timed out".
+**Bug:** Two layered bugs. *(a)* `time.Timer.Reset(d)` is only safe on a timer that has expired-and-been-received-from, or has been successfully stopped. Calling `Reset` on a still-armed timer races with its original tick. *(b)* On the `ch` success path, `t.C` may still receive after `Put`. The pool now holds a timer with a queued tick; the next borrower's `select <-t.C` returns immediately — fake timeout.
 
-**Why it's subtle:** Pooling `*time.Timer` looks like a clean optimization — allocation is non-trivial. The race window is small; single-waiter tests never reproduce it.
+**Why it's subtle:** Pooling `*time.Timer` looks like a clean optimization. The race window is small; single-waiter tests never reproduce it.
 
 **Spot in review:** Any `sync.Pool` of `*time.Timer` without paired Stop/drain on `Put`.
 
@@ -539,9 +532,9 @@ func putRequest(r *Request) {
 
 <details><summary>Answer</summary>
 
-**Bug:** The cap checks `cap(r.Body)` but not `len(r.Headers)`. A request with 5,000 headers is accepted into the pool. The `delete` loop empties the map but does *not* shrink the bucket array — Go's runtime keeps map storage proportional to the largest size ever reached. That 5,000-bucket map is permanent baggage on every future borrower. RSS climbs while the `cap(Body)` gate waves small payloads through.
+**Bug:** The cap checks `cap(r.Body)` but not `len(r.Headers)`. A request with 5,000 headers is accepted. The `delete` loop empties the map but does *not* shrink the bucket array — Go's runtime keeps map storage proportional to the largest size ever reached. The 5,000-bucket map is permanent baggage on every future borrower; RSS climbs while the `cap(Body)` gate waves small payloads through.
 
-**Why it's subtle:** The size-cap idea is right; it only covers one growable field. Map capacity is invisible — `len(m)` after `delete` is zero, so reviewers think "map is empty, this is fine".
+**Why it's subtle:** The cap idea is right; the implementation only covers one growable field. Map capacity is invisible — `len(m)` after `delete` is zero.
 
 **Spot in review:** Any pooled struct with multiple growable sub-allocations. Each one needs its own gate. For maps, the rule is: if it ever grew large, drop the whole struct.
 
@@ -575,11 +568,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
     pool := sync.Pool{                        // declared INSIDE the handler
         New: func() any { return new(bytes.Buffer) },
     }
-
     buf := pool.Get().(*bytes.Buffer)
     defer pool.Put(buf)
     buf.Reset()
-
     renderTo(buf, r)
     w.Write(buf.Bytes())
 }
@@ -587,9 +578,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `pool` is declared inside the handler. Every request constructs a fresh `sync.Pool`, calls `New` once, uses the buffer, and `Put`s it back into a pool about to go out of scope. The whole pool — buffer included — becomes garbage at end of request. Identical to having no pool, except slower (the `sync.Pool` struct adds overhead).
+**Bug:** `pool` is declared inside the handler. Every request constructs a fresh `sync.Pool`, calls `New` once, uses the buffer, and `Put`s it back into a pool about to go out of scope. The whole pool — buffer included — becomes garbage at end of request. Identical to no pool, except slower.
 
-**Why it's subtle:** Code reads correctly line-by-line. `Get`/`Put` are paired. `Reset` is called. The bug is *scope*, not *logic*.
+**Why it's subtle:** Code reads correctly. `Get`/`Put` are paired. `Reset` is called. The bug is *scope*, not *logic*.
 
 **Spot in review:** `sync.Pool{...}` literal appearing inside any function that runs per-request, per-message, or per-iteration. Pools must be package-level, struct-field, or otherwise long-lived.
 
@@ -631,13 +622,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `render` returns `*Result` containing a slice aliased to the pooled buffer, then immediately `Put`s the buffer back. The audit goroutine and `w.Write` both share that slice with whatever future borrower the pool hands the buffer to next. A concurrent goroutine that calls `Get`, `Reset`, and writes is overwriting `res.bytes` in real time. `-race` catches it; production sees corrupted log lines and partial responses.
+**Bug:** `render` returns `*Result` containing a slice aliased to the pooled buffer, then immediately `Put`s the buffer back. The audit goroutine and `w.Write` share that slice with whatever future borrower receives the same buffer — a concurrent `Get`/`Reset`/write overwrites `res.bytes` in real time. `-race` catches it; production sees corrupted log lines and partial responses. Same root cause as Bug 4, but the failure mode is worse: *multiple concurrent readers* share a re-issued buffer.
 
-Same root cause as Bug 4, with a worse failure mode: *multiple concurrent readers* share a buffer that has been re-issued.
+**Why it's subtle:** The bug isn't in `render` alone — it's in the contract with the caller. The signature gives no hint that the bytes are pool-aliased.
 
-**Why it's subtle:** The bug isn't in `render` alone — it's in the contract between `render` and its caller. The signature gives no hint that the bytes are pool-aliased.
-
-**Spot in review:** Any function that `Put`s before its return value is fully copied or consumed.
+**Spot in review:** Any function that `Put`s before its return value is fully consumed.
 
 **Fix:** copy out, or invert the API to a callback that runs *while the buffer is borrowed*:
 
@@ -659,13 +648,13 @@ func render(req *Request) *Result {
 ## Bug 15 — Type assertion panic (New returns wrong type)
 
 ```go
-// Original:
+// Original — New returns *bytes.Buffer; call sites assert *bytes.Buffer.
 var bufPool = sync.Pool{
-    New: func() any { return bytes.NewBuffer(nil) },     // *bytes.Buffer
+    New: func() any { return bytes.NewBuffer(nil) },
 }
 
 func encode(v any) []byte {
-    buf := bufPool.Get().(*bytes.Buffer)                 // assertion to pointer
+    buf := bufPool.Get().(*bytes.Buffer)
     defer bufPool.Put(buf)
     buf.Reset()
     json.NewEncoder(buf).Encode(v)
@@ -683,11 +672,11 @@ var bufPool = sync.Pool{
 
 <details><summary>Answer</summary>
 
-**Bug:** The refactor returns a *value* `bytes.Buffer` instead of a pointer. The next `pool.Get().(*bytes.Buffer)` panics with `interface conversion: bytes.Buffer is not *bytes.Buffer`. Every call site crashes. The compiler can't catch it because `sync.Pool.New` has signature `func() any`, erasing the concrete type.
+**Bug:** The refactor returns a *value* `bytes.Buffer` instead of a pointer. The next `pool.Get().(*bytes.Buffer)` panics with `interface conversion: bytes.Buffer is not *bytes.Buffer`. Every call site crashes. The compiler can't catch it because `sync.Pool.New` is `func() any` — concrete type erased.
 
-**Why it's subtle:** Tests against unrefactored call sites pass until they run. CI catches it only if the call path is exercised. Code review sees two correct-looking snippets that don't add up.
+**Why it's subtle:** Tests pass until the refactor's call path is exercised. Review sees two correct-looking snippets that don't add up.
 
-**Spot in review:** When changing `New`, audit every `pool.Get()` call site and confirm the type assertion matches. Better — wrap the pool in a typed helper so the assertion lives in one place.
+**Spot in review:** When changing `New`, audit every `pool.Get()` call site. Better — wrap the pool in a typed helper.
 
 **Fix:** wrap the pool in a typed helper so the assertion lives in one place:
 
