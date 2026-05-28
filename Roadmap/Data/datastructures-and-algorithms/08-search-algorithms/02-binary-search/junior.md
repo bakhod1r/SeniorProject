@@ -667,7 +667,7 @@ In Python, arbitrary-precision integers eliminate the bug entirely. But: if you 
 
 2. **Prefer iterative over recursive.** Saves O(log n) stack space, avoids stack overflow on adversarial input, plays nicely with tail-call-impaired runtimes (JVM, Go).
 
-3. **Branch-free comparisons help on modern CPUs.** Instead of `if arr[mid] < target { lo = mid + 1 } else { hi = mid }`, you can write conditional moves. See `optimize.md` exercise 2 for the full version.
+3. **Branch-free comparisons help on modern CPUs.** Instead of `if arr[mid] < target { lo = mid + 1 } else { hi = mid }`, you can write conditional moves.
 
 4. **For tiny arrays (n < 20), use linear search.** Branch prediction loves linear scans, while binary search has unpredictable jumps. The crossover is platform-specific; benchmark.
 

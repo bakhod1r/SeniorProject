@@ -261,7 +261,7 @@ def sift_down(arr, i, n):
     arr[i] = val                           # land at final position
 ```
 
-This **deferred-write** pattern halves the number of array writes (one move per level instead of one swap = two writes). See `optimize.md` for measurements.
+This **deferred-write** pattern halves the number of array writes (one move per level instead of one swap = two writes).
 
 ---
 
@@ -546,7 +546,7 @@ while pq:
 
 ### 6. d-ary heaps for cache
 
-A `d=4` heap has 4 children per node. Tree height is `log_4 n = (log_2 n) / 2`, so half as many sift-down levels — but each level compares 4 children. For cache-line-sized nodes, `d=4` typically beats `d=2` by 20–30%. See `optimize.md`.
+A `d=4` heap has 4 children per node. Tree height is `log_4 n = (log_2 n) / 2`, so half as many sift-down levels — but each level compares 4 children. For cache-line-sized nodes, `d=4` typically beats `d=2` by 20–30%.
 
 ### 7. Avoid recursion in production
 

@@ -290,4 +290,3 @@ These bounds are **tight** in the comparison model. To go faster, you must use t
 - **Frigo, Leiserson, Prokop, Ramachandran**, "Cache-Oblivious Algorithms" (1999) — cache-oblivious framework.
 - **Khuong & Morin**, "Array Layouts for Comparison-Based Searching" (2017) — the definitive Eytzinger benchmark and analysis. Open access at arXiv:1509.05053.
 - **Sedgewick & Wayne**, *Algorithms* 4e, §3.1 — average-case analysis of binary search trees, related to BST layouts.
-- Continue with `specification.md` for language-specific APIs and the formal compliance checklist.

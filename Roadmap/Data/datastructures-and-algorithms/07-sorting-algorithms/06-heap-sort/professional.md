@@ -281,7 +281,7 @@ For large `n` (greater than `M`, where `M` is L2 / L3 cache size, typically MBs)
 
 ### d-ary heap improvements
 
-A `d`-ary heap (children at `di+1, di+2, ..., di+d`) has tree height `log_d n`. For `d = 4`, four siblings fit in one 32-byte block; sift-down does half as many cache misses for the same element count. Empirically, `d = 4` or `d = 8` is the sweet spot. See `optimize.md`.
+A `d`-ary heap (children at `di+1, di+2, ..., di+d`) has tree height `log_d n`. For `d = 4`, four siblings fit in one 32-byte block; sift-down does half as many cache misses for the same element count. Empirically, `d = 4` or `d = 8` is the sweet spot.
 
 ### Cache-oblivious heaps
 
@@ -371,4 +371,4 @@ If you relax worst-case (allow `O(n²)`), Quick Sort wins on every other axis.
 - **Heap Sort matches the comparison-sort lower bound `Ω(n log n)`** asymptotically and (with bottom-up) constant-optimally.
 - Heap Sort's niche: **`O(1)` space + `O(n log n)` worst case** with simple code. No other algorithm offers all three.
 
-> **Next:** read `specification.md` for the algorithm-as-a-spec reference and `interview.md` for graded questions.
+> **Next:** read `interview.md` for graded questions.

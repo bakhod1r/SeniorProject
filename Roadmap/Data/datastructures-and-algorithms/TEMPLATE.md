@@ -10,11 +10,11 @@
 | | Description |
 |---|---|
 | **Purpose** | Universal template for all Data Structures & Algorithms roadmap topics |
-| **Files per topic** | 9 files: `junior.md`, `middle.md`, `senior.md`, `professional.md`, `interview.md`, `tasks.md`, `find-bug.md`, `optimize.md`, `specification.md` |
+| **Files per topic** | 6 files: `junior.md`, `middle.md`, `senior.md`, `professional.md`, `interview.md`, `tasks.md` |
 | **Languages** | All code must be in **Go**, **Java**, **Python** (in that order) |
 | **Visualization** | `animation.html` — **Required** for DS/algorithm topics (arrays, linked lists, stacks, queues, hash tables, sorting, searching, trees, graphs, Big-O, asymptotic notation). **Skip** for pure theory topics (syntax, pseudo code, OOP, control structures) |
 | **Code Fences** | `go`, `java`, `python` for implementations, `text` for pseudocode |
-| **Table of Contents** | Optional — omit for `tasks.md`, `find-bug.md`, `optimize.md` |
+| **Table of Contents** | Optional — omit for `tasks.md` |
 
 ### Topic Structure
 
@@ -26,9 +26,6 @@ XX-topic-name/
 ├── professional.md    ← formal proofs, NP-completeness, amortized analysis
 ├── interview.md       ← interview prep across all levels
 ├── tasks.md           ← hands-on practice tasks (3 languages)
-├── find-bug.md        ← find and fix bugs (10+ exercises, 3 languages)
-├── optimize.md        ← optimize slow/inefficient code (10+ exercises, 3 languages)
-├── specification.md   ← Official spec / documentation deep-dive
 └── animation.html     ← REQUIRED for DS/algorithm topics — interactive visual animation
                           (arrays, linked lists, stacks, queues, hash tables, sorting,
                            searching, trees, graphs, Big-O, asymptotic notation)
@@ -124,10 +121,7 @@ async function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 ├── senior.md
 ├── professional.md
 ├── interview.md
-├── tasks.md
-├── find-bug.md
-├── optimize.md
-└── specification.md
+└── tasks.md
 ```
 > Theory topic — animation.html not required.
 
@@ -141,10 +135,7 @@ async function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 ├── senior.md
 ├── professional.md
 ├── interview.md
-├── tasks.md
-├── find-bug.md
-├── optimize.md
-└── specification.md
+└── tasks.md
 ```
 > Theory topic — animation.html not required.
 
@@ -160,21 +151,18 @@ async function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 │   ├── professional.md
 │   ├── interview.md
 │   ├── tasks.md
-│   ├── find-bug.md
-│   ├── optimize.md
-│   ├── specification.md
 │   └── animation.html       ← REQUIRED
 ├── 02-linked-lists/
-│   ├── ... (same 9 files)
+│   ├── ... (same 6 files)
 │   └── animation.html       ← REQUIRED
 ├── 03-queues/
-│   ├── ... (same 9 files)
+│   ├── ... (same 6 files)
 │   └── animation.html       ← REQUIRED
 ├── 04-stacks/
-│   ├── ... (same 9 files)
+│   ├── ... (same 6 files)
 │   └── animation.html       ← REQUIRED
 └── 05-hash-tables/
-    ├── ... (same 9 files)
+    ├── ... (same 6 files)
     └── animation.html       ← REQUIRED
 ```
 
@@ -189,15 +177,12 @@ async function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 │   ├── senior.md
 │   ├── professional.md
 │   ├── interview.md
-│   ├── tasks.md
-│   ├── find-bug.md
-│   ├── optimize.md
-│   └── specification.md
+│   └── tasks.md
 ├── 02-how-to-calculate-complexity/
-│   └── ... (same 9 files)
+│   └── ... (same 6 files)
 ├── 03-common-runtimes/
 │   ├── 01-constant/
-│   │   ├── ... (9 files)
+│   │   ├── ... (6 files)
 │   │   └── animation.html   ← REQUIRED
 │   ├── 02-logarithmic/
 │   │   └── animation.html   ← REQUIRED
@@ -211,7 +196,7 @@ async function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 │       └── animation.html   ← REQUIRED
 └── 04-asymptotic-notation/
     ├── 01-big-o-notation/
-    │   ├── ... (9 files)
+    │   ├── ... (6 files)
     │   └── animation.html   ← REQUIRED
     ├── 02-big-theta-notation/
     │   └── animation.html   ← REQUIRED
@@ -1492,230 +1477,7 @@ for n in sizes:
 ---
 ---
 
-# TEMPLATE 7 — `find-bug.md`
-
-# {{TOPIC_NAME}} — Find the Bug
-
-> 10+ exercises. Each shows buggy code in **all 3 languages** — find, explain, and fix.
-
----
-
-## Exercise 1: {{Bug Title}}
-
-### Go (Buggy)
-
-```go
-func buggyFunction(arr []int, target int) int {
-    left, right := 0, len(arr) // BUG: should be len(arr)-1
-    for left < right {         // BUG: should be <=
-        mid := (left + right) / 2
-        if arr[mid] == target {
-            return mid
-        } else if arr[mid] < target {
-            left = mid + 1
-        } else {
-            right = mid
-        }
-    }
-    return -1
-}
-```
-
-### Java (Buggy)
-
-```java
-public static int buggyFunction(int[] arr, int target) {
-    int left = 0, right = arr.length; // BUG: should be arr.length - 1
-    while (left < right) {            // BUG: should be <=
-        int mid = (left + right) / 2;
-        if (arr[mid] == target) return mid;
-        else if (arr[mid] < target) left = mid + 1;
-        else right = mid;
-    }
-    return -1;
-}
-```
-
-### Python (Buggy)
-
-```python
-def buggy_function(arr, target):
-    left, right = 0, len(arr)      # BUG: should be len(arr) - 1
-    while left < right:             # BUG: should be <=
-        mid = (left + right) // 2
-        if arr[mid] == target:
-            return mid
-        elif arr[mid] < target:
-            left = mid + 1
-        else:
-            right = mid
-    return -1
-```
-
-**Bug:** `right` is one past the last valid index; loop exits too early.
-
-### Fix (all languages)
-
-#### Go
-
-```go
-func fixedFunction(arr []int, target int) int {
-    left, right := 0, len(arr)-1
-    for left <= right {
-        mid := left + (right-left)/2
-        if arr[mid] == target { return mid }
-        if arr[mid] < target { left = mid + 1 } else { right = mid - 1 }
-    }
-    return -1
-}
-```
-
-#### Java
-
-```java
-public static int fixedFunction(int[] arr, int target) {
-    int left = 0, right = arr.length - 1;
-    while (left <= right) {
-        int mid = left + (right - left) / 2;
-        if (arr[mid] == target) return mid;
-        else if (arr[mid] < target) left = mid + 1;
-        else right = mid - 1;
-    }
-    return -1;
-}
-```
-
-#### Python
-
-```python
-def fixed_function(arr, target):
-    left, right = 0, len(arr) - 1
-    while left <= right:
-        mid = left + (right - left) // 2
-        if arr[mid] == target: return mid
-        elif arr[mid] < target: left = mid + 1
-        else: right = mid - 1
-    return -1
-```
-
----
-
-## Exercise 2: {{Bug Title}}
-
-> Repeat the same 3-language pattern for each exercise.
-> Minimum 10 exercises required.
-
-## Exercise 3-10: {{Bug Titles}}
-
-> Same structure: Buggy code in Go/Java/Python -> Explanation -> Fix in Go/Java/Python
-
----
----
-
-# TEMPLATE 8 — `optimize.md`
-
-# {{TOPIC_NAME}} — Optimize
-
-> 10+ exercises. Show before/after in **all 3 languages** with complexity comparison and benchmarks.
-
----
-
-## Exercise 1: {{Optimization Title}} — O(n^2) to O(n log n)
-
-### Before (Slow)
-
-#### Go
-
-```go
-// O(n^2) — brute force
-func slowSolution(arr []int) []int {
-    // slow implementation
-    return arr
-}
-```
-
-#### Java
-
-```java
-// O(n^2) — brute force
-public static int[] slowSolution(int[] arr) {
-    // slow implementation
-    return arr;
-}
-```
-
-#### Python
-
-```python
-# O(n^2) — brute force
-def slow_solution(arr):
-    # slow implementation
-    return arr
-```
-
-### After (Optimized)
-
-#### Go
-
-```go
-// O(n log n) — optimized
-func fastSolution(arr []int) []int {
-    // optimized implementation
-    return arr
-}
-```
-
-#### Java
-
-```java
-// O(n log n) — optimized
-public static int[] fastSolution(int[] arr) {
-    // optimized implementation
-    return arr;
-}
-```
-
-#### Python
-
-```python
-# O(n log n) — optimized
-def fast_solution(arr):
-    # optimized implementation
-    return arr
-```
-
-### Complexity Comparison
-
-| | Time | Space |
-|---|------|-------|
-| Before | O(n^2) | O(1) |
-| After | O(n log n) | O(n) |
-
-### Benchmark
-
-> Run benchmarks in all 3 languages using the benchmark template from `tasks.md`.
-
----
-
-## Exercise 2-10: {{Optimization Titles}}
-
-> Same structure: Before/After in Go/Java/Python -> Complexity table -> Benchmark
-
----
-
-## Optimization Summary
-
-| Exercise | Before | After | Strategy |
-|----------|--------|-------|----------|
-| 1 | O(n^2) | O(n log n) | Divide and conquer |
-| 2 | O(n^2) | O(n) | Hash map |
-| 3 | O(2^n) | O(n) | Memoization / DP |
-| ... | ... | ... | ... |
-
----
----
-
-# TEMPLATE 9 — `animation.html`
+# TEMPLATE 7 — `animation.html`
 
 > Standalone HTML file with embedded CSS and JavaScript.
 > No external dependencies — everything in one file.
@@ -2243,209 +2005,3 @@ def fast_solution(arr):
 > - Must work standalone — NO external CDN, NO frameworks, NO build tools
 > - Dark theme with neon accent colors for readability
 > - Responsive design — works on mobile and desktop
----
----
-
-# TEMPLATE 10 — `specification.md`
-
-> **Focus:** Official documentation deep-dive — API reference, configuration schema, behavioral guarantees, and version compatibility.
->
-> **Source:** Always cite the official documentation with direct section links.
-> - AI Agents / Claude: https://docs.anthropic.com/en/api/
-> - Machine Learning (scikit-learn): https://scikit-learn.org/stable/modules/classes.html
-> - Prompt Engineering: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview
-> - Data Analyst (pandas): https://pandas.pydata.org/docs/reference/
-> - Claude Code: https://docs.anthropic.com/en/docs/claude-code/overview
-> - AI Engineer: https://docs.anthropic.com/en/api/
-> - BI Analyst: https://docs.metabase.com/latest/
-> - AI Data Scientist: https://docs.scipy.org/doc/scipy/reference/
-> - Data Structures & Algorithms: https://docs.python.org/3/library/
-
-<details open>
-<summary><strong>Template Content</strong></summary>
-
-# {{TOPIC_NAME}} — Specification
-
-> **Official Documentation Reference**
->
-> Source: [{{TOOL_NAME}} Official Docs]({{DOCS_URL}}) — {{SECTION}}
-
----
-
-## Table of Contents
-
-1. [Docs Reference](#docs-reference)
-2. [API / Configuration Reference](#api--configuration-reference)
-3. [Core Concepts & Rules](#core-concepts--rules)
-4. [Schema / Parameters Reference](#schema--parameters-reference)
-5. [Behavioral Specification](#behavioral-specification)
-6. [Edge Cases from Official Docs](#edge-cases-from-official-docs)
-7. [Version & Compatibility Matrix](#version--compatibility-matrix)
-8. [Official Examples](#official-examples)
-9. [Compliance & Best Practices Checklist](#compliance--best-practices-checklist)
-10. [Related Documentation](#related-documentation)
-
----
-
-## 1. Docs Reference
-
-| Property | Value |
-|----------|-------|
-| **Official Docs** | [{{TOOL_NAME}} Documentation]({{DOCS_URL}}) |
-| **Relevant Section** | {{SECTION_NAME}} — {{SECTION_TITLE}} |
-| **Version** | {{TOOL_VERSION}} |
-| **Direct URL** | {{DOCS_URL}}/{{PATH}} |
-
----
-
-## 2. API / Configuration Reference
-
-> From: {{DOCS_URL}}/{{API_SECTION}}
-
-### {{RESOURCE_OR_FUNCTION_NAME}}
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `{{PARAM_1}}` | `{{TYPE_1}}` | ✅ | — | {{DESC_1}} |
-| `{{PARAM_2}}` | `{{TYPE_2}}` | ❌ | `{{DEFAULT_2}}` | {{DESC_2}} |
-| `{{PARAM_3}}` | `{{TYPE_3}}` | ❌ | `{{DEFAULT_3}}` | {{DESC_3}} |
-
-**Returns:** `{{RETURN_TYPE}}` — {{RETURN_DESC}}
-
----
-
-## 3. Core Concepts & Rules
-
-The official documentation defines these key rules for {{TOPIC_NAME}}:
-
-### Rule 1: {{RULE_NAME}}
-
-> *Docs: [{{DOCS_URL}}/{{SECTION}}]({{DOCS_URL}}/{{SECTION}}) — "{{DOC_QUOTE}}"*
-
-{{RULE_EXPLANATION}}
-
-```python
-# ✅ Correct — follows official guidance
-{{VALID_EXAMPLE}}
-
-# ❌ Incorrect — violates official guidance
-{{INVALID_EXAMPLE}}
-```
-
-### Rule 2: {{RULE_NAME}}
-
-> *Docs: [{{DOCS_URL}}/{{SECTION}}]({{DOCS_URL}}/{{SECTION}})*
-
-{{RULE_EXPLANATION}}
-
-```python
-{{CODE_EXAMPLE}}
-```
-
----
-
-## 4. Schema / Parameters Reference
-
-| Option | Type | Allowed Values | Default | Docs |
-|--------|------|---------------|---------|------|
-| `{{OPT_1}}` | `{{TYPE_1}}` | `{{VALUES_1}}` | `{{DEFAULT_1}}` | [Link]({{URL_1}}) |
-| `{{OPT_2}}` | `{{TYPE_2}}` | `{{VALUES_2}}` | `{{DEFAULT_2}}` | [Link]({{URL_2}}) |
-| `{{OPT_3}}` | `{{TYPE_3}}` | `{{VALUES_3}}` | `{{DEFAULT_3}}` | [Link]({{URL_3}}) |
-
----
-
-## 5. Behavioral Specification
-
-### Normal Operation
-
-{{NORMAL_OPERATION}}
-
-### Documented Limitations
-
-| Limitation | Details | Workaround |
-|------------|---------|------------|
-| {{LIMIT_1}} | {{DETAIL_1}} | {{WORKAROUND_1}} |
-| {{LIMIT_2}} | {{DETAIL_2}} | {{WORKAROUND_2}} |
-
-### Error / Failure Conditions
-
-| Error | Condition | Official Resolution |
-|-------|-----------|---------------------|
-| `{{ERROR_1}}` | {{COND_1}} | {{FIX_1}} |
-| `{{ERROR_2}}` | {{COND_2}} | {{FIX_2}} |
-
----
-
-## 6. Edge Cases from Official Docs
-
-| Edge Case | Official Behavior | Reference |
-|-----------|-------------------|-----------|
-| {{EDGE_1}} | {{BEHAVIOR_1}} | [Docs]({{URL_1}}) |
-| {{EDGE_2}} | {{BEHAVIOR_2}} | [Docs]({{URL_2}}) |
-| {{EDGE_3}} | {{BEHAVIOR_3}} | [Docs]({{URL_3}}) |
-
----
-
-## 7. Version & Compatibility Matrix
-
-| Version | Change | Notes |
-|---------|--------|-------|
-| `{{VER_1}}` | {{CHANGE_1}} | {{NOTES_1}} |
-| `{{VER_2}}` | {{CHANGE_2}} | {{NOTES_2}} |
-
-### Dependency Compatibility
-
-| Dependency | Supported Versions | Notes |
-|------------|-------------------|-------|
-| {{DEP_1}} | {{VER_RANGE_1}} | {{NOTES_1}} |
-| {{DEP_2}} | {{VER_RANGE_2}} | {{NOTES_2}} |
-
----
-
-## 8. Official Examples
-
-### Example from Docs: {{EXAMPLE_TITLE}}
-
-> Source: [{{DOCS_URL}}/{{ANCHOR}}]({{DOCS_URL}}/{{ANCHOR}})
-
-```python
-{{OFFICIAL_EXAMPLE_CODE}}
-```
-
-**Expected result:**
-
-```
-{{EXPECTED_RESULT}}
-```
-
----
-
-## 9. Compliance & Best Practices Checklist
-
-- [ ] Follows official recommended patterns for {{TOPIC_NAME}}
-- [ ] Uses supported version ({{TOOL_VERSION}}+)
-- [ ] Handles all documented error/edge conditions
-- [ ] Follows official security recommendations
-- [ ] Uses official API/SDK rather than workarounds
-- [ ] Compatible with listed dependencies
-
----
-
-## 10. Related Documentation
-
-| Topic | Doc Section | URL |
-|-------|-------------|-----|
-| {{RELATED_1}} | {{SECTION_1}} | [Link]({{URL_1}}) |
-| {{RELATED_2}} | {{SECTION_2}} | [Link]({{URL_2}}) |
-| {{RELATED_3}} | {{SECTION_3}} | [Link]({{URL_3}}) |
-
----
-
-> **Content Rules for `specification.md`:**
-> - Always link directly to the relevant doc section (not just the homepage)
-> - Use official examples from the documentation when available
-> - Note breaking changes and deprecated features between versions
-> - Include official security / safety recommendations
-> - Minimum 2 Core Rules, 3 Parameters, 3 Edge Cases, 2 Official Examples
-
-</details>

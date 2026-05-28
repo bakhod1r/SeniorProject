@@ -278,7 +278,7 @@ This is **better than plain binary search when `k << n`** — you find a near-th
 
 - **Searching infinite/unbounded sorted streams.** "Find the first occurrence of an event after time T in this append-only log."
 - **`bisect`-style insertion in a sorted file** without doing a full size query.
-- **Galloping search** — inside merge-sort variants (Java's TimSort uses this) to find where one run's prefix fits in another. We touch on TimSort galloping in `optimize.md`.
+- **Galloping search** — inside merge-sort variants (Java's TimSort uses this) to find where one run's prefix fits in another.
 
 ---
 

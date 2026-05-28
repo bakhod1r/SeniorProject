@@ -36,6 +36,15 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [5.3 Queues](05-basic-data-structures/03-queues/junior.md)
 - [5.4 Stacks](05-basic-data-structures/04-stacks/junior.md)
 - [5.5 Hash Tables](05-basic-data-structures/05-hash-tables/junior.md)
+- [5.6 Set](05-basic-data-structures/06-sets/)
+- [5.7 Multiset / Bag](05-basic-data-structures/07-multiset-bag/)
+- [5.8 Map / Dictionary](05-basic-data-structures/08-map-dictionary/)
+- [5.9 Deque](05-basic-data-structures/09-deque/)
+- [5.10 Two Pointers](05-basic-data-structures/10-two-pointers/)
+- [5.11 Sliding Window](05-basic-data-structures/11-sliding-window/)
+- [5.12 Prefix Sums & Difference Arrays](05-basic-data-structures/12-prefix-sums-difference-arrays/)
+- [5.13 Monotonic Stack](05-basic-data-structures/13-monotonic-stack/)
+- [5.14 Monotonic Queue](05-basic-data-structures/14-monotonic-queue/)
 
 ## [06. Algorithmic Complexity](06-algorithmic-complexity/01-time-vs-space-complexity/junior.md)
 
@@ -66,11 +75,24 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [7.4 Quick Sort](07-sorting-algorithms/04-quick-sort/junior.md)
 - [7.5 Selection Sort](07-sorting-algorithms/05-selection-sort/junior.md)
 - [7.6 Heap Sort](07-sorting-algorithms/06-heap-sort/junior.md)
+- [7.7 Counting Sort](07-sorting-algorithms/07-counting-sort/)
+- [7.8 Radix Sort](07-sorting-algorithms/08-radix-sort/)
+- [7.9 Bucket Sort](07-sorting-algorithms/09-bucket-sort/)
+- [7.10 Shell Sort](07-sorting-algorithms/10-shell-sort/)
+- [7.11 Tim Sort](07-sorting-algorithms/11-tim-sort/)
+- [7.12 Intro Sort](07-sorting-algorithms/12-intro-sort/)
 
 ## [08. Search Algorithms](08-search-algorithms/01-linear-search/junior.md)
 
 - [8.1 Linear Search](08-search-algorithms/01-linear-search/junior.md)
 - [8.2 Binary Search](08-search-algorithms/02-binary-search/junior.md)
+- [8.3 Ternary Search](08-search-algorithms/03-ternary-search/)
+- [8.4 Newton's Method](08-search-algorithms/04-newton-method/)
+- [8.5 Binary Search on Answer](08-search-algorithms/05-binary-search-on-answer/)
+- [8.6 Jump Search](08-search-algorithms/06-jump-search/)
+- [8.7 Interpolation Search](08-search-algorithms/07-interpolation-search/)
+- [8.8 Exponential Search](08-search-algorithms/08-exponential-search/)
+- [8.9 Fibonacci Search](08-search-algorithms/09-fibonacci-search/)
 
 ## [09. Trees](09-trees/)
 
@@ -82,6 +104,12 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [9.6 Segment Tree](09-trees/06-segment-tree/)
 - [9.7 Fenwick Tree (BIT)](09-trees/07-fenwick-tree/)
 - [9.8 B-Tree](09-trees/08-b-tree/)
+- [9.9 Sparse Table (RMQ)](09-trees/09-sparse-table-rmq/)
+- [9.10 Sqrt Decomposition / Mo's Algorithm](09-trees/10-sqrt-decomposition-mos-algorithm/)
+- [9.11 B+ Tree](09-trees/11-b-plus-tree/)
+- [9.12 Interval Tree](09-trees/12-interval-tree/)
+- [9.13 Quadtree / Octree](09-trees/13-quadtree-octree/)
+- [9.14 R-Tree](09-trees/14-r-tree/)
 
 ## [10. Heaps & Priority Queues](10-heaps/)
 
@@ -89,6 +117,10 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [10.2 Priority Queue](10-heaps/02-priority-queue/)
 - [10.3 Fibonacci Heap](10-heaps/03-fibonacci-heap/)
 - [10.4 D-Ary Heap](10-heaps/04-d-ary-heap/)
+- [10.5 Binomial Heap](10-heaps/05-binomial-heap/)
+- [10.6 Pairing Heap](10-heaps/06-pairing-heap/)
+- [10.7 Leftist Heap](10-heaps/07-leftist-heap/)
+- [10.8 Skew Heap](10-heaps/08-skew-heap/)
 
 ## [11. Graphs](11-graphs/)
 
@@ -102,6 +134,24 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [11.8 Tarjan's SCC](11-graphs/08-tarjan-scc/)
 - [11.9 A* Search](11-graphs/09-a-star/)
 - [11.10 Minimum Spanning Tree (Kruskal, Prim)](11-graphs/10-mst-kruskal-prim/)
+- [11.11 Articulation Points & Bridges](11-graphs/11-articulation-points-bridges/)
+- [11.12 Eulerian Path / Circuit](11-graphs/12-eulerian-path-circuit/)
+- [11.13 LCA (Lowest Common Ancestor)](11-graphs/13-lca/)
+- [11.14 Heavy-Light Decomposition](11-graphs/14-heavy-light-decomposition/)
+- [11.15 Centroid Decomposition](11-graphs/15-centroid-decomposition/)
+- [11.16 Max Flow (Edmonds-Karp / Dinic)](11-graphs/16-max-flow-edmonds-karp-dinic/)
+- [11.17 Max Flow (Push-Relabel)](11-graphs/17-max-flow-push-relabel/)
+- [11.18 Min-Cost Max-Flow](11-graphs/18-min-cost-max-flow/)
+- [11.19 Bipartite Matching](11-graphs/19-bipartite-matching/)
+- [11.20 2-SAT](11-graphs/20-two-sat/)
+- [11.21 Small-to-Large Merging](11-graphs/21-small-to-large-merging/)
+- [11.22 0-1 BFS](11-graphs/22-zero-one-bfs/)
+- [11.23 Edge / Vertex Connectivity](11-graphs/23-edge-vertex-connectivity/)
+- [11.24 Kirchhoff Theorem](11-graphs/24-kirchhoff-theorem/)
+- [11.25 Prüfer Code](11-graphs/25-prufer-code/)
+- [11.26 Strong Orientation](11-graphs/26-strong-orientation/)
+- [11.27 Graph Coloring](11-graphs/27-graph-coloring/)
+- [11.28 NP-Hard: TSP & Hamiltonian](11-graphs/28-np-hard-tsp-hamiltonian/)
 
 ## [12. Disjoint Set (Union-Find)](12-disjoint-set/)
 
@@ -120,6 +170,22 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [13.6 Bitmask DP](13-dynamic-programming/06-bitmask-dp/)
 - [13.7 Tree DP](13-dynamic-programming/07-tree-dp/)
 - [13.8 Digit DP](13-dynamic-programming/08-digit-dp/)
+- [13.9 SOS DP](13-dynamic-programming/09-sos-dp/)
+- [13.10 Convex Hull Trick / Li Chao Tree](13-dynamic-programming/10-convex-hull-trick-li-chao/)
+- [13.11 Divide & Conquer Optimization](13-dynamic-programming/11-divide-conquer-optimization/)
+- [13.12 Knuth's Optimization](13-dynamic-programming/12-knuth-optimization/)
+- [13.13 Profile DP](13-dynamic-programming/13-profile-dp/)
+- [13.14 Nim](13-dynamic-programming/14-nim/)
+- [13.15 Sprague-Grundy Theorem](13-dynamic-programming/15-sprague-grundy/)
+- [13.16 Minimax & Alpha-Beta](13-dynamic-programming/16-minimax-alpha-beta/)
+- [13.17 Game DP](13-dynamic-programming/17-game-dp/)
+- [13.18 Josephus Problem](13-dynamic-programming/18-josephus-problem/)
+- [13.19 Coin Change](13-dynamic-programming/19-coin-change/)
+- [13.20 Matrix Chain Multiplication](13-dynamic-programming/20-matrix-chain-multiplication/)
+- [13.21 Rod Cutting](13-dynamic-programming/21-rod-cutting/)
+- [13.22 Subset Sum / Partition](13-dynamic-programming/22-subset-sum-partition/)
+- [13.23 Word Break](13-dynamic-programming/23-word-break/)
+- [13.24 Egg Dropping](13-dynamic-programming/24-egg-dropping/)
 
 ## [14. Greedy Algorithms](14-greedy-algorithms/)
 
@@ -128,6 +194,9 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [14.3 Fractional Knapsack](14-greedy-algorithms/03-fractional-knapsack/)
 - [14.4 Job Scheduling](14-greedy-algorithms/04-job-scheduling/)
 - [14.5 Exchange Argument](14-greedy-algorithms/05-exchange-argument/)
+- [14.6 Interval Scheduling Variations](14-greedy-algorithms/06-interval-scheduling-variations/)
+- [14.7 Set Cover Approximation](14-greedy-algorithms/07-set-cover-approximation/)
+- [14.8 Vertex Cover Approximation](14-greedy-algorithms/08-vertex-cover-approximation/)
 
 ## [15. Divide & Conquer](15-divide-and-conquer/)
 
@@ -136,6 +205,7 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [15.3 Master Theorem](15-divide-and-conquer/03-master-theorem/)
 - [15.4 Karatsuba Multiplication](15-divide-and-conquer/04-karatsuba/)
 - [15.5 FFT](15-divide-and-conquer/05-fft/)
+- [15.6 Meet in the Middle](15-divide-and-conquer/06-meet-in-the-middle/)
 
 ## [16. Backtracking](16-backtracking/)
 
@@ -143,6 +213,10 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [16.2 Sudoku Solver](16-backtracking/02-sudoku/)
 - [16.3 Permutations & Subsets](16-backtracking/03-permutations-subsets/)
 - [16.4 Constraint Satisfaction](16-backtracking/04-constraint-satisfaction/)
+- [16.5 Rat in Maze](16-backtracking/05-rat-in-maze/)
+- [16.6 Knight's Tour](16-backtracking/06-knight-tour/)
+- [16.7 Word Search](16-backtracking/07-word-search/)
+- [16.8 Branch and Bound](16-backtracking/08-branch-and-bound/)
 
 ## [17. String Algorithms](17-string-algorithms/)
 
@@ -153,6 +227,14 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [17.5 Aho-Corasick](17-string-algorithms/05-aho-corasick/)
 - [17.6 Edit Distance](17-string-algorithms/06-edit-distance/)
 - [17.7 Tries (string-focused)](17-string-algorithms/07-tries/)
+- [17.8 Boyer-Moore](17-string-algorithms/08-boyer-moore/)
+- [17.9 Boyer-Moore-Horspool](17-string-algorithms/09-boyer-moore-horspool/)
+- [17.10 Burrows-Wheeler Transform](17-string-algorithms/10-burrows-wheeler-transform/)
+- [17.11 Manacher's Algorithm](17-string-algorithms/11-manacher-algorithm/)
+- [17.12 Suffix Automaton](17-string-algorithms/12-suffix-automaton/)
+- [17.13 Suffix Tree (Ukkonen)](17-string-algorithms/13-suffix-tree-ukkonen/)
+- [17.14 Palindromic Tree (Eertree)](17-string-algorithms/14-palindromic-tree-eertree/)
+- [17.15 Lyndon Decomposition](17-string-algorithms/15-lyndon-decomposition/)
 
 ## [18. Bit Manipulation](18-bit-manipulation/)
 
@@ -160,6 +242,7 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [18.2 XOR Pairing](18-bit-manipulation/02-xor-pairing/)
 - [18.3 Bitmask Enumeration](18-bit-manipulation/03-bitmask-enumeration/)
 - [18.4 Bit-Parallel Algorithms](18-bit-manipulation/04-bit-parallel/)
+- [18.5 Gosper's Hack & Gray Code](18-bit-manipulation/05-gosper-hack-gray-code/)
 
 ## [19. Number Theory](19-number-theory/)
 
@@ -168,6 +251,26 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [19.3 Prime Sieves](19-number-theory/03-prime-sieves/)
 - [19.4 Fermat's Little Theorem / Euler's Totient](19-number-theory/04-fermat-euler/)
 - [19.5 Chinese Remainder Theorem (CRT)](19-number-theory/05-crt/)
+- [19.6 Extended Euclidean & Modular Inverse](19-number-theory/06-extended-euclidean-modular-inverse/)
+- [19.7 Linear Diophantine](19-number-theory/07-linear-diophantine/)
+- [19.8 Miller-Rabin Primality](19-number-theory/08-miller-rabin-primality/)
+- [19.9 Pollard's Rho Factorization](19-number-theory/09-pollard-rho-factorization/)
+- [19.10 Matrix Exponentiation](19-number-theory/10-matrix-exponentiation/)
+- [19.11 Discrete Log (BSGS)](19-number-theory/11-discrete-log-bsgs/)
+- [19.12 Primitive Root & Discrete Root](19-number-theory/12-primitive-root-discrete-root/)
+- [19.13 NTT](19-number-theory/13-ntt/)
+- [19.14 Montgomery Multiplication](19-number-theory/14-montgomery-multiplication/)
+- [19.15 Garner's Algorithm](19-number-theory/15-garner-algorithm/)
+- [19.16 Continued Fractions](19-number-theory/16-continued-fractions/)
+- [19.17 Gaussian Elimination](19-number-theory/17-gaussian-elimination/)
+- [19.18 Matrix Determinant](19-number-theory/18-matrix-determinant/)
+- [19.19 Matrix Rank](19-number-theory/19-matrix-rank/)
+- [19.20 Polynomial Operations](19-number-theory/20-polynomial-operations/)
+- [19.21 Binomial Coefficients](19-number-theory/21-binomial-coefficients/)
+- [19.22 Catalan Numbers](19-number-theory/22-catalan-numbers/)
+- [19.23 Inclusion-Exclusion](19-number-theory/23-inclusion-exclusion/)
+- [19.24 Burnside / Pólya](19-number-theory/24-burnside-polya/)
+- [19.25 Stars and Bars](19-number-theory/25-stars-and-bars/)
 
 ## [20. Computational Geometry](20-computational-geometry/)
 
@@ -176,6 +279,13 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [20.3 Point in Polygon](20-computational-geometry/03-point-in-polygon/)
 - [20.4 KD-Tree](20-computational-geometry/04-kd-tree/)
 - [20.5 Sweep Line](20-computational-geometry/05-sweep-line/)
+- [20.6 Rotating Calipers](20-computational-geometry/06-rotating-calipers/)
+- [20.7 Closest Pair of Points](20-computational-geometry/07-closest-pair-of-points/)
+- [20.8 Minimum Enclosing Circle](20-computational-geometry/08-minimum-enclosing-circle/)
+- [20.9 Pick's Theorem](20-computational-geometry/09-picks-theorem/)
+- [20.10 Minkowski Sum](20-computational-geometry/10-minkowski-sum/)
+- [20.11 Voronoi & Delaunay](20-computational-geometry/11-voronoi-delaunay/)
+- [20.12 Half-Plane Intersection](20-computational-geometry/12-half-plane-intersection/)
 
 ## [21. Advanced Data Structures](21-advanced-structures/)
 
@@ -185,6 +295,25 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [21.4 LSM Tree](21-advanced-structures/04-lsm-tree/)
 - [21.5 Merkle Tree](21-advanced-structures/05-merkle-tree/)
 - [21.6 Rope](21-advanced-structures/06-rope/)
+- [21.7 Sqrt Tree](21-advanced-structures/07-sqrt-tree/)
+- [21.8 Count-Min Sketch](21-advanced-structures/08-count-min-sketch/)
+- [21.9 HyperLogLog](21-advanced-structures/09-hyperloglog/)
+- [21.10 Cuckoo Filter](21-advanced-structures/10-cuckoo-filter/)
+- [21.11 Persistent Segment Tree](21-advanced-structures/11-persistent-segment-tree/)
+- [21.12 Link-Cut Tree](21-advanced-structures/12-link-cut-tree/)
+- [21.13 Wavelet Tree](21-advanced-structures/13-wavelet-tree/)
+- [21.14 Van Emde Boas Tree](21-advanced-structures/14-van-emde-boas-tree/)
+- [21.15 CAS & Atomic Primitives](21-advanced-structures/15-cas-atomic-primitives/)
+- [21.16 Lock-Free Queue (Michael-Scott)](21-advanced-structures/16-lock-free-queue-michael-scott/)
+- [21.17 Lock-Free Stack](21-advanced-structures/17-lock-free-stack/)
+- [21.18 Concurrent Hash Map](21-advanced-structures/18-concurrent-hash-map/)
+- [21.19 RCU (Read-Copy-Update)](21-advanced-structures/19-rcu/)
+- [21.20 Hazard Pointers](21-advanced-structures/20-hazard-pointers/)
+- [21.21 LFU Cache](21-advanced-structures/21-lfu-cache/)
+- [21.22 ARC / 2Q Cache](21-advanced-structures/22-arc-2q-cache/)
+- [21.23 Counting Bloom Filter](21-advanced-structures/23-counting-bloom-filter/)
+- [21.24 Patricia Trie / Radix Tree](21-advanced-structures/24-patricia-trie-radix/)
+- [21.25 Hash Array Mapped Trie (HAMT)](21-advanced-structures/25-hash-array-mapped-trie/)
 
 ## [22. Randomized Algorithms](22-randomized-algorithms/)
 
@@ -193,11 +322,9 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [22.3 Monte Carlo vs Las Vegas](22-randomized-algorithms/03-monte-carlo-las-vegas/)
 - [22.4 Treap](22-randomized-algorithms/04-treap/)
 - [22.5 Randomized Quicksort](22-randomized-algorithms/05-randomized-quicksort/)
-
-## 23. Platforms to Practice
-
-- 23.1 Leetcode
-- 23.2 Edabit
-- 23.3 Codeforces
-- 23.4 HackerRank
-- 23.5 AtCoder
+- [22.6 Quickselect (k-th Order Statistic)](22-randomized-algorithms/06-quickselect-kth-order-statistic/)
+- [22.7 Simulated Annealing](22-randomized-algorithms/07-simulated-annealing/)
+- [22.8 Misra-Gries Heavy Hitters](22-randomized-algorithms/08-misra-gries-heavy-hitters/)
+- [22.9 t-Digest Quantiles](22-randomized-algorithms/09-t-digest-quantiles/)
+- [22.10 Locality-Sensitive Hashing](22-randomized-algorithms/10-locality-sensitive-hashing/)
+- [22.11 Space-Saving Algorithm](22-randomized-algorithms/11-space-saving-algorithm/)

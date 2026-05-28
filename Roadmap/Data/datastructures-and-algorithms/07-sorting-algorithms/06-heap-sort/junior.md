@@ -175,7 +175,7 @@ If you used a min-heap for ascending order, you'd need an auxiliary output array
 | Insert (priority queue) | **O(log n)** | O(1) amortized for dynamic array. |
 | Extract max/min | **O(log n)** | O(1) | One sift down from the root. |
 | Peek (look at root) | **O(1)** | O(1) | |
-| Decrease-key (with index) | **O(log n)** | O(1) | Needs an "index map" — see `optimize.md`. |
+| Decrease-key (with index) | **O(log n)** | O(1) | Needs an "index map" alongside the heap. |
 | **Heap Sort — best** | **O(n log n)** | **O(1)** | Even already-sorted input takes `O(n log n)`. |
 | **Heap Sort — average** | **O(n log n)** | O(1) | |
 | **Heap Sort — worst** | **O(n log n)** | O(1) | Best worst-case guarantee among in-place sorts. |
@@ -516,7 +516,7 @@ public static <T extends Comparable<T>> void sort(T[] arr) {
 1. **Use `>=` (not `>`) in the early-exit check.** This avoids one extra swap when the parent equals the larger child.
 2. **Iterate, don't recurse, in `siftDown`.** Compilers usually convert tail-recursive sift-down to a loop, but Java's JIT may not always inline; iterative is safer.
 3. **Inline the comparison.** Going through `Comparable.compareTo` is a virtual call; for primitive arrays, prefer specialized code.
-4. **Cache the value being sifted.** Instead of swapping at each step, store the sifting value once and only write it at the final position. This halves the writes — see `optimize.md`.
+4. **Cache the value being sifted.** Instead of swapping at each step, store the sifting value once and only write it at the final position. This halves the writes.
 5. **For very large arrays, consider d-ary heaps (d=4 or d=8).** Children fit in one cache line, sift-down is shallower (`log_d n` instead of `log_2 n`), trading more comparisons per node for fewer cache misses.
 6. **Avoid Heap Sort on small arrays.** For `n < 16`, insertion sort wins.
 

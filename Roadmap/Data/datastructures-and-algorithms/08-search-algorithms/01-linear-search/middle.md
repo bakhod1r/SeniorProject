@@ -438,8 +438,6 @@ This always scans the whole array, so it's slower in the average case — but it
 
 For sorted data, **jump search** combines linear and binary ideas: jump in steps of √n, then linear-scan within the block. O(√n) — between linear and binary.
 
-Covered more in [`optimize.md`](./optimize.md).
-
 ---
 
 ## Summary

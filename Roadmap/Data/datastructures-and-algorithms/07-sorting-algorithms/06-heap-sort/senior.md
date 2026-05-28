@@ -335,7 +335,7 @@ Each sift-down step is one cache miss at deep levels. For `n = 10⁹`, that's ~3
 
 A `d=4` heap fits 4 children in one cache line (4 × 8 bytes = 32 bytes < 64-byte line). Tree height halves; sift-down does ~half as many cache misses but compares 4 children per level instead of 2.
 
-Empirically, `d=4` and `d=8` outperform binary heaps for `n > 10⁵`. See `optimize.md` for benchmarks.
+Empirically, `d=4` and `d=8` outperform binary heaps for `n > 10⁵`.
 
 ### Memory layout tricks
 

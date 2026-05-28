@@ -309,5 +309,3 @@ Linear search is the **asymptotic baseline** for unstructured search:
 - **Information-theoretically tight** for unordered data; can only be beaten by structural preprocessing (sort → log n; hash → 1) or quantum (√n).
 
 Its theoretical simplicity belies its practical importance: it is the algorithm against which every other search is measured, and the algorithm that wins by default whenever preprocessing is impossible or wasteful.
-
-Continue to [`specification.md`](./specification.md) for the formal API contract and language-specific compliance.
