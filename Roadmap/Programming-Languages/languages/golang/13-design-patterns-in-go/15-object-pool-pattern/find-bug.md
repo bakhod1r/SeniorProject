@@ -22,11 +22,11 @@ func renderUser(w http.ResponseWriter, u *User) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `buf.Reset()` is never called before writing. The borrowed buffer still contains the previous borrower's bytes, so the response is prefixed with whatever the previous request wrote. User A sees user B's email leak into their response body.
+**Bug:** `buf.Reset()` is never called. The borrowed buffer still contains the previous borrower's bytes, so the response is prefixed with whatever the previous request wrote — User A sees User B's email leak in.
 
-**Why it's subtle:** Local development never reproduces it — single-threaded usage hits `New`-fresh buffers. Failures appear only when a buffer cycles `Put` → `Get` under traffic.
+**Why it's subtle:** Local dev never reproduces it; single-threaded usage hits `New`-fresh buffers. Failures appear only when a buffer cycles `Put` → `Get` under traffic.
 
-**Spot in review:** Any `pool.Get()` that *writes* to the returned object without an explicit `Reset()` / `[:0]` / `clear()` first.
+**Spot in review:** Any `pool.Get()` that *writes* without `Reset()` / `[:0]` / `clear()` first.
 
 **Fix:** add `buf.Reset()` immediately after the `defer`:
 
@@ -60,11 +60,11 @@ func validate(payload map[string]any) error {
 
 <details><summary>Answer</summary>
 
-**Bug:** `validate` returns without ever calling `encoderPool.Put(enc)`. Each call drains one item; the next `Get` runs `New` again. The pool degenerates into "allocate every time, drop on the floor" — strictly worse than no pool, since the unused cache entries linger until GC.
+**Bug:** `validate` never calls `encoderPool.Put(enc)`. Each call drains one item; the next `Get` runs `New`. The pool degenerates into "allocate every time, drop on the floor" — strictly worse than no pool.
 
-**Why it's subtle:** No panic, no heap leak — each encoder is short-lived. The only symptom is "the pool isn't helping", invisible without a before/after benchmark.
+**Why it's subtle:** No panic, no heap leak. The only symptom is "the pool isn't helping", invisible without a before/after benchmark.
 
-**Spot in review:** Every `pool.Get()` needs a matching `pool.Put()` on every return path. The idiom is `Get` immediately followed by `defer Put`.
+**Spot in review:** Every `pool.Get()` needs a matching `pool.Put()` on every return path — idiom is `Get` immediately followed by `defer Put`.
 
 **Fix:** add `defer encoderPool.Put(enc)` immediately after `Get`.
 
@@ -90,11 +90,11 @@ func handle(w http.ResponseWriter, r *http.Request) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `bufPool.Put(buf)` is on the final line, not deferred. If `mustDecodeJSON` panics, the buffer never returns to the pool. The pool slowly bleeds buffers on every malformed input; after a few hours of attackers sending garbage, every request allocates fresh.
+**Bug:** `bufPool.Put(buf)` is on the final line, not deferred. If `mustDecodeJSON` panics, the buffer never returns. The pool bleeds buffers on every malformed input; after hours of bad traffic, every request allocates fresh.
 
-**Why it's subtle:** The happy path works. Benchmarks pass. The leak only shows under adversarial or bug-triggering traffic, where it compounds quickly.
+**Why it's subtle:** Happy path works; benchmarks pass. The leak only shows under adversarial traffic.
 
-**Spot in review:** Any `pool.Put(x)` as a normal statement instead of `defer pool.Put(x)`. The defer guarantees the buffer returns on panic or early return.
+**Spot in review:** Any `pool.Put(x)` as a normal statement instead of `defer pool.Put(x)`.
 
 **Fix:** move `Put` to a `defer` on the line after `Get`.
 
@@ -159,22 +159,15 @@ return append([]byte(nil), buf.Bytes()...)  // owned copy
 ## Bug 5 — Buffer grows unbounded (no size cap)
 
 ```go
-var bufPool = sync.Pool{
-    New: func() any { return new(bytes.Buffer) },
-}
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 func encodeReport(records []Record) []byte {
     buf := bufPool.Get().(*bytes.Buffer)
     defer bufPool.Put(buf)
     buf.Reset()
-
     enc := json.NewEncoder(buf)
-    for _, r := range records {
-        enc.Encode(r)
-    }
-    out := make([]byte, buf.Len())
-    copy(out, buf.Bytes())
-    return out
+    for _, r := range records { enc.Encode(r) }
+    return append([]byte(nil), buf.Bytes()...)
 }
 ```
 
@@ -186,22 +179,16 @@ func encodeReport(records []Record) []byte {
 
 **Spot in review:** Any pool `Put` of a growable container (`*bytes.Buffer`, `[]byte`, `*strings.Builder`) without a size-based gate.
 
-**Fix:**
+**Fix:** gate `Put` on `b.Cap()`. `encoding/json` does this in its internal encoder pool — pick a cap that fits 99% of real traffic; let outliers re-allocate.
 
 ```go
 const maxPooledBuf = 64 << 10               // 64 KiB
 
 func putBuf(b *bytes.Buffer) {
-    if b.Cap() > maxPooledBuf {
-        return                              // drop oversized; let GC reclaim
-    }
+    if b.Cap() > maxPooledBuf { return }    // drop oversized; let GC reclaim
     bufPool.Put(b)
 }
-
-defer putBuf(buf)
 ```
-
-`encoding/json` does exactly this in its internal encoder pool. Pick a cap that fits 99% of real traffic; let the outliers re-allocate.
 
 **Why common:** Naive pool examples never mention the cap. Until you've watched a heap profile climb after a single oversized request, the failure mode isn't intuitive.
 </details>
@@ -211,10 +198,7 @@ defer putBuf(buf)
 ## Bug 6 — Pooling a value type (not pointer)
 
 ```go
-type Scratch struct {
-    data [4096]byte
-    n    int
-}
+type Scratch struct { data [4096]byte; n int }
 
 var scratchPool = sync.Pool{
     New: func() any { return Scratch{} },   // value, not pointer
@@ -233,11 +217,11 @@ func process(input []byte) int {
 
 <details><summary>Answer</summary>
 
-**Bug:** `sync.Pool` stores `interface{}`. Putting a value-type `Scratch` boxes it — heap allocation plus a 4 KB copy in; `Get` copies 4 KB back out. Every cycle does two copies and one heap alloc — strictly worse than `var s Scratch` on the stack. Worse, mutations live in the local copy, so `Put(s)` stores a snapshot — state that was supposed to be reset is carried forward.
+**Bug:** `sync.Pool` stores `interface{}`. Putting a value-type `Scratch` boxes it — heap allocation plus a 4 KB copy in; `Get` copies 4 KB back out. Every cycle does two copies and one heap alloc — strictly worse than `var s Scratch` on the stack. Worse, mutations live in the local copy, so `Put(s)` stores a snapshot.
 
-**Why it's subtle:** Code compiles, tests pass, escape analysis is silent. The benchmark shows zero improvement and the developer concludes "pools don't help here".
+**Why it's subtle:** Code compiles, tests pass, escape analysis is silent. The benchmark shows zero improvement.
 
-**Spot in review:** `New: func() any { return T{} }` (value) instead of `return &T{}` (pointer). `staticcheck` flags this as `SA6002`.
+**Spot in review:** `New: func() any { return T{} }` (value) instead of `&T{}`. `staticcheck` flags this as `SA6002`.
 
 **Fix:** return a pointer from `New`, assert to a pointer in `Get`, mutate through the pointer:
 
@@ -313,9 +297,7 @@ For SQL, `database/sql.DB` implements all of this for you.
 ## Bug 8 — Reset that reallocates ([]byte = make instead of [:0])
 
 ```go
-type Encoder struct {
-    buf []byte
-}
+type Encoder struct { buf []byte }
 
 func (e *Encoder) Reset() {
     e.buf = make([]byte, 0, 4096)            // fresh allocation each Reset
@@ -338,21 +320,15 @@ func encode(v any) []byte {
 
 <details><summary>Answer</summary>
 
-**Bug:** `Reset` does `e.buf = make(...)` — a fresh allocation. Every borrow throws away the previously grown backing array. The whole point of pooling — reusing the grown allocation — is silently undone. allocs/op stays at 1 per call, exactly as if there were no pool.
+**Bug:** `Reset` does `e.buf = make(...)` — a fresh allocation. Every borrow throws away the previously grown backing array. The point of pooling — reusing the allocation — is silently undone. allocs/op stays at 1 per call, exactly as if there were no pool.
 
-**Why it's subtle:** The function is called `Reset` and it does set length to zero. It's just that "reset" here means "throw it away" instead of "rewind". Without a benchmark vs the no-pool path, the regression hides.
+**Why it's subtle:** `Reset` does set length to zero — but "reset" here means "throw it away" instead of "rewind". Without a benchmark vs no-pool, the regression hides.
 
-**Spot in review:** Any `Reset` method on a pooled type that contains a `make(...)` call. The correct idiom is `s = s[:0]`, `clear(m)`, or `b.Reset()` on a `*bytes.Buffer`.
+**Spot in review:** Any `Reset` method on a pooled type that contains `make(...)`.
 
-**Fix:** truncate, don't allocate. Slices use `s = s[:0]`; maps use `clear(m)` (Go 1.21+); `bytes.Buffer.Reset` does the right thing already.
+**Fix:** truncate, don't allocate — `e.buf = e.buf[:0]` for slices, `clear(m)` for maps (Go 1.21+), `b.Reset()` for `*bytes.Buffer`.
 
-```go
-func (e *Encoder) Reset() {
-    e.buf = e.buf[:0]                         // keep capacity, reset length
-}
-```
-
-**Why common:** `make` is what new code starts with. When someone later adds `Reset`, they reach for the same `make` — not realizing "reset" in a pooled context means "preserve the allocation".
+**Why common:** `make` is what new code starts with. When `Reset` is added later, the author reaches for the same `make` — not realizing "reset" in a pooled context means "preserve the allocation".
 </details>
 
 ---
@@ -434,13 +410,11 @@ func decompress(data []byte) ([]byte, error) {
 
 <details><summary>Answer</summary>
 
-**Bug:** `decompress` never calls `r.Reset(newSrc)`. The reader still points at the dummy source from `New`, or at the *previous* caller's source. `io.ReadAll` reads from whatever stream the previous goroutine left attached — EOF, partially consumed, or worse, still in use elsewhere.
+**Bug:** `decompress` never calls `r.Reset(newSrc)`. The reader still points at the dummy source from `New`, or at the previous caller's source. `io.ReadAll` reads from whatever stream the previous goroutine left attached — EOF, partially consumed, or still in use elsewhere. For pooled `gzip.Reader`, `flate.Reader`, `bufio.Reader`, `cipher.Stream`, `csv.Reader`, calling `Reset(newSrc)` is **the** purpose of pooling.
 
-For pooled `gzip.Reader`, `flate.Reader`, `bufio.Reader`, `cipher.Stream`, `csv.Reader`, calling `Reset(newSrc)` is **the** purpose of pooling. Skipping it makes the pool a source of cross-request data leaks.
+**Why it's subtle:** `Put` returns the object but not its internal state — the wrapped source is unchanged.
 
-**Why it's subtle:** It looks like `Put` "released" the reader. But `Put` returns only the object; its internal state (the wrapped source) is unchanged.
-
-**Spot in review:** Every type with a `Reset(src)` method should have a matching call at the top of every pooled-borrow block. Search for `.Get().(*T)` and verify a `Reset(...)` immediately follows.
+**Spot in review:** Every pooled type with a `Reset(src)` method needs a matching call right after `Get`.
 
 **Fix:** call `r.Reset(bytes.NewReader(data))` right after `Get`, check its error, *then* `io.ReadAll`.
 
@@ -715,14 +689,12 @@ These bugs cluster into four families.
 Review checklist for any Object-Pool PR:
 
 - [ ] Is the pool declared at package or long-lived struct scope — never inside a per-request function?
-- [ ] Does `New` return a **pointer** type (`return &T{}`), not a value?
-- [ ] Is every `pool.Get()` immediately followed by `defer pool.Put(...)` on the next line?
-- [ ] Does the borrow block call `Reset()` (or `Reset(src)`, or `[:0]`, or `clear()`) before any writes?
+- [ ] Does `New` return a **pointer** type (`return &T{}`), not a value? Does every `Get` assertion match?
+- [ ] Is every `pool.Get()` immediately followed by `defer pool.Put(...)`, with `Reset()` / `Reset(src)` / `[:0]` / `clear()` before any writes?
 - [ ] Does `Reset` *preserve* the underlying allocation (no `make` inside)?
-- [ ] Is there a size cap on `Put` for every growable sub-allocation (buffers, slices, maps)?
+- [ ] Is there a size cap on `Put` for **every** growable sub-allocation (buffers, slices, maps)?
 - [ ] Do returned slices that alias the pooled buffer get **copied out** before `Put` runs?
-- [ ] For resources holding file descriptors (`*grpc.ClientConn`, `net.Conn`, `*sql.DB`): is a typed channel-pool used instead of `sync.Pool`?
+- [ ] For FD-holding resources (`*grpc.ClientConn`, `net.Conn`, `*sql.DB`): is a typed channel-pool used instead of `sync.Pool`?
 - [ ] Are `*time.Timer` borrows wrapped in proper Stop/drain logic — or, better, not pooled at all?
-- [ ] Does the type assertion at every `Get` match what `New` returns? Consider a typed wrapper or generic pool.
 - [ ] Is the worker-pool channel buffered, and does `Submit` expose backpressure (try-send, context cancellation)?
 - [ ] Have you benchmarked with `-benchmem` and confirmed allocs/op actually decreased? If not, delete the pool.
