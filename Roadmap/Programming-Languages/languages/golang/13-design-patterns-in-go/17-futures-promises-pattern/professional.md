@@ -72,9 +72,9 @@ A Future-per-request pattern with 50 k req/s and 20 ms work creates ~1 000 concu
 
 ## 3. Structured concurrency — borrowing from Trio/Kotlin; errgroup as Go's answer
 
-The textbook critique of futures: **unstructured concurrency leaks**. A goroutine spawned inside a function can outlive the function. The Trio (Python) and Kotlin coroutines communities formalized the answer — *structured concurrency* — and Go's `errgroup` is the closest idiomatic match.
+The textbook critique of futures: **unstructured concurrency leaks**. A goroutine spawned inside a function can outlive it. Trio (Python) and Kotlin coroutines formalized the answer — *structured concurrency*. Go's `errgroup` is the closest idiomatic match.
 
-The principle: **every goroutine has a parent scope; the scope cannot return until every child has either completed or been cancelled.** No goroutine outlives its lexical parent.
+The principle: **every goroutine has a parent scope; the scope cannot return until every child has completed or been cancelled.** No goroutine outlives its lexical parent.
 
 ```go
 func fanOutStructured(ctx context.Context, ids []string) ([]User, error) {
@@ -84,10 +84,8 @@ func fanOutStructured(ctx context.Context, ids []string) ([]User, error) {
     for i, id := range ids {
         i, id := i, id
         g.Go(func() error {
-            u, err := fetchUser(gctx, id)
-            if err != nil { return err }
-            out[i] = u
-            return nil
+            u, err := fetchUser(gctx, id); if err != nil { return err }
+            out[i] = u; return nil
         })
     }
     if err := g.Wait(); err != nil { return nil, err }
@@ -95,23 +93,7 @@ func fanOutStructured(ctx context.Context, ids []string) ([]User, error) {
 }
 ```
 
-When `fanOutStructured` returns, every spawned goroutine has either finished or seen `gctx.Done()` and bailed out. There is no leak by construction. Compare with the unstructured version:
-
-```go
-// WRONG — children outlive parent
-func fanOutLeaky(ctx context.Context, ids []string) <-chan User {
-    out := make(chan User)
-    for _, id := range ids {
-        go func(id string) {                  // no scope, no Wait
-            u, _ := fetchUser(ctx, id)
-            out <- u                           // blocks forever if no reader
-        }(id)
-    }
-    return out
-}
-```
-
-The second version is correct only if the caller drains the channel forever. The first is correct unconditionally. **Structured concurrency is the default; unstructured is the optimization with proof of obligation.**
+When `fanOutStructured` returns, every goroutine has finished or seen `gctx.Done()`. No leak by construction. The unstructured version with bare `go func()` writing to an unbuffered channel is correct only if the caller drains forever. **Structured concurrency is the default; unstructured is the optimization with a proof obligation.**
 
 | Property | `errgroup` | Trio nursery | Kotlin coroutineScope |
 |---|---|---|---|

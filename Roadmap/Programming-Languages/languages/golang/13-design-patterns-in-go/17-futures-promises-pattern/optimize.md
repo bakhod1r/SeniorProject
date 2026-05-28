@@ -4,9 +4,9 @@
 
 Twelve scenarios where Future/Promise code is slower, allocates more, or scales worse than it should. Each entry has a **Before** (code + benchmark) and a collapsible **After** (optimized code + benchmark + why + trade-offs + when NOT).
 
-Anchored at Go 1.23, amd64. Numbers are reproducible-shape — run `go test -bench=. -benchmem` on your hardware before quoting them. Future cost is dominated by three things: goroutine creation, channel synchronization, and `iface` boxing. Most wins come from removing one of those three on the hot path.
+Anchored at Go 1.23, amd64. Numbers are reproducible-shape — run `go test -bench=. -benchmem` on your hardware before quoting them. Future cost is dominated by three things: goroutine creation, channel synchronization, and `iface` boxing. Most wins remove one of those three on the hot path.
 
-Reading order: Exercise 1 (goroutine per Future is the most common waste), 5 (generics kills boxing across the whole pattern), 8 (pooling the Future struct), then the rest in any order.
+Reading order: Exercise 1, 5 (generics), 8 (pooling), then the rest in any order.
 
 ---
 
@@ -67,17 +67,14 @@ BenchmarkCachedOnce-8       100000000     11 ns/op    0 B/op    0 allocs/op
 
 ## 3. Exercise 2 — Channel-of-Result with mutex
 
-A Future that protects `(val, err, done)` with a mutex pays for `Lock`/`Unlock` on the resolver and a guarded read on every Await. Post-resolution readers still take the lock just to discover the value is ready.
+A Future that protects `(val, err, done)` with a mutex pays `Lock`/`Unlock` on the resolver and a guarded read on every Await. Post-resolution readers still take the lock to discover the value is ready.
 
 **Before:**
 
 ```go
 type Future[T any] struct {
-    mu   sync.Mutex
-    done bool
-    val  T
-    err  error
-    cond *sync.Cond
+    mu sync.Mutex; cond *sync.Cond
+    done bool; val T; err error
 }
 
 func (f *Future[T]) Await() (T, error) {
@@ -96,7 +93,7 @@ BenchmarkFutureMutex_Contended-8    400000   3200 ns/op
 
 <details><summary>After</summary>
 
-`atomic.Pointer[result]` for the resolved state, plus a `chan struct{}` for the "still waiting" hop. Post-resolution readers take the lock-free path.
+`atomic.Pointer[result]` for the resolved state, plus a `chan struct{}` for the still-waiting hop. Post-resolution readers take the lock-free path.
 
 ```go
 type result[T any] struct { val T; err error }
@@ -108,16 +105,11 @@ type Future[T any] struct {
 }
 
 func (f *Future[T]) Resolve(v T) {
-    f.once.Do(func() {
-        f.res.Store(&result[T]{val: v})
-        close(f.done)
-    })
+    f.once.Do(func() { f.res.Store(&result[T]{val: v}); close(f.done) })
 }
 
 func (f *Future[T]) Await(ctx context.Context) (T, error) {
-    if r := f.res.Load(); r != nil { // fast path
-        return r.val, r.err
-    }
+    if r := f.res.Load(); r != nil { return r.val, r.err } // fast path
     select {
     case <-f.done:
         r := f.res.Load()
@@ -190,7 +182,7 @@ BenchmarkBufferedFuture-8     20000000     65 ns/op
 
 ## 5. Exercise 4 — Per-Future context allocation
 
-Calling `context.WithTimeout(parent, d)` per Future allocates a `*timerCtx`, registers a timer in the runtime heap, and chains parent cancel propagation. For a request creating 50 futures with the same logical deadline, that's 50 redundant allocations and 50 timers.
+Calling `context.WithTimeout` per Future allocates a `*timerCtx`, registers a timer in the runtime heap, and chains parent cancel propagation. For 50 futures with the same logical deadline, that's 50 redundant allocations and 50 timers.
 
 **Before:**
 
@@ -201,9 +193,7 @@ for i, id := range ids {
     g.Go(func() error {
         ctx2, cancel := context.WithTimeout(gctx, 200*time.Millisecond) // per-future
         defer cancel()
-        u, err := fetchUser(ctx2, id)
-        out[i] = u
-        return err
+        u, err := fetchUser(ctx2, id); out[i] = u; return err
     })
 }
 ```
@@ -219,14 +209,11 @@ Derive *one* deadline at the request boundary and reuse it.
 ```go
 ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 defer cancel()
-
 g, gctx := errgroup.WithContext(ctx)
 for i, id := range ids {
     i, id := i, id
     g.Go(func() error {
-        u, err := fetchUser(gctx, id) // shared ctx
-        out[i] = u
-        return err
+        u, err := fetchUser(gctx, id); out[i] = u; return err
     })
 }
 ```
@@ -237,9 +224,9 @@ BenchmarkSharedCtx-8     1200000    1200 ns/op    96 B/op    2 allocs/op
 
 ~6.5× faster, 26× fewer allocations.
 
-**Why faster:** One `*timerCtx` allocation instead of 50. One timer in the runtime heap instead of 50 (the heap is O(log n) per insert). `errgroup` already cancels its derived context on error — you get the same propagation without per-future overhead.
+**Why faster:** One `*timerCtx` instead of 50. One timer in the runtime heap (O(log n) per insert). `errgroup` already cancels its derived context on error — same propagation without per-future overhead.
 
-**Trade-off:** All futures share the same deadline. If individual sub-requests should each get their own budget, per-future is correct. In practice the request-level budget is what callers care about.
+**Trade-off:** All futures share the same deadline. If individual sub-requests need their own budget, per-future is correct. In practice the request-level budget is what callers care about.
 
 **When NOT:** When per-future deadlines model the underlying SLA (50 ms per RPC regardless of fan-out). When the futures escape a request boundary.
 </details>
@@ -256,8 +243,8 @@ A pre-generics Future stores `interface{}`. Every Resolve boxes the value into a
 type Future struct { done chan struct{}; val any; err error }
 func (f *Future) Resolve(v any) { f.val = v; close(f.done) }
 
-f.Resolve(user)            // boxes User (40 B) → heap alloc
-u := (<-f).(User)          // type assert
+f.Resolve(user)   // boxes User (40 B) → heap alloc
+u := (<-f).(User) // type assert
 ```
 
 ```
@@ -271,8 +258,7 @@ Generics. `Future[User]` stores `User` directly.
 ```go
 type Future[T any] struct {
     done chan struct{}
-    val  T
-    err  error
+    val  T; err error
     once sync.Once
 }
 
@@ -287,18 +273,18 @@ BenchmarkTypedFuture-8    60000000   22 ns/op    0 B/op   0 allocs/op
 
 ~14× faster, zero allocations.
 
-**Why faster:** Compiler monomorphizes `Future[User]` — `f.val` is a `User` field, not a two-word iface header. No iface materialization on Resolve, no type-descriptor write, no type-assertion check.
+**Why faster:** Compiler monomorphizes `Future[User]` — `f.val` is a `User` field, not a two-word iface header. No iface materialization, no type-descriptor write, no type-assertion check.
 
-**Trade-off:** One Future type per concrete payload — in practice the right granularity. Generic instantiation grows binary size slightly per `T`, harmless at tens-of-types.
+**Trade-off:** One Future type per concrete payload — the right granularity. Generic instantiation grows binary size slightly per `T`, harmless at tens-of-types.
 
-**When NOT:** A genuinely heterogeneous result channel that a single consumer dispatches on type. There iface is unavoidable; reach for a tagged-union wrapper.
+**When NOT:** A genuinely heterogeneous result channel that one consumer dispatches on type. There iface is unavoidable; reach for a tagged-union wrapper.
 </details>
 
 ---
 
 ## 7. Exercise 6 — `errgroup` with high `SetLimit`
 
-A team sets `g.SetLimit(1000)` "for throughput". Each in-flight call uses 8 KB stack and a downstream connection. Downstream rate-limiter at 200 QPS rejects most; CPU in context-switching exceeds CPU doing work.
+A team sets `g.SetLimit(1000)` "for throughput". Each in-flight call uses 8 KB stack and a downstream connection. Downstream rate-limiter at 200 QPS rejects most; context-switching exceeds work.
 
 **Before:**
 
@@ -309,25 +295,18 @@ for _, id := range ids {
     id := id
     g.Go(func() error { return fetchUser(gctx, id) })
 }
-g.Wait()
 ```
 
 ```
-BenchmarkErrgroup1000-8     // 8 MB of stacks, ~30% in sched, p99 = 4.2s
+BenchmarkErrgroup1000-8     // 8 MB stacks, ~30% in sched, p99 = 4.2s
 ```
 
 <details><summary>After</summary>
 
-Apply Little's Law: `L = λ × W`. Downstream serves 200 QPS at 50 ms each: `L = 200 × 0.05 = 10`. Limit of 10-20 saturates without queuing.
+Apply Little's Law: `L = λ × W`. Downstream serves 200 QPS at 50 ms each: `L = 200 × 0.05 = 10`. Limit 10-20 saturates without queueing.
 
 ```go
-g, gctx := errgroup.WithContext(ctx)
 g.SetLimit(16) // ~2× Little's Law estimate
-for _, id := range ids {
-    id := id
-    g.Go(func() error { return fetchUser(gctx, id) })
-}
-g.Wait()
 ```
 
 ```
@@ -336,7 +315,7 @@ BenchmarkErrgroup16-8       // 128 KB stacks, ~5% in sched, p99 = 380 ms
 
 Same throughput (downstream-bound), ~11× better p99.
 
-**Why faster:** Past the saturation point, more concurrency just adds queueing latency — Little's Law in reverse. 1000 goroutines for 200 QPS means 5-second queue depth.
+**Why faster:** Past saturation, more concurrency just adds queueing latency — Little's Law in reverse. 1000 goroutines for 200 QPS means 5-second queue depth.
 
 **Trade-off:** Under-limit leaves throughput on the floor. Tune by measuring where downstream p99 starts climbing; add 2× headroom and a hard cap.
 
@@ -372,10 +351,7 @@ type tagged struct { i int; v Result; err error }
 out := make(chan tagged, len(fs))
 for i, f := range fs {
     i, f := i, f
-    go func() {
-        v, err := f.Await(ctx)
-        out <- tagged{i, v, err}
-    }()
+    go func() { v, err := f.Await(ctx); out <- tagged{i, v, err} }()
 }
 for k := 0; k < len(fs); k++ {
     t := <-out
@@ -402,7 +378,7 @@ BenchmarkReflectSelect-8     30000     42000 ns/op    // ~30× faster; ~1 µs/ca
 
 ## 9. Exercise 8 — Repeated Future creation in a loop
 
-A streaming pipeline allocates one `*Future[T]` per item. At 100k items/sec, that's 8 MB/s of garbage. GC pauses show in p99.
+A streaming pipeline allocates one `*Future[T]` per item. At 100k items/sec that's 8 MB/s of garbage; GC pauses show in p99.
 
 **Before:**
 
@@ -411,8 +387,7 @@ for j := range in {
     f := &Future[Result]{done: make(chan struct{})}
     go func(j Job, f *Future[Result]) {
         r, err := doWork(j)
-        if err != nil { f.Reject(err); return }
-        f.Resolve(r)
+        if err != nil { f.Reject(err) } else { f.Resolve(r) }
     }(j, f)
     out <- f
 }
@@ -424,30 +399,21 @@ BenchmarkLoopFutureAlloc-8    300000    4200 ns/op   160 B/op   2 allocs/op
 
 <details><summary>After</summary>
 
-`sync.Pool` of Future structs. `close(done)` is irreversible — switch to a notify channel that's recreated on Release.
+`sync.Pool` of Future structs. `close(done)` is irreversible — switch to a notify channel recreated on Release.
 
 ```go
-type Future[T any] struct {
-    ready  atomic.Bool
-    notify chan struct{}
-    val    T
-    err    error
-}
-
 var futurePool = sync.Pool{
     New: func() any { return &Future[Result]{notify: make(chan struct{})} },
 }
 
 func (f *Future[T]) Release() {
-    var zero T
-    f.val, f.err = zero, nil
+    var z T
+    f.val, f.err = z, nil
     f.ready.Store(false)
     f.notify = make(chan struct{}) // fresh channel; old one GC'd
     futurePool.Put(f)
 }
 ```
-
-The fresh channel is one allocation; the pool saves the Future struct (5-10× larger).
 
 ```
 BenchmarkLoopFuturePool-8    2000000    620 ns/op    24 B/op   1 allocs/op
@@ -457,9 +423,9 @@ BenchmarkLoopFuturePool-8    2000000    620 ns/op    24 B/op   1 allocs/op
 
 **Why faster:** Pool avoids `mallocgc` for the Future struct (40-80 B). GC pressure drops; pauses shrink. Remaining allocation is the notify channel — pool that too if you need to.
 
-**Trade-off:** Release must be called exactly once after the last consumer awaits. Multi-consumer broadcast Futures cannot be pooled this way. `sync.Pool` clears on each GC, so steady-state hit-rate is high but not 100%.
+**Trade-off:** Release must be called exactly once after the last consumer awaits. Multi-consumer broadcast Futures cannot be pooled this way. `sync.Pool` clears on each GC, so hit-rate is high but not 100%.
 
-**When NOT:** Below ~10k Futures/sec — GC isn't the bottleneck. When Future lifetime escapes the pool's scope.
+**When NOT:** Below ~10k Futures/sec. When Future lifetime escapes the pool's scope.
 </details>
 
 ---
@@ -629,22 +595,18 @@ BenchmarkSingleflightOnMiss-8   50000000      24 ns/op  (cache hit)
 
 ## 13. Exercise 12 — `errgroup.Wait` per request
 
-A handler creates its own `errgroup` and spawns 50 sub-fetches per request. At 1000 QPS that's 50k goroutines/sec of churn, measurable scheduler load, ~400 MB/s of stack memory churning.
+A handler creates its own `errgroup` and spawns 50 sub-fetches per request. At 1000 QPS that's 50k goroutines/sec of churn, ~400 MB/s of stack memory churning.
 
 **Before:**
 
 ```go
-func Handler(ctx context.Context, ids []string) ([]Item, error) {
-    g, gctx := errgroup.WithContext(ctx)
-    g.SetLimit(16)
-    for i, id := range ids {
-        i, id := i, id
-        g.Go(func() error {
-            it, err := fetchItem(gctx, id); out[i] = it; return err
-        })
-    }
-    return out, g.Wait()
+g, gctx := errgroup.WithContext(ctx)
+g.SetLimit(16)
+for i, id := range ids {
+    i, id := i, id
+    g.Go(func() error { it, err := fetchItem(gctx, id); out[i] = it; return err })
 }
+return out, g.Wait()
 ```
 
 ```
@@ -657,27 +619,25 @@ Long-lived worker pool consuming a shared queue. Per-request work is submitting 
 
 ```go
 type Job struct { id string; out *Future[Item]; ctx context.Context }
-
 type Pool struct{ jobs chan Job }
 
 func NewPool(workers int) *Pool {
     p := &Pool{jobs: make(chan Job, workers*4)}
-    for i := 0; i < workers; i++ { go p.worker() }
-    return p
-}
-
-func (p *Pool) worker() {
-    for j := range p.jobs {
-        if j.ctx.Err() != nil { j.out.Reject(j.ctx.Err()); continue }
-        it, err := fetchItem(j.ctx, j.id)
-        if err != nil { j.out.Reject(err); continue }
-        j.out.Resolve(it)
+    for i := 0; i < workers; i++ {
+        go func() {
+            for j := range p.jobs {
+                if j.ctx.Err() != nil { j.out.Reject(j.ctx.Err()); continue }
+                it, err := fetchItem(j.ctx, j.id)
+                if err != nil { j.out.Reject(err) } else { j.out.Resolve(it) }
+            }
+        }()
     }
+    return p
 }
 
 func (p *Pool) Submit(ctx context.Context, id string) *Future[Item] {
     f := NewFuture[Item]()
-    p.jobs <- Job{id: id, out: f, ctx: ctx}
+    p.jobs <- Job{id, f, ctx}
     return f
 }
 ```
@@ -688,9 +648,9 @@ BenchmarkSharedPool-8   200000    7800 ns/op    1600 B/op   12 allocs/op
 
 ~8× faster, 5× fewer allocations.
 
-**Why faster:** No goroutine spawn per request — workers run forever, paying their 8 KB stack once. No errgroup state setup per request. Per-request alloc is just Job and Future (poolable per Ex. 8). The scheduler doesn't see 50 new goroutines per millisecond.
+**Why faster:** No goroutine spawn per request — workers run forever, paying their 8 KB stack once. Per-request alloc is just Job and Future (poolable per Ex. 8). Scheduler doesn't see 50 new goroutines per millisecond.
 
-**Trade-off:** Workers are a global resource — size for peak QPS × per-job latency. If one request submits 1000 jobs, they monopolize the pool; add per-tenant rate limits at Submit. A cancelled job sitting in queue still runs unless workers check ctx before starting.
+**Trade-off:** Workers are global — size for peak QPS × per-job latency. One request submitting 1000 jobs monopolizes the pool; add per-tenant rate limits at Submit. A cancelled job sitting in queue still runs unless workers check ctx first.
 
 **When NOT:** Bursty workloads with very different per-request sizes — ad-hoc errgroup gives better isolation. Short-lived processes where pool startup dominates.
 </details>
@@ -699,27 +659,27 @@ BenchmarkSharedPool-8   200000    7800 ns/op    1600 B/op   12 allocs/op
 
 ## 14. When NOT to optimize
 
-Future patterns dominate when many small async values are flying around. If your code creates 10 futures per minute, optimizing them is pointless — your time is in the work the futures wrap, not the futures themselves.
+Future patterns dominate when many small async values are flying around. If your code creates 10 futures per minute, optimizing them is pointless — your time is in the work the futures wrap.
 
 - Background sync that runs once per hour — keep the simplest channel-based Future.
 - Test fixtures that fake async — no goroutine, just an already-resolved Future struct.
 - Code where each "future" already wraps a 10 ms network call — goroutine overhead is < 0.1% of total cost.
 
-**Profile first.** `go test -bench=. -benchmem -cpuprofile=cpu.out`. Look for time in `runtime.chansend`, `runtime.gopark`, `runtime.mallocgc`, and `sync.(*Mutex).Lock` — the four signatures of Future overhead.
+**Profile first.** Look for time in `runtime.chansend`, `runtime.gopark`, `runtime.mallocgc`, and `sync.(*Mutex).Lock` — the four signatures of Future overhead.
 
 **Common premature optimizations:**
 
 - Pooling Future structs (Ex. 8) below 10k Futures/sec.
 - `atomic.Pointer` (Ex. 2) when there's only one waiter — `sync.Mutex` matches it with simpler semantics.
 - Fan-in await (Ex. 7) for ≤3 futures — sequential is shorter and faster.
-- Flattening Future chains (Ex. 10) when stages are observably independent.
+- Flattening chains (Ex. 10) when stages are observably independent.
 - Worker pool (Ex. 12) when per-request load is uneven.
 
 **Correctness gaps disguised as optimizations:**
 
-- Removing `sync.Once` from Resolve "because Resolve is only called once" — until a retry path calls it twice and panics on closed channel.
+- Removing `sync.Once` from Resolve "because it's only called once" — until a retry path calls it twice and panics on closed channel.
 - Buffered channel without one-shot guard — multi-resolution silently overwrites.
-- Pool reuse with active consumers still awaiting — Future is mutated under their feet.
+- Pool reuse with active consumers still awaiting — Future mutated under their feet.
 - Singleflight across security domains — one tenant's result returned to another's call.
 
 ---
@@ -732,23 +692,23 @@ Future patterns dominate when many small async values are flying around. If your
 - Typed generic `Future[T]`, never `Future[any]` (Ex. 5).
 - One context deadline at the request boundary (Ex. 4).
 - `time.NewTimer` + `Reset` in any awaiting loop (Ex. 9).
-- `sync.Once` around Resolve/Reject — non-negotiable correctness, low cost.
+- `sync.Once` around Resolve/Reject — non-negotiable correctness.
 
 **Wins behind a profile** (when measurements justify them):
 
 - `atomic.Pointer[Result]` for lock-free fast path (Ex. 2) — when read-after-resolution is hot.
 - `errgroup.SetLimit` via Little's Law (Ex. 6) — when downstream is the constraint.
-- Fan-in await for ≥8 futures (Ex. 7) — when sequential latency-sum is in your trace.
+- Fan-in await for ≥8 futures (Ex. 7).
 - Pool the Future struct (Ex. 8) — at ≥10k Futures/sec.
-- Flatten chain combinators (Ex. 10) — when forwarder goroutines show up in profiles.
-- Singleflight only at miss path (Ex. 11) — when its mutex is hot on cache-hit traffic.
+- Flatten chain combinators (Ex. 10).
+- Singleflight only at miss path (Ex. 11).
 - Shared worker pool (Ex. 12) — when goroutine spawn dominates per-request CPU.
 
 **Specialty** (only when the design calls for it):
 
 - `sync.Once`-cached Future for shared expensive results (Ex. 1).
-- `reflect.Select` over dynamic Future sets (Ex. 7) — when N is runtime-determined.
-- Reference-counted Future for broadcast (Future awaited by many consumers).
+- `reflect.Select` over dynamic Future sets (Ex. 7).
+- Reference-counted Future for broadcast.
 - Lazy Futures with `sync.Once` for fallback chains.
 
-The Future pattern's cost is goroutines, channels, and iface boxes. Strip those three by inlining cheap work, buffering one-shot channels, and using generics; then size concurrency to the real downstream. The shape is ~100 lines of Go; the discipline is what makes it production-grade. Measure, profile, then optimize. The Future is rarely where the time goes — but when it is, these are the levers.
+Future cost is goroutines, channels, and iface boxes. Strip those three by inlining cheap work, buffering one-shot channels, and using generics; then size concurrency to the real downstream. The shape is ~100 lines of Go; the discipline is what makes it production-grade. The Future is rarely where the time goes — but when it is, these are the levers.
