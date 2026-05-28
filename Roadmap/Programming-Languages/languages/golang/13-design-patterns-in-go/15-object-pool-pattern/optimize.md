@@ -74,9 +74,7 @@ BenchmarkPooled-8    100000000    14 ns/op    0 B/op    0 allocs/op
 **Before:**
 
 ```go
-var rawPool = sync.Pool{
-    New: func() any { return &Encoder{} },
-}
+var rawPool = sync.Pool{New: func() any { return &Encoder{} }}
 
 func encode(v any) []byte {
     e := rawPool.Get().(*Encoder) // assertion every call
@@ -95,9 +93,7 @@ BenchmarkUntypedPool-8    50000000    34 ns/op    0 B/op    0 allocs/op
 Wrap `sync.Pool` in a generic typed pool. The cast is gone; the API is self-documenting.
 
 ```go
-type Pool[T any] struct {
-    p sync.Pool
-}
+type Pool[T any] struct{ p sync.Pool }
 
 func NewPool[T any](newFn func() *T) *Pool[T] {
     return &Pool[T]{p: sync.Pool{New: func() any { return newFn() }}}
@@ -133,7 +129,7 @@ BenchmarkTypedPool-8    60000000    28 ns/op    0 B/op    0 allocs/op
 
 ## 4. Exercise 3 — `make([]byte, 4096)` per request
 
-A common shape: a handler reads a small message into a stack-or-heap byte slice. The size is "big enough for almost all messages" so it's allocated fresh each time.
+A handler reads a small message into a 4 KB slice sized "big enough for almost all messages", allocated fresh per request.
 
 **Before:**
 
@@ -189,7 +185,7 @@ BenchmarkPoolSlice-8    100000000    13 ns/op    0 B/op    0 allocs/op
 
 ## 5. Exercise 4 — `bytes.Buffer.Reset()` when a slice would do
 
-`bytes.Buffer` is convenient but heavy: it carries a `lastRead` field, an internal offset, and `io.Reader`/`io.Writer` boilerplate that compiles to non-trivial machine code. For a pure write-then-flush use case, the buffer is overkill.
+`bytes.Buffer` carries a `lastRead` field, an internal offset, and `io.Reader`/`io.Writer` boilerplate — overkill for a pure write-then-flush path.
 
 **Before:**
 
@@ -212,7 +208,7 @@ BenchmarkBufferReset-8    80000000    18 ns/op    0 B/op    0 allocs/op
 
 <details><summary>After</summary>
 
-Use a raw `[]byte` and `b.Body = b.Body[:0]` to clear. The slice keeps its backing array; the length is zero. No `Buffer` overhead.
+Use raw `[]byte` and `b = b[:0]` to clear — keeps the backing array, length is zero, no `Buffer` overhead.
 
 ```go
 type Batch struct{ Body []byte }
@@ -224,9 +220,9 @@ func (b *Batch) Append(line string) {
 
 func reset(b *Batch) { b.Body = b.Body[:0] }
 
-var batchPool = sync.Pool{
-    New: func() any { return &Batch{Body: make([]byte, 0, 4096)} },
-}
+var batchPool = sync.Pool{New: func() any {
+    return &Batch{Body: make([]byte, 0, 4096)}
+}}
 ```
 
 ```
@@ -246,16 +242,14 @@ BenchmarkSliceReset-8    300000000    4.6 ns/op    0 B/op    0 allocs/op
 
 ## 6. Exercise 5 — Undersized `chan T` connection pool
 
-A `chan *Conn` of size 8 looks reasonable on a laptop. Under real load (200 concurrent requests, 30ms downstream call) it becomes the bottleneck: 192 goroutines line up waiting for a slot.
+A `chan *Conn` of size 8 looks reasonable on a laptop but under 200 concurrent requests with a 30 ms downstream call, 192 goroutines line up waiting for a slot.
 
 **Before:**
 
 ```go
 type Pool struct{ ch chan *Conn }
 
-func New() *Pool {
-    return &Pool{ch: make(chan *Conn, 8)} // arbitrary
-}
+func New() *Pool { return &Pool{ch: make(chan *Conn, 8)} } // arbitrary
 
 func (p *Pool) Get(ctx context.Context) (*Conn, error) {
     select {
@@ -271,12 +265,11 @@ BenchmarkChanPool8-8    300000    4800 ns/op   // p99 includes queue wait
 
 <details><summary>After</summary>
 
-Size the pool with Little's Law: `L = λ × W`, where `λ` is the arrival rate (req/s) and `W` is the average service time (seconds). For 200 req/s × 0.030 s = 6 in-flight on average; double for safety margin → cap 12. For 2000 req/s × 0.030 s = 60 in-flight → cap ~120.
+Size with Little's Law: `L = λ × W`. For 200 req/s × 0.030 s = 6 in-flight; double for safety → cap 12. For 2000 req/s × 0.030 s = 60 → cap ~120.
 
 ```go
-func New(arrivalsPerSec float64, serviceSec float64) *Pool {
-    base := int(math.Ceil(arrivalsPerSec * serviceSec))
-    capacity := base * 2 // peak headroom
+func New(arrivalsPerSec, serviceSec float64) *Pool {
+    capacity := int(math.Ceil(arrivalsPerSec*serviceSec)) * 2 // peak headroom
     if capacity < 4 { capacity = 4 }
     return &Pool{ch: make(chan *Conn, capacity)}
 }
@@ -299,7 +292,7 @@ BenchmarkChanPoolSized-8    5000000    240 ns/op   // no queue wait at target lo
 
 ## 7. Exercise 6 — Unbuffered worker channel
 
-A worker pool with an unbuffered job channel forces the producer to wait for a worker to pick up each job. With short jobs, the producer–consumer handshake is most of the cost.
+An unbuffered job channel forces the producer to wait for a worker on every job — for short jobs the handshake is most of the cost.
 
 **Before:**
 
@@ -352,7 +345,7 @@ BenchmarkBufWorkers-8    8000000    140 ns/op
 
 ## 8. Exercise 7 — `interface{}` boxing on Get
 
-Pre-generics pools returned `interface{}` and the caller cast back. Even with `any` (Go 1.18+), the cast remains, and the *signature* of the API still forces the runtime to materialize an `eface`/`iface` pair every Put.
+Pre-generics pools returned `interface{}` and the caller cast back. Even with `any` (Go 1.18+) the API signature still materializes an `eface`/`iface` pair per Put for non-pointer types.
 
 **Before:**
 
@@ -361,44 +354,17 @@ type Pool struct{ pool sync.Pool }
 
 func (p *Pool) Get() any  { return p.pool.Get() }
 func (p *Pool) Put(v any) { p.pool.Put(v) }
-
-func use(p *Pool) {
-    b := p.Get().(*bytes.Buffer)
-    defer p.Put(b)
-    b.Reset()
-    b.WriteString("hi")
-}
 ```
 
 ```
 BenchmarkAnyPool-8    50000000    32 ns/op    0 B/op    0 allocs/op
 ```
 
-Why is it 0 B/op despite the boxing? Because `*bytes.Buffer` is a pointer — its `iface` fits in registers and doesn't escape. But the moment you pool a non-pointer or a struct, the box allocates.
+0 B/op here because `*bytes.Buffer` is a pointer — its iface fits in registers. Pool a value type or a struct and the box allocates.
 
 <details><summary>After</summary>
 
-Generics let you keep the `*T` type all the way through the API. The pool body still stores `any` (sync.Pool's constraint), but the user-visible methods are typed and inlined.
-
-```go
-type Pool[T any] struct{ p sync.Pool }
-
-func NewPool[T any](newFn func() *T) *Pool[T] {
-    return &Pool[T]{p: sync.Pool{New: func() any { return newFn() }}}
-}
-
-func (p *Pool[T]) Get() *T   { return p.p.Get().(*T) }
-func (p *Pool[T]) Put(v *T)  { p.p.Put(v) }
-
-var bufs = NewPool(func() *bytes.Buffer { return &bytes.Buffer{} })
-
-func use() {
-    b := bufs.Get()
-    defer bufs.Put(b)
-    b.Reset()
-    b.WriteString("hi")
-}
-```
+Generics keep the `*T` type through the API. Pool body still stores `any` (sync.Pool's constraint), but user-visible methods are typed and inlined (see Exercise 2's `Pool[T]` definition).
 
 ```
 BenchmarkTypedPool-8    60000000    25 ns/op    0 B/op    0 allocs/op
@@ -417,7 +383,7 @@ BenchmarkTypedPool-8    60000000    25 ns/op    0 B/op    0 allocs/op
 
 ## 9. Exercise 8 — Pool with no upper bound on item size
 
-A pooled `bytes.Buffer` that grows to 4 MB during one outlier request stays 4 MB in the pool forever. With 1000 cached buffers each pinned at the largest size any single request ever needed, the pool's resident footprint is gigabytes.
+A pooled `bytes.Buffer` that grows to 4 MB during one outlier stays 4 MB forever — 1000 cached buffers × 4 MB = gigabytes pinned.
 
 **Before:**
 
@@ -469,7 +435,7 @@ Nearly identical CPU cost. Memory ceiling reduced by ~64×.
 
 ## 10. Exercise 9 — `Get()` inside a hot loop
 
-Borrowing once per iteration of a tight loop wastes the pool's purpose: you pay the pool overhead N times instead of once.
+Borrowing per iteration of a tight loop pays pool overhead N times instead of once.
 
 **Before:**
 
@@ -492,7 +458,7 @@ BenchmarkGetPerIter-8    100000    18000 ns/op    // 1000 items
 
 <details><summary>After</summary>
 
-Borrow once outside the loop. Reuse the same buffer for every iteration. The single Reset replaces N Get/Put pairs.
+Borrow once outside the loop. The single Reset replaces N Get/Put pairs.
 
 ```go
 func formatLines(out io.Writer, items []Item) {
@@ -524,7 +490,7 @@ BenchmarkGetOnce-8    400000    4200 ns/op
 
 ## 11. Exercise 10 — New JSON encoder per call
 
-`json.NewEncoder(w)` is cheap-looking but allocates an encoder struct, its internal scratch buffer, and an `*encodeState` per call. At high request rates, that's measurable.
+`json.NewEncoder(w)` allocates an encoder struct, its scratch buffer, and an `*encodeState` per call — measurable at high request rates.
 
 **Before:**
 
@@ -548,19 +514,16 @@ type jsonScratch struct {
     enc *json.Encoder
 }
 
-var jsonPool = sync.Pool{
-    New: func() any {
-        b := &bytes.Buffer{}
-        return &jsonScratch{buf: b, enc: json.NewEncoder(b)}
-    },
-}
+var jsonPool = sync.Pool{New: func() any {
+    b := &bytes.Buffer{}
+    return &jsonScratch{buf: b, enc: json.NewEncoder(b)}
+}}
 
 func writeJSON(w io.Writer, v any) error {
     s := jsonPool.Get().(*jsonScratch)
     defer func() {
         if s.buf.Cap() > 64<<10 { return } // cap on return
-        s.buf.Reset()
-        jsonPool.Put(s)
+        s.buf.Reset(); jsonPool.Put(s)
     }()
     if err := s.enc.Encode(v); err != nil { return err }
     _, err := w.Write(s.buf.Bytes())
@@ -607,23 +570,20 @@ Shard the pool by goroutine identity, route each `Get` to its shard. With 8 shar
 ```go
 const shards = 8
 
-type ConnPool struct {
-    s [shards]chan *Conn
-}
+type ConnPool struct{ s [shards]chan *Conn }
 
-// Cheap shard selector — locality, not perfect balance. In production use
-// runtime_procPin via a small assembly shim or a per-goroutine hash.
+// Cheap selector — locality, not perfect balance. Production uses
+// runtime_procPin via assembly shim or a per-goroutine hash.
 func shardIdx() int {
     var x int
     return int(uintptr(unsafe.Pointer(&x))>>4) & (shards - 1)
 }
 
-func (p *ConnPool) Get() *Conn  { return <-p.s[shardIdx()] }
+func (p *ConnPool) Get() *Conn { return <-p.s[shardIdx()] }
 func (p *ConnPool) Put(c *Conn) {
     select {
     case p.s[shardIdx()] <- c:
-    default:
-        c.Close() // shard full
+    default: c.Close() // shard full
     }
 }
 ```
@@ -722,22 +682,11 @@ BenchmarkPoolNoFinalizer-8    20000000    140 ns/op    0 B/op    0 allocs/op
 
 ## 14. When NOT to optimize
 
-Most Go programs do not need a pool. The default allocator handles small short-lived objects efficiently; escape analysis already places many objects on the stack.
+Most Go programs do not need a pool. The default allocator handles small short-lived objects efficiently; escape analysis already places many objects on the stack. A handler at 100 req/s allocating a 256-byte struct generates 25 KB/s of garbage — noise to the GC. A CLI that runs once should never pool. A 5-byte field is too cheap to recover from pooling overhead.
 
-- A handler at 100 req/s allocating one 256-byte struct generates 25 KB/s of garbage — noise to the GC.
-- A CLI tool that runs once and exits should never pool — the GC won't run before `main` returns.
-- A struct with a 5-byte field is too cheap to allocate to recover from pooling overhead.
+**Profile first.** Run `go test -bench=. -benchmem` and `pprof -alloc_objects`. If the suspect type isn't in the top 10 by allocation count *and* not a CPU bottleneck, leave it alone.
 
-**Profile first.** `go test -bench=. -benchmem` and `pprof -alloc_objects`. If the suspect type isn't in the top 10 by allocation count *and* not a CPU bottleneck, leave it alone.
-
-**Common premature optimizations:**
-
-- Pooling structs ≤256 bytes — the allocator beats the pool below that size.
-- Pooling objects used once per program lifetime — no reuse, no win.
-- Pooling without `Reset` — a stale buffer is a correctness bug, not a perf win.
-- Pooling with no cap (Exercise 8) — memory bloat costs more than the saved alloc.
-- Sharding (Exercise 11) under low contention — bookkeeping cost > contention cost.
-- Putting back a connection whose health you didn't check — dead-in-pool is worse than re-dial.
+**Common premature optimizations:** pooling structs ≤256 bytes (the allocator wins below that), pooling objects used once per program lifetime, pooling without `Reset` (a correctness bug, not a perf win), pooling with no cap (Exercise 8), sharding (Exercise 11) under low contention, and putting back a connection whose health you didn't check.
 
 The pool is a hint, not a guarantee. Design for the case where `New` runs on every call.
 
@@ -761,9 +710,9 @@ The pool is a hint, not a guarantee. Design for the case where `New` runs on eve
 - Size connection pools with Little's Law (Exercise 5) when queue waits show up in p99 latency.
 - Buffer worker channels (Exercise 6) when Submit throughput matters more than per-job latency.
 
-**Specialty** (only when the design genuinely calls for it):
+**Specialty** (only when the design calls for it):
 
 - Shard a custom pool by P or goroutine ID (Exercise 11) when a flame graph shows acquire contention.
 - Build a typed pool with explicit `Close` for resources with OS handles (Exercise 12 after-form).
 
-Object pooling in Go is a precision instrument. Used on the wrong target, it bloats memory or regresses performance. Used on the right target — large, hot, short-lived, costly-to-init objects — it can cut GC pressure to a fraction of baseline and turn a CPU-bound workload into an I/O-bound one. Measure, profile, then pool.
+Object pooling is a precision instrument: bloats memory on the wrong target, cuts GC pressure dramatically on the right one (large, hot, short-lived, costly-to-init objects). Measure, profile, then pool.

@@ -310,7 +310,7 @@ Staff candidate names the **tail-tolerance gap**: upstream p99=5 s with 100 conn
 
 ### Q24. Multi-tier pool design: small/medium/large buffers.
 
-**Short answer:** One pool for variable sizes produces the buffer-size trap. The fix at scale is **size-segregated pools**: separate pools per size class, each only stores buffers in its band. Callers pick by requested size; oversize requests skip pooling.
+**Short answer:** One pool for variable sizes triggers the buffer-size trap. Fix at scale: **size-segregated pools** — one per size class, each storing only buffers in its band. Callers pick by size; oversize bypasses pooling.
 
 ```go
 var (
@@ -325,14 +325,13 @@ func Get(size int) *[]byte {
     case size <= 16<<10:  return medium.Get().(*[]byte)
     case size <= 256<<10: return large.Get().(*[]byte)
     default:
-        b := make([]byte, 0, size) // bypass pool
+        b := make([]byte, 0, size)
         return &b
     }
 }
 
 func Put(b *[]byte) {
-    c := cap(*b)
-    *b = (*b)[:0]
+    c := cap(*b); *b = (*b)[:0]
     switch {
     case c <= 1<<10:   small.Put(b)
     case c <= 16<<10:  medium.Put(b)
@@ -342,29 +341,19 @@ func Put(b *[]byte) {
 }
 ```
 
-This is what TCMalloc, jemalloc, and Go's allocator do internally — size classes — and the pattern translates to pools. Trade-offs: more pools = more headers, but more predictable per-tier residency. Pick 3–5 tiers, log-scale spacing.
+This is what TCMalloc, jemalloc, and Go's allocator do internally — size classes. Pick 3–5 tiers, log-scale spacing. A staff candidate wraps `Get(size)` in a `Bytes(size)` helper returning slice + `Release` — call site is one line, size-class logic invisible.
 
-A staff candidate wraps `Get(size)` in a `Bytes(size)` helper returning the slice and a `Release` function. Call site becomes one line; size-class logic invisible.
-
-**Follow-up to expect:** What does `fasthttp` do? Answer: `valyala/fasthttp` uses size-bucketed pools for everything — bodies, headers, hash buckets. Aggressive end-of-spectrum. Worth reading its companion `bytebufferpool`.
+**Follow-up to expect:** What does `fasthttp` do? Answer: `valyala/fasthttp` uses size-bucketed pools for everything — bodies, headers, hash buckets. Aggressive end-of-spectrum. Companion library `bytebufferpool` is the idiomatic reference.
 
 ---
 
 ### Q25. Expensive `Reset` — what do you do?
 
-**Short answer:** Sometimes resetting is non-trivial — clearing N hash table keys, nilling pointers in a slice so GC can reclaim, zeroing an embedded buffer for security. If `Reset` cost approaches `New` cost, the pool's benefit collapses.
+**Short answer:** Sometimes resetting is non-trivial — clearing N hash keys, nilling pointers so GC can reclaim, zeroing an embedded buffer for security. If `Reset` approaches `New`, the pool's benefit collapses. Three responses: (1) **Amortize** — clear lazily on `Get`, only the parts you'll use; tombstone-mark and check on read. (2) **Generation counters** — give the object `gen int64`, bump on `Put`; borrowers carry the gen; reads check `if entry.gen != current.gen { entry = zero }`. Reset becomes O(1); per-access check costs a load. (3) **Stop pooling that object** — if cost is irreducible and approaches `New`, the pool is debt; drop it. Senior signal is recognizing option 3 exists.
 
-Three responses:
+Staff framing: "every pooled object pays a reset tax. If the tax exceeds the savings, the pool is a memorial to good intentions."
 
-(1) **Amortize the reset** — clear lazily on `Get`, only the parts you'll use. If the next caller writes 3 of 100 keys, you only reset those 3 (or tombstone-mark and check on read).
-
-(2) **Generation counters** — give the object a `gen int64`; bump on `Put`. Borrowers carry the gen they got; reads check `if entry.gen != current.gen { entry = zero }`. Reset becomes O(1); per-access check costs a load. Some lock-free hash tables work this way.
-
-(3) **Stop pooling that object** — if `Reset` cost is irreducible and approaches `New`, the pool is debt. Drop it. The senior signal is recognizing this option exists.
-
-A staff candidate's framing: "every pooled object pays a reset tax. If the tax exceeds the savings, the pool is a memorial to good intentions."
-
-**Follow-up to expect:** Security-sensitive zeroing? Answer: separate problem. A buffer holding a password must be zeroed before returning, or the next borrower might `String()` it and log it. Explicit `for i := range b { b[i] = 0 }` is usually sufficient. Zeroing is part of reset cost — sometimes pooling crypto state is the wrong call.
+**Follow-up to expect:** Security-sensitive zeroing? Answer: separate problem. A buffer holding a password must be zeroed before returning, or the next borrower may `String()` it and log it. Explicit `for i := range b { b[i] = 0 }` usually suffices. Zeroing is part of reset cost — sometimes pooling crypto state is the wrong call.
 
 ---
 
@@ -384,58 +373,44 @@ import (
     "sync"
 )
 
-// maxCap is the largest buffer we'll return to the pool. Bigger ones
-// get dropped on Put so the pool doesn't accumulate huge backing arrays.
-// 64 KB is the encoding/json heuristic — large enough for typical
-// responses, small enough that 1000 cached buffers stays at 64 MB.
+// maxCap: largest buffer we keep. Bigger ones get dropped so the pool
+// doesn't accumulate huge backing arrays. 64 KB = encoding/json's
+// heuristic — fits typical responses, 1000 cached stays at 64 MB.
 const maxCap = 64 << 10
 
 type BufferPool struct{ p sync.Pool }
 
 func New() *BufferPool {
-    return &BufferPool{
-        // New is cheap: just a struct header. Backing array grows
-        // on first WriteString in the caller.
-        p: sync.Pool{New: func() any { return new(bytes.Buffer) }},
-    }
+    return &BufferPool{p: sync.Pool{New: func() any { return new(bytes.Buffer) }}}
 }
 
 func (bp *BufferPool) Get() *bytes.Buffer {
     b := bp.p.Get().(*bytes.Buffer)
-    // Reset-on-Get is safer than reset-on-Put: if a caller panics
-    // and skips Put, the next borrower still gets a clean buffer.
+    // Reset on Get is panic-tolerant: a caller that skips Put still
+    // leaves the pool with clean state for the next borrower.
     b.Reset()
     return b
 }
 
 func (bp *BufferPool) Put(b *bytes.Buffer) {
-    if b == nil {
-        return
-    }
-    if b.Cap() > maxCap {
-        // Drop the oversized buffer. GC reclaims the backing array;
-        // next Get falls through to New for a fresh small one.
-        return
-    }
+    if b == nil || b.Cap() > maxCap { return }
     bp.p.Put(b)
 }
 
-// Borrow returns a buffer and a release function. Idiomatic Go: the
-// caller writes `defer release()` and can't forget to Put.
+// Borrow + release: idiomatic Go. Caller writes `defer release()`
+// and can't forget to Put.
 func (bp *BufferPool) Borrow() (*bytes.Buffer, func()) {
     b := bp.Get()
     return b, func() { bp.Put(b) }
 }
 
-// Example caller:
-//   buf, release := pool.Borrow()
-//   defer release()
-//   buf.WriteString("hello ")
-//   buf.WriteString(name)
+// Example:
+//   buf, release := pool.Borrow(); defer release()
+//   buf.WriteString("hello "); buf.WriteString(name)
 //   return buf.String() // String copies; safe to release.
 ```
 
-Senior moves: (a) `Reset()` in `Get`, not `Put` — panic-tolerant; (b) the cap is named and commented, not magic; (c) `Borrow` returns a release function so the call site is one `defer`; (d) `b.String()` is safe after release because `String` copies — a senior knows which `bytes.Buffer` methods alias (`Bytes`, `Next`) and which don't.
+Senior moves: `Reset()` in `Get` (panic-tolerant); cap named and commented; `Borrow` returns release so the call site is one `defer`; `b.String()` is safe after release because `String` copies — knowing which `bytes.Buffer` methods alias (`Bytes`, `Next`) and which don't is part of the job.
 
 ---
 
@@ -454,9 +429,8 @@ import (
     "sync"
 )
 
-// Conn is the minimum interface a poolable connection must satisfy.
-// Kept narrow: the pool doesn't care what the connection does,
-// only that it can be checked and closed.
+// Conn: narrow interface — pool doesn't care what the connection does,
+// only that it can be checked and closed. App layer adds Query/Exec.
 type Conn interface {
     Ping() error
     Close() error
@@ -478,69 +452,48 @@ var ErrClosed = errors.New("connpool: pool is closed")
 func (p *ConnPool[C]) Get(ctx context.Context) (C, error) {
     var zero C
     p.mu.Lock()
-    if p.closed {
-        p.mu.Unlock()
-        return zero, ErrClosed
-    }
+    if p.closed { p.mu.Unlock(); return zero, ErrClosed }
     p.mu.Unlock()
-
     select {
     case c := <-p.pool:
-        // Health-check before handing out — a stale connection here
-        // causes a confusing error five layers deeper at query time.
-        if err := c.Ping(); err != nil {
-            _ = c.Close()
-            return p.factory()
-        }
+        // Health-check before handing out — a stale conn here causes
+        // a confusing error five layers deeper at query time.
+        if err := c.Ping(); err != nil { _ = c.Close(); return p.factory() }
         return c, nil
     case <-ctx.Done():
         return zero, ctx.Err()
     default:
-        // Pool empty — mint a new one. Production pools enforce
-        // a max_total here, blocking if we'd exceed it.
+        // Pool empty. Production pools enforce max_total here.
         return p.factory()
     }
 }
 
 func (p *ConnPool[C]) Put(c C) {
     p.mu.Lock()
-    if p.closed {
-        p.mu.Unlock()
-        _ = c.Close()
-        return
-    }
+    if p.closed { p.mu.Unlock(); _ = c.Close(); return }
     p.mu.Unlock()
-
     select {
     case p.pool <- c:
     default:
-        // Pool full — close to free the resource. Without this,
-        // we'd leak connections every time Put was refused.
-        _ = c.Close()
+        _ = c.Close() // full — close instead of leaking
     }
 }
 
 func (p *ConnPool[C]) Close() error {
     p.mu.Lock()
-    if p.closed {
-        p.mu.Unlock()
-        return ErrClosed
-    }
+    if p.closed { p.mu.Unlock(); return ErrClosed }
     p.closed = true
     close(p.pool)
     p.mu.Unlock()
-
     var firstErr error
     for c := range p.pool {
-        if err := c.Close(); err != nil && firstErr == nil {
-            firstErr = err
-        }
+        if err := c.Close(); err != nil && firstErr == nil { firstErr = err }
     }
     return firstErr
 }
 ```
 
-Senior moves: (a) narrow `Conn` interface — pool depends only on `Ping`/`Close`; (b) borrow-side health check surfaces failures at the pool layer, not the query; (c) context-aware `Get` honors caller deadlines; (d) `Put` closes on full pool instead of silently leaking; (e) comments name the production gaps left out (`max_total`, retries, metrics) so the interviewer knows you know.
+Senior moves: narrow `Conn` interface; borrow-side health check surfaces failures at the pool layer not the query; context-aware `Get` honors caller deadlines; `Put` closes on full pool instead of silently leaking; comments name the production gaps left out (`max_total`, retries, metrics) so the interviewer knows you know.
 
 ---
 
@@ -571,16 +524,12 @@ type WorkerPool struct {
     cancel   context.CancelFunc
 }
 
-// New: queueSize controls backpressure. Small = Submit blocks quickly
-// (signal to upstream). Large = hides pressure until OOM. Default
-// queueSize ~= workers*2; tune for job duration variance.
+// queueSize controls backpressure: small = Submit blocks quickly
+// (signal upstream); large = hides pressure until OOM. Default ~= workers*2.
 func New(workers, queueSize int) *WorkerPool {
     ctx, cancel := context.WithCancel(context.Background())
     p := &WorkerPool{jobs: make(chan Job, queueSize), ctx: ctx, cancel: cancel}
-    for i := 0; i < workers; i++ {
-        p.wg.Add(1)
-        go p.worker()
-    }
+    for i := 0; i < workers; i++ { p.wg.Add(1); go p.worker() }
     return p
 }
 
@@ -589,11 +538,8 @@ func (p *WorkerPool) worker() {
     for job := range p.jobs {
         if err := job(p.ctx); err != nil {
             p.mu.Lock()
-            // Keep only the first error — subsequent failures are
-            // usually consequences (cancelled context, timeouts).
-            if p.firstErr == nil {
-                p.firstErr = err
-            }
+            // First error only — later ones are usually consequences.
+            if p.firstErr == nil { p.firstErr = err }
             p.mu.Unlock()
         }
     }
@@ -603,67 +549,57 @@ var ErrPoolClosed = errors.New("workerpool: closed")
 
 func (p *WorkerPool) Submit(job Job) error {
     p.mu.Lock()
-    if p.closed {
-        p.mu.Unlock()
-        return ErrPoolClosed
-    }
+    if p.closed { p.mu.Unlock(); return ErrPoolClosed }
     p.mu.Unlock()
-    // Blocking is the backpressure — caller feels the slowdown.
-    p.jobs <- job
+    p.jobs <- job // blocking is the backpressure
     return nil
 }
 
 func (p *WorkerPool) Shutdown(ctx context.Context) error {
     p.mu.Lock()
-    if p.closed {
-        p.mu.Unlock()
-        return ErrPoolClosed
-    }
+    if p.closed { p.mu.Unlock(); return ErrPoolClosed }
     p.closed = true
     close(p.jobs)
     p.mu.Unlock()
-
     done := make(chan struct{})
     go func() { p.wg.Wait(); close(done) }()
-
     select {
     case <-done:
     case <-ctx.Done():
-        // Deadline hit — cancel workers' job ctx so they abort.
-        // Jobs ignoring ctx.Done will still hang; document this.
+        // Deadline hit — cancel workers' ctx so they abort.
+        // Jobs ignoring ctx.Done still hang; that's a job bug.
         p.cancel()
         <-done
     }
-
     p.mu.Lock()
     defer p.mu.Unlock()
     return p.firstErr
 }
 ```
 
-Senior moves: (a) queue size is a documented backpressure knob; (b) only the first error preserved — `errors.Join` of 100 cancelled-ctx errors is noise; (c) `Shutdown` honors a deadline and cancels worker context on timeout; (d) the contract "jobs must respect ctx.Done" is named — a job that ignores it will hang shutdown; (e) `Submit` returning `ErrPoolClosed` lets HTTP handlers return 503 instead of blocking on a closed channel.
+Senior moves: queue size is a documented backpressure knob; only the first error kept (`errors.Join` of 100 cancelled-ctx errors is noise); `Shutdown` honors a deadline and cancels worker ctx on timeout; the contract "jobs must respect ctx.Done" is named (a job that ignores it hangs shutdown); `Submit`'s `ErrPoolClosed` lets HTTP handlers return 503 instead of blocking on a closed channel.
 
 ---
 
 ## 7. Concept checks
 
-If you can't answer any of these in one breath, study more.
+If you can't answer these in one breath, study more.
 
-- Difference between `sync.Pool` and a channel-based pool? (`sync.Pool`: unbounded, evicts at GC, lock-free per-P. Channel: bounded, no eviction, shared lock.)
-- Why does `sync.Pool` clear during GC? (Opportunistic retention. Runtime reclaims under memory pressure. Pool is a hint.)
-- What's per-P architecture? (One cache per logical processor; lock-free local fast path; shared/steal slow path.)
-- Why must you `Reset()`? (Object carries previous borrower's state; using it without reset corrupts both outputs.)
-- The buffer-size trap? (Growable buffer that gets large once stays large forever. Cap on Put.)
+- `sync.Pool` vs channel-based pool? (`sync.Pool`: unbounded, evicts at GC, lock-free per-P. Channel: bounded, no eviction, shared lock.)
+- Why does `sync.Pool` clear during GC? (Opportunistic retention; pool is a hint.)
+- Per-P architecture? (One cache per processor; lock-free local fast path; shared/steal slow path.)
+- Why `Reset()`? (Object carries previous state; using it without reset corrupts both outputs.)
+- Buffer-size trap? (Growable buffer that gets large once stays large forever. Cap on Put.)
 - Why not pool DB connections in `sync.Pool`? (No size cap, GC eviction, no health check.)
-- The victim cache? (Secondary list populated by GC; objects survive one extra cycle. Smooths post-GC cliff.)
-- When does `Get()` allocate? (GC clear, first call on P, contention loss, type-assertion escape, expensive `New`.)
+- Victim cache? (Secondary list populated by GC; objects survive one extra cycle.)
+- When does `Get()` allocate? (GC clear, first call on P, contention loss, assertion escape, expensive `New`.)
 - Healthy hit rate? (>95% steady, >80% spikes. <50% = debt.)
-- How do you benchmark a pool? (Two benchmarks with/without; `allocs/op`, `B/op`, `ns/op`; `RunParallel` for per-P benefit.)
-- What does `GOMEMLIMIT` do to pools? (More GC = more clears = lower hit rate. Set with headroom.)
+- How do you benchmark a pool? (With/without, `allocs/op` `B/op` `ns/op`, `RunParallel` for per-P benefit.)
+- `GOMEMLIMIT` and pools? (More GC = more clears = lower hit rate. Set with headroom.)
 - Pooling structs with maps? (Inner allocations don't reset themselves; clear keys / truncate slices on Put.)
-- Little's law for pool sizing? (`N = QPS * holding_time * safety`. Below it = wait; above = waste.)
-- Health-check connections on borrow or return? (Both. Borrow catches stale before caller; return skips broken from re-entry.)
-- Worker pool vs object pool? (Worker: N goroutines on a channel. Object: N stored objects. Same word, different patterns.)
+- Little's law for sizing? (`N = QPS * holding_time * safety`. Below = wait; above = waste.)
+- Health-check on borrow or return? (Both. Borrow catches stale before caller; return skips broken from re-entry.)
+- Worker pool vs object pool? (Goroutines on a channel vs N stored objects. Same word, different patterns.)
 
 ---
 
@@ -671,16 +607,16 @@ If you can't answer any of these in one breath, study more.
 
 These signal a weak candidate.
 
-- **Pooling without benchmarking.** Adds `sync.Pool` because "it should be faster" with no `-benchmem` numbers. Debt until proven otherwise.
-- **`Reset()` forgotten.** Live-coding example writes to a pooled buffer without reset. No recognition the next borrower inherits the data.
+- **Pooling without benchmarking.** Adds `sync.Pool` because "it should be faster" with no `-benchmem` numbers.
+- **`Reset()` forgotten.** Writes to a pooled buffer without reset; no recognition the next borrower inherits the data.
 - **Caller keeps a reference past `Put`.** Returns `buf.Bytes()` without copying, then `Put`s. Classic data race.
-- **`sync.Pool` for connections.** Suggests it without acknowledging eviction, size cap, or health check. Hasn't run a real pool.
-- **No `New` function.** Constructs `sync.Pool{}` expecting `Get` to return non-nil. Hasn't read the docs.
-- **No cap on growable buffers.** Pools `*bytes.Buffer` without `Cap()` check on Put. Unbounded growth under any burst.
-- **"Pools are free."** Treats pooling as no-cost. No mention of reset, type-assertion, contention, or hit-rate measurement.
-- **Pooling tiny objects.** Wraps `sync.Pool` around an 8-byte struct. Pool overhead exceeds allocation cost.
-- **No GC interaction discussion.** Asked about `sync.Pool` and GC, doesn't know the pool clears. Hasn't read `pool.go`.
-- **One pool for all sizes.** Pools variable-size buffers together and accepts the bloat; doesn't bring up size-class segregation.
+- **`sync.Pool` for connections.** No acknowledgment of eviction, size cap, or health check. Hasn't run a real pool.
+- **No `New` function.** Expects `Get` to return non-nil from `sync.Pool{}`. Hasn't read the docs.
+- **No cap on growable buffers.** Pools `*bytes.Buffer` without `Cap()` check on Put.
+- **"Pools are free."** No mention of reset, type-assertion, contention, or hit-rate measurement.
+- **Pooling tiny objects.** Wraps `sync.Pool` around an 8-byte struct; pool overhead exceeds allocation cost.
+- **No GC interaction.** Doesn't know the pool clears. Hasn't read `pool.go`.
+- **One pool for all sizes.** No size-class segregation for variable-size buffers.
 
 ---
 
@@ -688,23 +624,23 @@ These signal a weak candidate.
 
 These signal a strong candidate.
 
-- **Brings numbers, not opinions.** "Profiled, allocs/op dropped from 12 to 1, p99 dropped 8 ms; here's the benchmark."
-- **Picks `sync.Pool` vs typed pool deliberately.** Names when each wins; names the trade-off.
-- **Reset lives at `Get`.** Or wraps `Borrow` to enforce the contract. Recognizes panics-skip-Put as the default failure mode.
-- **Caps buffer size on `Put`.** Unprompted mention of the trap and the 64 KB threshold. Has read `encoding/json`.
-- **Walks through `sync.Pool` internals.** Sketches per-P locals, victim cache, lock-free fast path. Has read `src/sync/pool.go`.
-- **Names Little's law for sizing.** `N = QPS * latency * safety`. Doesn't pull numbers from the air.
+- **Brings numbers, not opinions.** "Profiled, allocs/op dropped from 12 to 1, p99 dropped 8 ms."
+- **Picks `sync.Pool` vs typed pool deliberately.** Names when each wins and the trade-off.
+- **Reset lives at `Get`** — or wraps `Borrow` to enforce the contract. Recognizes panics-skip-Put.
+- **Caps buffer size on `Put`.** Unprompted mention of the trap and the 64 KB threshold.
+- **Walks through `sync.Pool` internals.** Per-P locals, victim cache, lock-free fast path.
+- **Names Little's law for sizing.** `N = QPS * latency * safety`; doesn't pull numbers from the air.
 - **Hit-rate metric.** Instruments hits, misses, ratio. Knows the pool is invisible without metrics.
-- **Size-segregated pools at scale.** Brings up tiered pools for variable sizes. References `bytebufferpool` or allocator size classes.
-- **Acknowledges removal as a valid outcome.** Mentions pools they wrote that got removed when benchmarks didn't justify them. Maturity signal.
-- **Distinguishes worker pool from object pool.** Recognizes "pool of goroutines for in-process concurrency" vs "queue of jobs in a database for cross-restart reliability" as different problems.
+- **Size-segregated pools at scale.** Tiered pools for variable sizes; references `bytebufferpool`.
+- **Acknowledges removal as valid.** Mentions pools they wrote that got removed when benchmarks didn't justify them.
+- **Distinguishes worker pool from object pool.** Different problems with the same name.
 
 ---
 
 ## 10. Further reading
 
-- **`sync/pool.go` source**: <https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/sync/pool.go> — canonical implementation, ~300 lines with the victim cache. Read end-to-end at least once.
-- **`encoding/json` encoder pool**: <https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/encoding/json/encode.go> — production `sync.Pool` with size-cap-on-Put. The trap fix lives in `encodeStatePool` Put.
-- **Vincent Blanchon, *Go: Understand the Design of `sync.Pool`***: <https://medium.com/a-journey-with-go/go-understand-the-design-of-sync-pool-2dde3024e277> — clearest walkthrough of per-P architecture and the victim cache for readers who haven't touched runtime source.
-- **`valyala/bytebufferpool`**: <https://github.com/valyala/bytebufferpool> — production size-class buffer pool from the `fasthttp` ecosystem. Idiomatic Go implementation of tiered pooling.
-- **Jeff Dean & Luiz André Barroso, *The Tail at Scale***: <https://research.google/pubs/the-tail-at-scale/> — required reading for connection-pool sizing under tail latency. Hedged-request pattern lives here.
+- **`sync/pool.go` source**: <https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/sync/pool.go> — canonical implementation, ~300 lines including the victim cache. Read once.
+- **`encoding/json` encoder pool**: <https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/encoding/json/encode.go> — production `sync.Pool` with size-cap-on-Put.
+- **Vincent Blanchon, *Go: Understand the Design of `sync.Pool`***: <https://medium.com/a-journey-with-go/go-understand-the-design-of-sync-pool-2dde3024e277> — clearest walkthrough of per-P architecture and victim cache.
+- **`valyala/bytebufferpool`**: <https://github.com/valyala/bytebufferpool> — production size-class buffer pool from the `fasthttp` ecosystem.
+- **Dean & Barroso, *The Tail at Scale***: <https://research.google/pubs/the-tail-at-scale/> — required reading for pool sizing under tail latency.

@@ -11,19 +11,13 @@ Pooling bugs rarely crash. They corrupt one response per million, leak a megabyt
 ## Bug 1 — Forgotten Reset()
 
 ```go
-var bufPool = sync.Pool{
-    New: func() any { return new(bytes.Buffer) },
-}
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 func renderUser(w http.ResponseWriter, u *User) {
     buf := bufPool.Get().(*bytes.Buffer)
     defer bufPool.Put(buf)
 
-    buf.WriteString("name=")
-    buf.WriteString(u.Name)
-    buf.WriteString(" email=")
-    buf.WriteString(u.Email)
-
+    buf.WriteString("name=" + u.Name + " email=" + u.Email)
     w.Write(buf.Bytes())
 }
 ```
@@ -36,15 +30,12 @@ func renderUser(w http.ResponseWriter, u *User) {
 
 **Spot in review:** Any `pool.Get()` that *writes* to the returned object without an explicit `Reset()` / `[:0]` / `clear()` first.
 
-**Fix:**
+**Fix:** add `buf.Reset()` immediately after the `defer`:
 
 ```go
 buf := bufPool.Get().(*bytes.Buffer)
 defer bufPool.Put(buf)
 buf.Reset()                          // first line after Get
-
-buf.WriteString("name=")
-// ...
 ```
 
 **Why common:** Examples in articles often show pools used with fresh objects from `New`. The fact that `Reset` is part of the contract is implicit, and copy-pasted code drops the `Reset` line because "the buffer is empty, right?"
@@ -77,19 +68,9 @@ func validate(payload map[string]any) error {
 
 **Spot in review:** Every `pool.Get()` needs a matching `pool.Put()` on every return path. The idiom is `Get` immediately followed by `defer Put`.
 
-**Fix:**
+**Fix:** add `defer encoderPool.Put(enc)` immediately after `Get`.
 
-```go
-enc := encoderPool.Get().(*json.Encoder)
-defer encoderPool.Put(enc)
-
-if err := enc.Encode(payload); err != nil {
-    return fmt.Errorf("encode: %w", err)
-}
-return nil
-```
-
-**Why common:** Early returns multiply quickly. The original author wrote `Put` at the end of the happy path; the first `if err != nil { return }` added later silently skips it.
+**Why common:** Early returns multiply quickly. The author wrote `Put` at the end of the happy path; the first `if err != nil { return }` added later silently skips it.
 </details>
 
 ---
@@ -101,13 +82,11 @@ func handle(w http.ResponseWriter, r *http.Request) {
     buf := bufPool.Get().(*bytes.Buffer)
     buf.Reset()
 
-    body := mustDecodeJSON(r.Body)        // can panic on bad input
-    buf.WriteString(body.User)
-    buf.WriteString(":")
-    buf.WriteString(body.Token)
+    body := mustDecodeJSON(r.Body)        // panics on malformed input
+    buf.WriteString(body.User + ":" + body.Token)
 
     w.Write(buf.Bytes())
-    bufPool.Put(buf)                       // last line — only runs on success
+    bufPool.Put(buf)                       // only runs on success
 }
 ```
 
@@ -119,24 +98,16 @@ func handle(w http.ResponseWriter, r *http.Request) {
 
 **Spot in review:** Any `pool.Put(x)` as a normal statement instead of `defer pool.Put(x)`. The defer guarantees the buffer returns on panic or early return.
 
-**Fix:**
+**Fix:** move `Put` to a `defer` on the line after `Get`.
 
 ```go
-func handle(w http.ResponseWriter, r *http.Request) {
-    buf := bufPool.Get().(*bytes.Buffer)
-    defer bufPool.Put(buf)
-    buf.Reset()
-
-    body := mustDecodeJSON(r.Body)
-    buf.WriteString(body.User)
-    buf.WriteString(":")
-    buf.WriteString(body.Token)
-
-    w.Write(buf.Bytes())
-}
+buf := bufPool.Get().(*bytes.Buffer)
+defer bufPool.Put(buf)
+buf.Reset()
+// ... rest unchanged ...
 ```
 
-**Why common:** Code that started single-line ("just write the response") grows into something with multiple failure modes, but the `Put` stays where the author originally typed it.
+**Why common:** Single-line beginnings grow into multi-failure functions, but the `Put` stays where it was originally typed.
 </details>
 
 ---
@@ -152,11 +123,9 @@ func renderToken(user string) []byte {
     buf := bufPool.Get().(*bytes.Buffer)
     defer bufPool.Put(buf)
     buf.Reset()
-
     buf.WriteString("user=")
     buf.WriteString(user)
-
-    return buf.Bytes()                     // returned BEFORE Put runs… or does it?
+    return buf.Bytes()                     // aliased to pooled buffer
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -174,21 +143,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 **Spot in review:** Any function that `Put`s a pooled buffer and returns `buf.Bytes()` or a sub-slice of the internal array. The data must be copied before `Put` runs.
 
-**Fix:**
+**Fix:** copy out of the pool before `Put` runs:
 
 ```go
-func renderToken(user string) []byte {
-    buf := bufPool.Get().(*bytes.Buffer)
-    defer bufPool.Put(buf)
-    buf.Reset()
-
-    buf.WriteString("user=")
-    buf.WriteString(user)
-
-    out := make([]byte, buf.Len())
-    copy(out, buf.Bytes())                  // copy out of the pool
-    return out
-}
+defer bufPool.Put(buf)
+buf.Reset()
+buf.WriteString("user=")
+buf.WriteString(user)
+return append([]byte(nil), buf.Bytes()...)  // owned copy
 ```
 
 **Why common:** `buf.Bytes()` looks like a getter; nothing in its signature hints "this is a window into a shared array". Surfaces only under concurrent traffic.
@@ -279,20 +241,14 @@ func process(input []byte) int {
 
 **Spot in review:** `New: func() any { return T{} }` (value) instead of `return &T{}` (pointer). `staticcheck` flags this as `SA6002`.
 
-**Fix:**
+**Fix:** return a pointer from `New`, assert to a pointer in `Get`, mutate through the pointer:
 
 ```go
-var scratchPool = sync.Pool{
-    New: func() any { return &Scratch{} },
-}
-
-func process(input []byte) int {
-    s := scratchPool.Get().(*Scratch)
-    defer scratchPool.Put(s)
-    s.n = 0
-    copy(s.data[:], input)
-    return work(s.data[:len(input)])
-}
+New: func() any { return &Scratch{} },
+// ...
+s := scratchPool.Get().(*Scratch)
+defer scratchPool.Put(s)
+s.n = 0
 ```
 
 **Why common:** Go's value/pointer fluidity hides the boxing cost; `vet` doesn't flag it.
@@ -393,7 +349,7 @@ func encode(v any) []byte {
 
 **Spot in review:** Any `Reset` method on a pooled type that contains a `make(...)` call. The correct idiom is `s = s[:0]`, `clear(m)`, or `b.Reset()` on a `*bytes.Buffer`.
 
-**Fix:**
+**Fix:** truncate, don't allocate. Slices use `s = s[:0]`; maps use `clear(m)` (Go 1.21+); `bytes.Buffer.Reset` does the right thing already.
 
 ```go
 func (e *Encoder) Reset() {
@@ -401,16 +357,7 @@ func (e *Encoder) Reset() {
 }
 ```
 
-For maps:
-
-```go
-func (e *Encoder) Reset() {
-    clear(e.headers)                          // Go 1.21+; preserves the map
-    e.buf = e.buf[:0]
-}
-```
-
-**Why common:** `make` is what new code starts with. When someone later adds `Reset`, they often write the same `make` call — not realizing that "reset" in a pooled context means "preserve the allocation".
+**Why common:** `make` is what new code starts with. When someone later adds `Reset`, they reach for the same `make` — not realizing "reset" in a pooled context means "preserve the allocation".
 </details>
 
 ---
@@ -429,22 +376,13 @@ func New(workers int) *WorkerPool {
         p.wg.Add(1)
         go func() {
             defer p.wg.Done()
-            for f := range p.jobs {
-                f()
-            }
+            for f := range p.jobs { f() }
         }()
     }
     return p
 }
 
-func (p *WorkerPool) Submit(f func()) {
-    p.jobs <- f                                   // blocks if all workers busy
-}
-
-func (p *WorkerPool) Close() {
-    close(p.jobs)
-    p.wg.Wait()
-}
+func (p *WorkerPool) Submit(f func()) { p.jobs <- f }      // blocks if all busy
 ```
 
 <details><summary>Answer</summary>
@@ -457,31 +395,22 @@ Buffering with capacity N alone isn't enough — it just delays the deadlock by 
 
 **Spot in review:** Any worker-pool channel with `make(chan T)` (no buffer) plus a `Submit` that just sends. Compare against a real bounded queue with non-blocking try-send.
 
-**Fix:**
+**Fix:** bound the queue and expose backpressure (deadline-aware or non-blocking):
 
 ```go
-func New(workers, queue int) *WorkerPool {
-    p := &WorkerPool{jobs: make(chan func(), queue)}
-    // ... spawn workers as before ...
-    return p
-}
+jobs := make(chan func(), queueSize)
 
-// Backpressure: either deadline-aware or non-blocking.
 func (p *WorkerPool) Submit(ctx context.Context, f func()) error {
     select {
-    case p.jobs <- f:
-        return nil
-    case <-ctx.Done():
-        return ctx.Err()
+    case p.jobs <- f:    return nil
+    case <-ctx.Done():   return ctx.Err()
     }
 }
 
 func (p *WorkerPool) TrySubmit(f func()) bool {
     select {
-    case p.jobs <- f:
-        return true
-    default:
-        return false                           // pool full; caller decides
+    case p.jobs <- f: return true
+    default:          return false           // pool full; caller decides
     }
 }
 ```
@@ -520,21 +449,9 @@ For pooled `gzip.Reader`, `flate.Reader`, `bufio.Reader`, `cipher.Stream`, `csv.
 
 **Spot in review:** Every type with a `Reset(src)` method should have a matching call at the top of every pooled-borrow block. Search for `.Get().(*T)` and verify a `Reset(...)` immediately follows.
 
-**Fix:**
+**Fix:** call `r.Reset(bytes.NewReader(data))` right after `Get`, check its error, *then* `io.ReadAll`.
 
-```go
-func decompress(data []byte) ([]byte, error) {
-    r := gzPool.Get().(*gzip.Reader)
-    defer gzPool.Put(r)
-
-    if err := r.Reset(bytes.NewReader(data)); err != nil {
-        return nil, err
-    }
-    return io.ReadAll(r)
-}
-```
-
-**Why common:** The `Reset` API is unique to types designed for pooling. Newcomers expect "fresh from the pool means clean" — Go's pooled-reader convention requires explicit re-binding.
+**Why common:** The `Reset(src)` API is unique to pooled types. Newcomers expect "fresh from the pool means clean" — Go's convention requires explicit re-binding.
 </details>
 
 ---
@@ -568,32 +485,21 @@ func waitFor(d time.Duration, ch <-chan struct{}) bool {
 
 **Spot in review:** Any `sync.Pool` of `*time.Timer` without paired Stop/drain on `Put`.
 
-**Fix:**
+**Fix:** stop-and-drain on `Put`, then `Reset` on next borrow:
 
 ```go
-func waitFor(d time.Duration, ch <-chan struct{}) bool {
-    t := timerPool.Get().(*time.Timer)
-    defer func() {
-        if !t.Stop() {
-            select {
-            case <-t.C:                       // drain if already fired
-            default:
-            }
+defer func() {
+    if !t.Stop() {
+        select {
+        case <-t.C:                           // drain if already fired
+        default:
         }
-        timerPool.Put(t)
-    }()
-
-    t.Reset(d)
-    select {
-    case <-t.C:
-        return false
-    case <-ch:
-        return true
     }
-}
+    timerPool.Put(t)
+}()
 ```
 
-Go 1.23+ made timer channels unbuffered and `Stop`/`Reset` race-free, but legacy code still hits this. When in doubt, *don't pool timers* — `time.NewTimer` is cheap enough.
+Go 1.23+ made timer channels unbuffered and `Stop`/`Reset` race-free. For legacy targets, *don't pool timers* — `time.NewTimer` is cheap.
 
 **Why common:** Pooling concentrates every edge case from the `*time.Timer` docs into a single shared object.
 </details>
@@ -639,7 +545,7 @@ func putRequest(r *Request) {
 
 **Spot in review:** Any pooled struct with multiple growable sub-allocations. Each one needs its own gate. For maps, the rule is: if it ever grew large, drop the whole struct.
 
-**Fix:**
+**Fix:** gate every growable field; for maps, replace rather than `delete`-loop since `delete` doesn't shrink:
 
 ```go
 const (
@@ -649,21 +555,11 @@ const (
 
 func putRequest(r *Request) {
     if cap(r.Body) > maxBuf || len(r.Headers) > maxHeaders {
-        return                                // both gates
+        return                                // drop oversized
     }
-    for k := range r.Headers {
-        delete(r.Headers, k)
-    }
+    clear(r.Headers)
     r.Body = r.Body[:0]
     reqPool.Put(r)
-}
-```
-
-If shrinking the map is essential, *replace* rather than `delete`-loop:
-
-```go
-if len(r.Headers) > maxHeaders {
-    r.Headers = make(map[string]string, 16)
 }
 ```
 
@@ -697,23 +593,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 **Spot in review:** `sync.Pool{...}` literal appearing inside any function that runs per-request, per-message, or per-iteration. Pools must be package-level, struct-field, or otherwise long-lived.
 
-**Fix:** lift the pool to package scope or attach it to a long-lived struct:
+**Fix:** lift the pool to package scope (or hang it on a long-lived `*Server` for testability):
 
 ```go
-var bufPool = sync.Pool{                      // package-level
-    New: func() any { return new(bytes.Buffer) },
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-    buf := bufPool.Get().(*bytes.Buffer)
-    defer bufPool.Put(buf)
-    buf.Reset()
-    renderTo(buf, r)
-    w.Write(buf.Bytes())
-}
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 ```
-
-For testability, hang the pool on a `*Server` constructed once at startup.
 
 **Why common:** A developer reads "don't share global state" and reflexively scopes the pool inside the function. The pool's whole purpose — sharing across calls — is exactly what was sacrificed.
 </details>
@@ -727,21 +611,17 @@ var bufPool = sync.Pool{
     New: func() any { return new(bytes.Buffer) },
 }
 
-type Result struct {
-    bytes []byte                              // aliases pooled buffer
-}
+type Result struct{ bytes []byte }            // aliases pooled buffer
 
 func render(req *Request) *Result {
     buf := bufPool.Get().(*bytes.Buffer)
     buf.Reset()
     renderTo(buf, req)
-
     res := &Result{bytes: buf.Bytes()}        // share, don't copy
     bufPool.Put(buf)                          // return to pool immediately
     return res
 }
 
-// Caller passes the result to another goroutine that reads res.bytes asynchronously.
 func handler(w http.ResponseWriter, r *http.Request) {
     res := render(parseRequest(r))
     go logAudit(res.bytes)                    // reads after render returned
@@ -759,7 +639,7 @@ Same root cause as Bug 4, with a worse failure mode: *multiple concurrent reader
 
 **Spot in review:** Any function that `Put`s before its return value is fully copied or consumed.
 
-**Fix:**
+**Fix:** copy out, or invert the API to a callback that runs *while the buffer is borrowed*:
 
 ```go
 func render(req *Request) *Result {
@@ -767,26 +647,11 @@ func render(req *Request) *Result {
     defer bufPool.Put(buf)
     buf.Reset()
     renderTo(buf, req)
-
-    out := make([]byte, buf.Len())
-    copy(out, buf.Bytes())
-    return &Result{bytes: out}                // owned copy
+    return &Result{bytes: append([]byte(nil), buf.Bytes()...)}
 }
 ```
 
-If copying is too expensive, invert the API: pass a callback that runs *while the buffer is borrowed*, then return.
-
-```go
-func withRendered(req *Request, fn func([]byte)) {
-    buf := bufPool.Get().(*bytes.Buffer)
-    defer bufPool.Put(buf)
-    buf.Reset()
-    renderTo(buf, req)
-    fn(buf.Bytes())                           // caller uses the slice in-place
-}
-```
-
-**Why common:** "Avoid the copy, just return the buffer's bytes" is a tempting micro-optimization. Under `-race` it lights up immediately; without `-race` it produces sporadic, hard-to-reproduce corruption.
+**Why common:** "Avoid the copy, just return the bytes" is a tempting micro-optimization. Under `-race` it lights up immediately; without `-race` it produces sporadic corruption.
 </details>
 
 ---
@@ -794,27 +659,24 @@ func withRendered(req *Request, fn func([]byte)) {
 ## Bug 15 — Type assertion panic (New returns wrong type)
 
 ```go
+// Original:
 var bufPool = sync.Pool{
-    New: func() any {
-        return bytes.NewBuffer(make([]byte, 0, 4096))   // returns *bytes.Buffer
-    },
+    New: func() any { return bytes.NewBuffer(nil) },     // *bytes.Buffer
 }
 
 func encode(v any) []byte {
-    buf := bufPool.Get().(*bytes.Buffer)
+    buf := bufPool.Get().(*bytes.Buffer)                 // assertion to pointer
     defer bufPool.Put(buf)
     buf.Reset()
     json.NewEncoder(buf).Encode(v)
-    out := make([]byte, buf.Len())
-    copy(out, buf.Bytes())
-    return out
+    return append([]byte(nil), buf.Bytes()...)
 }
 
-// Months later, somebody refactors:
+// Months later, somebody refactors New:
 var bufPool = sync.Pool{
     New: func() any {
-        b := bytes.NewBuffer(make([]byte, 0, 4096))
-        return *b                                       // returns bytes.Buffer (value!)
+        b := bytes.NewBuffer(nil)
+        return *b                                         // bytes.Buffer (value!)
     },
 }
 ```
