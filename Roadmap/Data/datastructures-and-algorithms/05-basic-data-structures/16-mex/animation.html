@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEX (Minimum Excludant) Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { color: var(--blue); text-align: center; font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); text-align: center; margin-bottom: 16px; font-size: 0.85rem; }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 14px;
+  }
+  .left { display: flex; flex-direction: column; gap: 12px; }
+  .right { display: flex; flex-direction: column; gap: 12px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h3 { color: var(--blue); font-size: 0.92rem; margin-bottom: 10px; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .controls input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    flex: 1;
+    min-width: 200px;
+  }
+  .controls label { color: var(--muted); font-size: 0.82rem; }
+
+  button {
+    background: var(--green);
+    color: #0d1117;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: filter 0.2s;
+  }
+  button:hover { filter: brightness(1.15); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: var(--blue); }
+  button.warning { background: var(--yellow); }
+  button.danger { background: var(--red); color: #fff; }
+  button.purple { background: var(--purple); color: #0d1117; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tab {
+    padding: 6px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-family: inherit;
+  }
+  .tab.active { background: var(--blue); color: var(--bg); border-color: var(--blue); }
+
+  .row-label { color: var(--muted); font-size: 0.75rem; margin: 4px 0 4px 0; }
+
+  .cells {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-height: 56px;
+    align-items: center;
+  }
+  .cell {
+    width: 44px;
+    min-height: 44px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: background 0.25s, border-color 0.25s, transform 0.25s;
+    position: relative;
+  }
+  .cell .index {
+    position: absolute;
+    top: -14px;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+  .cell.input { background: var(--surface); }
+  .cell.input.scanned { background: rgba(88, 166, 255, 0.18); border-color: var(--blue); }
+  .cell.bucket-empty { background: var(--surface); color: var(--muted); }
+  .cell.bucket-set { background: rgba(63, 185, 80, 0.25); border-color: var(--green); color: var(--green); }
+  .cell.marking { background: var(--purple); color: var(--bg); transform: scale(1.1); border-color: var(--purple); }
+  .cell.scanning { background: var(--yellow); color: var(--bg); border-color: var(--yellow); }
+  .cell.found { background: var(--green); color: var(--bg); border-color: var(--green); transform: scale(1.1); }
+  .cell.out-of-range { opacity: 0.35; }
+
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 0.75rem; color: var(--muted); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+
+  .info {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.82rem;
+    min-height: 60px;
+  }
+  .info .op { color: var(--blue); font-weight: 600; }
+  .info .complexity { color: var(--yellow); }
+  .info .result { color: var(--green); font-weight: 600; }
+
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .compare-col {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+  }
+  .compare-col h4 { color: var(--blue); font-size: 0.78rem; margin-bottom: 6px; }
+  .compare-col .metric { font-size: 0.72rem; color: var(--muted); }
+  .compare-col .metric span { color: var(--text); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    font-size: 0.78rem;
+  }
+  .stats div { display: flex; justify-content: space-between; }
+  .stats div span { color: var(--blue); font-weight: 600; }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 0.72rem;
+    line-height: 1.5;
+  }
+  .log .entry { color: var(--text); }
+  .log .entry .ts { color: var(--muted); }
+  .log .entry.mark { color: var(--purple); }
+  .log .entry.scan { color: var(--yellow); }
+  .log .entry.found { color: var(--green); }
+
+  .speed-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .speed-row input[type=range] { flex: 1; accent-color: var(--blue); }
+  .speed-row span { color: var(--muted); font-size: 0.75rem; min-width: 40px; }
+
+  .pointer-label {
+    position: relative;
+    height: 22px;
+    margin-top: 6px;
+  }
+  .pointer-arrow {
+    position: absolute;
+    top: 0;
+    color: var(--blue);
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: left 0.25s;
+  }
+
+  @media (max-width: 960px) {
+    .container { grid-template-columns: 1fr; }
+    .compare-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<h1>MEX (Minimum Excludant)</h1>
+<p class="subtitle">Bucket-array algorithm | scan | hash-set | sort | step-by-step visualization</p>
+
+<div class="container">
+  <div class="left">
+    <div class="panel">
+      <h3>Input array</h3>
+      <div class="controls">
+        <input type="text" id="input" value="2, 0, 1, 4, 3, 7" placeholder="comma-separated non-negative integers" />
+        <button onclick="loadInput()">Load</button>
+        <button class="secondary" onclick="randomInput()">Random</button>
+        <button class="purple" onclick="presetEmpty()">Empty</button>
+        <button class="purple" onclick="presetFull()">Full [0..n-1]</button>
+      </div>
+      <div class="row-label">Input cells (values; index shown above)</div>
+      <div class="cells" id="inputCells"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Algorithm</h3>
+      <div class="tabs">
+        <div class="tab active" id="tab-bucket" onclick="switchAlgo('bucket')">Bucket array O(n)</div>
+        <div class="tab" id="tab-hash" onclick="switchAlgo('hash')">Hash set O(n) avg</div>
+        <div class="tab" id="tab-sort" onclick="switchAlgo('sort')">Sort + scan O(n log n)</div>
+        <div class="tab" id="tab-compare" onclick="switchAlgo('compare')">Compare all three</div>
+      </div>
+
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="50" max="900" value="500" />
+        <span>Fast</span>
+      </div>
+
+      <div class="controls">
+        <button onclick="runAuto()" id="runBtn">Run</button>
+        <button class="secondary" onclick="stepOnce()" id="stepBtn">Step</button>
+        <button class="warning" onclick="pause()" id="pauseBtn" disabled>Pause</button>
+        <button class="danger" onclick="resetState()">Reset</button>
+      </div>
+
+      <div id="algoView"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="panel">
+      <h3>State</h3>
+      <div class="stats">
+        <div>Input size n <span id="statN">0</span></div>
+        <div>Bucket size <span id="statBucket">0</span></div>
+        <div>Marked values <span id="statMarked">0</span></div>
+        <div>Scan pointer <span id="statPtr">-</span></div>
+        <div>MEX result <span id="statMex">-</span></div>
+        <div>Step <span id="statStep">0</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Last Operation</h3>
+      <div class="info" id="info">
+        Load an input and press <strong>Run</strong> or <strong>Step</strong>.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O</h3>
+      <div class="info" style="font-size: 0.78rem;">
+        <div><strong>Bucket array:</strong> <span class="complexity">O(n)</span> time, <span class="complexity">O(n)</span> space</div>
+        <div><strong>Hash set scan:</strong> <span class="complexity">O(n)</span> avg, <span class="complexity">O(n)</span> space</div>
+        <div><strong>Sort + scan:</strong> <span class="complexity">O(n log n)</span> time, <span class="complexity">O(1)</span> extra</div>
+        <div style="margin-top: 6px;"><strong>Invariant:</strong> MEX &le; n always.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Legend</h3>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background: var(--surface);"></div>Empty bucket</div>
+        <div class="legend-item"><div class="legend-swatch" style="background: rgba(63,185,80,0.25); border-color: var(--green);"></div>Marked (present)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background: var(--purple);"></div>Currently marking</div>
+        <div class="legend-item"><div class="legend-swatch" style="background: var(--yellow);"></div>Scan pointer</div>
+        <div class="legend-item"><div class="legend-swatch" style="background: var(--green);"></div>MEX found</div>
+        <div class="legend-item"><div class="legend-swatch" style="background: var(--surface); opacity: 0.35;"></div>Out of range (&gt; n)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  let array = [2, 0, 1, 4, 3, 7];
+  let algo = 'bucket';
+  let steps = [];
+  let stepIdx = 0;
+  let running = false;
+  let timer = null;
+
+  function speedMs() {
+    const max = 950;
+    return max - Number(document.getElementById('speed').value);
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function log(msg, cls = '') {
+    const el = document.getElementById('log');
+    const ts = new Date().toLocaleTimeString().split(' ')[0];
+    const div = document.createElement('div');
+    div.className = 'entry ' + cls;
+    div.innerHTML = `<span class="ts">${ts}</span> ${msg}`;
+    el.prepend(div);
+    while (el.childElementCount > 80) el.removeChild(el.lastChild);
+  }
+
+  function setInfo(html) {
+    document.getElementById('info').innerHTML = html;
+  }
+
+  function setStats(s) {
+    document.getElementById('statN').textContent = s.n;
+    document.getElementById('statBucket').textContent = s.bucket;
+    document.getElementById('statMarked').textContent = s.marked;
+    document.getElementById('statPtr').textContent = s.ptr;
+    document.getElementById('statMex').textContent = s.mex;
+    document.getElementById('statStep').textContent = s.step;
+  }
+
+  function renderInputCells(highlightIdx = -1) {
+    const container = document.getElementById('inputCells');
+    container.innerHTML = '';
+    if (array.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.color = 'var(--muted)';
+      empty.style.fontSize = '0.85rem';
+      empty.textContent = '(empty array)';
+      container.appendChild(empty);
+      return;
+    }
+    array.forEach((v, i) => {
+      const c = document.createElement('div');
+      const isOOR = v < 0 || v > array.length;
+      c.className = 'cell input' + (i === highlightIdx ? ' scanned' : '') + (isOOR ? ' out-of-range' : '');
+      const idxLabel = document.createElement('span');
+      idxLabel.className = 'index';
+      idxLabel.textContent = i;
+      const val = document.createElement('span');
+      val.textContent = v;
+      c.appendChild(idxLabel);
+      c.appendChild(val);
+      container.appendChild(c);
+    });
+  }
+
+  function renderBucket(seen, n, options = {}) {
+    const { markingIdx = -1, scanIdx = -1, foundIdx = -1 } = options;
+    let html = '<div class="row-label">Bucket array seen[0..' + n + '] (size n+1 = ' + (n + 1) + ')</div>';
+    html += '<div class="cells" id="bucketCells">';
+    for (let i = 0; i <= n; i++) {
+      let cls = 'cell ';
+      if (i === foundIdx) cls += 'found';
+      else if (i === markingIdx) cls += 'marking';
+      else if (i === scanIdx) cls += 'scanning';
+      else if (seen[i]) cls += 'bucket-set';
+      else cls += 'bucket-empty';
+      html += `<div class="${cls}"><span class="index">${i}</span><span>${seen[i] ? 'T' : 'F'}</span></div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // ===== Bucket algorithm steps =====
+  function buildBucketSteps(arr) {
+    const n = arr.length;
+    const out = [];
+    const seen = new Array(n + 1).fill(false);
+    out.push({
+      kind: 'init',
+      seen: seen.slice(),
+      inputIdx: -1,
+      markingIdx: -1,
+      scanIdx: -1,
+      foundIdx: -1,
+      mex: '-',
+      ptr: '-',
+      marked: 0,
+      info: `Initialize bucket of size <strong>n+1 = ${n + 1}</strong>. All entries false. Invariant: <span class="complexity">MEX &le; n</span>, so only values in [0, n] matter.`,
+    });
+
+    for (let i = 0; i < n; i++) {
+      const v = arr[i];
+      const inRange = v >= 0 && v <= n;
+      if (inRange) {
+        seen[v] = true;
+      }
+      out.push({
+        kind: 'mark',
+        seen: seen.slice(),
+        inputIdx: i,
+        markingIdx: inRange ? v : -1,
+        scanIdx: -1,
+        foundIdx: -1,
+        mex: '-',
+        ptr: '-',
+        marked: seen.filter(Boolean).length,
+        info: inRange
+          ? `Read a[${i}] = <strong>${v}</strong>. Set <span class="op">seen[${v}] = true</span>.`
+          : `Read a[${i}] = <strong>${v}</strong>. Out of range (must be in [0, ${n}]) -- <span class="op">ignored</span>.`,
+      });
+    }
+
+    // Scan phase
+    let mex = -1;
+    for (let k = 0; k <= n; k++) {
+      out.push({
+        kind: 'scan',
+        seen: seen.slice(),
+        inputIdx: -1,
+        markingIdx: -1,
+        scanIdx: k,
+        foundIdx: -1,
+        mex: '-',
+        ptr: k,
+        marked: seen.filter(Boolean).length,
+        info: `Scan: check <span class="op">seen[${k}]</span> = <strong>${seen[k] ? 'true' : 'false'}</strong>.`,
+      });
+      if (!seen[k]) {
+        mex = k;
+        out.push({
+          kind: 'found',
+          seen: seen.slice(),
+          inputIdx: -1,
+          markingIdx: -1,
+          scanIdx: -1,
+          foundIdx: k,
+          mex: k,
+          ptr: k,
+          marked: seen.filter(Boolean).length,
+          info: `Found <span class="result">MEX = ${k}</span>. <span class="complexity">Total time: O(n).</span>`,
+        });
+        break;
+      }
+    }
+    if (mex === -1) {
+      out.push({
+        kind: 'found',
+        seen: seen.slice(),
+        inputIdx: -1,
+        markingIdx: -1,
+        scanIdx: -1,
+        foundIdx: n + 1,
+        mex: n + 1,
+        ptr: n + 1,
+        marked: seen.filter(Boolean).length,
+        info: `All of [0, ${n}] marked. <span class="result">MEX = ${n + 1}</span> (pigeonhole equality case).`,
+      });
+    }
+    return out;
+  }
+
+  // ===== Hash-set algorithm steps =====
+  function buildHashSteps(arr) {
+    const n = arr.length;
+    const out = [];
+    const set = new Set();
+    out.push({
+      kind: 'init-hash',
+      set: new Set(set),
+      ptr: '-',
+      mex: '-',
+      info: `Build a hash set of input values. <span class="complexity">O(n) avg insert.</span>`,
+    });
+    for (let i = 0; i < n; i++) {
+      if (arr[i] >= 0) set.add(arr[i]);
+      out.push({
+        kind: 'insert-hash',
+        set: new Set(set),
+        ptr: '-',
+        mex: '-',
+        info: `Insert a[${i}] = ${arr[i]} into the hash set.`,
+        inputIdx: i,
+      });
+    }
+    for (let k = 0; ; k++) {
+      out.push({
+        kind: 'scan-hash',
+        set: new Set(set),
+        ptr: k,
+        mex: '-',
+        info: `Probe: is <strong>${k}</strong> in the set? <strong>${set.has(k) ? 'yes' : 'no'}</strong>.`,
+      });
+      if (!set.has(k)) {
+        out.push({
+          kind: 'found-hash',
+          set: new Set(set),
+          ptr: k,
+          mex: k,
+          info: `Found <span class="result">MEX = ${k}</span> after ${k + 1} probe(s).`,
+        });
+        break;
+      }
+      if (k > n + 1) break; // safety
+    }
+    return out;
+  }
+
+  // ===== Sort+scan algorithm steps =====
+  function buildSortSteps(arr) {
+    const n = arr.length;
+    const out = [];
+    const sorted = [...new Set(arr.filter(v => v >= 0))].sort((a, b) => a - b);
+    out.push({
+      kind: 'init-sort',
+      sorted: sorted.slice(),
+      ptr: '-',
+      expected: 0,
+      mex: '-',
+      info: `Deduplicate + sort filtered non-negatives. <span class="complexity">O(n log n).</span>`,
+    });
+    let expected = 0;
+    let mex = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      const v = sorted[i];
+      if (v === expected) {
+        expected++;
+        out.push({
+          kind: 'scan-sort',
+          sorted: sorted.slice(),
+          ptr: i,
+          expected,
+          mex: '-',
+          info: `sorted[${i}] = ${v} matches expected ${v}. Advance expected to <strong>${expected}</strong>.`,
+        });
+      } else if (v > expected) {
+        mex = expected;
+        out.push({
+          kind: 'found-sort',
+          sorted: sorted.slice(),
+          ptr: i,
+          expected,
+          mex,
+          info: `Gap: sorted[${i}] = ${v} > expected ${expected}. <span class="result">MEX = ${expected}</span>.`,
+        });
+        break;
+      }
+    }
+    if (mex === -1) {
+      out.push({
+        kind: 'found-sort',
+        sorted: sorted.slice(),
+        ptr: sorted.length,
+        expected,
+        mex: expected,
+        info: `No gaps. <span class="result">MEX = ${expected}</span>.`,
+      });
+    }
+    return out;
+  }
+
+  // ===== Rendering by algorithm =====
+  function renderStep(step) {
+    const view = document.getElementById('algoView');
+    if (!step) {
+      view.innerHTML = '<div class="info">No steps. Press Run or Step.</div>';
+      return;
+    }
+    let html = '';
+    if (algo === 'bucket') {
+      renderInputCells(step.inputIdx);
+      html += renderBucket(step.seen, array.length, {
+        markingIdx: step.markingIdx,
+        scanIdx: step.scanIdx,
+        foundIdx: step.foundIdx,
+      });
+    } else if (algo === 'hash') {
+      renderInputCells(step.inputIdx);
+      html += '<div class="row-label">Hash set contents</div>';
+      html += '<div class="cells">';
+      const arr = Array.from(step.set).sort((a, b) => a - b);
+      if (arr.length === 0) {
+        html += '<div style="color: var(--muted); padding: 12px;">(empty set)</div>';
+      } else {
+        for (const v of arr) {
+          html += `<div class="cell bucket-set"><span>${v}</span></div>`;
+        }
+      }
+      html += '</div>';
+      if (step.ptr !== '-') {
+        html += `<div class="row-label">Probing ${step.ptr}: <strong>${step.set.has(step.ptr) ? 'in set' : 'NOT in set'}</strong></div>`;
+      }
+    } else if (algo === 'sort') {
+      renderInputCells(-1);
+      html += '<div class="row-label">Sorted unique non-negatives</div>';
+      html += '<div class="cells">';
+      step.sorted.forEach((v, i) => {
+        let cls = 'cell ';
+        if (i === step.ptr) cls += 'scanning';
+        else cls += 'bucket-set';
+        html += `<div class="${cls}"><span class="index">${i}</span><span>${v}</span></div>`;
+      });
+      html += '</div>';
+      html += `<div class="row-label">Expected next: <strong>${step.expected}</strong></div>`;
+    } else if (algo === 'compare') {
+      renderInputCells(-1);
+      html += renderCompareView();
+    }
+    view.innerHTML = html;
+    setInfo(step.info || '-');
+    const seen = step.seen || [];
+    setStats({
+      n: array.length,
+      bucket: array.length + 1,
+      marked: seen.filter ? seen.filter(Boolean).length : (step.set ? step.set.size : (step.sorted ? step.sorted.length : 0)),
+      ptr: step.ptr !== undefined ? step.ptr : '-',
+      mex: step.mex !== undefined ? step.mex : '-',
+      step: stepIdx,
+    });
+  }
+
+  function renderCompareView() {
+    const bucketSteps = buildBucketSteps(array);
+    const hashSteps = buildHashSteps(array);
+    const sortSteps = buildSortSteps(array);
+    const bucketFinal = bucketSteps[bucketSteps.length - 1];
+    const hashFinal = hashSteps[hashSteps.length - 1];
+    const sortFinal = sortSteps[sortSteps.length - 1];
+    const html = `
+      <div class="compare-row">
+        <div class="compare-col">
+          <h4>Bucket array</h4>
+          <div class="metric">Steps: <span>${bucketSteps.length}</span></div>
+          <div class="metric">Memory (cells): <span>${array.length + 1}</span></div>
+          <div class="metric">Time: <span>O(n)</span></div>
+          <div class="metric">MEX: <span style="color: var(--green); font-weight: 600;">${bucketFinal.mex}</span></div>
+        </div>
+        <div class="compare-col">
+          <h4>Hash-set scan</h4>
+          <div class="metric">Steps: <span>${hashSteps.length}</span></div>
+          <div class="metric">Memory (entries): <span>${hashFinal.set.size}</span></div>
+          <div class="metric">Time: <span>O(n) avg</span></div>
+          <div class="metric">MEX: <span style="color: var(--green); font-weight: 600;">${hashFinal.mex}</span></div>
+        </div>
+        <div class="compare-col">
+          <h4>Sort + scan</h4>
+          <div class="metric">Steps: <span>${sortSteps.length}</span></div>
+          <div class="metric">Memory (sorted): <span>${sortFinal.sorted.length}</span></div>
+          <div class="metric">Time: <span>O(n log n)</span></div>
+          <div class="metric">MEX: <span style="color: var(--green); font-weight: 600;">${sortFinal.mex}</span></div>
+        </div>
+      </div>
+      <div style="margin-top: 10px; font-size: 0.78rem; color: var(--muted);">
+        All three algorithms agree on MEX. Bucket wins on raw speed and cache locality
+        when values fit; hash wins when values are unbounded; sort is the simplest
+        one-liner when you do not mind the log factor.
+      </div>
+    `;
+    return html;
+  }
+
+  // ===== Controls =====
+  function buildSteps() {
+    if (algo === 'bucket') steps = buildBucketSteps(array);
+    else if (algo === 'hash') steps = buildHashSteps(array);
+    else if (algo === 'sort') steps = buildSortSteps(array);
+    else steps = [{ info: 'Compare view -- no step playback.', mex: '-', ptr: '-' }];
+    stepIdx = 0;
+  }
+
+  function resetState() {
+    pause();
+    buildSteps();
+    renderStep(steps[0]);
+    log(`Reset. Algorithm: <strong>${algo}</strong>. Input size: ${array.length}.`);
+  }
+
+  async function runAuto() {
+    if (running) return;
+    running = true;
+    document.getElementById('runBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    document.getElementById('stepBtn').disabled = true;
+    if (stepIdx >= steps.length) {
+      buildSteps();
+      renderStep(steps[0]);
+    }
+    while (running && stepIdx < steps.length - 1) {
+      stepIdx++;
+      const step = steps[stepIdx];
+      renderStep(step);
+      logStep(step);
+      await sleep(speedMs());
+    }
+    running = false;
+    document.getElementById('runBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('stepBtn').disabled = false;
+  }
+
+  function pause() {
+    running = false;
+    document.getElementById('runBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('stepBtn').disabled = false;
+  }
+
+  function stepOnce() {
+    if (running) return;
+    if (stepIdx === 0 && steps.length > 0) {
+      renderStep(steps[0]);
+      logStep(steps[0]);
+      stepIdx = 1;
+      return;
+    }
+    if (stepIdx >= steps.length) return;
+    const step = steps[stepIdx];
+    renderStep(step);
+    logStep(step);
+    stepIdx++;
+  }
+
+  function logStep(step) {
+    if (!step) return;
+    let cls = '';
+    if (step.kind && step.kind.startsWith('mark')) cls = 'mark';
+    else if (step.kind && step.kind.startsWith('scan')) cls = 'scan';
+    else if (step.kind && step.kind.startsWith('found')) cls = 'found';
+    const plain = (step.info || '').replace(/<[^>]+>/g, '');
+    log(plain, cls);
+  }
+
+  function switchAlgo(name) {
+    algo = name;
+    ['bucket', 'hash', 'sort', 'compare'].forEach(a => {
+      const el = document.getElementById('tab-' + a);
+      if (el) el.classList.toggle('active', a === name);
+    });
+    resetState();
+  }
+
+  function parseInput(text) {
+    const parts = text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    const nums = parts.map(s => Number(s)).filter(n => Number.isFinite(n));
+    return nums;
+  }
+
+  function loadInput() {
+    const text = document.getElementById('input').value;
+    const parsed = parseInput(text);
+    array = parsed;
+    log(`Loaded array of length ${array.length}: [${array.join(', ')}]`);
+    resetState();
+  }
+
+  function randomInput() {
+    const n = 5 + Math.floor(Math.random() * 8);
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      arr.push(Math.floor(Math.random() * (n + 3)));
+    }
+    array = arr;
+    document.getElementById('input').value = array.join(', ');
+    log(`Random array (n=${n}): [${array.join(', ')}]`);
+    resetState();
+  }
+
+  function presetEmpty() {
+    array = [];
+    document.getElementById('input').value = '';
+    log('Preset: empty array. MEX(empty) = 0.');
+    resetState();
+  }
+
+  function presetFull() {
+    const n = 6;
+    array = Array.from({ length: n }, (_, i) => i);
+    document.getElementById('input').value = array.join(', ');
+    log(`Preset: full [0..${n - 1}]. MEX = ${n} (pigeonhole equality).`);
+    resetState();
+  }
+
+  // Expose handlers
+  window.loadInput = loadInput;
+  window.randomInput = randomInput;
+  window.presetEmpty = presetEmpty;
+  window.presetFull = presetFull;
+  window.runAuto = runAuto;
+  window.pause = pause;
+  window.stepOnce = stepOnce;
+  window.resetState = resetState;
+  window.switchAlgo = switchAlgo;
+
+  // Init
+  buildSteps();
+  renderInputCells();
+  renderStep(steps[0]);
+  log('Ready. Default input: [' + array.join(', ') + '].');
+})();
+</script>
+</body>
+</html>

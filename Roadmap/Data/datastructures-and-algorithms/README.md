@@ -13,7 +13,7 @@
 - 1.7 Rust
 - 1.8 Ruby
 
-## [01. Introduction to DSA](01-introduction-to-dsa/)
+## [01. Introduction to DSA](01-introduction-to-dsa/junior.md)
 
 What DSA is, why it matters, how to study it, how problems map to data structures.
 
@@ -36,15 +36,17 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [5.3 Queues](05-basic-data-structures/03-queues/junior.md)
 - [5.4 Stacks](05-basic-data-structures/04-stacks/junior.md)
 - [5.5 Hash Tables](05-basic-data-structures/05-hash-tables/junior.md)
-- [5.6 Set](05-basic-data-structures/06-sets/)
-- [5.7 Multiset / Bag](05-basic-data-structures/07-multiset-bag/)
-- [5.8 Map / Dictionary](05-basic-data-structures/08-map-dictionary/)
-- [5.9 Deque](05-basic-data-structures/09-deque/)
-- [5.10 Two Pointers](05-basic-data-structures/10-two-pointers/)
-- [5.11 Sliding Window](05-basic-data-structures/11-sliding-window/)
-- [5.12 Prefix Sums & Difference Arrays](05-basic-data-structures/12-prefix-sums-difference-arrays/)
-- [5.13 Monotonic Stack](05-basic-data-structures/13-monotonic-stack/)
-- [5.14 Monotonic Queue](05-basic-data-structures/14-monotonic-queue/)
+- [5.6 Set](05-basic-data-structures/06-sets/junior.md)
+- [5.7 Multiset / Bag](05-basic-data-structures/07-multiset-bag/junior.md)
+- [5.8 Map / Dictionary](05-basic-data-structures/08-map-dictionary/junior.md)
+- [5.9 Deque](05-basic-data-structures/09-deque/junior.md)
+- [5.10 Two Pointers](05-basic-data-structures/10-two-pointers/junior.md)
+- [5.11 Sliding Window](05-basic-data-structures/11-sliding-window/junior.md)
+- [5.12 Prefix Sums & Difference Arrays](05-basic-data-structures/12-prefix-sums-difference-arrays/junior.md)
+- [5.13 Monotonic Stack](05-basic-data-structures/13-monotonic-stack/junior.md)
+- [5.14 Monotonic Queue](05-basic-data-structures/14-monotonic-queue/junior.md)
+- [5.15 Floyd's Cycle Detection (Tortoise & Hare)](05-basic-data-structures/15-floyd-cycle-detection/)
+- [5.16 MEX (Minimum Excludant)](05-basic-data-structures/16-mex/)
 
 ## [06. Algorithmic Complexity](06-algorithmic-complexity/01-time-vs-space-complexity/junior.md)
 
@@ -75,24 +77,24 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [7.4 Quick Sort](07-sorting-algorithms/04-quick-sort/junior.md)
 - [7.5 Selection Sort](07-sorting-algorithms/05-selection-sort/junior.md)
 - [7.6 Heap Sort](07-sorting-algorithms/06-heap-sort/junior.md)
-- [7.7 Counting Sort](07-sorting-algorithms/07-counting-sort/)
-- [7.8 Radix Sort](07-sorting-algorithms/08-radix-sort/)
-- [7.9 Bucket Sort](07-sorting-algorithms/09-bucket-sort/)
-- [7.10 Shell Sort](07-sorting-algorithms/10-shell-sort/)
-- [7.11 Tim Sort](07-sorting-algorithms/11-tim-sort/)
-- [7.12 Intro Sort](07-sorting-algorithms/12-intro-sort/)
+- [7.7 Counting Sort](07-sorting-algorithms/07-counting-sort/junior.md)
+- [7.8 Radix Sort](07-sorting-algorithms/08-radix-sort/junior.md)
+- [7.9 Bucket Sort](07-sorting-algorithms/09-bucket-sort/junior.md)
+- [7.10 Shell Sort](07-sorting-algorithms/10-shell-sort/junior.md)
+- [7.11 Tim Sort](07-sorting-algorithms/11-tim-sort/junior.md)
+- [7.12 Intro Sort](07-sorting-algorithms/12-intro-sort/junior.md)
 
 ## [08. Search Algorithms](08-search-algorithms/01-linear-search/junior.md)
 
 - [8.1 Linear Search](08-search-algorithms/01-linear-search/junior.md)
 - [8.2 Binary Search](08-search-algorithms/02-binary-search/junior.md)
-- [8.3 Ternary Search](08-search-algorithms/03-ternary-search/)
-- [8.4 Newton's Method](08-search-algorithms/04-newton-method/)
-- [8.5 Binary Search on Answer](08-search-algorithms/05-binary-search-on-answer/)
-- [8.6 Jump Search](08-search-algorithms/06-jump-search/)
-- [8.7 Interpolation Search](08-search-algorithms/07-interpolation-search/)
-- [8.8 Exponential Search](08-search-algorithms/08-exponential-search/)
-- [8.9 Fibonacci Search](08-search-algorithms/09-fibonacci-search/)
+- [8.3 Ternary Search](08-search-algorithms/03-ternary-search/junior.md)
+- [8.4 Newton's Method](08-search-algorithms/04-newton-method/junior.md)
+- [8.5 Binary Search on Answer](08-search-algorithms/05-binary-search-on-answer/junior.md)
+- [8.6 Jump Search](08-search-algorithms/06-jump-search/junior.md)
+- [8.7 Interpolation Search](08-search-algorithms/07-interpolation-search/junior.md)
+- [8.8 Exponential Search](08-search-algorithms/08-exponential-search/junior.md)
+- [8.9 Fibonacci Search](08-search-algorithms/09-fibonacci-search/junior.md)
 
 ## [09. Trees](09-trees/)
 
@@ -152,6 +154,10 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [11.26 Strong Orientation](11-graphs/26-strong-orientation/)
 - [11.27 Graph Coloring](11-graphs/27-graph-coloring/)
 - [11.28 NP-Hard: TSP & Hamiltonian](11-graphs/28-np-hard-tsp-hamiltonian/)
+- [11.29 Planar Graph Faces](11-graphs/29-planar-graph-faces/)
+- [11.30 Online Bridge Finding](11-graphs/30-online-bridges/)
+- [11.31 Second-Best MST](11-graphs/31-second-best-mst/)
+- [11.32 Paths of Fixed Length (Matrix Exp on Graphs)](11-graphs/32-paths-fixed-length/)
 
 ## [12. Disjoint Set (Union-Find)](12-disjoint-set/)
 
@@ -186,6 +192,8 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [13.22 Subset Sum / Partition](13-dynamic-programming/22-subset-sum-partition/)
 - [13.23 Word Break](13-dynamic-programming/23-word-break/)
 - [13.24 Egg Dropping](13-dynamic-programming/24-egg-dropping/)
+- [13.25 Kadane's Algorithm (Max Subarray Sum)](13-dynamic-programming/25-kadane-max-subarray/)
+- [13.26 Games on Arbitrary Graphs](13-dynamic-programming/26-games-on-graphs/)
 
 ## [14. Greedy Algorithms](14-greedy-algorithms/)
 
@@ -217,6 +225,7 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [16.6 Knight's Tour](16-backtracking/06-knight-tour/)
 - [16.7 Word Search](16-backtracking/07-word-search/)
 - [16.8 Branch and Bound](16-backtracking/08-branch-and-bound/)
+- [16.9 15-Puzzle Solvability](16-backtracking/09-15-puzzle/)
 
 ## [17. String Algorithms](17-string-algorithms/)
 
@@ -235,6 +244,7 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [17.13 Suffix Tree (Ukkonen)](17-string-algorithms/13-suffix-tree-ukkonen/)
 - [17.14 Palindromic Tree (Eertree)](17-string-algorithms/14-palindromic-tree-eertree/)
 - [17.15 Lyndon Decomposition](17-string-algorithms/15-lyndon-decomposition/)
+- [17.16 Expression Parsing (Shunting Yard)](17-string-algorithms/16-expression-parsing/)
 
 ## [18. Bit Manipulation](18-bit-manipulation/)
 
@@ -271,6 +281,12 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [19.23 Inclusion-Exclusion](19-number-theory/23-inclusion-exclusion/)
 - [19.24 Burnside / Pólya](19-number-theory/24-burnside-polya/)
 - [19.25 Stars and Bars](19-number-theory/25-stars-and-bars/)
+- [19.26 Binary Exponentiation](19-number-theory/26-binary-exponentiation/)
+- [19.27 Arbitrary-Precision Arithmetic (BigInt)](19-number-theory/27-bigint-arithmetic/)
+- [19.28 Divisor Functions (d(n), σ(n))](19-number-theory/28-divisor-functions/)
+- [19.29 Factorial Modulo p (Lucas, Wilson)](19-number-theory/29-factorial-mod-p/)
+- [19.30 Fibonacci Numbers (Closed Form, Matrix Form)](19-number-theory/30-fibonacci-numbers/)
+- [19.31 Simpson's Integration](19-number-theory/31-simpson-integration/)
 
 ## [20. Computational Geometry](20-computational-geometry/)
 
@@ -286,6 +302,10 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [20.10 Minkowski Sum](20-computational-geometry/10-minkowski-sum/)
 - [20.11 Voronoi & Delaunay](20-computational-geometry/11-voronoi-delaunay/)
 - [20.12 Half-Plane Intersection](20-computational-geometry/12-half-plane-intersection/)
+- [20.13 Circle-Line Intersection](20-computational-geometry/13-circle-line-intersection/)
+- [20.14 Circle-Circle Intersection](20-computational-geometry/14-circle-circle-intersection/)
+- [20.15 Common Tangents to Circles](20-computational-geometry/15-circle-tangents/)
+- [20.16 Manhattan & Chebyshev Distance](20-computational-geometry/16-manhattan-chebyshev/)
 
 ## [21. Advanced Data Structures](21-advanced-structures/)
 

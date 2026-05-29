@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floyd's Cycle Detection -- Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { color: var(--blue); text-align: center; font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); text-align: center; margin-bottom: 18px; font-size: 0.85rem; }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 290px;
+    gap: 14px;
+  }
+  .left { display: flex; flex-direction: column; gap: 12px; }
+  .right { display: flex; flex-direction: column; gap: 12px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h3 { color: var(--blue); font-size: 0.92rem; margin-bottom: 10px; }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .controls input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    flex: 1;
+    min-width: 200px;
+  }
+  .controls input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    width: 60px;
+  }
+  .controls label { color: var(--muted); font-size: 0.82rem; }
+  button {
+    background: var(--green);
+    color: #0d1117;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: filter 0.2s;
+  }
+  button:hover { filter: brightness(1.15); }
+  button.secondary { background: var(--border); color: var(--text); }
+  button.danger    { background: var(--red); color: #fff; }
+  button.accent    { background: var(--blue); color: #0d1117; }
+  button.warn      { background: var(--orange); color: #0d1117; }
+  button.purple    { background: var(--purple); color: #0d1117; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .viz-wrap {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    min-height: 380px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+  }
+  svg { display: block; user-select: none; }
+  .node-circle {
+    fill: var(--surface);
+    stroke: var(--border);
+    stroke-width: 2;
+    transition: all 0.25s ease;
+  }
+  .node-circle.cycle-entry {
+    fill: #1d2a3a;
+    stroke: var(--purple);
+    stroke-width: 3;
+  }
+  .node-circle.meeting-point {
+    stroke: var(--yellow);
+    stroke-width: 3;
+  }
+  .node-label {
+    fill: var(--text);
+    font-size: 13px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+  .node-index {
+    fill: var(--muted);
+    font-size: 10px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+  .edge-line {
+    stroke: var(--border);
+    stroke-width: 2;
+    fill: none;
+  }
+  .edge-line.cycle-edge {
+    stroke: var(--purple);
+    stroke-dasharray: 5 3;
+  }
+  .arrow-head {
+    fill: var(--border);
+  }
+  .arrow-head.cycle-arrow {
+    fill: var(--purple);
+  }
+  .pointer-marker {
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .pointer-tortoise {
+    fill: var(--blue);
+    stroke: #0d1117;
+    stroke-width: 2;
+  }
+  .pointer-hare {
+    fill: var(--orange);
+    stroke: #0d1117;
+    stroke-width: 2;
+  }
+  .pointer-fresh {
+    fill: var(--green);
+    stroke: #0d1117;
+    stroke-width: 2;
+  }
+  .pointer-label {
+    fill: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+
+  /* ===== Side panel ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    text-align: center;
+  }
+  .stat .val { font-size: 1.05rem; color: var(--blue); font-weight: bold; }
+  .stat .val.hare { color: var(--orange); }
+  .stat .val.invariant { color: var(--yellow); }
+  .stat .val.green { color: var(--green); }
+  .stat .lbl { font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+
+  .info-line {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    min-height: 60px;
+  }
+  .info-line .step-tag {
+    color: var(--orange);
+    font-weight: bold;
+    margin-right: 4px;
+  }
+  .info-line .num { color: var(--green); }
+  .info-line .idx { color: var(--purple); }
+
+  .complexity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.74rem;
+  }
+  .complexity-table th, .complexity-table td {
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .complexity-table th { background: var(--bg); color: var(--blue); }
+  .complexity-table .good { color: var(--green); }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 0.7rem;
+    line-height: 1.45;
+  }
+  .log-entry { border-bottom: 1px solid var(--border); padding: 2px 0; }
+  .log-entry:last-child { border-bottom: 0; }
+  .log-entry .tag-step { color: var(--green); }
+  .log-entry .tag-meet { color: var(--yellow); }
+  .log-entry .tag-phase { color: var(--blue); }
+  .log-entry .tag-done { color: var(--purple); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.7rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-color {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid #0d1117;
+  }
+
+  .phase-display {
+    text-align: center;
+    padding: 8px 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--blue);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  @media (max-width: 880px) {
+    .container { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Floyd's Cycle Detection</h1>
+<p class="subtitle">Tortoise &amp; Hare on a rho-shaped linked list. Build, run, find the cycle start.</p>
+
+<div class="container">
+  <div class="left">
+    <div class="panel">
+      <h3>Build your list</h3>
+      <div class="controls" style="margin-bottom:8px">
+        <label>Values:</label>
+        <input type="text" id="valuesInput" value="1,2,3,4,5,6,7,8">
+        <label>loop_at index:</label>
+        <input type="number" id="loopAtInput" value="2" min="-1" max="50">
+        <button class="accent" onclick="loadList()">Build</button>
+        <button class="secondary" onclick="loadPreset('classic')">Preset rho</button>
+        <button class="secondary" onclick="loadPreset('selfloop')">Self-loop</button>
+        <button class="secondary" onclick="loadPreset('nocycle')">No cycle</button>
+      </div>
+      <div class="controls">
+        <button class="warn" id="playBtn" onclick="play()">Play</button>
+        <button onclick="stepForward()">Step &gt;</button>
+        <button class="secondary" onclick="pause()" id="pauseBtn" disabled>Pause</button>
+        <button class="purple" onclick="jumpToPhase2()">Jump to Phase 2</button>
+        <button class="danger" onclick="reset()">Reset</button>
+      </div>
+      <div class="controls" style="margin-top:8px">
+        <label>Speed:</label>
+        <span style="color:var(--muted);font-size:0.75rem">slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5" style="width:140px">
+        <span style="color:var(--muted);font-size:0.75rem">fast</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Visualization</h3>
+      <div class="viz-wrap">
+        <svg id="viz" width="700" height="380"></svg>
+      </div>
+      <div class="legend" style="margin-top:10px">
+        <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>tortoise (slow, 1 step)</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>hare (fast, 2 steps)</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--purple);border:2px solid var(--purple)"></div>cycle entry</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--surface);border:2px solid var(--yellow)"></div>meeting point</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>reset to head</div>
+      </div>
+      <div class="phase-display" id="phaseDisplay">PHASE 1 -- Detection</div>
+    </div>
+
+    <div class="panel">
+      <h3>Step explanation</h3>
+      <div class="info-line" id="infoLine">
+        <span class="step-tag">READY</span>
+        Build a list above (try <b>1,2,3,4,5</b> with <b>loop_at=2</b>) then press <b>Play</b> or <b>Step &gt;</b>.
+        Watch the tortoise (blue) advance 1 step and the hare (orange) advance 2 steps. They meet inside the cycle.
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statStep">0</div><div class="lbl">Step</div></div>
+        <div class="stat"><div class="val" id="statPhase">1</div><div class="lbl">Phase</div></div>
+        <div class="stat"><div class="val" id="statTortoise">0</div><div class="lbl">Tortoise idx</div></div>
+        <div class="stat"><div class="val hare" id="statHare">0</div><div class="lbl">Hare idx</div></div>
+        <div class="stat"><div class="val invariant" id="statInvariant">0</div><div class="lbl">(hare - tort) mod &lambda;</div></div>
+        <div class="stat"><div class="val green" id="statLambda">?</div><div class="lbl">&lambda; (cycle len)</div></div>
+        <div class="stat"><div class="val green" id="statMu">?</div><div class="lbl">&mu; (tail len)</div></div>
+        <div class="stat"><div class="val" id="statDetected">no</div><div class="lbl">Cycle?</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O</h3>
+      <table class="complexity-table">
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Time</td><td class="good">O(&mu; + &lambda;)</td></tr>
+        <tr><td>Space</td><td class="good">O(1)</td></tr>
+        <tr><td>f-calls/iter</td><td>3 (Floyd's)</td></tr>
+        <tr><td>Phases</td><td>3 (detect, &mu;, &lambda;)</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Log</h3>
+      <div class="log" id="logArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =============================================================================
+   STATE
+   ============================================================================= */
+let values = [1, 2, 3, 4, 5, 6, 7, 8];
+let loopAt = 2;            // index of cycle entry, -1 means no cycle
+let nodes = [];            // [{val, idx, x, y}], positions computed by layoutNodes
+let mu = null;             // tail length (computed at build time for stats reference)
+let lambda = null;         // cycle length (computed at build time)
+let steps = [];            // animation steps
+let stepIdx = 0;
+let playing = false;
+let timer = null;
+let meetingPoint = null;
+let detected = false;
+
+/* =============================================================================
+   LIST CONSTRUCTION
+   ============================================================================= */
+function rebuildList() {
+  // Compute mu and lambda from values + loopAt
+  if (loopAt < 0 || loopAt >= values.length) {
+    mu = values.length;
+    lambda = 0;
+  } else {
+    mu = loopAt;
+    lambda = values.length - loopAt;
+  }
+  layoutNodes();
+}
+
+function layoutNodes() {
+  nodes = [];
+  const n = values.length;
+  const radius = 22;
+
+  if (loopAt < 0 || loopAt >= n || lambda === 0) {
+    // Straight line, no cycle.
+    const totalWidth = Math.max(700, n * 78);
+    document.getElementById('viz').setAttribute('width', totalWidth);
+    document.getElementById('viz').setAttribute('height', 240);
+    const y = 130;
+    for (let i = 0; i < n; i++) {
+      nodes.push({ val: values[i], idx: i, x: 40 + i * 78, y, r: radius });
+    }
+    return;
+  }
+
+  // rho shape: tail goes left-to-right, then cycle is a circle.
+  const tailLen = mu;
+  const cycleLen = lambda;
+  const cycleRadius = Math.max(70, cycleLen * 14);
+
+  const tailStartX = 50;
+  const tailY = 190;
+  const tailSpacing = 70;
+
+  // Center of cycle is right of the tail
+  const cycleCenterX = tailStartX + tailLen * tailSpacing + cycleRadius + 10;
+  const cycleCenterY = tailY;
+
+  const svgWidth = Math.max(700, cycleCenterX + cycleRadius + 60);
+  const svgHeight = Math.max(380, cycleCenterY + cycleRadius + 60);
+  document.getElementById('viz').setAttribute('width', svgWidth);
+  document.getElementById('viz').setAttribute('height', svgHeight);
+
+  // Place tail nodes
+  for (let i = 0; i < tailLen; i++) {
+    nodes.push({ val: values[i], idx: i, x: tailStartX + i * tailSpacing, y: tailY, r: radius });
+  }
+
+  // Place cycle nodes around circle; cycle entry (index = loopAt) is on the left of the circle (closest to tail).
+  for (let i = 0; i < cycleLen; i++) {
+    // angle starts at PI (left side of circle) and goes counter-clockwise
+    const angle = Math.PI - (i * 2 * Math.PI / cycleLen);
+    const x = cycleCenterX + cycleRadius * Math.cos(angle);
+    const y = cycleCenterY + cycleRadius * Math.sin(angle);
+    nodes.push({ val: values[tailLen + i], idx: tailLen + i, x, y, r: radius });
+  }
+}
+
+function getNext(idx) {
+  if (idx < 0 || idx >= values.length) return -1;
+  if (idx === values.length - 1) {
+    if (loopAt < 0 || loopAt >= values.length) return -1;
+    return loopAt;
+  }
+  return idx + 1;
+}
+
+/* =============================================================================
+   STEP GENERATION -- precomputed for replay
+   ============================================================================= */
+function generateSteps() {
+  steps = [];
+  detected = false;
+  meetingPoint = null;
+
+  if (values.length === 0) {
+    steps.push({ phase: 'done', tortoise: -1, hare: -1, desc: 'Empty list -- no cycle.', detected: false });
+    return;
+  }
+
+  // Phase 1: detection
+  let slow = 0;
+  let fast = 0;
+  let iter = 0;
+  let foundMeet = false;
+
+  steps.push({
+    phase: 1, tortoise: slow, hare: fast,
+    desc: `Initialize tortoise and hare both at head (index 0, value ${values[0]}).`,
+    detected: false, iter
+  });
+
+  let safety = values.length * 4 + 10;
+  while (safety-- > 0) {
+    // Advance slow by 1
+    const nextSlow = getNext(slow);
+    if (nextSlow < 0) break;
+    // Advance fast by 2
+    const oneNext = getNext(fast);
+    if (oneNext < 0) break;
+    const twoNext = getNext(oneNext);
+    if (twoNext < 0) break;
+
+    slow = nextSlow;
+    fast = twoNext;
+    iter++;
+
+    const inv = lambda > 0 ? ((fast - slow) % lambda + lambda) % lambda : '-';
+
+    steps.push({
+      phase: 1, tortoise: slow, hare: fast,
+      desc: `Step ${iter}: tortoise -> a[${slow}]=${values[slow]}, hare -> a[${fast}]=${values[fast]}. Relative offset (hare - tortoise) mod &lambda; = <b>${inv}</b>.`,
+      detected: false, iter, invariant: inv
+    });
+
+    if (slow === fast) {
+      foundMeet = true;
+      meetingPoint = slow;
+      detected = true;
+      steps.push({
+        phase: 1, tortoise: slow, hare: fast,
+        desc: `<b>MEETING!</b> tortoise = hare at index ${slow} (value ${values[slow]}). Cycle confirmed.`,
+        detected: true, iter, invariant: 0, meeting: true
+      });
+      break;
+    }
+  }
+
+  if (!foundMeet) {
+    steps.push({
+      phase: 'done', tortoise: slow, hare: fast,
+      desc: `Hare reached the end of the list. <b>No cycle</b>.`,
+      detected: false, iter
+    });
+    return;
+  }
+
+  // Phase 2: find cycle start
+  steps.push({
+    phase: 2, tortoise: 0, hare: meetingPoint, reset: true,
+    desc: `<b>PHASE 2</b>: reset one pointer to head (index 0). Advance both 1 step at a time. They meet at the cycle start.`,
+    detected: true, iter
+  });
+
+  let p = 0;
+  let q = meetingPoint;
+  let phase2Steps = 0;
+  while (p !== q) {
+    const np = getNext(p);
+    const nq = getNext(q);
+    if (np < 0 || nq < 0) break;
+    p = np;
+    q = nq;
+    phase2Steps++;
+    steps.push({
+      phase: 2, tortoise: p, hare: q,
+      desc: `Phase 2 step ${phase2Steps}: p -> a[${p}]=${values[p]}, q -> a[${q}]=${values[q]}.`,
+      detected: true, iter, phase2Steps
+    });
+  }
+
+  steps.push({
+    phase: 2, tortoise: p, hare: q, cycleStart: p,
+    desc: `<b>CYCLE START found at index ${p} (value ${values[p]})</b>. Walked &mu; = ${phase2Steps} steps from head. Cycle length &lambda; = ${lambda}.`,
+    detected: true, iter, phase2Steps, cycleStartFound: true
+  });
+
+  // Phase 3: cycle length
+  let phase3 = 0;
+  let r = getNext(p);
+  while (r !== p && r >= 0 && phase3 < lambda + 2) {
+    phase3++;
+    r = getNext(r);
+  }
+  phase3++;
+
+  steps.push({
+    phase: 'done', tortoise: p, hare: q,
+    desc: `Algorithm complete. &mu; = ${phase2Steps}, &lambda; = ${lambda}. Identity check: &mu; + m = k * &lambda; where m is meeting offset.`,
+    detected: true, finalMu: phase2Steps, finalLambda: lambda
+  });
+}
+
+/* =============================================================================
+   RENDERING (SVG)
+   ============================================================================= */
+function renderSvg(step) {
+  const svg = document.getElementById('viz');
+  // Clear
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+
+  // Edges first (behind nodes)
+  for (let i = 0; i < nodes.length; i++) {
+    const next = getNext(i);
+    if (next < 0) continue;
+    const from = nodes[i];
+    const to = nodes[next];
+
+    // For the back-edge (last node to loopAt), draw a curve
+    const isCycleEdge = (i === nodes.length - 1) && (next === loopAt);
+
+    const edge = drawEdge(svgNS, from, to, isCycleEdge);
+    edge.forEach(e => svg.appendChild(e));
+  }
+
+  // Nodes
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+
+    const circle = document.createElementNS(svgNS, 'circle');
+    circle.setAttribute('cx', n.x);
+    circle.setAttribute('cy', n.y);
+    circle.setAttribute('r', n.r);
+    circle.setAttribute('class', 'node-circle');
+    if (i === loopAt && loopAt >= 0) {
+      circle.classList.add('cycle-entry');
+    }
+    if (step && step.meeting && i === step.tortoise) {
+      circle.classList.add('meeting-point');
+    }
+    if (step && step.cycleStartFound && i === step.cycleStart) {
+      circle.classList.add('cycle-entry');
+    }
+    svg.appendChild(circle);
+
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('x', n.x);
+    label.setAttribute('y', n.y - 2);
+    label.setAttribute('class', 'node-label');
+    label.textContent = n.val;
+    svg.appendChild(label);
+
+    const idxLabel = document.createElementNS(svgNS, 'text');
+    idxLabel.setAttribute('x', n.x);
+    idxLabel.setAttribute('y', n.y + 12);
+    idxLabel.setAttribute('class', 'node-index');
+    idxLabel.textContent = '[' + i + ']';
+    svg.appendChild(idxLabel);
+  }
+
+  // Pointers
+  if (step) {
+    if (step.tortoise >= 0 && step.tortoise < nodes.length) {
+      const tn = nodes[step.tortoise];
+      const tortClass = step.reset ? 'pointer-marker pointer-fresh' : 'pointer-marker pointer-tortoise';
+      drawPointer(svgNS, svg, tn.x - 18, tn.y - n_offset(tn), tortClass, 'T');
+    }
+    if (step.hare >= 0 && step.hare < nodes.length && step.phase !== 'done') {
+      const hn = nodes[step.hare];
+      // If both at same node, offset hare's marker
+      const sameAs = (step.hare === step.tortoise);
+      drawPointer(svgNS, svg, hn.x + 18, hn.y - n_offset(hn), 'pointer-marker pointer-hare', 'H');
+    }
+  }
+}
+
+function n_offset(node) {
+  return node.r + 14;
+}
+
+function drawPointer(svgNS, svg, x, y, cls, label) {
+  const c = document.createElementNS(svgNS, 'circle');
+  c.setAttribute('cx', x);
+  c.setAttribute('cy', y);
+  c.setAttribute('r', 11);
+  c.setAttribute('class', cls);
+  svg.appendChild(c);
+
+  const t = document.createElementNS(svgNS, 'text');
+  t.setAttribute('x', x);
+  t.setAttribute('y', y + 1);
+  t.setAttribute('class', 'pointer-label');
+  t.textContent = label;
+  svg.appendChild(t);
+}
+
+function drawEdge(svgNS, from, to, isCycleEdge) {
+  // Straight arrow for tail-to-tail or cycle-to-cycle adjacent;
+  // Curved if cycle back-edge (last node to loopAt).
+  const elements = [];
+
+  // Adjust endpoints so arrow does not overlap circle
+  const r = from.r;
+  let x1, y1, x2, y2, pathD;
+
+  if (isCycleEdge) {
+    // Cycle back-edge: curve outward.
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    x1 = from.x - ux * r;
+    y1 = from.y - uy * r;
+    x2 = to.x + ux * r;
+    y2 = to.y + uy * r;
+
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+    path.setAttribute('class', 'edge-line cycle-edge');
+    elements.push(path);
+
+    elements.push(drawArrowHead(svgNS, x2, y2, ux, uy, true));
+  } else {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ux = dx / len;
+    const uy = dy / len;
+
+    x1 = from.x + ux * r;
+    y1 = from.y + uy * r;
+    x2 = to.x - ux * r;
+    y2 = to.y - uy * r;
+
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', x1);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+    line.setAttribute('class', 'edge-line');
+    elements.push(line);
+
+    elements.push(drawArrowHead(svgNS, x2, y2, ux, uy, false));
+  }
+
+  return elements;
+}
+
+function drawArrowHead(svgNS, x, y, ux, uy, cycleArrow) {
+  const size = 8;
+  const px = -uy * size * 0.5;
+  const py = ux * size * 0.5;
+  const x1 = x;
+  const y1 = y;
+  const x2 = x - ux * size + px;
+  const y2 = y - uy * size + py;
+  const x3 = x - ux * size - px;
+  const y3 = y - uy * size - py;
+  const poly = document.createElementNS(svgNS, 'polygon');
+  poly.setAttribute('points', `${x1},${y1} ${x2},${y2} ${x3},${y3}`);
+  poly.setAttribute('class', 'arrow-head' + (cycleArrow ? ' cycle-arrow' : ''));
+  return poly;
+}
+
+/* =============================================================================
+   UI / DRIVER
+   ============================================================================= */
+function render() {
+  const step = steps[stepIdx];
+  if (!step) return;
+  renderSvg(step);
+  updateStats(step);
+  updatePhaseDisplay(step);
+
+  document.getElementById('infoLine').innerHTML =
+    `<span class="step-tag">${phaseTag(step)}</span> ${step.desc}`;
+}
+
+function phaseTag(step) {
+  if (step.phase === 'done') return 'DONE';
+  if (step.phase === 2) return 'PHASE 2';
+  return 'PHASE 1';
+}
+
+function updatePhaseDisplay(step) {
+  const el = document.getElementById('phaseDisplay');
+  if (step.phase === 'done') {
+    el.textContent = 'COMPLETE';
+    el.style.color = 'var(--green)';
+  } else if (step.phase === 2) {
+    el.textContent = 'PHASE 2 -- Find Cycle Start';
+    el.style.color = 'var(--purple)';
+  } else {
+    el.textContent = 'PHASE 1 -- Detection';
+    el.style.color = 'var(--blue)';
+  }
+}
+
+function updateStats(step) {
+  document.getElementById('statStep').textContent = stepIdx;
+  document.getElementById('statPhase').textContent = step.phase === 'done' ? '-' : step.phase;
+  document.getElementById('statTortoise').textContent = step.tortoise >= 0 ? step.tortoise : '-';
+  document.getElementById('statHare').textContent = step.hare >= 0 ? step.hare : '-';
+  document.getElementById('statInvariant').textContent =
+    (step.invariant !== undefined) ? step.invariant : (step.phase === 2 ? '0' : '-');
+  document.getElementById('statLambda').textContent = (lambda && lambda > 0) ? lambda : '-';
+  document.getElementById('statMu').textContent = (mu !== null) ? mu : '-';
+  document.getElementById('statDetected').textContent = detected ? 'yes' : 'no';
+  document.getElementById('statDetected').style.color = detected ? 'var(--green)' : 'var(--muted)';
+}
+
+function loadList() {
+  const raw = document.getElementById('valuesInput').value;
+  const nums = raw.split(/[,\s]+/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  if (nums.length === 0) return;
+  values = nums.slice(0, 20);                    // cap to keep readable
+  const la = parseInt(document.getElementById('loopAtInput').value, 10);
+  loopAt = (isNaN(la) || la >= values.length) ? -1 : la;
+  reset();
+}
+
+function loadPreset(name) {
+  if (name === 'classic') {
+    values = [1, 2, 3, 4, 5, 6, 7, 8];
+    loopAt = 2;
+  } else if (name === 'selfloop') {
+    values = [1, 2, 3];
+    loopAt = 2;
+  } else if (name === 'nocycle') {
+    values = [1, 2, 3, 4, 5];
+    loopAt = -1;
+  }
+  document.getElementById('valuesInput').value = values.join(',');
+  document.getElementById('loopAtInput').value = loopAt;
+  reset();
+}
+
+function reset() {
+  pause();
+  stepIdx = 0;
+  document.getElementById('logArea').innerHTML = '';
+  rebuildList();
+  generateSteps();
+  render();
+  addLog(`built list n=${values.length}, loop_at=${loopAt}, mu=${mu}, lambda=${lambda}`, 'tag-phase');
+}
+
+function stepForward() {
+  if (stepIdx >= steps.length - 1) { pause(); return; }
+  stepIdx++;
+  const s = steps[stepIdx];
+  let tag = 'tag-step';
+  if (s.meeting) tag = 'tag-meet';
+  if (s.cycleStartFound) tag = 'tag-done';
+  if (s.phase === 'done') tag = 'tag-done';
+  if (s.reset) tag = 'tag-phase';
+  addLog(`step ${stepIdx}: phase=${s.phase} t=${s.tortoise} h=${s.hare}`, tag);
+  render();
+}
+
+function jumpToPhase2() {
+  if (steps.length === 0) return;
+  let target = -1;
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].phase === 2 && steps[i].reset) {
+      target = i;
+      break;
+    }
+  }
+  if (target < 0) {
+    addLog('no cycle detected -- cannot jump to phase 2', 'tag-phase');
+    return;
+  }
+  pause();
+  stepIdx = target;
+  addLog(`jumped to phase 2 (step ${stepIdx})`, 'tag-phase');
+  render();
+}
+
+function play() {
+  if (stepIdx >= steps.length - 1) reset();
+  playing = true;
+  document.getElementById('playBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  runAnim();
+}
+
+function runAnim() {
+  if (!playing) return;
+  if (stepIdx >= steps.length - 1) { pause(); return; }
+  stepForward();
+  const delay = 1200 - parseInt(document.getElementById('speed').value, 10) * 110;
+  timer = setTimeout(runAnim, delay);
+}
+
+function pause() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('playBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function addLog(msg, cls) {
+  const area = document.getElementById('logArea');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="${cls}">${msg}</span>`;
+  area.prepend(entry);
+  while (area.children.length > 80) area.removeChild(area.lastChild);
+}
+
+document.getElementById('speed').addEventListener('input', () => {
+  if (playing) {
+    clearTimeout(timer);
+    runAnim();
+  }
+});
+
+/* Initial */
+reset();
+</script>
+
+</body>
+</html>
