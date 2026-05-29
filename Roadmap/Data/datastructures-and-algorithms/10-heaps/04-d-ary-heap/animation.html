@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>D-Ary Heap — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    color: var(--blue);
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .op-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .op-panel input[type="text"],
+  .op-panel input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-family: "SF Mono", Menlo, monospace;
+    width: 110px;
+  }
+
+  .op-panel input[type="text"].wide {
+    width: 220px;
+  }
+
+  .op-panel button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: 0.15s;
+  }
+
+  .op-panel button:hover:not(:disabled) {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  .op-panel button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .op-panel button.primary { color: var(--green); border-color: var(--green); }
+  .op-panel button.danger  { color: var(--red);   border-color: var(--red); }
+  .op-panel button.warn    { color: var(--yellow);border-color: var(--yellow); }
+
+  .op-panel label {
+    color: var(--muted);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .op-panel .sep {
+    width: 1px;
+    height: 22px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  .mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .mode-toggle button {
+    border: none;
+    border-radius: 0;
+    padding: 6px 10px;
+  }
+
+  .mode-toggle button.active {
+    background: var(--blue);
+    color: var(--bg);
+  }
+
+  input[type="range"] {
+    accent-color: var(--blue);
+    width: 110px;
+  }
+
+  .info-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--purple);
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    color: var(--text);
+    min-height: 18px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  @media (max-width: 1100px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 480px;
+  }
+
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+
+  .panel-title {
+    font-weight: 600;
+    color: var(--blue);
+    font-size: 15px;
+  }
+
+  .panel-stats {
+    display: flex;
+    gap: 10px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .panel-stats span b { color: var(--text); }
+
+  .tree-wrap {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: auto;
+    min-height: 280px;
+    padding: 4px;
+  }
+
+  .tree-wrap svg {
+    display: block;
+    min-width: 100%;
+  }
+
+  .node circle {
+    stroke: var(--border);
+    stroke-width: 1.5;
+    fill: var(--bg);
+    transition: 0.18s;
+  }
+
+  .node text {
+    fill: var(--text);
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+
+  .node.default circle  { stroke: var(--blue); }
+  .node.comparing circle{ stroke: var(--red); fill: rgba(248,81,73,0.15); }
+  .node.swapping circle { stroke: var(--yellow); fill: rgba(210,153,34,0.2); }
+  .node.inserted circle { stroke: var(--green); fill: rgba(63,185,80,0.25); animation: flash 0.5s; }
+  .node.extracted circle{ stroke: var(--muted); opacity: 0.3; }
+  .node.path circle     { stroke: var(--purple); fill: rgba(188,140,255,0.15); }
+
+  @keyframes flash {
+    0%   { transform: scale(1.4); }
+    100% { transform: scale(1); }
+  }
+
+  .node.inserted circle {
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+
+  .edge { stroke: var(--border); stroke-width: 1.2; }
+  .edge.path { stroke: var(--purple); stroke-width: 2; }
+
+  .array-strip {
+    display: flex;
+    gap: 2px;
+    margin-top: 8px;
+    overflow-x: auto;
+    padding: 4px 2px;
+  }
+
+  .cell {
+    min-width: 34px;
+    height: 36px;
+    border: 1.5px solid var(--blue);
+    border-radius: 4px;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11.5px;
+    transition: 0.18s;
+    flex-shrink: 0;
+  }
+
+  .cell .idx {
+    font-size: 8.5px;
+    color: var(--muted);
+    line-height: 1;
+  }
+
+  .cell .val { line-height: 1.1; }
+
+  .cell.comparing { border-color: var(--red); background: rgba(248,81,73,0.18); }
+  .cell.swapping  { border-color: var(--yellow); background: rgba(210,153,34,0.2); }
+  .cell.inserted  { border-color: var(--green); background: rgba(63,185,80,0.25); }
+  .cell.extracted { border-color: var(--muted); opacity: 0.35; }
+  .cell.path      { border-color: var(--purple); background: rgba(188,140,255,0.15); }
+
+  .log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 14px;
+    padding: 8px 12px;
+    height: 130px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11.5px;
+  }
+
+  .log .row {
+    padding: 2px 0;
+    border-bottom: 1px dashed rgba(48,54,61,0.5);
+    color: var(--muted);
+  }
+
+  .log .row:last-child { border: none; }
+  .log .row .tag { color: var(--orange); margin-right: 6px; }
+  .log .row .tag-d2 { color: var(--blue); }
+  .log .row .tag-d4 { color: var(--green); }
+  .log .row .tag-d8 { color: var(--purple); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend i {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1.5px solid;
+  }
+</style>
+</head>
+<body>
+
+<h1>D-Ary Heap — Interactive Visualization</h1>
+<div class="subtitle">Compare branching factor d = 2, 4, 8 side by side. Same operations, different trade-offs in height vs comparisons.</div>
+
+<div class="op-panel">
+  <input type="number" id="insertVal" placeholder="value" />
+  <button class="primary" id="btnInsert">Insert</button>
+  <button class="danger" id="btnExtract">Extract</button>
+  <button id="btnPeek">Peek</button>
+  <div class="sep"></div>
+  <input type="text" id="buildArr" class="wide" placeholder="e.g. 7,3,9,1,5,8,2,6" />
+  <button id="btnBuild">Build Heap</button>
+  <button id="btnRandom">Random</button>
+  <button class="warn" id="btnReset">Reset</button>
+  <div class="sep"></div>
+  <span class="mode-toggle">
+    <button id="modeMin" class="active">Min-PQ</button>
+    <button id="modeMax">Max-PQ</button>
+  </span>
+  <div class="sep"></div>
+  <label>Speed <input type="range" id="speed" min="60" max="900" value="380" /></label>
+  <div class="sep"></div>
+  <button id="btnStep">Step</button>
+  <button id="btnPlay">Play</button>
+  <button id="btnSReset">Reset Steps</button>
+</div>
+
+<div class="info-bar" id="infoBar">Ready. Insert values or click Random to begin.</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="legend">
+  <span><i style="border-color:var(--blue)"></i>default</span>
+  <span><i style="border-color:var(--red);background:rgba(248,81,73,0.18)"></i>comparing</span>
+  <span><i style="border-color:var(--yellow);background:rgba(210,153,34,0.2)"></i>swapping</span>
+  <span><i style="border-color:var(--green);background:rgba(63,185,80,0.25)"></i>inserted</span>
+  <span><i style="border-color:var(--purple);background:rgba(188,140,255,0.15)"></i>path</span>
+  <span><i style="border-color:var(--muted);opacity:0.5"></i>extracted</span>
+</div>
+
+<div class="log" id="log"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+// Global state
+// ============================================================
+const D_VALUES = [2, 4, 8];
+let mode = "min"; // or "max"
+let busy = false;
+let speedMs = 380;
+let pendingSteps = [];
+let playing = false;
+
+// ============================================================
+// D-Ary Heap class
+// ============================================================
+class DAryHeap {
+  constructor(d, mode) {
+    this.d = d;
+    this.mode = mode;
+    this.arr = [];
+    this.comparisons = 0;
+    this.swaps = 0;
+  }
+
+  parent(i) { return Math.floor((i - 1) / this.d); }
+  child(i, k) { return this.d * i + 1 + k; }
+  size() { return this.arr.length; }
+  height() {
+    if (this.arr.length === 0) return 0;
+    return Math.floor(Math.log(this.arr.length * (this.d - 1) + 1) / Math.log(this.d));
+  }
+
+  better(a, b) {
+    this.comparisons++;
+    return this.mode === "min" ? a < b : a > b;
+  }
+
+  reset() {
+    this.arr = [];
+    this.comparisons = 0;
+    this.swaps = 0;
+  }
+}
+
+// ============================================================
+// Panel objects
+// ============================================================
+const panels = {};
+
+function buildPanels() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  D_VALUES.forEach((d) => {
+    const heap = new DAryHeap(d, mode);
+    const div = document.createElement("div");
+    div.className = "panel";
+    div.innerHTML = `
+      <div class="panel-head">
+        <div class="panel-title">d = ${d}</div>
+        <div class="panel-stats">
+          <span>cmp: <b id="cmp-${d}">0</b></span>
+          <span>swp: <b id="swp-${d}">0</b></span>
+          <span>h: <b id="h-${d}">0</b></span>
+          <span>n: <b id="n-${d}">0</b></span>
+        </div>
+      </div>
+      <div class="tree-wrap" id="tree-${d}"></div>
+      <div class="array-strip" id="strip-${d}"></div>
+    `;
+    grid.appendChild(div);
+    panels[d] = { heap, highlights: new Map(), edges: new Set() };
+  });
+  renderAll();
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function levelOf(d, i) {
+  // 0-indexed level
+  if (i === 0) return 0;
+  return Math.floor(Math.log(i * (d - 1) + 1) / Math.log(d));
+}
+
+function renderPanel(d) {
+  const p = panels[d];
+  const heap = p.heap;
+  const n = heap.size();
+
+  // stats
+  document.getElementById(`cmp-${d}`).textContent = heap.comparisons;
+  document.getElementById(`swp-${d}`).textContent = heap.swaps;
+  document.getElementById(`h-${d}`).textContent = heap.height();
+  document.getElementById(`n-${d}`).textContent = n;
+
+  // SVG tree
+  const treeDiv = document.getElementById(`tree-${d}`);
+  if (n === 0) {
+    treeDiv.innerHTML = `<div style="color:var(--muted);text-align:center;padding:60px 0;font-size:12px;">empty heap</div>`;
+  } else {
+    treeDiv.innerHTML = buildSVG(d, heap, p);
+  }
+
+  // array strip
+  const strip = document.getElementById(`strip-${d}`);
+  strip.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    const hl = p.highlights.get(i);
+    if (hl) cell.classList.add(hl);
+    cell.innerHTML = `<div class="idx">${i}</div><div class="val">${heap.arr[i]}</div>`;
+    strip.appendChild(cell);
+  }
+}
+
+function buildSVG(d, heap, panel) {
+  const n = heap.size();
+  // compute levels
+  const levels = [];
+  for (let i = 0; i < n; i++) {
+    const lv = levelOf(d, i);
+    if (!levels[lv]) levels[lv] = [];
+    levels[lv].push(i);
+  }
+  const maxLevel = levels.length - 1;
+
+  // node radius
+  const r = 14;
+  const vSpacing = 60;
+
+  // width depends on widest level
+  const widest = Math.max(...levels.map(l => l.length));
+  const hSpacing = Math.max(38, Math.min(70, 600 / widest));
+  const width = Math.max(300, widest * hSpacing + 40);
+  const height = (maxLevel + 1) * vSpacing + 30;
+
+  // positions
+  const pos = {};
+  levels.forEach((row, lv) => {
+    const rowW = row.length * hSpacing;
+    const startX = (width - rowW) / 2 + hSpacing / 2;
+    row.forEach((idx, j) => {
+      pos[idx] = { x: startX + j * hSpacing, y: 25 + lv * vSpacing };
+    });
+  });
+
+  // edges
+  let edgesSvg = "";
+  for (let i = 1; i < n; i++) {
+    const p = heap.parent(i);
+    if (pos[p] && pos[i]) {
+      const isPath = panel.edges.has(`${p}-${i}`);
+      edgesSvg += `<line class="edge ${isPath ? 'path' : ''}" x1="${pos[p].x}" y1="${pos[p].y}" x2="${pos[i].x}" y2="${pos[i].y}" />`;
+    }
+  }
+
+  // nodes
+  let nodesSvg = "";
+  for (let i = 0; i < n; i++) {
+    const hl = panel.highlights.get(i) || "default";
+    nodesSvg += `<g class="node ${hl}" transform="translate(${pos[i].x},${pos[i].y})">
+      <circle r="${r}"></circle>
+      <text>${heap.arr[i]}</text>
+    </g>`;
+  }
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${edgesSvg}${nodesSvg}</svg>`;
+}
+
+function renderAll() {
+  D_VALUES.forEach(renderPanel);
+}
+
+function clearHighlights() {
+  D_VALUES.forEach((d) => {
+    panels[d].highlights.clear();
+    panels[d].edges.clear();
+  });
+}
+
+function setHL(d, i, cls) {
+  panels[d].highlights.set(i, cls);
+}
+
+function clearHL(d, i) {
+  panels[d].highlights.delete(i);
+}
+
+// ============================================================
+// Logging + info
+// ============================================================
+function setInfo(text) {
+  document.getElementById("infoBar").textContent = text;
+}
+
+function log(d, msg) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<span class="tag tag-d${d}">[d=${d}]</span>${msg}`;
+  const logEl = document.getElementById("log");
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function logTop(msg) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<span class="tag">[op]</span>${msg}`;
+  const logEl = document.getElementById("log");
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ============================================================
+// Sleep / step utility
+// ============================================================
+function sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+async function pause() {
+  await sleep(speedMs);
+}
+
+// ============================================================
+// Heap operations (per-panel, animated)
+// ============================================================
+async function insertOne(d, value) {
+  const p = panels[d];
+  const heap = p.heap;
+  heap.arr.push(value);
+  let i = heap.size() - 1;
+
+  setHL(d, i, "inserted");
+  setInfo(`d=${d}: placed ${value} at index ${i} (leaf), now sift up.`);
+  renderPanel(d);
+  await pause();
+  clearHL(d, i);
+
+  // sift up
+  while (i > 0) {
+    const par = heap.parent(i);
+    setHL(d, i, "comparing");
+    setHL(d, par, "comparing");
+    p.edges.add(`${par}-${i}`);
+    setInfo(`d=${d}: compare arr[${i}]=${heap.arr[i]} with parent arr[${par}]=${heap.arr[par]}.`);
+    renderPanel(d);
+    await pause();
+
+    if (heap.better(heap.arr[i], heap.arr[par])) {
+      setHL(d, i, "swapping");
+      setHL(d, par, "swapping");
+      [heap.arr[i], heap.arr[par]] = [heap.arr[par], heap.arr[i]];
+      heap.swaps++;
+      setInfo(`d=${d}: swap arr[${i}] and arr[${par}].`);
+      renderPanel(d);
+      await pause();
+      clearHL(d, i);
+      i = par;
+    } else {
+      clearHL(d, i);
+      clearHL(d, par);
+      setInfo(`d=${d}: heap property holds at index ${par}; done.`);
+      renderPanel(d);
+      await pause();
+      break;
+    }
+  }
+  clearHighlights();
+  log(d, `insert(${value}) — cmp=${heap.comparisons}, swp=${heap.swaps}, h=${heap.height()}`);
+  renderPanel(d);
+}
+
+async function extractRoot(d) {
+  const p = panels[d];
+  const heap = p.heap;
+  if (heap.size() === 0) {
+    log(d, `extract — empty`);
+    return null;
+  }
+  const root = heap.arr[0];
+  setHL(d, 0, "extracted");
+  setInfo(`d=${d}: extract root ${root}.`);
+  renderPanel(d);
+  await pause();
+
+  const last = heap.arr.pop();
+  if (heap.size() === 0) {
+    clearHighlights();
+    renderPanel(d);
+    log(d, `extract → ${root} (heap empty)`);
+    return root;
+  }
+  heap.arr[0] = last;
+  clearHL(d, 0);
+  setHL(d, 0, "inserted");
+  setInfo(`d=${d}: moved last element ${last} to root; sift down.`);
+  renderPanel(d);
+  await pause();
+  clearHL(d, 0);
+
+  // sift down
+  let i = 0;
+  const n = heap.size();
+  while (true) {
+    let best = i;
+    const childIdxs = [];
+    for (let k = 0; k < heap.d; k++) {
+      const c = heap.child(i, k);
+      if (c < n) childIdxs.push(c);
+    }
+    if (childIdxs.length === 0) break;
+
+    // highlight all children + parent
+    setHL(d, i, "comparing");
+    childIdxs.forEach((c) => {
+      setHL(d, c, "comparing");
+      p.edges.add(`${i}-${c}`);
+    });
+    setInfo(`d=${d}: compare arr[${i}]=${heap.arr[i]} with ${childIdxs.length} children (${childIdxs.join(",")}).`);
+    renderPanel(d);
+    await pause();
+
+    for (const c of childIdxs) {
+      if (heap.better(heap.arr[c], heap.arr[best])) best = c;
+    }
+
+    if (best !== i) {
+      setHL(d, i, "swapping");
+      setHL(d, best, "swapping");
+      childIdxs.forEach((c) => { if (c !== best) clearHL(d, c); });
+      [heap.arr[i], heap.arr[best]] = [heap.arr[best], heap.arr[i]];
+      heap.swaps++;
+      setInfo(`d=${d}: swap arr[${i}] ↔ arr[${best}]=${heap.arr[i]} (best child).`);
+      renderPanel(d);
+      await pause();
+      clearHL(d, i);
+      i = best;
+    } else {
+      clearHL(d, i);
+      childIdxs.forEach((c) => clearHL(d, c));
+      setInfo(`d=${d}: arr[${i}]=${heap.arr[i]} satisfies heap property; done.`);
+      renderPanel(d);
+      await pause();
+      break;
+    }
+  }
+  clearHighlights();
+  log(d, `extract → ${root}, cmp=${heap.comparisons}, swp=${heap.swaps}, h=${heap.height()}`);
+  renderPanel(d);
+  return root;
+}
+
+async function buildOne(d, values) {
+  const p = panels[d];
+  const heap = p.heap;
+  heap.reset();
+  heap.arr = values.slice();
+  const n = heap.size();
+  setInfo(`d=${d}: build-heap from ${n} values; sift down from last internal node.`);
+  renderPanel(d);
+  await pause();
+
+  // last internal node index
+  const start = Math.floor((n - 2) / heap.d);
+  for (let i = start; i >= 0; i--) {
+    await siftDownNoLog(d, i);
+  }
+  clearHighlights();
+  log(d, `build(${n}) — cmp=${heap.comparisons}, swp=${heap.swaps}, h=${heap.height()}`);
+  renderPanel(d);
+}
+
+async function siftDownNoLog(d, startIdx) {
+  const p = panels[d];
+  const heap = p.heap;
+  const n = heap.size();
+  let i = startIdx;
+  while (true) {
+    let best = i;
+    const childIdxs = [];
+    for (let k = 0; k < heap.d; k++) {
+      const c = heap.child(i, k);
+      if (c < n) childIdxs.push(c);
+    }
+    if (childIdxs.length === 0) break;
+
+    setHL(d, i, "comparing");
+    childIdxs.forEach((c) => setHL(d, c, "comparing"));
+    renderPanel(d);
+    await pause();
+
+    for (const c of childIdxs) {
+      if (heap.better(heap.arr[c], heap.arr[best])) best = c;
+    }
+
+    if (best !== i) {
+      setHL(d, i, "swapping");
+      setHL(d, best, "swapping");
+      childIdxs.forEach((c) => { if (c !== best) clearHL(d, c); });
+      [heap.arr[i], heap.arr[best]] = [heap.arr[best], heap.arr[i]];
+      heap.swaps++;
+      renderPanel(d);
+      await pause();
+      clearHL(d, i);
+      i = best;
+    } else {
+      clearHL(d, i);
+      childIdxs.forEach((c) => clearHL(d, c));
+      break;
+    }
+  }
+}
+
+// ============================================================
+// Driver (runs on all panels in parallel)
+// ============================================================
+async function runOnAll(fn, label) {
+  if (busy) return;
+  busy = true;
+  setUIBusy(true);
+  logTop(label);
+  await Promise.all(D_VALUES.map((d) => fn(d)));
+  busy = false;
+  setUIBusy(false);
+  renderAll();
+}
+
+function setUIBusy(b) {
+  const ids = ["btnInsert","btnExtract","btnPeek","btnBuild","btnRandom","btnReset","modeMin","modeMax"];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = b;
+  });
+}
+
+// ============================================================
+// Public ops (wired to UI)
+// ============================================================
+async function doInsert() {
+  const raw = document.getElementById("insertVal").value.trim();
+  if (raw === "") { setInfo("enter a value to insert."); return; }
+  const v = Number(raw);
+  if (Number.isNaN(v)) { setInfo("invalid number."); return; }
+  document.getElementById("insertVal").value = "";
+  await runOnAll((d) => insertOne(d, v), `insert ${v}`);
+}
+
+async function doExtract() {
+  await runOnAll((d) => extractRoot(d), `extract ${mode === "min" ? "min" : "max"}`);
+}
+
+function doPeek() {
+  if (busy) return;
+  D_VALUES.forEach((d) => {
+    const h = panels[d].heap;
+    if (h.size() === 0) {
+      log(d, `peek — empty`);
+    } else {
+      setHL(d, 0, "path");
+      log(d, `peek → ${h.arr[0]}`);
+    }
+  });
+  setInfo(`peek: ${mode === "min" ? "min" : "max"} of each heap shown in purple.`);
+  renderAll();
+  setTimeout(() => { clearHighlights(); renderAll(); }, Math.max(800, speedMs * 2));
+}
+
+async function doBuild() {
+  const raw = document.getElementById("buildArr").value.trim();
+  if (!raw) { setInfo("enter comma-separated values."); return; }
+  const vals = raw.split(/[,\s]+/).map(Number).filter((x) => !Number.isNaN(x));
+  if (vals.length === 0) { setInfo("no valid numbers."); return; }
+  await runOnAll((d) => buildOne(d, vals), `build from [${vals.join(",")}]`);
+}
+
+async function doRandom() {
+  const n = 12 + Math.floor(Math.random() * 29);
+  const vals = Array.from({ length: n }, () => Math.floor(Math.random() * 99) + 1);
+  document.getElementById("buildArr").value = vals.join(",");
+  await runOnAll((d) => buildOne(d, vals), `random build n=${n}`);
+}
+
+function doReset() {
+  if (busy) return;
+  D_VALUES.forEach((d) => panels[d].heap.reset());
+  clearHighlights();
+  renderAll();
+  document.getElementById("log").innerHTML = "";
+  setInfo("all heaps reset.");
+}
+
+// ============================================================
+// Step / Play (operates a queue of insert ops)
+// ============================================================
+function buildStepQueue() {
+  if (pendingSteps.length > 0) return;
+  const n = 14;
+  pendingSteps = Array.from({ length: n }, () => Math.floor(Math.random() * 99) + 1);
+  setInfo(`step queue: ${pendingSteps.length} inserts queued.`);
+}
+
+async function doStep() {
+  if (busy) return;
+  buildStepQueue();
+  const v = pendingSteps.shift();
+  if (v === undefined) return;
+  await runOnAll((d) => insertOne(d, v), `step insert ${v}`);
+}
+
+async function doPlay() {
+  const btn = document.getElementById("btnPlay");
+  if (playing) {
+    playing = false;
+    btn.textContent = "Play";
+    return;
+  }
+  playing = true;
+  btn.textContent = "Pause";
+  buildStepQueue();
+  while (playing && pendingSteps.length > 0) {
+    const v = pendingSteps.shift();
+    await runOnAll((d) => insertOne(d, v), `step insert ${v}`);
+  }
+  playing = false;
+  btn.textContent = "Play";
+}
+
+function doStepReset() {
+  pendingSteps = [];
+  playing = false;
+  document.getElementById("btnPlay").textContent = "Play";
+  setInfo("step queue cleared.");
+}
+
+// ============================================================
+// Mode toggle
+// ============================================================
+function setMode(m) {
+  if (busy) return;
+  mode = m;
+  document.getElementById("modeMin").classList.toggle("active", m === "min");
+  document.getElementById("modeMax").classList.toggle("active", m === "max");
+  // re-heapify existing data under new mode
+  D_VALUES.forEach((d) => {
+    const old = panels[d].heap.arr.slice();
+    panels[d].heap.reset();
+    panels[d].heap.mode = m;
+    panels[d].heap.arr = old;
+    const n = old.length;
+    if (n > 1) {
+      const start = Math.floor((n - 2) / d);
+      const heap = panels[d].heap;
+      for (let i = start; i >= 0; i--) {
+        let cur = i;
+        while (true) {
+          let best = cur;
+          for (let k = 0; k < d; k++) {
+            const c = heap.child(cur, k);
+            if (c < n && heap.better(heap.arr[c], heap.arr[best])) best = c;
+          }
+          if (best !== cur) {
+            [heap.arr[cur], heap.arr[best]] = [heap.arr[best], heap.arr[cur]];
+            heap.swaps++;
+            cur = best;
+          } else break;
+        }
+      }
+    }
+  });
+  renderAll();
+  setInfo(`mode switched to ${m === "min" ? "Min-PQ" : "Max-PQ"}; existing data re-heapified.`);
+}
+
+// ============================================================
+// Wire up
+// ============================================================
+document.getElementById("btnInsert").addEventListener("click", doInsert);
+document.getElementById("btnExtract").addEventListener("click", doExtract);
+document.getElementById("btnPeek").addEventListener("click", doPeek);
+document.getElementById("btnBuild").addEventListener("click", doBuild);
+document.getElementById("btnRandom").addEventListener("click", doRandom);
+document.getElementById("btnReset").addEventListener("click", doReset);
+document.getElementById("modeMin").addEventListener("click", () => setMode("min"));
+document.getElementById("modeMax").addEventListener("click", () => setMode("max"));
+document.getElementById("speed").addEventListener("input", (e) => {
+  speedMs = Number(e.target.value);
+});
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnPlay").addEventListener("click", doPlay);
+document.getElementById("btnSReset").addEventListener("click", doStepReset);
+
+document.getElementById("insertVal").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") doInsert();
+});
+document.getElementById("buildArr").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") doBuild();
+});
+
+// init
+buildPanels();
+setInfo("Ready. Try Random to load 12–40 values into all three heaps.");
+
+</script>
+</body>
+</html>

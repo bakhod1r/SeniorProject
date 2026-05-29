@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fibonacci Heap — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 {
+    font-size: 16px; margin: 0; font-weight: 600;
+    letter-spacing: .3px;
+  }
+  header .subtitle {
+    color: var(--muted); font-size: 12px;
+  }
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 14px;
+    padding: 14px;
+  }
+  @media (max-width: 1000px) {
+    .container { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h2 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    font-weight: 600;
+  }
+  .stage {
+    position: relative;
+    min-height: 460px;
+    background: linear-gradient(180deg, #0d1117 0%, #11161e 100%);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  svg { width: 100%; height: 460px; display: block; }
+  .stats {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  @media (max-width: 700px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  .stat {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .stat .label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+  .stat .val {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat.phi .val { color: var(--orange); }
+  .controls {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .row {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .row > input[type="number"] {
+    flex: 1; min-width: 0;
+  }
+  label.lbl {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+  input[type="number"] {
+    background: #0d1117;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 9px;
+    font-size: 13px;
+    width: 100%;
+    font-family: inherit;
+  }
+  input[type="number"]:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+  button {
+    background: #21262d;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .15s ease;
+    white-space: nowrap;
+  }
+  button:hover:not(:disabled) {
+    background: #30363d;
+    border-color: #6e7681;
+  }
+  button:disabled {
+    opacity: .4; cursor: not-allowed;
+  }
+  button.primary {
+    background: #1f6feb;
+    border-color: #1f6feb;
+    color: white;
+  }
+  button.primary:hover:not(:disabled) {
+    background: #388bfd;
+    border-color: #388bfd;
+  }
+  button.danger {
+    background: #21262d;
+    border-color: var(--red);
+    color: var(--red);
+  }
+  button.danger:hover:not(:disabled) {
+    background: var(--red);
+    color: white;
+  }
+  button.warn {
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+  button.warn:hover:not(:disabled) {
+    background: var(--orange);
+    color: #1a1a1a;
+  }
+  .info {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--blue);
+    border-radius: 5px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 60px;
+    color: var(--text);
+  }
+  .log {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    max-height: 160px;
+    overflow-y: auto;
+    line-height: 1.55;
+  }
+  .log .entry { color: var(--muted); }
+  .log .entry .ts { color: var(--blue); margin-right: 6px; }
+  .log .entry.success { color: var(--green); }
+  .log .entry.warn { color: var(--orange); }
+  .log .entry.danger { color: var(--red); }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-size: 11px; color: var(--muted);
+  }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .swatch {
+    width: 11px; height: 11px; border-radius: 50%;
+    border: 1px solid var(--border);
+  }
+  .speed-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+  .min-pointer {
+    fill: var(--yellow);
+    font-size: 11px;
+    font-weight: 700;
+    text-anchor: middle;
+    filter: drop-shadow(0 0 6px var(--yellow));
+  }
+  text { fill: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .degree-label {
+    fill: var(--muted); font-size: 9px; text-anchor: middle;
+  }
+  .root-link {
+    stroke: var(--muted);
+    stroke-width: 1.2;
+    stroke-dasharray: 4 4;
+    fill: none;
+    opacity: .55;
+  }
+  .child-link {
+    stroke: var(--border);
+    stroke-width: 1.6;
+    fill: none;
+  }
+  .node-circle {
+    stroke-width: 2;
+    transition: fill .25s ease, stroke .25s ease, filter .25s ease;
+    cursor: pointer;
+  }
+  .node-text {
+    text-anchor: middle;
+    dominant-baseline: central;
+    font-weight: 700;
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .empty-msg {
+    fill: var(--muted);
+    font-size: 13px;
+    text-anchor: middle;
+  }
+  .section-divider {
+    height: 1px; background: var(--border); margin: 4px 0;
+  }
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .dk-row {
+    display: flex; gap: 6px;
+  }
+  .dk-row input { flex: 1; }
+  .dk-row button { flex-shrink: 0; }
+  .selected-info {
+    font-size: 11px; color: var(--muted);
+    background: #0d1117;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  .selected-info b { color: var(--purple); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Fibonacci Heap — Interactive Visualization</h1>
+    <div class="subtitle">forest of heap-ordered trees · root list · cascading cuts · potential function Φ</div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--blue)"></span>default</span>
+    <span><span class="swatch" style="background:var(--yellow);box-shadow:0 0 6px var(--yellow)"></span>min</span>
+    <span><span class="swatch" style="background:var(--blue);border-color:var(--red)"></span>marked</span>
+    <span><span class="swatch" style="background:var(--red)"></span>comparing</span>
+    <span><span class="swatch" style="background:var(--purple)"></span>cutting</span>
+    <span><span class="swatch" style="background:var(--green)"></span>linking</span>
+  </div>
+</header>
+
+<div class="container">
+  <div class="panel">
+    <h2>Heap Forest</h2>
+    <div class="stage">
+      <svg id="svg" viewBox="0 0 1100 460" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="label">n (size)</div><div class="val" id="stat-n">0</div></div>
+      <div class="stat"><div class="label"># roots</div><div class="val" id="stat-roots">0</div></div>
+      <div class="stat"><div class="label"># marked</div><div class="val" id="stat-marked">0</div></div>
+      <div class="stat phi"><div class="label">Φ = R + 2M</div><div class="val" id="stat-phi">0</div></div>
+      <div class="stat"><div class="label">max degree</div><div class="val" id="stat-deg">0</div></div>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <h2>Operations</h2>
+
+    <label class="lbl">Insert</label>
+    <div class="row">
+      <input type="number" id="ins-val" placeholder="key" value="">
+      <button id="btn-insert" class="primary">Insert</button>
+      <button id="btn-insert-rand">Rand</button>
+    </div>
+
+    <button id="btn-extract" class="warn">Extract Min</button>
+
+    <div class="section-divider"></div>
+
+    <label class="lbl">Selected node</label>
+    <div class="selected-info" id="sel-info">click a node to select</div>
+
+    <label class="lbl">Decrease Key</label>
+    <div class="dk-row">
+      <input type="number" id="dk-val" placeholder="new key">
+      <button id="btn-decrease">Decrease</button>
+    </div>
+
+    <button id="btn-delete" class="danger">Delete Selected</button>
+
+    <div class="section-divider"></div>
+
+    <button id="btn-meld">Meld with random heap</button>
+    <button id="btn-reset" class="danger">Reset</button>
+
+    <div class="section-divider"></div>
+
+    <h2>Playback</h2>
+    <div class="row" style="gap:6px;">
+      <button id="btn-step">Step</button>
+      <button id="btn-play">Play</button>
+    </div>
+    <div class="speed-row">
+      <span class="lbl">Speed</span>
+      <input type="range" id="speed" min="60" max="1400" step="40" value="650">
+      <span id="speed-val" style="font-size:11px;color:var(--muted);min-width:48px;text-align:right;font-variant-numeric:tabular-nums;">650ms</span>
+    </div>
+  </div>
+</div>
+
+<div class="container" style="padding-top:0;">
+  <div class="panel">
+    <h2>Step Narration</h2>
+    <div class="info" id="info">Ready. Insert nodes, then try Extract-Min to trigger consolidate.</div>
+  </div>
+  <div class="panel">
+    <h2>Operation Log</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+ * Fibonacci Heap — single-file implementation + visualization
+ * ============================================================
+ * Nodes are objects with: key, id, parent, child (one child ref),
+ * left/right (circular doubly linked sibling list), degree, mark.
+ * Root list is also a circular doubly linked list of nodes whose
+ * parent === null. `min` points at the smallest root.
+ * ========================================================== */
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("svg");
+
+let busy = false;
+let nextId = 1;
+let H = { min: null, n: 0 };
+let selectedId = null;
+let stepResolve = null;        // resolves when user clicks Step
+let playing = false;
+let speedMs = 650;
+
+const info = document.getElementById("info");
+const logEl = document.getElementById("log");
+const elN = document.getElementById("stat-n");
+const elR = document.getElementById("stat-roots");
+const elM = document.getElementById("stat-marked");
+const elPhi = document.getElementById("stat-phi");
+const elDeg = document.getElementById("stat-deg");
+const selInfo = document.getElementById("sel-info");
+const speedSlider = document.getElementById("speed");
+const speedVal = document.getElementById("speed-val");
+
+speedSlider.addEventListener("input", () => {
+  speedMs = +speedSlider.value;
+  speedVal.textContent = speedMs + "ms";
+});
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+// step gate — if "play" is on, just sleep; otherwise wait for a Step click.
+async function gate(narration) {
+  setInfo(narration);
+  if (playing) {
+    await sleep(speedMs);
+  } else {
+    await new Promise(res => { stepResolve = res; });
+  }
+}
+
+function setInfo(text) { info.textContent = text; }
+
+function log(msg, kind="") {
+  const div = document.createElement("div");
+  div.className = "entry " + kind;
+  const ts = new Date().toLocaleTimeString().split(" ")[0];
+  div.innerHTML = `<span class="ts">[${ts}]</span>${escapeHtml(msg)}`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+/* ---------- Node factory ---------- */
+function makeNode(key) {
+  const n = {
+    id: nextId++,
+    key,
+    parent: null,
+    child: null,
+    degree: 0,
+    mark: false,
+    state: "default",   // visual state
+  };
+  n.left = n;
+  n.right = n;
+  return n;
+}
+
+/* ---------- Doubly-linked circular list helpers ---------- */
+// Insert `b` immediately to the right of `a`. Returns nothing.
+function listInsertRight(a, b) {
+  b.left = a;
+  b.right = a.right;
+  a.right.left = b;
+  a.right = b;
+}
+
+// Remove `x` from its sibling list. Does not null x's pointers fully; they
+// remain pointing somewhere but x becomes a singleton.
+function listRemove(x) {
+  x.left.right = x.right;
+  x.right.left = x.left;
+  x.left = x;
+  x.right = x;
+}
+
+// Concatenate two circular lists rooted at a and b (both non-null).
+function listConcat(a, b) {
+  const aRight = a.right;
+  const bLeft = b.left;
+  a.right = b;
+  b.left = a;
+  bLeft.right = aRight;
+  aRight.left = bLeft;
+}
+
+// Iterate over a circular root/child list starting at head.
+function listEach(head, fn) {
+  if (!head) return;
+  let cur = head;
+  do {
+    const next = cur.right;
+    fn(cur);
+    cur = next;
+  } while (cur !== head);
+}
+
+function listToArray(head) {
+  const out = [];
+  if (!head) return out;
+  let cur = head;
+  do { out.push(cur); cur = cur.right; } while (cur !== head);
+  return out;
+}
+
+/* ---------- Core operations ---------- */
+function insertNode(key) {
+  const n = makeNode(key);
+  if (H.min === null) {
+    H.min = n;
+  } else {
+    listInsertRight(H.min, n);
+    if (n.key < H.min.key) H.min = n;
+  }
+  H.n++;
+  return n;
+}
+
+function findById(id, head = H.min) {
+  if (!head) return null;
+  const stack = listToArray(head);
+  while (stack.length) {
+    const x = stack.pop();
+    if (x.id === id) return x;
+    if (x.child) stack.push(...listToArray(x.child));
+  }
+  return null;
+}
+
+// Link y as child of x (assumes both are roots, x.key <= y.key).
+function link(x, y) {
+  listRemove(y);
+  y.parent = x;
+  if (x.child === null) {
+    x.child = y;
+  } else {
+    listInsertRight(x.child, y);
+  }
+  x.degree++;
+  y.mark = false;
+}
+
+async function consolidate() {
+  const D = Math.floor(Math.log2(Math.max(H.n, 1))) + 2;
+  const A = new Array(D + 5).fill(null);
+
+  const roots = listToArray(H.min);
+  for (const w of roots) {
+    let x = w;
+    let d = x.degree;
+    while (A[d] !== null) {
+      let y = A[d];
+      if (x.key > y.key) { const t = x; x = y; y = t; }
+      // visual: link y into x
+      x.state = "linking"; y.state = "linking";
+      render();
+      await gate(`consolidate: same-degree (d=${d}) roots ${x.key} & ${y.key} — link ${y.key} under ${x.key}`);
+      link(x, y);
+      x.state = "default"; y.state = "default";
+      A[d] = null;
+      d++;
+    }
+    A[d] = x;
+  }
+
+  // rebuild root list & min from A[]
+  H.min = null;
+  for (const node of A) {
+    if (node === null) continue;
+    node.left = node; node.right = node;
+    node.parent = null;
+    if (H.min === null) {
+      H.min = node;
+    } else {
+      listInsertRight(H.min, node);
+      if (node.key < H.min.key) H.min = node;
+    }
+  }
+  render();
+}
+
+async function extractMin() {
+  const z = H.min;
+  if (z === null) {
+    log("extract-min: empty heap", "warn");
+    return null;
+  }
+  z.state = "comparing"; render();
+  await gate(`extract-min: removing root ${z.key}; promoting its ${z.degree} children to the root list`);
+
+  // Add z's children to root list, clearing parent.
+  if (z.child !== null) {
+    listEach(z.child, c => { c.parent = null; });
+    listConcat(z, z.child);
+    z.child = null;
+  }
+
+  // Remove z from root list.
+  if (z === z.right) {
+    H.min = null;
+  } else {
+    H.min = z.right;
+    listRemove(z);
+  }
+  H.n--;
+  render();
+
+  if (H.min !== null) {
+    await gate("consolidate: pair roots of equal degree until all degrees are unique");
+    await consolidate();
+    // refresh min
+    let best = null;
+    listEach(H.min, r => { if (best === null || r.key < best.key) best = r; });
+    H.min = best;
+  }
+
+  log(`extract-min → ${z.key}`, "success");
+  render();
+  return z;
+}
+
+async function cut(x, y) {
+  // remove x from y's child list
+  if (x.right === x) {
+    y.child = null;
+  } else {
+    if (y.child === x) y.child = x.right;
+    listRemove(x);
+  }
+  y.degree--;
+  // add x to root list
+  x.parent = null;
+  x.mark = false;
+  x.left = x; x.right = x;
+  listInsertRight(H.min, x);
+  x.state = "cutting";
+  render();
+  await gate(`cut: detach ${x.key} from parent ${y.key} and add ${x.key} to root list`);
+  x.state = "default";
+}
+
+async function cascadingCut(y) {
+  const z = y.parent;
+  if (z !== null) {
+    if (!y.mark) {
+      y.mark = true;
+      y.state = "default";
+      render();
+      await gate(`cascading-cut stops: mark ${y.key} (first child loss)`);
+    } else {
+      await gate(`cascading-cut: ${y.key} already marked — cut it too`);
+      await cut(y, z);
+      await cascadingCut(z);
+    }
+  }
+}
+
+async function decreaseKey(x, k) {
+  if (k > x.key) {
+    log(`decrease-key rejected: ${k} > current ${x.key}`, "danger");
+    return;
+  }
+  const old = x.key;
+  x.key = k;
+  x.state = "comparing";
+  render();
+  await gate(`decrease-key: node ${old} → ${k}`);
+  const y = x.parent;
+  if (y !== null && x.key < y.key) {
+    await gate(`heap-order violated (${x.key} < parent ${y.key}); cut & cascade`);
+    await cut(x, y);
+    await cascadingCut(y);
+  }
+  x.state = "default";
+  if (H.min === null || x.key < H.min.key) H.min = x;
+  render();
+  log(`decrease-key: ${old} → ${k}`, "success");
+}
+
+async function deleteNode(x) {
+  await decreaseKey(x, Number.NEGATIVE_INFINITY);
+  await extractMin();
+  log("delete: complete", "success");
+}
+
+async function meld(other) {
+  if (!other || !other.min) { log("meld: other heap is empty", "warn"); return; }
+  if (!H.min) {
+    H.min = other.min;
+    H.n = other.n;
+  } else {
+    listConcat(H.min, other.min);
+    if (other.min.key < H.min.key) H.min = other.min;
+    H.n += other.n;
+  }
+  render();
+  await gate(`meld: concatenate root lists — O(1) operation; new min may shift`);
+  log(`meld: merged ${other.n} nodes`, "success");
+}
+
+/* ---------- Stats ---------- */
+function countMarked() {
+  if (!H.min) return 0;
+  let m = 0;
+  const stack = listToArray(H.min);
+  while (stack.length) {
+    const x = stack.pop();
+    if (x.mark) m++;
+    if (x.child) stack.push(...listToArray(x.child));
+  }
+  return m;
+}
+
+function maxDegree() {
+  if (!H.min) return 0;
+  let d = 0;
+  const stack = listToArray(H.min);
+  while (stack.length) {
+    const x = stack.pop();
+    if (x.degree > d) d = x.degree;
+    if (x.child) stack.push(...listToArray(x.child));
+  }
+  return d;
+}
+
+function rootCount() {
+  if (!H.min) return 0;
+  return listToArray(H.min).length;
+}
+
+function updateStats() {
+  const r = rootCount();
+  const m = countMarked();
+  elN.textContent = H.n;
+  elR.textContent = r;
+  elM.textContent = m;
+  elPhi.textContent = r + 2 * m;
+  elDeg.textContent = maxDegree();
+}
+
+/* ---------- Layout & render ---------- */
+// We compute layout per render: each root tree gets a horizontal slot,
+// children fan out below their parent.
+function computeSubtreeWidth(node) {
+  if (!node.child) { node._w = 1; return 1; }
+  let total = 0;
+  listEach(node.child, c => { total += computeSubtreeWidth(c); });
+  node._w = Math.max(total, 1);
+  return node._w;
+}
+
+function layoutTree(node, cx, top, hSpacing, vSpacing) {
+  node._x = cx; node._y = top;
+  if (!node.child) return;
+  const children = listToArray(node.child);
+  const totalW = children.reduce((s,c)=>s+c._w,0) * hSpacing;
+  let cursor = cx - totalW / 2;
+  for (const c of children) {
+    const w = c._w * hSpacing;
+    layoutTree(c, cursor + w/2, top + vSpacing, hSpacing, vSpacing);
+    cursor += w;
+  }
+}
+
+function render() {
+  // clear SVG
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  updateStats();
+
+  if (!H.min) {
+    const t = document.createElementNS(SVG_NS, "text");
+    t.setAttribute("x", 550); t.setAttribute("y", 230);
+    t.setAttribute("class", "empty-msg");
+    t.textContent = "empty heap — insert a value to begin";
+    svg.appendChild(t);
+    return;
+  }
+
+  // --- layout pass ---
+  const roots = listToArray(H.min);
+  for (const r of roots) computeSubtreeWidth(r);
+  const totalUnits = roots.reduce((s,r)=>s+r._w,0);
+  const SVG_W = 1100;
+  const SVG_H = 460;
+  const margin = 60;
+  const usable = SVG_W - 2 * margin;
+  const hSpacing = Math.min(70, Math.max(34, usable / Math.max(totalUnits, 1)));
+  const vSpacing = 60;
+  const topY = 80;
+
+  // Place each root tree side by side.
+  let cursor = margin;
+  for (const r of roots) {
+    const w = r._w * hSpacing;
+    layoutTree(r, cursor + w/2, topY, hSpacing, vSpacing);
+    cursor += w + 12;
+  }
+
+  // --- draw dashed root-list links (circular) ---
+  const rootPositions = roots.map(r => ({ x: r._x, y: r._y }));
+  if (rootPositions.length > 1) {
+    for (let i = 0; i < rootPositions.length; i++) {
+      const a = rootPositions[i];
+      const b = rootPositions[(i+1) % rootPositions.length];
+      const path = document.createElementNS(SVG_NS, "path");
+      const arc = i === rootPositions.length - 1
+        ? `M ${a.x} ${a.y - 22} Q ${(a.x + b.x)/2} ${a.y - 60} ${b.x} ${b.y - 22}`
+        : `M ${a.x} ${a.y - 22} Q ${(a.x + b.x)/2} ${a.y - 38} ${b.x} ${b.y - 22}`;
+      path.setAttribute("d", arc);
+      path.setAttribute("class", "root-link");
+      svg.appendChild(path);
+    }
+  }
+
+  // --- draw child links + nodes ---
+  const drawSubtree = (node) => {
+    if (node.child) {
+      listEach(node.child, c => {
+        const link = document.createElementNS(SVG_NS, "path");
+        link.setAttribute("d", `M ${node._x} ${node._y + 16} C ${node._x} ${(node._y + c._y)/2}, ${c._x} ${(node._y + c._y)/2}, ${c._x} ${c._y - 16}`);
+        link.setAttribute("class", "child-link");
+        svg.appendChild(link);
+        drawSubtree(c);
+      });
+    }
+  };
+  for (const r of roots) drawSubtree(r);
+
+  // min pointer label above min
+  if (H.min) {
+    const ptr = document.createElementNS(SVG_NS, "text");
+    ptr.setAttribute("x", H.min._x);
+    ptr.setAttribute("y", H.min._y - 32);
+    ptr.setAttribute("class", "min-pointer");
+    ptr.textContent = "▼ min";
+    svg.appendChild(ptr);
+  }
+
+  // draw nodes (after links so they sit on top)
+  const drawNode = (node) => {
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("transform", `translate(${node._x}, ${node._y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 16);
+    c.setAttribute("class", "node-circle");
+    let fill = "var(--blue)";
+    let stroke = "var(--border)";
+    let filter = "none";
+    if (node === H.min) { fill = "var(--yellow)"; filter = "drop-shadow(0 0 6px var(--yellow))"; }
+    if (node.state === "comparing") fill = "var(--red)";
+    else if (node.state === "linking") fill = "var(--green)";
+    else if (node.state === "cutting") fill = "var(--purple)";
+    if (node.mark) stroke = "var(--red)";
+    if (selectedId === node.id) {
+      stroke = "var(--purple)";
+      filter = (filter === "none" ? "" : filter + " ") + "drop-shadow(0 0 5px var(--purple))";
+    }
+    c.setAttribute("fill", fill);
+    c.setAttribute("stroke", stroke);
+    if (filter !== "none") c.setAttribute("style", `filter:${filter}`);
+    c.addEventListener("click", () => onNodeClick(node.id));
+    g.appendChild(c);
+
+    const t = document.createElementNS(SVG_NS, "text");
+    t.setAttribute("class", "node-text");
+    let textFill = "white";
+    if (node === H.min || node.state === "linking") textFill = "#1a1a1a";
+    t.setAttribute("fill", textFill);
+    t.textContent = node.key === Number.NEGATIVE_INFINITY ? "-∞" : node.key;
+    g.appendChild(t);
+
+    // degree label
+    if (node.degree > 0) {
+      const d = document.createElementNS(SVG_NS, "text");
+      d.setAttribute("class", "degree-label");
+      d.setAttribute("x", 0); d.setAttribute("y", 30);
+      d.textContent = `deg=${node.degree}`;
+      g.appendChild(d);
+    }
+
+    svg.appendChild(g);
+    if (node.child) listEach(node.child, drawNode);
+  };
+  for (const r of roots) drawNode(r);
+}
+
+/* ---------- Interaction ---------- */
+function onNodeClick(id) {
+  if (busy) return;
+  selectedId = (selectedId === id) ? null : id;
+  const node = selectedId !== null ? findById(selectedId) : null;
+  if (node) {
+    selInfo.innerHTML = `<b>node ${node.key}</b> · degree ${node.degree} · ${node.mark ? "marked" : "unmarked"} · ${node.parent ? "internal" : "root"}`;
+  } else {
+    selInfo.textContent = "click a node to select";
+  }
+  render();
+}
+
+/* ---------- Button wiring ---------- */
+const btnInsert = document.getElementById("btn-insert");
+const btnInsertRand = document.getElementById("btn-insert-rand");
+const btnExtract = document.getElementById("btn-extract");
+const btnDecrease = document.getElementById("btn-decrease");
+const btnDelete = document.getElementById("btn-delete");
+const btnMeld = document.getElementById("btn-meld");
+const btnReset = document.getElementById("btn-reset");
+const btnStep = document.getElementById("btn-step");
+const btnPlay = document.getElementById("btn-play");
+const insVal = document.getElementById("ins-val");
+const dkVal = document.getElementById("dk-val");
+
+function setButtonsDisabled(d) {
+  [btnInsert, btnInsertRand, btnExtract, btnDecrease, btnDelete, btnMeld, btnReset].forEach(b => b.disabled = d);
+}
+
+async function withBusy(fn) {
+  if (busy) return;
+  busy = true;
+  setButtonsDisabled(true);
+  try { await fn(); }
+  catch (e) { log("error: " + e.message, "danger"); console.error(e); }
+  finally {
+    busy = false;
+    setButtonsDisabled(false);
+    render();
+  }
+}
+
+btnInsert.addEventListener("click", () => withBusy(async () => {
+  const v = parseInt(insVal.value, 10);
+  if (Number.isNaN(v)) { log("insert: invalid key", "warn"); return; }
+  const n = insertNode(v);
+  log(`insert ${v}`, "success");
+  render();
+  await gate(`insert(${v}): add as a singleton root in O(1); update min if smaller`);
+}));
+
+btnInsertRand.addEventListener("click", () => withBusy(async () => {
+  const v = Math.floor(Math.random() * 99) + 1;
+  insertNode(v);
+  log(`insert ${v} (random)`, "success");
+  render();
+  await gate(`insert(${v}): lazy insert as a new root`);
+}));
+
+btnExtract.addEventListener("click", () => withBusy(async () => {
+  await extractMin();
+}));
+
+btnDecrease.addEventListener("click", () => withBusy(async () => {
+  if (selectedId === null) { log("decrease-key: no node selected", "warn"); return; }
+  const node = findById(selectedId);
+  if (!node) { log("decrease-key: selection lost", "warn"); return; }
+  const k = parseInt(dkVal.value, 10);
+  if (Number.isNaN(k)) { log("decrease-key: invalid new key", "warn"); return; }
+  await decreaseKey(node, k);
+}));
+
+btnDelete.addEventListener("click", () => withBusy(async () => {
+  if (selectedId === null) { log("delete: no node selected", "warn"); return; }
+  const node = findById(selectedId);
+  if (!node) { log("delete: selection lost", "warn"); return; }
+  const oldKey = node.key;
+  selectedId = null;
+  await deleteNode(node);
+  log(`delete ${oldKey}: implemented as decrease-key(-∞) + extract-min`, "success");
+}));
+
+btnMeld.addEventListener("click", () => withBusy(async () => {
+  const k = 3 + Math.floor(Math.random() * 4);
+  const other = { min: null, n: 0 };
+  const savedH = H;
+  H = other;
+  for (let i = 0; i < k; i++) insertNode(Math.floor(Math.random() * 99) + 1);
+  H = savedH;
+  await meld(other);
+}));
+
+btnReset.addEventListener("click", () => withBusy(async () => {
+  H = { min: null, n: 0 };
+  selectedId = null;
+  nextId = 1;
+  logEl.innerHTML = "";
+  selInfo.textContent = "click a node to select";
+  log("heap reset", "success");
+  setInfo("Heap cleared. Insert nodes to begin.");
+  render();
+}));
+
+btnStep.addEventListener("click", () => {
+  if (stepResolve) { const r = stepResolve; stepResolve = null; r(); }
+});
+
+btnPlay.addEventListener("click", () => {
+  playing = !playing;
+  btnPlay.textContent = playing ? "Pause" : "Play";
+  btnPlay.classList.toggle("primary", playing);
+  if (playing && stepResolve) { const r = stepResolve; stepResolve = null; r(); }
+});
+
+/* ---------- Initial seed for demonstration ---------- */
+(function seed() {
+  [7, 23, 3, 18, 52, 38, 41, 17].forEach(v => insertNode(v));
+  log("seeded heap with 8 keys", "success");
+  render();
+  setInfo("Initial root list contains 8 singleton trees. Try Extract-Min — that triggers Consolidate.");
+})();
+</script>
+</body>
+</html>

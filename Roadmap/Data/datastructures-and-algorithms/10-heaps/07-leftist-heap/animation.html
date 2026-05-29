@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leftist Heap — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  header h1 .accent { color: var(--orange); }
+
+  header .subtitle {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+
+  input[type="number"], input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input[type="number"]:focus, input[type="text"]:focus {
+    border-color: var(--blue);
+  }
+
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  button:hover:not(:disabled) {
+    border-color: var(--blue);
+    background: #1c2128;
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  button.primary {
+    background: var(--blue);
+    color: #fff;
+    border-color: var(--blue);
+  }
+
+  button.primary:hover:not(:disabled) {
+    background: #4493f8;
+  }
+
+  button.danger {
+    background: transparent;
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  button.danger:hover:not(:disabled) {
+    background: rgba(248, 81, 73, 0.1);
+  }
+
+  button.warn {
+    border-color: var(--yellow);
+    color: var(--yellow);
+  }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .speed {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .speed label {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--blue);
+  }
+
+  .canvas-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .canvas-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  svg {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .info-panel {
+    flex-shrink: 0;
+  }
+
+  .info-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text);
+    min-height: 80px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+  }
+
+  .info-box .label {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    font-family: inherit;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .stat .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .stat .stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--blue);
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    margin-top: 2px;
+  }
+
+  .log-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: 12px;
+  }
+
+  .log-box {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 11px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .log-entry {
+    padding: 3px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.05);
+    color: var(--text);
+  }
+
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .ts { color: var(--muted); margin-right: 6px; }
+  .log-entry.insert { color: var(--green); }
+  .log-entry.extract { color: var(--orange); }
+  .log-entry.meld { color: var(--purple); }
+  .log-entry.swap { color: var(--yellow); }
+  .log-entry.reset { color: var(--red); }
+
+  .node circle {
+    transition: fill 0.3s, stroke 0.3s, r 0.3s;
+    stroke-width: 2px;
+  }
+
+  .node text {
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--text);
+    user-select: none;
+  }
+
+  .node .npl {
+    font-size: 9px;
+    fill: var(--muted);
+    font-weight: 500;
+  }
+
+  .node.default circle { fill: #1c2128; stroke: var(--blue); }
+  .node.right-spine circle { fill: rgba(255, 166, 87, 0.15); stroke: var(--orange); }
+  .node.comparing circle { fill: rgba(248, 81, 73, 0.25); stroke: var(--red); }
+  .node.recursing circle { fill: rgba(188, 140, 255, 0.25); stroke: var(--purple); }
+  .node.swapping circle { fill: rgba(210, 153, 34, 0.35); stroke: var(--yellow); }
+  .node.inserted circle { fill: rgba(63, 185, 80, 0.3); stroke: var(--green); }
+  .node.extracted { opacity: 0.2; }
+  .node.root circle { stroke-width: 3px; }
+
+  line.edge {
+    stroke: var(--border);
+    stroke-width: 1.5px;
+    transition: stroke 0.3s, stroke-width 0.3s;
+  }
+
+  line.edge.right-spine {
+    stroke: var(--orange);
+    stroke-width: 2.5px;
+  }
+
+  line.edge.active {
+    stroke: var(--purple);
+    stroke-width: 2.5px;
+  }
+
+  .heap-label {
+    fill: var(--muted);
+    font-size: 11px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+  }
+  .badge.busy { background: var(--yellow); color: #000; }
+  .badge.idle { background: var(--green); color: #000; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+    body { overflow: auto; height: auto; }
+    html { overflow: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Leftist Heap <span class="accent">&middot;</span> Interactive Visualization</h1>
+    <div class="subtitle">NPL invariant &middot; right-spine meld &middot; min-heap order</div>
+  </div>
+  <div>
+    Status: <span id="status-badge" class="badge idle">IDLE</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT: controls -->
+  <aside class="panel">
+    <h2>Operations</h2>
+
+    <div class="row">
+      <input type="number" id="insert-val" placeholder="value" min="0" max="999">
+      <button class="primary" id="btn-insert">Insert</button>
+    </div>
+
+    <button id="btn-extract" style="width:100%; margin-bottom:10px;">Extract Min</button>
+    <button id="btn-meld-rand" style="width:100%; margin-bottom:10px;">Meld with random heap</button>
+    <button id="btn-build" style="width:100%; margin-bottom:10px;">Build sample heap</button>
+    <button class="danger" id="btn-reset" style="width:100%;">Reset</button>
+
+    <h2 style="margin-top:18px;">Step Controls</h2>
+    <div class="step-controls">
+      <button id="btn-step">Step</button>
+      <button id="btn-play">Play</button>
+    </div>
+
+    <div class="speed">
+      <label>Speed <span id="speed-label">1.0x</span></label>
+      <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1">
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Size</div>
+        <div class="stat-value" id="stat-size">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Root NPL</div>
+        <div class="stat-value" id="stat-npl">-</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Min</div>
+        <div class="stat-value" id="stat-min">-</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Right spine</div>
+        <div class="stat-value" id="stat-spine">-</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MIDDLE: canvas -->
+  <main class="canvas-wrap">
+    <div class="canvas-header">
+      <div>Leftist heap rendered as binary tree &mdash; right spine highlighted</div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span>node</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span>right spine</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--red)"></span>compare</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--purple)"></span>recurse</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--yellow)"></span>swap</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>insert</div>
+      </div>
+    </div>
+    <svg id="canvas" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+  </main>
+
+  <!-- RIGHT: info + log -->
+  <aside class="panel info-panel">
+    <h2>Step Narration</h2>
+    <div class="info-box" id="narration">
+      <div class="label">Idle</div>
+      <div id="narr-text">Insert values or build a sample heap to begin.</div>
+    </div>
+
+    <div class="log-panel">
+      <h2>Operation Log</h2>
+      <div class="log-box" id="log"></div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================ *
+ *                    LEFTIST HEAP CORE                         *
+ * ============================================================ */
+
+let nodeIdCounter = 0;
+
+function makeNode(key) {
+  return {
+    id: ++nodeIdCounter,
+    key: key,
+    npl: 0,           // null path length
+    left: null,
+    right: null,
+    // visual fields
+    x: 0, y: 0,
+    cls: 'default',
+    visible: true
+  };
+}
+
+function nplOf(node) {
+  return node === null ? -1 : node.npl;
+}
+
+/* ============================================================ *
+ *                       APP STATE                              *
+ * ============================================================ */
+
+const state = {
+  root: null,
+  busy: false,
+  paused: false,
+  stepMode: false,
+  stepResolve: null,
+  speed: 1,
+  pendingSecondHeap: null
+};
+
+/* ============================================================ *
+ *                  DOM REFERENCES                              *
+ * ============================================================ */
+
+const svg = document.getElementById('canvas');
+const narrText = document.getElementById('narr-text');
+const narrLabel = document.querySelector('#narration .label');
+const logBox = document.getElementById('log');
+const statusBadge = document.getElementById('status-badge');
+const statSize = document.getElementById('stat-size');
+const statNpl = document.getElementById('stat-npl');
+const statMin = document.getElementById('stat-min');
+const statSpine = document.getElementById('stat-spine');
+
+const btnInsert = document.getElementById('btn-insert');
+const btnExtract = document.getElementById('btn-extract');
+const btnMeldRand = document.getElementById('btn-meld-rand');
+const btnBuild = document.getElementById('btn-build');
+const btnReset = document.getElementById('btn-reset');
+const btnStep = document.getElementById('btn-step');
+const btnPlay = document.getElementById('btn-play');
+const speedSlider = document.getElementById('speed');
+const speedLabel = document.getElementById('speed-label');
+const insertInput = document.getElementById('insert-val');
+
+/* ============================================================ *
+ *                  UTILITIES                                   *
+ * ============================================================ */
+
+function sleep(ms) {
+  return new Promise(resolve => {
+    const adjusted = ms / state.speed;
+    if (state.stepMode) {
+      state.stepResolve = resolve;
+    } else {
+      setTimeout(resolve, adjusted);
+    }
+  });
+}
+
+async function pauseGate() {
+  while (state.paused && !state.stepMode) {
+    await new Promise(r => setTimeout(r, 80));
+  }
+}
+
+function narrate(label, text) {
+  narrLabel.textContent = label;
+  narrText.textContent = text;
+}
+
+function log(category, message) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + category;
+  const ts = new Date().toLocaleTimeString();
+  entry.innerHTML = `<span class="ts">${ts}</span>${message}`;
+  logBox.appendChild(entry);
+  logBox.scrollTop = logBox.scrollHeight;
+  while (logBox.children.length > 200) logBox.removeChild(logBox.firstChild);
+}
+
+function setBusy(b) {
+  state.busy = b;
+  statusBadge.textContent = b ? 'BUSY' : 'IDLE';
+  statusBadge.className = 'badge ' + (b ? 'busy' : 'idle');
+  [btnInsert, btnExtract, btnMeldRand, btnBuild, btnReset].forEach(btn => btn.disabled = b);
+}
+
+/* ============================================================ *
+ *               LAYOUT + RENDERING                             *
+ * ============================================================ */
+
+function collectNodes(root) {
+  const arr = [];
+  function dfs(n) {
+    if (!n) return;
+    arr.push(n);
+    dfs(n.left);
+    dfs(n.right);
+  }
+  dfs(root);
+  return arr;
+}
+
+function rightSpine(root) {
+  const arr = [];
+  let cur = root;
+  while (cur) {
+    arr.push(cur);
+    cur = cur.right;
+  }
+  return arr;
+}
+
+function computeLayout(root, xOffset, yOffset, widthBudget) {
+  if (!root) return { width: 0 };
+
+  const HSPACING = 38;
+  const VSPACING = 70;
+
+  // First pass: compute subtree widths
+  function widthOf(n) {
+    if (!n) return 0;
+    const lw = widthOf(n.left);
+    const rw = widthOf(n.right);
+    n._w = Math.max(HSPACING, lw + rw);
+    return n._w;
+  }
+  widthOf(root);
+
+  function assign(n, cx, cy) {
+    if (!n) return;
+    n.x = cx;
+    n.y = cy;
+    const lw = n.left ? n.left._w : 0;
+    const rw = n.right ? n.right._w : 0;
+    if (n.left) assign(n.left, cx - rw / 2 - 4, cy + VSPACING);
+    if (n.right) assign(n.right, cx + lw / 2 + 4, cy + VSPACING);
+  }
+  assign(root, xOffset, yOffset);
+
+  return { width: root._w };
+}
+
+function render(extraRoot) {
+  // Clear svg
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const vb = svg.viewBox.baseVal;
+  const cw = vb.width;
+
+  if (extraRoot) {
+    // Two heaps side by side
+    computeLayout(state.root, cw * 0.27, 60, cw * 0.45);
+    computeLayout(extraRoot, cw * 0.73, 60, cw * 0.45);
+    drawLabel(cw * 0.27, 30, "Heap A");
+    drawLabel(cw * 0.73, 30, "Heap B");
+  } else {
+    computeLayout(state.root, cw / 2, 60, cw);
+  }
+
+  const spineA = new Set(rightSpine(state.root).map(n => n.id));
+  const spineB = extraRoot ? new Set(rightSpine(extraRoot).map(n => n.id)) : new Set();
+
+  // Draw edges first
+  function drawEdges(node) {
+    if (!node) return;
+    if (node.left) {
+      drawEdge(node, node.left, false);
+      drawEdges(node.left);
+    }
+    if (node.right) {
+      drawEdge(node, node.right, true);
+      drawEdges(node.right);
+    }
+  }
+  drawEdges(state.root);
+  if (extraRoot) drawEdges(extraRoot);
+
+  // Draw nodes
+  function drawNodes(node, isRoot, spineSet) {
+    if (!node) return;
+    drawNode(node, isRoot, spineSet.has(node.id));
+    drawNodes(node.left, false, spineSet);
+    drawNodes(node.right, false, spineSet);
+  }
+  drawNodes(state.root, true, spineA);
+  if (extraRoot) drawNodes(extraRoot, true, spineB);
+
+  updateStats();
+}
+
+function drawLabel(x, y, text) {
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('x', x);
+  t.setAttribute('y', y);
+  t.setAttribute('text-anchor', 'middle');
+  t.setAttribute('class', 'heap-label');
+  t.textContent = text;
+  svg.appendChild(t);
+}
+
+function drawEdge(parent, child, isRight) {
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', parent.x);
+  line.setAttribute('y1', parent.y);
+  line.setAttribute('x2', child.x);
+  line.setAttribute('y2', child.y);
+  let cls = 'edge';
+  if (isRight) cls += ' right-spine';
+  if (parent.cls === 'recursing' && child.cls === 'recursing') cls += ' active';
+  line.setAttribute('class', cls);
+  svg.appendChild(line);
+}
+
+function drawNode(node, isRoot, onSpine) {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  let cls = 'node ' + node.cls;
+  if (isRoot) cls += ' root';
+  if (onSpine && node.cls === 'default') {
+    cls = 'node right-spine' + (isRoot ? ' root' : '');
+  }
+  g.setAttribute('class', cls);
+
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('cx', node.x);
+  circle.setAttribute('cy', node.y);
+  circle.setAttribute('r', 20);
+  g.appendChild(circle);
+
+  const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  txt.setAttribute('x', node.x);
+  txt.setAttribute('y', node.y);
+  txt.setAttribute('font-size', '13');
+  txt.textContent = node.key;
+  g.appendChild(txt);
+
+  // NPL subscript
+  const npl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  npl.setAttribute('x', node.x + 18);
+  npl.setAttribute('y', node.y + 18);
+  npl.setAttribute('class', 'npl');
+  npl.textContent = 'n' + node.npl;
+  g.appendChild(npl);
+
+  svg.appendChild(g);
+}
+
+/* ============================================================ *
+ *                       HIGHLIGHTING                           *
+ * ============================================================ */
+
+function setClassAll(root, cls) {
+  const all = collectNodes(root);
+  all.forEach(n => n.cls = cls);
+}
+
+function clearHighlights(extraRoot) {
+  setClassAll(state.root, 'default');
+  if (extraRoot) setClassAll(extraRoot, 'default');
+}
+
+function highlight(node, cls) {
+  if (!node) return;
+  node.cls = cls;
+}
+
+/* ============================================================ *
+ *                       OPERATIONS                             *
+ * ============================================================ */
+
+function recomputeNpl(node) {
+  if (!node) return;
+  node.npl = nplOf(node.right) + 1;
+}
+
+// Animated meld with narration
+async function meldAnimated(a, b, depth = 0, extraTrackingRoot = null) {
+  await pauseGate();
+
+  if (!a) {
+    narrate('meld()', 'Heap A is empty → return Heap B.');
+    log('meld', `meld(∅, ${b ? b.key : '∅'}) → ${b ? b.key : '∅'}`);
+    render(extraTrackingRoot);
+    await sleep(700);
+    return b;
+  }
+  if (!b) {
+    narrate('meld()', 'Heap B is empty → return Heap A.');
+    log('meld', `meld(${a.key}, ∅) → ${a.key}`);
+    render(extraTrackingRoot);
+    await sleep(700);
+    return a;
+  }
+
+  // Highlight comparison
+  highlight(a, 'comparing');
+  highlight(b, 'comparing');
+  render(extraTrackingRoot);
+  narrate('compare', `Compare roots: a.key = ${a.key} vs b.key = ${b.key}.`);
+  await sleep(900);
+
+  // Make sure smaller is root (a)
+  if (a.key > b.key) {
+    narrate('swap roots', `b.key (${b.key}) < a.key (${a.key}) → swap a, b.`);
+    log('swap', `swap roots ${a.key} ↔ ${b.key}`);
+    const tmp = a; a = b; b = tmp;
+    render(extraTrackingRoot);
+    await sleep(700);
+  }
+
+  highlight(a, 'recursing');
+  highlight(b, 'recursing');
+  render(extraTrackingRoot);
+  narrate('recurse', `a.key (${a.key}) is min. Recurse: a.right = meld(a.right, b).`);
+  await sleep(800);
+
+  // Recursive meld of a.right and b
+  const merged = await meldAnimated(a.right, b, depth + 1, extraTrackingRoot);
+  a.right = merged;
+
+  // Check NPL invariant
+  const lN = nplOf(a.left);
+  const rN = nplOf(a.right);
+  highlight(a, 'comparing');
+  if (a.left) highlight(a.left, 'comparing');
+  if (a.right) highlight(a.right, 'comparing');
+  render(extraTrackingRoot);
+  narrate('check NPL', `NPL(left)=${lN}, NPL(right)=${rN}. Leftist invariant: left ≥ right.`);
+  await sleep(900);
+
+  if (lN < rN) {
+    // Swap children
+    highlight(a, 'swapping');
+    if (a.left) highlight(a.left, 'swapping');
+    if (a.right) highlight(a.right, 'swapping');
+    render(extraTrackingRoot);
+    narrate('SWAP', `Violation! NPL(left)=${lN} < NPL(right)=${rN}. Swap children of ${a.key}.`);
+    log('swap', `swap children of ${a.key} (NPL ${lN}↔${rN})`);
+    await sleep(900);
+    const t = a.left; a.left = a.right; a.right = t;
+  }
+
+  recomputeNpl(a);
+  highlight(a, 'recursing');
+  render(extraTrackingRoot);
+  narrate('NPL update', `Update NPL(${a.key}) = NPL(right)+1 = ${a.npl}.`);
+  await sleep(700);
+
+  return a;
+}
+
+async function insertAnimated(value) {
+  setBusy(true);
+  log('insert', `insert(${value})`);
+  narrate('insert', `Create singleton node {${value}}, then meld with existing heap.`);
+
+  const fresh = makeNode(value);
+  fresh.cls = 'inserted';
+
+  // Show second mini heap (just the singleton)
+  render(fresh);
+  await sleep(900);
+
+  state.root = await meldAnimated(state.root, fresh, 0, null);
+  clearHighlights();
+  render();
+  setBusy(false);
+  narrate('done', `Inserted ${value}. Root is now ${state.root.key}.`);
+}
+
+async function extractMinAnimated() {
+  if (!state.root) {
+    narrate('extract', 'Heap is empty.');
+    log('extract', 'extract on empty heap (no-op)');
+    return;
+  }
+  setBusy(true);
+  const minVal = state.root.key;
+  log('extract', `extractMin → ${minVal}`);
+  narrate('extract', `Min = ${minVal} (root). Remove it, then meld its two children.`);
+
+  highlight(state.root, 'extracted');
+  render();
+  await sleep(800);
+
+  const L = state.root.left;
+  const R = state.root.right;
+  state.root = null;
+  render(); // just to clear briefly
+
+  // Show the two orphaned heaps side by side, then meld
+  if (L && R) {
+    // Put them into temp render: use state.root = L, extra = R, then meld
+    state.root = L;
+    render(R);
+    narrate('meld children', `Two orphaned subheaps. Call meld(left, right).`);
+    await sleep(900);
+    state.root = await meldAnimated(L, R, 0, null);
+  } else if (L) {
+    state.root = L;
+  } else if (R) {
+    state.root = R;
+  } else {
+    state.root = null;
+  }
+
+  if (state.root) clearHighlights();
+  render();
+  setBusy(false);
+  narrate('done', `Extracted ${minVal}. New root: ${state.root ? state.root.key : '∅'}.`);
+}
+
+async function meldRandomHeapAnimated() {
+  setBusy(true);
+
+  // Build a small random second heap
+  const otherRoot = buildRandomHeap(4 + Math.floor(Math.random() * 4));
+  log('meld', `meld with random heap of size ${countNodes(otherRoot)}`);
+  narrate('meld', 'Generated random heap B. Walk down right spines to meld.');
+  render(otherRoot);
+  await sleep(1100);
+
+  state.root = await meldAnimated(state.root, otherRoot, 0, null);
+  clearHighlights();
+  render();
+  setBusy(false);
+  narrate('done', 'Meld complete. Right spine should remain short (≤ log n).');
+}
+
+/* ============================================================ *
+ *                       HELPERS                                *
+ * ============================================================ */
+
+function countNodes(n) {
+  if (!n) return 0;
+  return 1 + countNodes(n.left) + countNodes(n.right);
+}
+
+function buildRandomHeap(size) {
+  let root = null;
+  for (let i = 0; i < size; i++) {
+    const v = Math.floor(Math.random() * 90) + 10;
+    const node = makeNode(v);
+    root = meldSync(root, node);
+  }
+  return root;
+}
+
+// Synchronous meld for setup
+function meldSync(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.key > b.key) { const t = a; a = b; b = t; }
+  a.right = meldSync(a.right, b);
+  if (nplOf(a.left) < nplOf(a.right)) {
+    const t = a.left; a.left = a.right; a.right = t;
+  }
+  a.npl = nplOf(a.right) + 1;
+  return a;
+}
+
+function updateStats() {
+  const size = countNodes(state.root);
+  statSize.textContent = size;
+  statNpl.textContent = state.root ? state.root.npl : '-';
+  statMin.textContent = state.root ? state.root.key : '-';
+  statSpine.textContent = state.root ? rightSpine(state.root).length : '-';
+}
+
+/* ============================================================ *
+ *                       UI EVENTS                              *
+ * ============================================================ */
+
+btnInsert.addEventListener('click', async () => {
+  if (state.busy) return;
+  const v = parseInt(insertInput.value);
+  if (isNaN(v)) {
+    narrate('error', 'Please enter a valid integer.');
+    return;
+  }
+  insertInput.value = '';
+  await insertAnimated(v);
+});
+
+insertInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') btnInsert.click();
+});
+
+btnExtract.addEventListener('click', async () => {
+  if (state.busy) return;
+  await extractMinAnimated();
+});
+
+btnMeldRand.addEventListener('click', async () => {
+  if (state.busy) return;
+  await meldRandomHeapAnimated();
+});
+
+btnBuild.addEventListener('click', async () => {
+  if (state.busy) return;
+  setBusy(true);
+  log('reset', 'build sample heap');
+  state.root = null;
+  const vals = [50, 20, 80, 10, 30, 60, 90, 5, 25, 70];
+  for (const v of vals) {
+    state.root = meldSync(state.root, makeNode(v));
+  }
+  clearHighlights();
+  render();
+  narrate('built', `Sample heap built with ${vals.length} values: [${vals.join(', ')}].`);
+  setBusy(false);
+});
+
+btnReset.addEventListener('click', () => {
+  if (state.busy) return;
+  state.root = null;
+  nodeIdCounter = 0;
+  logBox.innerHTML = '';
+  render();
+  narrate('reset', 'Heap cleared.');
+  log('reset', 'reset()');
+});
+
+btnStep.addEventListener('click', () => {
+  if (state.stepResolve) {
+    const r = state.stepResolve;
+    state.stepResolve = null;
+    r();
+  } else if (!state.stepMode) {
+    state.stepMode = true;
+    state.paused = true;
+    btnStep.textContent = 'Next';
+    btnPlay.textContent = 'Resume';
+  }
+});
+
+btnPlay.addEventListener('click', () => {
+  if (state.stepMode) {
+    state.stepMode = false;
+    state.paused = false;
+    btnStep.textContent = 'Step';
+    btnPlay.textContent = state.paused ? 'Play' : 'Pause';
+    if (state.stepResolve) {
+      const r = state.stepResolve;
+      state.stepResolve = null;
+      r();
+    }
+  } else {
+    state.paused = !state.paused;
+    btnPlay.textContent = state.paused ? 'Resume' : 'Pause';
+  }
+});
+
+speedSlider.addEventListener('input', () => {
+  state.speed = parseFloat(speedSlider.value);
+  speedLabel.textContent = state.speed.toFixed(2) + 'x';
+});
+
+// Resize handling
+function resizeViewBox() {
+  const rect = svg.getBoundingClientRect();
+  const w = Math.max(700, rect.width);
+  const h = Math.max(400, rect.height);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  render();
+}
+window.addEventListener('resize', resizeViewBox);
+
+/* ============================================================ *
+ *                       BOOTSTRAP                              *
+ * ============================================================ */
+
+(function init() {
+  resizeViewBox();
+  // Build a small starting heap so users see something
+  const seed = [40, 15, 65, 8, 22];
+  for (const v of seed) state.root = meldSync(state.root, makeNode(v));
+  render();
+  narrate('ready', `Initial heap with ${seed.length} nodes: [${seed.join(', ')}]. Try Insert / Extract / Meld.`);
+  log('reset', 'initialized with seed heap');
+})();
+
+</script>
+</body>
+</html>

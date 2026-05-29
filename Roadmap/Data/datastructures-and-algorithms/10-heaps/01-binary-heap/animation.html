@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Binary Heap — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group {
+    margin-bottom: 16px;
+  }
+
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  button.btn.primary {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+
+  button.btn.primary:hover:not(:disabled) {
+    background: #4493e0;
+  }
+
+  button.btn.danger {
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  button.btn.warn {
+    border-color: var(--yellow);
+    color: var(--yellow);
+  }
+
+  button.btn.success {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--blue);
+  }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 420px;
+    overflow-x: auto;
+  }
+
+  svg#tree {
+    width: 100%;
+    height: 380px;
+    display: block;
+  }
+
+  .edge {
+    stroke: var(--border);
+    stroke-width: 2;
+    fill: none;
+  }
+
+  .node circle {
+    stroke-width: 2;
+    transition: all 0.25s ease;
+  }
+
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  .node text.idx {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    fill: var(--muted);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  /* node states */
+  .node.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .node.comparing circle { fill: rgba(248,81,73,0.25); stroke: var(--red); }
+  .node.swapping circle { fill: rgba(210,153,34,0.3); stroke: var(--yellow); }
+  .node.inserted circle { fill: rgba(63,185,80,0.3); stroke: var(--green); }
+  .node.extracted circle { fill: rgba(139,148,158,0.15); stroke: var(--muted); opacity: 0.4; }
+  .node.path circle { fill: rgba(188,140,255,0.2); stroke: var(--purple); }
+
+  .node.default text.val { fill: var(--text); }
+  .node.comparing text.val { fill: var(--red); }
+  .node.swapping text.val { fill: var(--yellow); }
+  .node.inserted text.val { fill: var(--green); }
+  .node.path text.val { fill: var(--purple); }
+
+  .array-strip {
+    display: flex;
+    gap: 4px;
+    margin-top: 18px;
+    padding: 6px 2px;
+    overflow-x: auto;
+    flex-wrap: wrap;
+  }
+
+  .arr-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 44px;
+  }
+
+  .arr-box {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--blue);
+    background: rgba(88,166,255,0.15);
+    color: var(--text);
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.25s ease;
+  }
+
+  .arr-box.comparing { border-color: var(--red); background: rgba(248,81,73,0.25); color: var(--red); }
+  .arr-box.swapping { border-color: var(--yellow); background: rgba(210,153,34,0.3); color: var(--yellow); }
+  .arr-box.inserted { border-color: var(--green); background: rgba(63,185,80,0.3); color: var(--green); }
+  .arr-box.path { border-color: var(--purple); background: rgba(188,140,255,0.2); color: var(--purple); }
+  .arr-box.extracted { opacity: 0.35; }
+
+  .arr-idx {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .stats-row .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.swap { color: var(--yellow); }
+  #log .entry.cmp { color: var(--red); }
+  #log .entry.ok { color: var(--green); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .legend .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid;
+  }
+
+  .dot.d-default { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-comparing { background: rgba(248,81,73,0.25); border-color: var(--red); }
+  .dot.d-swapping { background: rgba(210,153,34,0.3); border-color: var(--yellow); }
+  .dot.d-inserted { background: rgba(63,185,80,0.3); border-color: var(--green); }
+  .dot.d-path { background: rgba(188,140,255,0.2); border-color: var(--purple); }
+  .dot.d-extracted { background: rgba(139,148,158,0.15); border-color: var(--muted); }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Binary Heap — Interactive Visualization</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="min" class="active">Min-Heap</button>
+    <button data-mode="max">Max-Heap</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Operations</h2>
+      <div class="control-row">
+        <input type="number" id="insertVal" placeholder="Value" />
+        <button class="btn primary" id="btnInsert">Insert</button>
+      </div>
+      <div class="control-row">
+        <button class="btn warn" id="btnExtract" style="flex:1">Extract Min</button>
+        <button class="btn" id="btnPeek">Peek</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Build</h2>
+      <div class="control-row">
+        <input type="text" id="buildArr" placeholder="e.g. 5,3,9,1,7,2" />
+      </div>
+      <div class="control-row">
+        <button class="btn success" id="btnBuild" style="flex:1">Build Heap</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="control-row">
+        <button class="btn danger" id="btnReset" style="flex:1">Reset Heap</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Step Controls</h2>
+      <div class="step-controls">
+        <button class="btn" id="btnStart">Start</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn" id="btnStopRun">Stop</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1200" value="500" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Index Map</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.6;">
+        For node at index <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">i</code>:<br>
+        parent = <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">(i-1)/2</code><br>
+        left&nbsp;&nbsp; = <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">2i+1</code><br>
+        right&nbsp; = <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">2i+2</code>
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="tree" viewBox="0 0 1000 380" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="array-strip" id="arrStrip"></div>
+      <div class="info-bar" id="info">Heap is empty. Insert a value or click <code>Random</code>.</div>
+      <div class="stats-row">
+        <div class="stat">Size: <b id="statSize">0</b></div>
+        <div class="stat">Mode: <b id="statMode">min</b></div>
+        <div class="stat">Step: <b id="statStep">0</b></div>
+        <div class="stat">Comparisons: <b id="statCmp">0</b></div>
+        <div class="stat">Swaps: <b id="statSwap">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-default"></span>default</span>
+        <span><span class="dot d-comparing"></span>comparing</span>
+        <span><span class="dot d-swapping"></span>swapping</span>
+        <span><span class="dot d-inserted"></span>inserted</span>
+        <span><span class="dot d-path"></span>sift path</span>
+        <span><span class="dot d-extracted"></span>extracted</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Binary Heap visualizer
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const state = {
+  heap: [],
+  mode: "min",              // 'min' or 'max'
+  busy: false,
+  steps: 0,
+  comparisons: 0,
+  swaps: 0,
+  speedMs: 500,
+  // step controls
+  paused: false,
+  stepRequested: false,
+  stopped: false,
+  // step queue from "Start" button -> picks next op
+  pendingOps: [],
+};
+
+// element refs
+const els = {
+  tree:       document.getElementById("tree"),
+  arrStrip:   document.getElementById("arrStrip"),
+  info:       document.getElementById("info"),
+  log:        document.getElementById("log"),
+  insertVal:  document.getElementById("insertVal"),
+  buildArr:   document.getElementById("buildArr"),
+  speed:      document.getElementById("speed"),
+  statSize:   document.getElementById("statSize"),
+  statMode:   document.getElementById("statMode"),
+  statStep:   document.getElementById("statStep"),
+  statCmp:    document.getElementById("statCmp"),
+  statSwap:   document.getElementById("statSwap"),
+  btnExtract: document.getElementById("btnExtract"),
+  toast:      document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+async function pauseGate() {
+  // Honor pause and single-step
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) {
+      state.stepRequested = false;
+      return;
+    }
+    await sleep(60);
+  }
+}
+
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function compare(a, b) {
+  // returns true if `a` should be ABOVE `b` (parent above child)
+  state.comparisons++;
+  els.statCmp.textContent = state.comparisons;
+  return state.mode === "min" ? a < b : a > b;
+}
+
+function bumpStep() {
+  state.steps++;
+  els.statStep.textContent = state.steps;
+}
+
+function bumpSwap() {
+  state.swaps++;
+  els.statSwap.textContent = state.swaps;
+}
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function log(msg, klass = "") {
+  const ts = new Date();
+  const hh = String(ts.getHours()).padStart(2,"0");
+  const mm = String(ts.getMinutes()).padStart(2,"0");
+  const ss = String(ts.getSeconds()).padStart(2,"0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(text) {
+  els.info.innerHTML = text;
+}
+
+function setInsertExtractLabels() {
+  els.btnExtract.textContent = state.mode === "min" ? "Extract Min" : "Extract Max";
+  els.statMode.textContent = state.mode;
+}
+
+// ---------------- layout / drawing ----------------
+
+function levelOf(i) { return Math.floor(Math.log2(i + 1)); }
+
+function layoutPositions(n) {
+  // Returns array of {x, y} for each index 0..n-1
+  if (n === 0) return [];
+  const W = 1000, H = 380;
+  const levels = Math.floor(Math.log2(n)) + 1;
+  const vGap = Math.min(80, (H - 60) / Math.max(1, levels - 1 || 1));
+  const positions = [];
+  for (let i = 0; i < n; i++) {
+    const lvl = levelOf(i);
+    const idxInLvl = i - (Math.pow(2, lvl) - 1);
+    const nodesInLvl = Math.pow(2, lvl);
+    const x = (W * (idxInLvl + 1)) / (nodesInLvl + 1);
+    const y = 40 + lvl * vGap;
+    positions.push({ x, y });
+  }
+  return positions;
+}
+
+function drawTree() {
+  const svg = els.tree;
+  svg.innerHTML = "";
+  const n = state.heap.length;
+  if (n === 0) {
+    const t = document.createElementNS(SVG_NS, "text");
+    t.setAttribute("x", "500");
+    t.setAttribute("y", "180");
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("fill", "#8b949e");
+    t.setAttribute("font-size", "16");
+    t.textContent = "Empty heap";
+    svg.appendChild(t);
+    return;
+  }
+  const pos = layoutPositions(n);
+
+  // edges first
+  for (let i = 1; i < n; i++) {
+    const parent = Math.floor((i - 1) / 2);
+    const p = pos[parent], c = pos[i];
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", p.x);
+    line.setAttribute("y1", p.y);
+    line.setAttribute("x2", c.x);
+    line.setAttribute("y2", c.y);
+    line.setAttribute("class", "edge");
+    svg.appendChild(line);
+  }
+
+  // nodes
+  for (let i = 0; i < n; i++) {
+    const { x, y } = pos[i];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node default");
+    g.setAttribute("data-idx", i);
+    g.setAttribute("transform", `translate(${x},${y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 20);
+    c.setAttribute("cx", 0);
+    c.setAttribute("cy", 0);
+    g.appendChild(c);
+
+    const tv = document.createElementNS(SVG_NS, "text");
+    tv.setAttribute("class", "val");
+    tv.setAttribute("x", 0);
+    tv.setAttribute("y", 0);
+    tv.textContent = state.heap[i];
+    g.appendChild(tv);
+
+    const ti = document.createElementNS(SVG_NS, "text");
+    ti.setAttribute("class", "idx");
+    ti.setAttribute("x", 0);
+    ti.setAttribute("y", 34);
+    ti.textContent = `[${i}]`;
+    g.appendChild(ti);
+
+    svg.appendChild(g);
+  }
+}
+
+function drawArray() {
+  els.arrStrip.innerHTML = "";
+  if (state.heap.length === 0) {
+    const empty = document.createElement("div");
+    empty.style.color = "var(--muted)";
+    empty.style.fontSize = "12px";
+    empty.style.padding = "4px";
+    empty.textContent = "(empty array)";
+    els.arrStrip.appendChild(empty);
+    return;
+  }
+  state.heap.forEach((v, i) => {
+    const cell = document.createElement("div");
+    cell.className = "arr-cell";
+    cell.dataset.idx = i;
+
+    const box = document.createElement("div");
+    box.className = "arr-box default";
+    box.dataset.idx = i;
+    box.textContent = v;
+    cell.appendChild(box);
+
+    const idx = document.createElement("div");
+    idx.className = "arr-idx";
+    idx.textContent = i;
+    cell.appendChild(idx);
+
+    els.arrStrip.appendChild(cell);
+  });
+}
+
+function render() {
+  drawTree();
+  drawArray();
+  els.statSize.textContent = state.heap.length;
+}
+
+// ---------------- highlight helpers ----------------
+
+function setClass(idx, klass) {
+  if (idx < 0 || idx >= state.heap.length) return;
+  const node = els.tree.querySelector(`g.node[data-idx="${idx}"]`);
+  const box  = els.arrStrip.querySelector(`.arr-box[data-idx="${idx}"]`);
+  if (node) node.setAttribute("class", "node " + klass);
+  if (box)  box.className = "arr-box " + klass;
+}
+
+function clearAll(klass = "default") {
+  for (let i = 0; i < state.heap.length; i++) setClass(i, klass);
+}
+
+function updateValues() {
+  // Re-render values without rebuilding entire structure (kept simple: full redraw)
+  render();
+}
+
+// ---------------- heap operations (animated) ----------------
+
+async function insert(value) {
+  if (!Number.isFinite(value)) {
+    showToast("Invalid number", true);
+    return;
+  }
+  state.heap.push(value);
+  render();
+  bumpStep();
+  const i = state.heap.length - 1;
+  setClass(i, "inserted");
+  info(`Appended <code>${value}</code> at index <code>${i}</code> (last leaf). Now sift up.`);
+  log(`insert(${value})`, "op");
+  await wait();
+
+  await siftUp(i);
+  clearAll();
+  info(`Insert of <code>${value}</code> complete. Heap property restored.`);
+  log(`  done — heap size = ${state.heap.length}`, "ok");
+}
+
+async function siftUp(i) {
+  while (i > 0) {
+    const parent = Math.floor((i - 1) / 2);
+    setClass(i, "comparing");
+    setClass(parent, "comparing");
+    bumpStep();
+    info(`Compare child <code>arr[${i}]=${state.heap[i]}</code> with parent <code>arr[${parent}]=${state.heap[parent]}</code>.`);
+    log(`  compare arr[${i}]=${state.heap[i]} vs arr[${parent}]=${state.heap[parent]}`, "cmp");
+    await wait();
+
+    if (compare(state.heap[i], state.heap[parent])) {
+      setClass(i, "swapping");
+      setClass(parent, "swapping");
+      info(`Heap violation: swap <code>arr[${i}]</code> with <code>arr[${parent}]</code>.`);
+      log(`  swap arr[${i}] <-> arr[${parent}]`, "swap");
+      [state.heap[i], state.heap[parent]] = [state.heap[parent], state.heap[i]];
+      bumpSwap();
+      updateValues();
+      setClass(i, "path");
+      setClass(parent, "swapping");
+      await wait();
+      setClass(i, "default");
+      i = parent;
+      setClass(i, "path");
+    } else {
+      info(`No swap needed: parent dominates child. Heap property holds.`);
+      log(`  no swap; heap property OK`, "ok");
+      await wait();
+      setClass(i, "default");
+      setClass(parent, "default");
+      break;
+    }
+  }
+}
+
+async function extractRoot() {
+  if (state.heap.length === 0) {
+    showToast("Heap is empty", true);
+    return;
+  }
+  const root = state.heap[0];
+  setClass(0, "extracted");
+  info(`Extract root: <code>${root}</code> (the ${state.mode === "min" ? "minimum" : "maximum"}).`);
+  log(`extract${state.mode === "min" ? "Min" : "Max"}() = ${root}`, "op");
+  bumpStep();
+  await wait();
+
+  const last = state.heap.pop();
+  if (state.heap.length === 0) {
+    render();
+    info(`Heap now empty. Extracted <code>${root}</code>.`);
+    return;
+  }
+  state.heap[0] = last;
+  render();
+  setClass(0, "inserted");
+  info(`Move last leaf <code>${last}</code> to root. Now sift down.`);
+  log(`  move last leaf ${last} to root`, "swap");
+  await wait();
+
+  await siftDown(0);
+  clearAll();
+  info(`Extract complete. Returned <code>${root}</code>.`);
+  log(`  done — returned ${root}`, "ok");
+  return root;
+}
+
+async function siftDown(i) {
+  const n = state.heap.length;
+  while (true) {
+    const left = 2 * i + 1;
+    const right = 2 * i + 2;
+    let chosen = i;
+
+    setClass(i, "path");
+
+    if (left < n) {
+      setClass(left, "comparing");
+      bumpStep();
+      info(`Inspect left child <code>arr[${left}]=${state.heap[left]}</code> vs current <code>arr[${chosen}]=${state.heap[chosen]}</code>.`);
+      log(`  compare arr[${left}]=${state.heap[left]} vs arr[${chosen}]=${state.heap[chosen]}`, "cmp");
+      await wait();
+      if (compare(state.heap[left], state.heap[chosen])) chosen = left;
+    }
+
+    if (right < n) {
+      setClass(right, "comparing");
+      bumpStep();
+      info(`Inspect right child <code>arr[${right}]=${state.heap[right]}</code> vs best so far <code>arr[${chosen}]=${state.heap[chosen]}</code>.`);
+      log(`  compare arr[${right}]=${state.heap[right]} vs arr[${chosen}]=${state.heap[chosen]}`, "cmp");
+      await wait();
+      if (compare(state.heap[right], state.heap[chosen])) chosen = right;
+    }
+
+    if (chosen === i) {
+      info(`Parent dominates both children. Sift-down complete.`);
+      log(`  no swap; heap property OK`, "ok");
+      if (left < n) setClass(left, "default");
+      if (right < n) setClass(right, "default");
+      setClass(i, "default");
+      await wait();
+      break;
+    }
+
+    setClass(i, "swapping");
+    setClass(chosen, "swapping");
+    info(`Swap <code>arr[${i}]=${state.heap[i]}</code> with chosen child <code>arr[${chosen}]=${state.heap[chosen]}</code>.`);
+    log(`  swap arr[${i}] <-> arr[${chosen}]`, "swap");
+    [state.heap[i], state.heap[chosen]] = [state.heap[chosen], state.heap[i]];
+    bumpSwap();
+    updateValues();
+    await wait();
+
+    if (left < n && left !== chosen) setClass(left, "default");
+    if (right < n && right !== chosen) setClass(right, "default");
+    setClass(i, "default");
+    i = chosen;
+  }
+}
+
+async function buildHeap(arr) {
+  state.heap = arr.slice();
+  render();
+  log(`buildHeap([${arr.join(",")}])`, "op");
+  info(`Build heap from <code>[${arr.join(", ")}]</code>. Start sift-down from the last non-leaf index.`);
+  await wait();
+
+  const n = state.heap.length;
+  const start = Math.floor(n / 2) - 1;
+  for (let i = start; i >= 0; i--) {
+    setClass(i, "path");
+    info(`Sift-down at index <code>${i}</code>.`);
+    log(`  siftDown(${i})`, "op");
+    bumpStep();
+    await wait();
+    await siftDown(i);
+    clearAll();
+  }
+  info(`Build complete. Heap is valid.`);
+  log(`  done — heap built in O(n)`, "ok");
+}
+
+async function peek() {
+  if (state.heap.length === 0) {
+    showToast("Heap is empty", true);
+    return;
+  }
+  setClass(0, "comparing");
+  info(`Peek: top of heap is <code>${state.heap[0]}</code> (no modification).`);
+  log(`peek() = ${state.heap[0]}`, "op");
+  bumpStep();
+  await wait();
+  await wait();
+  setClass(0, "default");
+}
+
+// ---------------- driver ----------------
+
+async function withBusy(fn) {
+  if (state.busy) {
+    showToast("Operation in progress…", true);
+    return;
+  }
+  state.busy = true;
+  state.stopped = false;
+  try {
+    await fn();
+  } catch (e) {
+    if (e.message !== "__stopped__") {
+      console.error(e);
+      showToast("Error: " + e.message, true);
+    } else {
+      log(`  stopped by user`, "cmp");
+      info("Operation stopped.");
+    }
+  } finally {
+    clearAll();
+    state.busy = false;
+    state.paused = false;
+    state.stepRequested = false;
+  }
+}
+
+// ---------------- event wiring ----------------
+
+document.getElementById("btnInsert").addEventListener("click", () => {
+  const raw = els.insertVal.value.trim();
+  if (raw === "") {
+    showToast("Enter a value", true);
+    return;
+  }
+  const v = Number(raw);
+  els.insertVal.value = "";
+  withBusy(() => insert(v));
+});
+
+els.insertVal.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btnInsert").click();
+});
+
+document.getElementById("btnExtract").addEventListener("click", () => {
+  withBusy(() => extractRoot());
+});
+
+document.getElementById("btnPeek").addEventListener("click", () => {
+  withBusy(() => peek());
+});
+
+document.getElementById("btnBuild").addEventListener("click", () => {
+  const raw = els.buildArr.value.trim();
+  if (!raw) {
+    showToast("Enter comma-separated values", true);
+    return;
+  }
+  const parts = raw.split(/[,\s]+/).map(s => Number(s)).filter(n => Number.isFinite(n));
+  if (parts.length === 0) {
+    showToast("No valid numbers", true);
+    return;
+  }
+  withBusy(() => buildHeap(parts));
+});
+
+document.getElementById("btnRandom").addEventListener("click", () => {
+  const n = 7 + Math.floor(Math.random() * 9); // 7..15
+  const arr = Array.from({ length: n }, () => Math.floor(Math.random() * 99) + 1);
+  els.buildArr.value = arr.join(",");
+  withBusy(() => buildHeap(arr));
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.busy) {
+    state.stopped = true;
+    return;
+  }
+  state.heap = [];
+  state.steps = 0;
+  state.comparisons = 0;
+  state.swaps = 0;
+  els.statStep.textContent = "0";
+  els.statCmp.textContent = "0";
+  els.statSwap.textContent = "0";
+  render();
+  info("Heap reset.");
+  log("reset()", "op");
+});
+
+document.getElementById("btnStart").addEventListener("click", () => {
+  state.paused = false;
+  state.stepRequested = false;
+  if (!state.busy) {
+    showToast("Trigger an operation to animate");
+  } else {
+    info("Resuming animation…");
+  }
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) {
+    showToast("Start an operation first");
+    return;
+  }
+  state.paused = true;
+  state.stepRequested = true;
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance." : "Resumed.");
+});
+
+document.getElementById("btnStopRun").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.stopped = true;
+  state.paused = false;
+});
+
+els.speed.addEventListener("input", (e) => {
+  // Slider value is 80..1200, where bigger means slower. Invert it so right-side = fast.
+  const v = Number(e.target.value);
+  state.speedMs = 1280 - v;
+});
+
+document.querySelectorAll("#modePill button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (state.busy) {
+      showToast("Wait for current op to finish", true);
+      return;
+    }
+    document.querySelectorAll("#modePill button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.mode = btn.dataset.mode;
+    setInsertExtractLabels();
+    if (state.heap.length > 0) {
+      // Rebuild heap under new mode
+      const arr = state.heap.slice();
+      state.heap = [];
+      render();
+      log(`mode = ${state.mode}, rebuilding…`, "op");
+      withBusy(() => buildHeap(arr));
+    } else {
+      info(`Mode switched to <code>${state.mode}-heap</code>.`);
+      log(`mode = ${state.mode}`, "op");
+    }
+  });
+});
+
+// ---------------- init ----------------
+
+function init() {
+  state.speedMs = 1280 - Number(els.speed.value);
+  setInsertExtractLabels();
+  render();
+  log("Binary Heap visualizer ready.", "ok");
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Binomial Heap — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+    min-height: 100vh;
+  }
+  .app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    letter-spacing: 0.3px;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .control-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.6px;
+  }
+  .row {
+    display: flex;
+    gap: 6px;
+  }
+  input[type="number"], input[type="text"] {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    outline: none;
+  }
+  input[type="number"]:focus, input[type="text"]:focus {
+    border-color: var(--blue);
+  }
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) {
+    border-color: var(--blue);
+    background: rgba(88, 166, 255, 0.08);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  button.primary { border-color: var(--green); color: var(--green); }
+  button.primary:hover:not(:disabled) { background: rgba(63, 185, 80, 0.12); }
+  button.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.warn:hover:not(:disabled) { background: rgba(210, 153, 34, 0.12); }
+  button.danger { border-color: var(--red); color: var(--red); }
+  button.danger:hover:not(:disabled) { background: rgba(248, 81, 73, 0.12); }
+  button.purple { border-color: var(--purple); color: var(--purple); }
+  button.purple:hover:not(:disabled) { background: rgba(188, 140, 255, 0.12); }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--blue);
+  }
+  .speed-readout {
+    color: var(--muted);
+    font-size: 11px;
+    font-family: monospace;
+  }
+  .stage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+  }
+  svg {
+    display: block;
+    min-width: 100%;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(88,166,255,0.04), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(188,140,255,0.04), transparent 50%);
+    border-radius: 5px;
+  }
+  .node-circle {
+    stroke-width: 2;
+    transition: fill 0.3s ease, stroke 0.3s ease, opacity 0.3s ease;
+  }
+  .node-circle.default { fill: rgba(88,166,255,0.18); stroke: var(--blue); }
+  .node-circle.min-root {
+    fill: rgba(210,153,34,0.22); stroke: var(--yellow);
+    filter: drop-shadow(0 0 6px rgba(210,153,34,0.65));
+  }
+  .node-circle.linking { fill: rgba(63,185,80,0.22); stroke: var(--green); }
+  .node-circle.carrying { fill: rgba(188,140,255,0.22); stroke: var(--purple); }
+  .node-circle.extracted { fill: rgba(248,81,73,0.22); stroke: var(--red); opacity: 0.35; }
+  .node-text {
+    fill: var(--text);
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    font-weight: 600;
+  }
+  .edge {
+    stroke: var(--border);
+    stroke-width: 1.8;
+    fill: none;
+    transition: stroke 0.3s ease;
+  }
+  .edge.linking { stroke: var(--green); stroke-width: 2.4; }
+  .edge.carrying { stroke: var(--purple); stroke-width: 2.4; stroke-dasharray: 4 3; }
+  .tree-label {
+    fill: var(--muted);
+    font-family: monospace;
+    font-size: 13px;
+    text-anchor: middle;
+    font-weight: 600;
+  }
+  .tree-rank-pill {
+    fill: rgba(255,255,255,0.04);
+    stroke: var(--border);
+    rx: 5;
+  }
+  .bit-strip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+    font-family: "SF Mono", Menlo, monospace;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .bit-label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .bits {
+    display: flex;
+    gap: 4px;
+  }
+  .bit {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-weight: 700;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 14px;
+    transition: all 0.3s ease;
+  }
+  .bit.on {
+    color: var(--bg);
+    box-shadow: 0 0 8px currentColor;
+  }
+  .popcount {
+    color: var(--text);
+    font-size: 13px;
+    margin-left: auto;
+  }
+  .popcount .arrow { color: var(--muted); margin: 0 6px; }
+  .popcount .count {
+    color: var(--green);
+    font-weight: 700;
+  }
+  .info {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.55;
+    min-height: 56px;
+  }
+  .info .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    letter-spacing: 0.5px;
+  }
+  .info .tag.insert { background: rgba(63,185,80,0.18); color: var(--green); }
+  .info .tag.extract { background: rgba(248,81,73,0.18); color: var(--red); }
+  .info .tag.meld { background: rgba(188,140,255,0.18); color: var(--purple); }
+  .info .tag.link { background: rgba(255,166,87,0.18); color: var(--orange); }
+  .info .tag.info { background: rgba(88,166,255,0.18); color: var(--blue); }
+  .log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .log-entry {
+    color: var(--muted);
+    border-bottom: 1px dashed rgba(255,255,255,0.04);
+    padding: 3px 0;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .ts {
+    color: var(--orange);
+    margin-right: 8px;
+  }
+  .log-entry.ok .msg { color: var(--green); }
+  .log-entry.warn .msg { color: var(--yellow); }
+  .log-entry.err .msg { color: var(--red); }
+  .stats {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  .stat b { color: var(--text); font-family: monospace; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .legend .swatch {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    margin-right: 5px;
+    vertical-align: middle;
+    border: 1px solid currentColor;
+  }
+  @media (max-width: 700px) {
+    .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Binomial Heap — Interactive Visualization</h1>
+  <div class="subtitle">
+    A forest of binomial trees, one per set bit in <code>n</code>. Insert / Extract-Min / Meld with carry-propagation animations.
+  </div>
+
+  <div class="panel">
+    <div class="controls">
+      <div class="control-group">
+        <label>Insert value</label>
+        <div class="row">
+          <input id="insertValue" type="number" value="7" />
+          <button id="insertBtn" class="primary">Insert</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Operations</label>
+        <div class="row">
+          <button id="extractBtn" class="warn">Extract Min</button>
+          <button id="meldBtn" class="purple">Meld Random</button>
+          <button id="resetBtn" class="danger">Reset</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Step Controls</label>
+        <div class="row">
+          <button id="stepBtn">Step</button>
+          <button id="playBtn">Play</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Speed <span id="speedReadout" class="speed-readout">600ms</span></label>
+        <input id="speedSlider" type="range" min="80" max="1500" value="600" step="20" />
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:rgba(88,166,255,0.4); color:var(--blue);"></span>default</span>
+      <span><span class="swatch" style="background:rgba(210,153,34,0.5); color:var(--yellow);"></span>min-root</span>
+      <span><span class="swatch" style="background:rgba(63,185,80,0.5); color:var(--green);"></span>linking</span>
+      <span><span class="swatch" style="background:rgba(188,140,255,0.5); color:var(--purple);"></span>carrying</span>
+      <span><span class="swatch" style="background:rgba(248,81,73,0.5); color:var(--red);"></span>extracted</span>
+    </div>
+    <div class="stats">
+      <span class="stat">Size: <b id="statSize">0</b></span>
+      <span class="stat">Trees: <b id="statTrees">0</b></span>
+      <span class="stat">Min: <b id="statMin">—</b></span>
+      <span class="stat">Max rank: <b id="statRank">—</b></span>
+      <span class="stat">Operations: <b id="statOps">0</b></span>
+    </div>
+  </div>
+
+  <div class="info" id="infoPanel">
+    <span class="tag info">READY</span>
+    Empty heap. Insert a value or meld with a random heap to begin. Each set bit in <code>n</code> corresponds to one binomial tree.
+  </div>
+
+  <div class="stage">
+    <svg id="svg" width="1340" height="480" viewBox="0 0 1340 480" preserveAspectRatio="xMinYMid meet"></svg>
+  </div>
+
+  <div class="bit-strip">
+    <div class="bit-label">n (binary):</div>
+    <div class="bits" id="bits"></div>
+    <div class="popcount" id="popcount">
+      n_binary = <span id="binStr">0</span> <span class="arrow">→</span> #trees = <span class="count" id="treeCount">0</span>
+    </div>
+  </div>
+
+  <div class="log-panel" id="logPanel"></div>
+</div>
+
+<script>
+"use strict";
+
+// ===================== Globals & State =====================
+const COLORS = ["#58a6ff","#3fb950","#d29922","#bc8cff","#ffa657","#f85149","#79c0ff","#56d364","#e3b341","#d2a8ff"];
+
+let svg = document.getElementById("svg");
+let infoPanel = document.getElementById("infoPanel");
+let logPanel = document.getElementById("logPanel");
+let speedSlider = document.getElementById("speedSlider");
+let speedReadout = document.getElementById("speedReadout");
+
+let SPEED = 600;
+let busy = false;
+let playing = false;
+let stepResolver = null;
+let stepMode = false;
+let opsCount = 0;
+
+speedSlider.addEventListener("input", () => {
+  SPEED = parseInt(speedSlider.value, 10);
+  speedReadout.textContent = SPEED + "ms";
+});
+
+// ===================== Binomial Heap Model =====================
+// Node: { key, rank, children: [Node], parent: Node|null, _state: string, _id: number }
+let NEXT_ID = 1;
+function makeNode(key) {
+  return { key, rank: 0, children: [], parent: null, _state: "default", _id: NEXT_ID++ };
+}
+
+// Heap is a list of tree roots in ascending rank order.
+let roots = [];
+
+// ===================== Helpers =====================
+function sleep(ms) {
+  return new Promise(res => {
+    if (stepMode) {
+      stepResolver = () => {
+        stepResolver = null;
+        setTimeout(res, 30);
+      };
+    } else {
+      setTimeout(res, ms);
+    }
+  });
+}
+
+function nowTime() {
+  const d = new Date();
+  return `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}:${d.getSeconds().toString().padStart(2,"0")}`;
+}
+
+function log(msg, cls = "") {
+  const e = document.createElement("div");
+  e.className = "log-entry " + cls;
+  e.innerHTML = `<span class="ts">${nowTime()}</span><span class="msg">${msg}</span>`;
+  logPanel.appendChild(e);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+function setInfo(html, tagClass = "info", tagText = "INFO") {
+  infoPanel.innerHTML = `<span class="tag ${tagClass}">${tagText}</span>${html}`;
+}
+
+function totalSize() {
+  // size = sum of 2^rank for each root
+  let n = 0;
+  for (const r of roots) n += (1 << r.rank);
+  return n;
+}
+
+function findMin() {
+  if (roots.length === 0) return null;
+  let m = roots[0];
+  for (const r of roots) if (r.key < m.key) m = r;
+  return m;
+}
+
+function setAllState(state) {
+  function rec(node) {
+    node._state = state;
+    for (const c of node.children) rec(c);
+  }
+  for (const r of roots) rec(r);
+}
+
+function markMin() {
+  setAllState("default");
+  const m = findMin();
+  if (m) m._state = "min-root";
+}
+
+// Link two trees of equal rank. Smaller key becomes root; other becomes its child.
+function linkTrees(a, b) {
+  if (a.key > b.key) [a, b] = [b, a];
+  b.parent = a;
+  a.children.push(b);
+  a.rank += 1;
+  return a;
+}
+
+// Merge two root lists by rank (like merging sorted lists)
+function mergeRootLists(a, b) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i].rank <= b[j].rank) out.push(a[i++]);
+    else out.push(b[j++]);
+  }
+  while (i < a.length) out.push(a[i++]);
+  while (j < b.length) out.push(b[j++]);
+  return out;
+}
+
+// ===================== Layout =====================
+// Compute (x,y) for each node, by laying out trees left-to-right.
+function layoutForest() {
+  const NODE_R = 18;
+  const X_GAP = 36;
+  const Y_GAP = 60;
+  const TREE_GAP = 30;
+  const TOP_PAD = 60;
+
+  const positions = []; // {node,x,y,depth}
+  let cursorX = 30;
+  const treeBounds = []; // {minX,maxX,rank,key}
+
+  // For each tree, do an in-order-ish DFS to assign x coords.
+  function layoutTree(root) {
+    let localX = 0;
+    function dfs(node, depth) {
+      // post-order width: leaves first
+      if (node.children.length === 0) {
+        const x = localX;
+        positions.push({ node, x, y: TOP_PAD + depth * Y_GAP, depth });
+        localX += 1;
+        return x;
+      } else {
+        const childXs = [];
+        for (const c of node.children) {
+          childXs.push(dfs(c, depth + 1));
+        }
+        const x = (Math.min(...childXs) + Math.max(...childXs)) / 2;
+        positions.push({ node, x, y: TOP_PAD + depth * Y_GAP, depth });
+        return x;
+      }
+    }
+    dfs(root, 0);
+    return localX; // total width in "units"
+  }
+
+  // Layout each tree separately, then offset
+  const treeStart = positions.length;
+  let offset = cursorX;
+  for (const root of roots) {
+    const baseIdx = positions.length;
+    const width = layoutTree(root);
+    // shift positions added since baseIdx
+    let minX = Infinity, maxX = -Infinity;
+    for (let k = baseIdx; k < positions.length; k++) {
+      positions[k].x = positions[k].x * X_GAP + offset;
+      if (positions[k].x < minX) minX = positions[k].x;
+      if (positions[k].x > maxX) maxX = positions[k].x;
+    }
+    treeBounds.push({ minX, maxX, rank: root.rank, key: root.key, rootId: root._id });
+    offset = maxX + X_GAP + TREE_GAP;
+  }
+
+  return { positions, treeBounds, totalWidth: offset + 20 };
+}
+
+// ===================== Render =====================
+function render() {
+  // Clear SVG
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const { positions, treeBounds, totalWidth } = layoutForest();
+  // resize svg viewBox to accommodate
+  const vbW = Math.max(1340, totalWidth);
+  svg.setAttribute("viewBox", `0 0 ${vbW} 480`);
+  svg.setAttribute("width", vbW);
+
+  // Tree rank labels and bounding pills
+  for (let i = 0; i < treeBounds.length; i++) {
+    const tb = treeBounds[i];
+    const w = Math.max(80, tb.maxX - tb.minX + 50);
+    const cx = (tb.minX + tb.maxX) / 2;
+    const pill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    pill.setAttribute("class", "tree-rank-pill");
+    pill.setAttribute("x", cx - w/2);
+    pill.setAttribute("y", 14);
+    pill.setAttribute("width", w);
+    pill.setAttribute("height", 26);
+    pill.setAttribute("rx", 5);
+    svg.appendChild(pill);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("class", "tree-label");
+    label.setAttribute("x", cx);
+    label.setAttribute("y", 31);
+    label.setAttribute("fill", COLORS[tb.rank % COLORS.length]);
+    label.textContent = `B${tb.rank}  (size ${1 << tb.rank})`;
+    svg.appendChild(label);
+  }
+
+  // Build a map id -> position
+  const posMap = new Map();
+  for (const p of positions) posMap.set(p.node._id, p);
+
+  // Draw edges (parent -> child)
+  for (const p of positions) {
+    for (const c of p.node.children) {
+      const cp = posMap.get(c._id);
+      if (!cp) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const stateCls = (c._state === "carrying" || c._state === "linking") ? c._state : "";
+      line.setAttribute("class", "edge " + stateCls);
+      line.setAttribute("x1", p.x);
+      line.setAttribute("y1", p.y);
+      line.setAttribute("x2", cp.x);
+      line.setAttribute("y2", cp.y);
+      svg.appendChild(line);
+    }
+  }
+
+  // Draw nodes
+  for (const p of positions) {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const circ = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circ.setAttribute("class", "node-circle " + p.node._state);
+    circ.setAttribute("cx", p.x);
+    circ.setAttribute("cy", p.y);
+    circ.setAttribute("r", 18);
+    g.appendChild(circ);
+
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("class", "node-text");
+    t.setAttribute("x", p.x);
+    t.setAttribute("y", p.y);
+    t.textContent = p.node.key;
+    g.appendChild(t);
+    svg.appendChild(g);
+  }
+
+  // Update stats and bit strip
+  const n = totalSize();
+  document.getElementById("statSize").textContent = n;
+  document.getElementById("statTrees").textContent = roots.length;
+  const mn = findMin();
+  document.getElementById("statMin").textContent = mn ? mn.key : "—";
+  document.getElementById("statRank").textContent = roots.length ? roots[roots.length-1].rank : "—";
+  document.getElementById("statOps").textContent = opsCount;
+
+  renderBits(n);
+}
+
+function renderBits(n) {
+  const bitsEl = document.getElementById("bits");
+  bitsEl.innerHTML = "";
+  const maxRank = roots.length ? roots[roots.length-1].rank : 0;
+  const width = Math.max(8, maxRank + 1);
+  // Build a quick map rank -> root for coloring
+  const rankToRoot = new Map();
+  for (const r of roots) rankToRoot.set(r.rank, r);
+
+  let binStr = "";
+  for (let i = width - 1; i >= 0; i--) {
+    const bit = (n >> i) & 1;
+    binStr += bit;
+    const b = document.createElement("div");
+    b.className = "bit" + (bit ? " on" : "");
+    b.textContent = bit;
+    if (bit) {
+      const color = COLORS[i % COLORS.length];
+      b.style.background = color;
+      b.style.borderColor = color;
+    }
+    bitsEl.appendChild(b);
+  }
+  document.getElementById("binStr").textContent = binStr || "0";
+  document.getElementById("treeCount").textContent = roots.length;
+}
+
+// ===================== Operations =====================
+
+// --- Normalize root list: consolidate trees so no two have same rank ---
+// Animates carry propagation.
+async function consolidate(narrate = true) {
+  // Sort roots by rank stably
+  roots.sort((a, b) => a.rank - b.rank);
+  let i = 0;
+  while (i < roots.length - 1) {
+    const a = roots[i];
+    const b = roots[i + 1];
+    if (a.rank !== b.rank) {
+      i++;
+      continue;
+    }
+    // Check 3-equal: if next-next also same rank, leave a and link b,c
+    if (i + 2 < roots.length && roots[i + 2].rank === a.rank) {
+      i++;
+      continue;
+    }
+    // Link a and b
+    a._state = "linking";
+    b._state = "linking";
+    if (narrate) {
+      setInfo(`Collision at rank B${a.rank}: link <code>${a.key}</code> and <code>${b.key}</code> → B${a.rank+1}.`, "link", "LINK");
+    }
+    render();
+    await sleep(SPEED);
+
+    const merged = linkTrees(a, b);
+    merged._state = "carrying";
+    roots.splice(i, 2, merged);
+    log(`Linked rank B${merged.rank-1} pair → B${merged.rank} (root=${merged.key})`, "ok");
+    render();
+    await sleep(SPEED);
+    merged._state = "default";
+    // do not advance i; new tree may collide with next
+  }
+  // Sort once more for stable left-to-right rendering
+  roots.sort((a, b) => a.rank - b.rank);
+  setAllState("default");
+  markMin();
+  render();
+}
+
+async function insertValue(value) {
+  const node = makeNode(value);
+  node._state = "carrying";
+  log(`Insert ${value}: create singleton B0`, "");
+  setInfo(`Inserting <code>${value}</code>: create <b>B<sub>0</sub></b>, then propagate carries through equal-rank collisions.`, "insert", "INSERT");
+  roots.push(node);
+  // Keep sorted by rank
+  roots.sort((a, b) => a.rank - b.rank);
+  render();
+  await sleep(SPEED);
+  await consolidate(true);
+  setInfo(`Inserted <code>${value}</code>. Heap now has <b>${roots.length}</b> tree(s), size <b>${totalSize()}</b>.`, "insert", "DONE");
+  opsCount++;
+  markMin();
+  render();
+}
+
+async function extractMin() {
+  if (roots.length === 0) {
+    log("Extract-Min on empty heap", "err");
+    setInfo("Heap is empty — nothing to extract.", "extract", "EMPTY");
+    return;
+  }
+  const m = findMin();
+  m._state = "extracted";
+  setInfo(`Extracting min = <code>${m.key}</code> from root list. Reverse its children to form a new heap, then meld + consolidate.`, "extract", "EXTRACT");
+  render();
+  log(`Extract-Min: ${m.key} (from B${m.rank})`, "warn");
+  await sleep(SPEED);
+
+  // Remove m from root list
+  roots = roots.filter(r => r !== m);
+
+  // Children of m become a new root list (reversed so ranks are ascending)
+  const childList = m.children.slice().reverse();
+  for (const c of childList) {
+    c.parent = null;
+    c._state = "carrying";
+  }
+  // Merge children into the root list
+  roots = mergeRootLists(roots, childList);
+  log(`Promoted ${childList.length} children of ${m.key} as new roots`, "");
+  render();
+  await sleep(SPEED);
+  setAllState("default");
+  await consolidate(true);
+
+  setInfo(`Extracted <code>${m.key}</code>. Heap size now <b>${totalSize()}</b>, with <b>${roots.length}</b> tree(s).`, "extract", "DONE");
+  opsCount++;
+  markMin();
+  render();
+}
+
+async function meldRandom() {
+  // Generate a small random heap
+  const size = 2 + Math.floor(Math.random() * 7);
+  const otherRoots = [];
+  for (let i = 0; i < size; i++) {
+    otherRoots.push(makeNode(10 + Math.floor(Math.random() * 90)));
+  }
+  // Consolidate the other heap on its own (silent) so it's a valid binomial heap
+  await consolidateSilent(otherRoots);
+
+  setInfo(`Melding with a random heap of size <b>${size}</b>. Merge root lists by rank, then propagate carries (binary addition).`, "meld", "MELD");
+  log(`Meld: random heap with ${size} nodes, ${otherRoots.length} tree(s)`, "");
+  for (const r of otherRoots) r._state = "carrying";
+  // Merge into main
+  roots = mergeRootLists(roots, otherRoots);
+  render();
+  await sleep(SPEED);
+  await consolidate(true);
+  setInfo(`Meld complete. Size <b>${totalSize()}</b>, <b>${roots.length}</b> tree(s).`, "meld", "DONE");
+  opsCount++;
+  markMin();
+  render();
+}
+
+// Silent (non-animated) consolidation used to build the random meld-input heap.
+async function consolidateSilent(list) {
+  list.sort((a, b) => a.rank - b.rank);
+  let i = 0;
+  while (i < list.length - 1) {
+    const a = list[i], b = list[i+1];
+    if (a.rank !== b.rank) { i++; continue; }
+    if (i + 2 < list.length && list[i+2].rank === a.rank) { i++; continue; }
+    const merged = linkTrees(a, b);
+    list.splice(i, 2, merged);
+  }
+  list.sort((a, b) => a.rank - b.rank);
+}
+
+function resetHeap() {
+  roots = [];
+  NEXT_ID = 1;
+  opsCount = 0;
+  setInfo("Heap reset. Insert a value or meld with a random heap.", "info", "RESET");
+  log("Heap reset", "warn");
+  render();
+}
+
+// ===================== UI Wiring =====================
+async function withGuard(fn) {
+  if (busy) {
+    log("Operation in progress — please wait", "warn");
+    return;
+  }
+  busy = true;
+  setButtonsDisabled(true);
+  try {
+    await fn();
+  } catch (e) {
+    log("Error: " + e.message, "err");
+    console.error(e);
+  } finally {
+    busy = false;
+    setButtonsDisabled(false);
+    stepMode = false;
+    playing = false;
+    document.getElementById("playBtn").textContent = "Play";
+  }
+}
+
+function setButtonsDisabled(d) {
+  ["insertBtn","extractBtn","meldBtn","resetBtn"].forEach(id => {
+    document.getElementById(id).disabled = d;
+  });
+}
+
+document.getElementById("insertBtn").addEventListener("click", () => {
+  const v = parseInt(document.getElementById("insertValue").value, 10);
+  if (isNaN(v)) { log("Invalid insert value", "err"); return; }
+  withGuard(() => insertValue(v));
+});
+
+document.getElementById("extractBtn").addEventListener("click", () => {
+  withGuard(() => extractMin());
+});
+
+document.getElementById("meldBtn").addEventListener("click", () => {
+  withGuard(() => meldRandom());
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (busy) return;
+  resetHeap();
+});
+
+document.getElementById("stepBtn").addEventListener("click", () => {
+  if (busy) {
+    // Already running: resolve next step
+    if (stepResolver) {
+      const r = stepResolver;
+      stepResolver = null;
+      r();
+    } else {
+      stepMode = true;
+    }
+    return;
+  }
+  // Not busy: kick off a single insert+step-mode
+  stepMode = true;
+  const v = parseInt(document.getElementById("insertValue").value, 10);
+  if (!isNaN(v)) withGuard(() => insertValue(v));
+});
+
+document.getElementById("playBtn").addEventListener("click", () => {
+  const btn = document.getElementById("playBtn");
+  if (busy && stepMode) {
+    // Resume from step mode
+    stepMode = false;
+    if (stepResolver) {
+      const r = stepResolver;
+      stepResolver = null;
+      r();
+    }
+    btn.textContent = "Pause";
+    return;
+  }
+  if (busy) {
+    // Toggle step mode (pause)
+    stepMode = true;
+    btn.textContent = "Play";
+    return;
+  }
+  // Auto-play: do a sequence of random inserts and extracts
+  btn.textContent = "Pause";
+  playing = true;
+  withGuard(async () => {
+    for (let i = 0; i < 6 && playing; i++) {
+      const v = Math.floor(Math.random() * 99) + 1;
+      document.getElementById("insertValue").value = v;
+      await insertValue(v);
+      await sleep(Math.min(SPEED, 400));
+    }
+    document.getElementById("playBtn").textContent = "Play";
+    playing = false;
+  });
+});
+
+// ===================== Init =====================
+async function seed() {
+  // Start with a small interesting heap so the visualization isn't empty
+  const seeds = [42, 17];
+  for (const v of seeds) {
+    const node = makeNode(v);
+    roots.push(node);
+    roots.sort((a,b) => a.rank - b.rank);
+    await consolidateSilent(roots);
+  }
+  markMin();
+  render();
+  setInfo("Seeded with a tiny heap. Try <b>Insert</b>, <b>Extract Min</b>, or <b>Meld Random</b>.", "info", "READY");
+  log("Initialized with seed values", "ok");
+}
+
+seed();
+</script>
+</body>
+</html>

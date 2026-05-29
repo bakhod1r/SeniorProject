@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Priority Queue — Three Backings Visualization</title>
+<style>
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --yellow:  #d29922;
+  --red:     #f85149;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --orange:  #ffa657;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+}
+body { padding: 20px; }
+header {
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+header h1 {
+  font-size: 22px;
+  color: var(--blue);
+  font-weight: 600;
+}
+header p {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.controls {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.controls .group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+}
+.controls .group:last-child { border-right: none; }
+.controls label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+input[type="text"], input[type="number"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  width: 110px;
+}
+input[type="number"] { width: 70px; }
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+button:hover:not(:disabled) {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--bg);
+}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary { background: var(--blue); color: var(--bg); border-color: var(--blue); }
+button.danger  { border-color: var(--red); color: var(--red); }
+button.danger:hover:not(:disabled)  { background: var(--red); color: var(--bg); }
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.toggle input { accent-color: var(--blue); }
+input[type="range"] { width: 110px; accent-color: var(--blue); }
+.panels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+@media (max-width: 1100px) { .panels { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+.panel h2 {
+  font-size: 14px;
+  color: var(--blue);
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.panel h2 .cx {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: normal;
+  font-family: monospace;
+}
+.panel .desc {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 6px;
+}
+.panel .view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.panel .counters {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-family: monospace;
+  font-size: 11px;
+}
+.panel .counters .c { display: flex; gap: 4px; }
+.panel .counters .c .lbl { color: var(--muted); }
+.panel .counters .c .val { color: var(--yellow); font-weight: 600; min-width: 24px; text-align: right; }
+svg { width: 100%; display: block; }
+.node-circle {
+  transition: fill 0.25s, stroke 0.25s, transform 0.3s, opacity 0.3s;
+}
+.node-circle.default   { fill: #1f6feb; stroke: var(--blue); }
+.node-circle.active    { fill: #d2992233; stroke: var(--orange); stroke-width: 3px; }
+.node-circle.comparing { fill: #f8514933; stroke: var(--red);    stroke-width: 3px; }
+.node-circle.inserted  { fill: #3fb95033; stroke: var(--green);  stroke-width: 3px; }
+.node-circle.extracted { fill: #8b949e33; stroke: var(--muted);  opacity: 0.35; }
+.node-circle.path      { fill: #bc8cff33; stroke: var(--purple); stroke-width: 2.5px; }
+.edge { stroke: var(--border); stroke-width: 1.5px; transition: stroke 0.2s; }
+.edge.path { stroke: var(--purple); stroke-width: 2.5px; }
+.node-label {
+  fill: var(--text);
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.node-sub {
+  fill: var(--muted);
+  font-family: monospace;
+  font-size: 9px;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.array-strip {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.cell {
+  min-width: 38px;
+  height: 38px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--bg);
+  transition: all 0.3s;
+  position: relative;
+}
+.cell .idx {
+  position: absolute;
+  top: -14px;
+  font-size: 9px;
+  color: var(--muted);
+}
+.cell.default { color: var(--blue); border-color: var(--blue); }
+.cell.active { color: var(--orange); border-color: var(--orange); background: #d2992222; transform: scale(1.08); }
+.cell.comparing { color: var(--red); border-color: var(--red); background: #f8514922; }
+.cell.inserted { color: var(--green); border-color: var(--green); background: #3fb95022; }
+.cell.extracted { opacity: 0.3; border-style: dashed; }
+.cell.path { color: var(--purple); border-color: var(--purple); }
+.array-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 8px;
+  font-family: monospace;
+}
+.bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 900px) { .bottom { grid-template-columns: 1fr; } }
+.info, .log {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.info h3, .log h3 {
+  font-size: 13px;
+  color: var(--blue);
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.info-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  min-height: 72px;
+  font-family: monospace;
+}
+.info-content .hi-heap   { color: var(--green); }
+.info-content .hi-sorted { color: var(--yellow); }
+.info-content .hi-bst    { color: var(--purple); }
+.log-content {
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.log-content .entry {
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.log-content .entry:last-child { border-bottom: none; }
+.log-content .entry .op {
+  display: inline-block;
+  width: 60px;
+  color: var(--orange);
+}
+.log-content .entry .res { color: var(--green); }
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.legend .lg { display: flex; align-items: center; gap: 4px; }
+.legend .sw {
+  width: 12px; height: 12px;
+  border: 1.5px solid;
+  border-radius: 2px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Priority Queue — Same ADT, Three Backings</h1>
+  <p>Operations Push / Pop / Peek executed in parallel on a binary heap, sorted array, and BST. Watch comparisons and moves diverge.</p>
+</header>
+
+<div class="controls">
+  <div class="group">
+    <input type="number" id="pushValue" placeholder="value" value="42">
+    <input type="number" id="pushPriority" placeholder="prio" value="">
+    <button id="btnPush" class="primary">Push</button>
+    <button id="btnPop">Pop</button>
+    <button id="btnPeek">Peek</button>
+  </div>
+  <div class="group">
+    <input type="text" id="buildInput" placeholder="3,1,4,1,5,9,2,6" value="5,3,8,1,9,2,7">
+    <button id="btnBuild">Build</button>
+    <button id="btnRandom">Random</button>
+    <button id="btnReset" class="danger">Reset</button>
+  </div>
+  <div class="group">
+    <label class="toggle"><input type="checkbox" id="toggleMode"> Max-PQ</label>
+    <label class="toggle"><input type="checkbox" id="toggleStable"> Stable counter</label>
+  </div>
+  <div class="group">
+    <label>speed</label>
+    <input type="range" id="speed" min="50" max="1200" value="500">
+    <span id="speedVal" style="font-size:11px;color:var(--muted);font-family:monospace;">500ms</span>
+  </div>
+</div>
+
+<div class="panels">
+  <!-- HEAP -->
+  <div class="panel">
+    <h2>Binary Heap <span class="cx">push/pop O(log n)</span></h2>
+    <div class="desc">Complete binary tree, array-backed. Sift up/down on mutation.</div>
+    <div class="view">
+      <svg id="heapSvg" viewBox="0 0 360 220"></svg>
+      <div id="heapArray" class="array-strip"></div>
+      <div class="array-label">array index view</div>
+    </div>
+    <div class="counters">
+      <div class="c"><span class="lbl">cmp</span><span class="val" id="heapCmp">0</span></div>
+      <div class="c"><span class="lbl">mov</span><span class="val" id="heapMov">0</span></div>
+      <div class="c"><span class="lbl">size</span><span class="val" id="heapSize">0</span></div>
+    </div>
+  </div>
+
+  <!-- SORTED ARRAY -->
+  <div class="panel">
+    <h2>Sorted Array <span class="cx">push O(n) · pop O(1)</span></h2>
+    <div class="desc">Linear scan + shift on insert. Pop from tail in priority order.</div>
+    <div class="view" style="justify-content:center;">
+      <div id="sortedArray" class="array-strip"></div>
+      <div class="array-label">sorted by priority (head = next pop)</div>
+    </div>
+    <div class="counters">
+      <div class="c"><span class="lbl">cmp</span><span class="val" id="sortedCmp">0</span></div>
+      <div class="c"><span class="lbl">mov</span><span class="val" id="sortedMov">0</span></div>
+      <div class="c"><span class="lbl">size</span><span class="val" id="sortedSize">0</span></div>
+    </div>
+  </div>
+
+  <!-- BST -->
+  <div class="panel">
+    <h2>BST (unbalanced) <span class="cx">avg O(log n) · worst O(n)</span></h2>
+    <div class="desc">Plain BST keyed by priority. Pop walks to extreme leaf.</div>
+    <div class="view">
+      <svg id="bstSvg" viewBox="0 0 360 220"></svg>
+    </div>
+    <div class="counters">
+      <div class="c"><span class="lbl">cmp</span><span class="val" id="bstCmp">0</span></div>
+      <div class="c"><span class="lbl">mov</span><span class="val" id="bstMov">0</span></div>
+      <div class="c"><span class="lbl">size</span><span class="val" id="bstSize">0</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom">
+  <div class="info">
+    <h3>Step Narration</h3>
+    <div class="info-content" id="info">Ready. Add elements with Push, or click Random to seed a queue.</div>
+    <div class="legend">
+      <div class="lg"><span class="sw" style="border-color:var(--blue);background:#1f6feb55;"></span>default</div>
+      <div class="lg"><span class="sw" style="border-color:var(--orange);background:#d2992233;"></span>active</div>
+      <div class="lg"><span class="sw" style="border-color:var(--red);background:#f8514933;"></span>comparing</div>
+      <div class="lg"><span class="sw" style="border-color:var(--green);background:#3fb95033;"></span>inserted</div>
+      <div class="lg"><span class="sw" style="border-color:var(--purple);background:#bc8cff33;"></span>path</div>
+      <div class="lg"><span class="sw" style="border-color:var(--muted);"></span>extracted</div>
+    </div>
+  </div>
+  <div class="log">
+    <h3>Operation Log</h3>
+    <div class="log-content" id="log"></div>
+  </div>
+</div>
+
+<script>
+// ---------------- state ----------------
+let MODE = "min";       // "min" or "max"
+let STABLE = false;
+let SPEED = 500;
+let busy = false;
+let counter = 0;        // monotonic insertion counter for stability
+
+const heap   = { arr: [], cmp: 0, mov: 0 };
+const sorted = { arr: [], cmp: 0, mov: 0 };  // arr sorted so arr[0] is highest priority (the "next pop")
+const bst    = { root: null, cmp: 0, mov: 0 };
+
+// ---------------- helpers ----------------
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const wait = () => sleep(SPEED);
+function logEntry(op, detail) {
+  const entry = document.createElement("div");
+  entry.className = "entry";
+  entry.innerHTML = `<span class="op">${op}</span><span class="res">${detail}</span>`;
+  $("log").prepend(entry);
+}
+function info(html) { $("info").innerHTML = html; }
+function setBusy(b) {
+  busy = b;
+  ["btnPush","btnPop","btnPeek","btnBuild","btnRandom","btnReset","toggleMode","toggleStable"]
+    .forEach(id => { const el = $(id); if (el) el.disabled = b; });
+}
+// Priority comparison.  Returns -1 if a should come out first.
+// Stability: when keys equal, lower counter wins (FIFO among same-priority).
+function prioBetter(a, b) {
+  if (a.prio !== b.prio) return MODE === "min" ? (a.prio < b.prio ? -1 : 1) : (a.prio > b.prio ? -1 : 1);
+  if (STABLE) return a.counter < b.counter ? -1 : 1;
+  return 0;
+}
+function nextCounter() { return ++counter; }
+function makeItem(value, prio) {
+  if (prio === null || prio === undefined || prio === "") prio = value;
+  return { value: Number(value), prio: Number(prio), counter: nextCounter() };
+}
+
+// ---------------- HEAP ----------------
+function heapParent(i) { return Math.floor((i - 1) / 2); }
+function heapL(i) { return 2 * i + 1; }
+function heapR(i) { return 2 * i + 2; }
+
+async function heapPush(item) {
+  heap.arr.push(item);
+  heap.mov++;
+  renderHeap([heap.arr.length - 1], "inserted");
+  await wait();
+  // sift up
+  let i = heap.arr.length - 1;
+  while (i > 0) {
+    const p = heapParent(i);
+    heap.cmp++;
+    renderHeap([i, p], "comparing");
+    await wait();
+    if (prioBetter(heap.arr[i], heap.arr[p]) < 0) {
+      [heap.arr[i], heap.arr[p]] = [heap.arr[p], heap.arr[i]];
+      heap.mov += 2;
+      renderHeap([i, p], "path");
+      await wait();
+      i = p;
+    } else break;
+  }
+  renderHeap([], "");
+}
+async function heapPop() {
+  if (heap.arr.length === 0) return null;
+  const top = heap.arr[0];
+  renderHeap([0], "extracted");
+  await wait();
+  const last = heap.arr.pop();
+  if (heap.arr.length > 0) {
+    heap.arr[0] = last;
+    heap.mov++;
+    renderHeap([0], "active");
+    await wait();
+    // sift down
+    let i = 0, n = heap.arr.length;
+    while (true) {
+      const l = heapL(i), r = heapR(i);
+      let best = i;
+      if (l < n) { heap.cmp++; if (prioBetter(heap.arr[l], heap.arr[best]) < 0) best = l; }
+      if (r < n) { heap.cmp++; if (prioBetter(heap.arr[r], heap.arr[best]) < 0) best = r; }
+      const targets = [i]; if (l < n) targets.push(l); if (r < n) targets.push(r);
+      renderHeap(targets, "comparing");
+      await wait();
+      if (best === i) break;
+      [heap.arr[i], heap.arr[best]] = [heap.arr[best], heap.arr[i]];
+      heap.mov += 2;
+      renderHeap([i, best], "path");
+      await wait();
+      i = best;
+    }
+  }
+  renderHeap([], "");
+  return top;
+}
+
+// ---------------- SORTED ARRAY ----------------
+// arr[0] is the next-to-pop (highest priority). For min-PQ that's the smallest.
+async function sortedPush(item) {
+  // Linear scan from head: find first position where new item is not better than current.
+  let i = 0;
+  while (i < sorted.arr.length) {
+    sorted.cmp++;
+    renderSorted([i], "comparing");
+    await wait();
+    if (prioBetter(item, sorted.arr[i]) < 0) break;
+    i++;
+  }
+  // shift everything from i..end one right
+  sorted.arr.splice(i, 0, item);
+  sorted.mov += (sorted.arr.length - 1 - i) + 1;
+  renderSorted([i], "inserted");
+  await wait();
+  renderSorted([], "");
+}
+async function sortedPop() {
+  if (sorted.arr.length === 0) return null;
+  renderSorted([0], "extracted");
+  await wait();
+  const top = sorted.arr.shift();
+  sorted.mov += sorted.arr.length; // every remaining element shifts
+  renderSorted([], "");
+  return top;
+}
+
+// ---------------- BST ----------------
+function bstNode(item) {
+  return { item, left: null, right: null, x: 0, y: 0, depth: 0 };
+}
+async function bstInsert(item) {
+  if (!bst.root) {
+    bst.root = bstNode(item);
+    bst.mov++;
+    renderBst(bst.root, "inserted");
+    await wait();
+    renderBst(null, "");
+    return;
+  }
+  let cur = bst.root, parent = null, dir = null;
+  while (cur) {
+    bst.cmp++;
+    renderBst(cur, "comparing");
+    await wait();
+    parent = cur;
+    if (item.prio < cur.item.prio) { dir = "left"; cur = cur.left; }
+    else if (item.prio > cur.item.prio) { dir = "right"; cur = cur.right; }
+    else {
+      // equal priority — break tie by counter (or push right by default)
+      dir = (STABLE && item.counter < cur.item.counter) ? "left" : "right";
+      cur = cur[dir];
+    }
+  }
+  parent[dir] = bstNode(item);
+  bst.mov++;
+  renderBst(parent[dir], "inserted");
+  await wait();
+  renderBst(null, "");
+}
+async function bstExtract() {
+  if (!bst.root) return null;
+  // walk to extreme (leftmost for min, rightmost for max)
+  const dir = MODE === "min" ? "left" : "right";
+  let cur = bst.root, parent = null;
+  while (cur[dir]) {
+    bst.cmp++;
+    renderBst(cur, "path");
+    await wait();
+    parent = cur;
+    cur = cur[dir];
+  }
+  renderBst(cur, "extracted");
+  await wait();
+  const top = cur.item;
+  const repl = (dir === "left") ? cur.right : cur.left;
+  if (!parent) bst.root = repl;
+  else parent[dir] = repl;
+  bst.mov++;
+  renderBst(null, "");
+  return top;
+}
+
+// ---------------- RENDER: HEAP ----------------
+function renderHeap(highlight, cls) {
+  const svg = $("heapSvg");
+  svg.innerHTML = "";
+  const n = heap.arr.length;
+  const W = 360, H = 220;
+  if (n === 0) {
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" fill="var(--muted)" font-size="11" text-anchor="middle" font-family="monospace">(empty)</text>`;
+  } else {
+    // levels
+    const levels = Math.ceil(Math.log2(n + 1));
+    const rowH = Math.min(50, (H - 20) / Math.max(levels, 1));
+    // positions
+    const pos = [];
+    for (let i = 0; i < n; i++) {
+      const depth = Math.floor(Math.log2(i + 1));
+      const inRow = i - (Math.pow(2, depth) - 1);
+      const total = Math.pow(2, depth);
+      const x = (W / (total + 1)) * (inRow + 1);
+      const y = 20 + depth * rowH;
+      pos.push({ x, y });
+    }
+    // edges
+    for (let i = 1; i < n; i++) {
+      const p = heapParent(i);
+      const isPath = highlight.includes(i) && highlight.includes(p) && cls === "path";
+      svg.innerHTML += `<line class="edge ${isPath?'path':''}" x1="${pos[p].x}" y1="${pos[p].y}" x2="${pos[i].x}" y2="${pos[i].y}"/>`;
+    }
+    // nodes
+    for (let i = 0; i < n; i++) {
+      const c = highlight.includes(i) ? cls : "default";
+      svg.innerHTML += `
+        <circle class="node-circle ${c}" cx="${pos[i].x}" cy="${pos[i].y}" r="14"/>
+        <text class="node-label" x="${pos[i].x}" y="${pos[i].y + 4}">${heap.arr[i].value}</text>
+        ${STABLE ? `<text class="node-sub" x="${pos[i].x}" y="${pos[i].y + 22}">p${heap.arr[i].prio}·#${heap.arr[i].counter}</text>` : `<text class="node-sub" x="${pos[i].x}" y="${pos[i].y + 22}">p${heap.arr[i].prio}</text>`}
+      `;
+    }
+  }
+  // array strip
+  const strip = $("heapArray");
+  strip.innerHTML = "";
+  heap.arr.forEach((it, i) => {
+    const c = highlight.includes(i) ? cls : "default";
+    const cell = document.createElement("div");
+    cell.className = `cell ${c}`;
+    cell.innerHTML = `<div class="idx">${i}</div>${it.value}`;
+    strip.appendChild(cell);
+  });
+  $("heapCmp").textContent = heap.cmp;
+  $("heapMov").textContent = heap.mov;
+  $("heapSize").textContent = heap.arr.length;
+}
+
+// ---------------- RENDER: SORTED ----------------
+function renderSorted(highlight, cls) {
+  const strip = $("sortedArray");
+  strip.innerHTML = "";
+  if (sorted.arr.length === 0) {
+    strip.innerHTML = `<div style="color:var(--muted);font-size:11px;font-family:monospace;padding:20px;">(empty)</div>`;
+  } else {
+    sorted.arr.forEach((it, i) => {
+      const c = highlight.includes(i) ? cls : "default";
+      const cell = document.createElement("div");
+      cell.className = `cell ${c}`;
+      cell.innerHTML = `<div class="idx">${i===0?'head':i}</div>${it.value}<div style="font-size:9px;color:var(--muted);margin-top:1px;">p${it.prio}</div>`;
+      cell.style.height = "48px";
+      strip.appendChild(cell);
+    });
+  }
+  $("sortedCmp").textContent = sorted.cmp;
+  $("sortedMov").textContent = sorted.mov;
+  $("sortedSize").textContent = sorted.arr.length;
+}
+
+// ---------------- RENDER: BST ----------------
+function bstLayout() {
+  if (!bst.root) return { nodes: [], edges: [] };
+  // inorder traversal to assign x by visit order
+  const nodes = [];
+  const edges = [];
+  let order = 0;
+  let maxDepth = 0;
+  function dfs(n, d) {
+    if (!n) return;
+    n.depth = d;
+    if (d > maxDepth) maxDepth = d;
+    dfs(n.left, d + 1);
+    n._order = order++;
+    nodes.push(n);
+    dfs(n.right, d + 1);
+  }
+  dfs(bst.root, 0);
+  const W = 360, H = 220;
+  const total = nodes.length;
+  const rowH = total === 0 ? 0 : Math.min(48, (H - 30) / (maxDepth + 1));
+  nodes.forEach(n => {
+    n.x = total > 1 ? 25 + (W - 50) * (n._order / (total - 1)) : W / 2;
+    n.y = 25 + n.depth * rowH;
+  });
+  function collectEdges(n) {
+    if (!n) return;
+    if (n.left)  { edges.push({ a: n, b: n.left  }); collectEdges(n.left);  }
+    if (n.right) { edges.push({ a: n, b: n.right }); collectEdges(n.right); }
+  }
+  collectEdges(bst.root);
+  return { nodes, edges };
+}
+function renderBst(highlightNode, cls) {
+  const svg = $("bstSvg");
+  svg.innerHTML = "";
+  const layout = bstLayout();
+  if (layout.nodes.length === 0) {
+    svg.innerHTML = `<text x="180" y="110" fill="var(--muted)" font-size="11" text-anchor="middle" font-family="monospace">(empty)</text>`;
+  } else {
+    layout.edges.forEach(e => {
+      svg.innerHTML += `<line class="edge" x1="${e.a.x}" y1="${e.a.y}" x2="${e.b.x}" y2="${e.b.y}"/>`;
+    });
+    layout.nodes.forEach(n => {
+      const c = (n === highlightNode) ? cls : "default";
+      svg.innerHTML += `
+        <circle class="node-circle ${c}" cx="${n.x}" cy="${n.y}" r="13"/>
+        <text class="node-label" x="${n.x}" y="${n.y + 4}">${n.item.value}</text>
+        <text class="node-sub" x="${n.x}" y="${n.y + 21}">p${n.item.prio}</text>
+      `;
+    });
+  }
+  $("bstCmp").textContent = bst.cmp;
+  $("bstMov").textContent = bst.mov;
+  $("bstSize").textContent = (function size(n){ return n ? 1+size(n.left)+size(n.right):0; })(bst.root);
+}
+
+// ---------------- HIGH-LEVEL OPERATIONS ----------------
+async function doPush(value, prio) {
+  if (busy) return;
+  setBusy(true);
+  const item = makeItem(value, prio);
+  info(`<b>Push</b> value=${item.value}, prio=${item.prio}${STABLE?`, #${item.counter}`:""}<br>
+        <span class="hi-heap">heap</span>: append then sift-up O(log n) ·
+        <span class="hi-sorted">sorted</span>: linear scan + shift O(n) ·
+        <span class="hi-bst">bst</span>: walk + attach O(log n) avg`);
+  await Promise.all([
+    heapPush({ ...item }),
+    sortedPush({ ...item }),
+    bstInsert({ ...item }),
+  ]);
+  logEntry(`push ${item.value}`, `prio=${item.prio} → heap.cmp=${heap.cmp} sorted.cmp=${sorted.cmp} bst.cmp=${bst.cmp}`);
+  renderAll();
+  setBusy(false);
+}
+async function doPop() {
+  if (busy) return;
+  if (heap.arr.length === 0) { info("Queue is empty — nothing to pop."); return; }
+  setBusy(true);
+  info(`<b>Pop</b> (extract ${MODE === "min" ? "minimum" : "maximum"})<br>
+        <span class="hi-heap">heap</span>: take root, move last to root, sift-down O(log n) ·
+        <span class="hi-sorted">sorted</span>: pop head, shift n-1 O(n) ·
+        <span class="hi-bst">bst</span>: walk to ${MODE==="min"?"leftmost":"rightmost"}, unlink O(h)`);
+  const [a, b, c] = await Promise.all([heapPop(), sortedPop(), bstExtract()]);
+  const v = a ? a.value : "—";
+  logEntry(`pop`, `→ ${v} (heap), ${b?b.value:"—"} (sorted), ${c?c.value:"—"} (bst)`);
+  renderAll();
+  setBusy(false);
+}
+async function doPeek() {
+  if (busy) return;
+  if (heap.arr.length === 0) { info("Queue is empty — nothing to peek."); return; }
+  setBusy(true);
+  const hTop = heap.arr[0];
+  const sTop = sorted.arr[0];
+  let bTop = bst.root;
+  const dir = MODE === "min" ? "left" : "right";
+  // animate BST walk for visual symmetry
+  while (bTop && bTop[dir]) {
+    renderBst(bTop, "path"); await wait();
+    bst.cmp++;
+    bTop = bTop[dir];
+  }
+  renderHeap([0], "active");
+  renderSorted([0], "active");
+  renderBst(bTop, "active");
+  info(`<b>Peek</b> top element:<br>
+        <span class="hi-heap">heap[0]</span> = ${hTop.value} (p${hTop.prio}) ·
+        <span class="hi-sorted">sorted[0]</span> = ${sTop.value} (p${sTop.prio}) ·
+        <span class="hi-bst">bst ${MODE==="min"?"leftmost":"rightmost"}</span> = ${bTop.item.value} (p${bTop.item.prio})`);
+  await sleep(SPEED * 1.4);
+  renderAll();
+  setBusy(false);
+}
+async function doBuild(values) {
+  if (busy) return;
+  resetAll();
+  setBusy(true);
+  info(`<b>Build</b> from [${values.join(",")}] — push each element on all three backings.`);
+  for (const v of values) {
+    const item = makeItem(v, v);
+    await Promise.all([
+      heapPush({ ...item }),
+      sortedPush({ ...item }),
+      bstInsert({ ...item }),
+    ]);
+  }
+  logEntry("build", `[${values.join(",")}] inserted`);
+  renderAll();
+  setBusy(false);
+}
+function resetAll() {
+  heap.arr = []; heap.cmp = 0; heap.mov = 0;
+  sorted.arr = []; sorted.cmp = 0; sorted.mov = 0;
+  bst.root = null; bst.cmp = 0; bst.mov = 0;
+  counter = 0;
+  renderAll();
+}
+function renderAll() {
+  renderHeap([], "");
+  renderSorted([], "");
+  renderBst(null, "");
+}
+
+// ---------------- WIRE UP ----------------
+$("btnPush").addEventListener("click", () => {
+  const v = $("pushValue").value;
+  const p = $("pushPriority").value;
+  if (v === "") return;
+  doPush(v, p);
+});
+$("btnPop").addEventListener("click", doPop);
+$("btnPeek").addEventListener("click", doPeek);
+$("btnBuild").addEventListener("click", () => {
+  const raw = $("buildInput").value.trim();
+  if (!raw) return;
+  const vals = raw.split(/[,\s]+/).map(Number).filter(n => !Number.isNaN(n));
+  if (vals.length) doBuild(vals);
+});
+$("btnRandom").addEventListener("click", () => {
+  const n = 7 + Math.floor(Math.random() * 6);
+  const vals = Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 99));
+  $("buildInput").value = vals.join(",");
+  doBuild(vals);
+});
+$("btnReset").addEventListener("click", () => {
+  resetAll();
+  info("Reset. All three backings cleared, counters at zero.");
+  logEntry("reset", "all backings cleared");
+});
+$("toggleMode").addEventListener("change", (e) => {
+  MODE = e.target.checked ? "max" : "min";
+  info(`Mode → <b>${MODE === "min" ? "Min-PQ" : "Max-PQ"}</b>. Existing contents will rebuild on next push or build.`);
+  // Rebuild on the spot to keep invariants consistent.
+  const snapshot = heap.arr.map(it => it.value);
+  if (snapshot.length) {
+    resetAll();
+    doBuild(snapshot);
+  }
+});
+$("toggleStable").addEventListener("change", (e) => {
+  STABLE = e.target.checked;
+  info(`Stability counter ${STABLE ? "<b>ON</b> — equal priorities resolved by FIFO insertion order." : "OFF — equal priorities are arbitrary."}`);
+  renderAll();
+});
+$("speed").addEventListener("input", (e) => {
+  SPEED = 1250 - Number(e.target.value);
+  $("speedVal").textContent = SPEED + "ms";
+});
+// Initialize speed display
+SPEED = 1250 - Number($("speed").value);
+$("speedVal").textContent = SPEED + "ms";
+
+// initial render
+renderAll();
+</script>
+</body>
+</html>

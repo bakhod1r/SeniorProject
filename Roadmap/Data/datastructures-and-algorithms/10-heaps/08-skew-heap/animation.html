@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skew Heap — Interactive Visualization</title>
+<style>
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --yellow:  #d29922;
+  --red:     #f85149;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --orange:  #ffa657;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  padding: 20px;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+h1 .accent { color: var(--orange); }
+
+.subtitle {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.panel h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.btn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.btn-inline {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s;
+  flex: 1;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--orange);
+  background: #1f242c;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--orange);
+  color: var(--bg);
+  border-color: var(--orange);
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #ffb87a;
+}
+
+button.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+button.danger:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.12);
+}
+
+input[type="number"], input[type="text"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+}
+
+input[type="number"]:focus, input[type="text"]:focus {
+  outline: none;
+  border-color: var(--orange);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.slider-row label {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--orange);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.toggle input { accent-color: var(--orange); }
+
+.canvas-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  min-height: 480px;
+  position: relative;
+  overflow: hidden;
+}
+
+#tree-svg {
+  width: 100%;
+  height: 480px;
+  display: block;
+}
+
+.node-circle {
+  stroke-width: 3;
+  transition: fill 0.2s, stroke 0.3s;
+}
+
+.node-circle.default {
+  fill: var(--blue);
+  stroke: var(--blue);
+}
+
+.node-circle.right-spine {
+  fill: var(--orange);
+  stroke: var(--orange);
+}
+
+.node-circle.comparing {
+  fill: var(--red);
+  stroke: var(--red);
+}
+
+.node-circle.recursing {
+  fill: var(--purple);
+  stroke: var(--purple);
+}
+
+.node-circle.swapping {
+  fill: var(--yellow);
+  stroke: var(--yellow);
+  animation: flash 0.4s ease-in-out;
+}
+
+.node-circle.heavy {
+  stroke: var(--red);
+  stroke-width: 4;
+  stroke-dasharray: 4 2;
+}
+
+.node-circle.light {
+  stroke: var(--muted);
+  stroke-width: 2;
+}
+
+.node-circle.inserted {
+  fill: var(--green);
+  stroke: var(--green);
+  animation: pop 0.5s ease-out;
+}
+
+.node-circle.extracted {
+  fill: var(--muted);
+  opacity: 0.4;
+  animation: fadeOut 0.6s ease-out;
+}
+
+@keyframes flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.2); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+.node-text {
+  fill: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  font-family: ui-monospace, monospace;
+}
+
+.edge-line {
+  stroke: var(--border);
+  stroke-width: 2;
+  fill: none;
+  transition: stroke 0.25s, stroke-width 0.25s;
+}
+
+.edge-line.active {
+  stroke: var(--orange);
+  stroke-width: 3;
+}
+
+.edge-line.swapping {
+  stroke: var(--yellow);
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+  animation: dashflow 0.6s linear infinite;
+}
+
+@keyframes dashflow {
+  to { stroke-dashoffset: -20; }
+}
+
+.info-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 16px;
+  min-height: 70px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.info-icon {
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  color: var(--orange);
+  font-size: 18px;
+}
+
+.counter-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.counter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.counter .label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.counter .value {
+  color: var(--orange);
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  font-size: 16px;
+}
+
+.counter.phi .value { color: var(--red); }
+.counter.delta .value { color: var(--green); }
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+}
+
+.log-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 16px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.log-panel h2 {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  padding-bottom: 4px;
+}
+
+.log-entry {
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+  color: var(--text);
+}
+
+.log-entry .time {
+  color: var(--muted);
+  margin-right: 8px;
+}
+
+.log-entry.op { color: var(--orange); font-weight: 600; }
+.log-entry.swap { color: var(--yellow); }
+.log-entry.compare { color: var(--red); }
+.log-entry.insert { color: var(--green); }
+
+.log-panel::-webkit-scrollbar { width: 6px; }
+.log-panel::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.empty-msg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 14px;
+}
+
+.formula {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.formula code { color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Skew <span class="accent">Heap</span> — Interactive Visualization</h1>
+    <p class="subtitle">A self-adjusting leftist heap variant: unconditional child swap on every meld step. Amortised O(log n) per operation.</p>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: operations -->
+    <div>
+      <div class="panel">
+        <h2>Operations</h2>
+        <div class="btn-row">
+          <div class="row">
+            <input type="number" id="value-input" placeholder="value" value="42" min="1" max="999">
+            <button class="primary" id="insert-btn" style="flex:0 0 auto;">Insert</button>
+          </div>
+          <button id="extract-btn">Extract Min</button>
+          <button id="meld-btn">Meld w/ random heap</button>
+          <button class="danger" id="reset-btn">Reset</button>
+        </div>
+
+        <h2>Playback</h2>
+        <div class="btn-inline" style="margin-bottom:12px;">
+          <button id="step-btn">Step</button>
+          <button id="play-btn">Play</button>
+        </div>
+        <div class="slider-row">
+          <label>Speed <span id="speed-label">600 ms</span></label>
+          <input type="range" id="speed" min="100" max="1500" value="600" step="50">
+        </div>
+
+        <h2>Display</h2>
+        <label class="toggle">
+          <input type="checkbox" id="heavy-toggle">
+          <span>Show heavy / light status</span>
+        </label>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h2>Legend</h2>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--blue);"></div>Default node</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--orange);"></div>Right-spine walk</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--red);"></div>Comparing keys</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--purple);"></div>Recursing</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--yellow);"></div>Swapping children</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--green);"></div>Inserted</div>
+          <div class="legend-item"><div class="legend-swatch" style="border-color:var(--red);border-style:dashed;"></div>Heavy right child</div>
+          <div class="legend-item"><div class="legend-swatch" style="border-color:var(--muted);"></div>Light child</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER: canvas -->
+    <div>
+      <div class="canvas-panel">
+        <svg id="tree-svg" viewBox="0 0 800 480" preserveAspectRatio="xMidYMid meet"></svg>
+        <div id="empty-msg" class="empty-msg">Heap is empty. Insert a value to begin.</div>
+      </div>
+      <div class="info-panel">
+        <span class="info-icon">&#9656;</span>
+        <span id="info-text">Ready. Insert values, extract the min, or meld a random heap to see the unconditional swap in action.</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: counters -->
+    <div>
+      <div class="panel">
+        <h2>Potential Function</h2>
+        <div class="counter-box">
+          <div class="counter">
+            <span class="label">Nodes (n)</span>
+            <span class="value" id="size-counter">0</span>
+          </div>
+          <div class="counter phi">
+            <span class="label">Heavy right children (&Phi;)</span>
+            <span class="value" id="phi-counter">0</span>
+          </div>
+          <div class="counter delta">
+            <span class="label">&Delta;&Phi; (last op)</span>
+            <span class="value" id="delta-counter">0</span>
+          </div>
+          <div class="counter">
+            <span class="label">Last op meld steps</span>
+            <span class="value" id="steps-counter">0</span>
+          </div>
+        </div>
+        <div class="formula">
+          A right child is <code>heavy</code> when its subtree has more than half of its parent's descendants. After each swap, heavy right children become left children &mdash; this is what tames amortised cost.<br><br>
+          <code>amortised = actual + &Delta;&Phi; = O(log n)</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <h2>Operation Log</h2>
+    <div id="log-content"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Skew Heap data model
+// ============================================================
+let nextId = 1;
+class Node {
+  constructor(key) {
+    this.id = nextId++;
+    this.key = key;
+    this.left = null;
+    this.right = null;
+    this.size = 1;
+    // visual state
+    this.cls = "default";
+    this.heavyStatus = null; // "heavy" | "light" | null
+  }
+}
+
+let root = null;
+let busy = false;
+let playing = false;
+let stepResolver = null;
+let speedMs = 600;
+let showHeavy = false;
+let lastPhi = 0;
+let lastSteps = 0;
+
+// ============================================================
+//  Utilities
+// ============================================================
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+function waitStep() {
+  if (playing) return sleep(speedMs);
+  return new Promise(resolve => { stepResolver = resolve; });
+}
+
+function subtreeSize(n) { return n ? n.size : 0; }
+
+function recomputeSizes(n) {
+  if (!n) return 0;
+  n.size = 1 + recomputeSizes(n.left) + recomputeSizes(n.right);
+  return n.size;
+}
+
+function recomputeHeavy(n) {
+  if (!n) return;
+  // a right child is heavy if size(right) > size(left) (descendant majority)
+  if (n.right) {
+    n.right.heavyStatus = (subtreeSize(n.right) > subtreeSize(n.left)) ? "heavy" : "light";
+  }
+  if (n.left) {
+    n.left.heavyStatus = "light"; // left children are never "heavy right children"
+  }
+  recomputeHeavy(n.left);
+  recomputeHeavy(n.right);
+}
+
+function countHeavyRight(n) {
+  if (!n) return 0;
+  let c = 0;
+  if (n.right && subtreeSize(n.right) > subtreeSize(n.left)) c++;
+  return c + countHeavyRight(n.left) + countHeavyRight(n.right);
+}
+
+function clearViz(n) {
+  if (!n) return;
+  n.cls = "default";
+  clearViz(n.left);
+  clearViz(n.right);
+}
+
+// ============================================================
+//  Skew heap meld (animated)
+// ============================================================
+async function meld(h1, h2, depth = 0) {
+  if (!h1) return h2;
+  if (!h2) return h1;
+
+  // walk right spine highlight
+  h1.cls = "right-spine";
+  h2.cls = "right-spine";
+  render();
+  setInfo("Walking the right spine of both heaps. Comparing roots " + h1.key + " and " + h2.key + ".");
+  await waitStep();
+
+  // ensure h1 has smaller root
+  h1.cls = "comparing";
+  h2.cls = "comparing";
+  render();
+  await waitStep();
+
+  if (h1.key > h2.key) {
+    log("compare", "swap roots: " + h2.key + " &lt; " + h1.key);
+    [h1, h2] = [h2, h1];
+  } else {
+    log("compare", "keep root: " + h1.key + " &le; " + h2.key);
+  }
+
+  h1.cls = "recursing";
+  if (h2) h2.cls = "recursing";
+  render();
+  setInfo("Recursing: meld(right-child-of-" + h1.key + ", heap-with-root-" + h2.key + ").");
+  await waitStep();
+
+  // recurse with right child + other heap
+  const newRight = await meld(h1.right, h2, depth + 1);
+
+  // unconditional swap: new right becomes left, old left becomes right
+  const oldLeft = h1.left;
+  h1.left = newRight;
+  h1.right = oldLeft;
+
+  h1.cls = "swapping";
+  if (h1.left) h1.left.cls = "swapping";
+  if (h1.right) h1.right.cls = "swapping";
+  render(true);
+  log("swap", "swap children of " + h1.key + " &mdash; unconditional");
+  setInfo("Unconditional swap at node " + h1.key + ". The freshly melded subtree moves to the LEFT.");
+  await waitStep();
+
+  h1.cls = "default";
+  if (h1.left) h1.left.cls = "default";
+  if (h1.right) h1.right.cls = "default";
+
+  recomputeSizes(h1);
+  return h1;
+}
+
+// ============================================================
+//  Operations
+// ============================================================
+async function opInsert(val) {
+  if (busy) return;
+  busy = true;
+  lastSteps = 0;
+  const before = countHeavyRight(root);
+  log("op", "INSERT " + val);
+  setInfo("Inserting " + val + " by melding a singleton heap.");
+
+  const newNode = new Node(val);
+  newNode.cls = "inserted";
+  render();
+  await waitStep();
+  newNode.cls = "default";
+
+  root = await meld(root, newNode);
+  recomputeSizes(root);
+  if (showHeavy) recomputeHeavy(root);
+  clearViz(root);
+
+  const after = countHeavyRight(root);
+  lastPhi = after;
+  updateCounters(after - before);
+  setInfo("Insert " + val + " complete. n = " + (root ? root.size : 0) + ", &Phi; = " + after + ".");
+  render();
+  busy = false;
+}
+
+async function opExtractMin() {
+  if (busy || !root) return;
+  busy = true;
+  lastSteps = 0;
+  const before = countHeavyRight(root);
+  const minKey = root.key;
+  log("op", "EXTRACT MIN (" + minKey + ")");
+  setInfo("Extracting min = " + minKey + ". Melding its two children.");
+
+  root.cls = "extracted";
+  render();
+  await waitStep();
+
+  const L = root.left, R = root.right;
+  root = await meld(L, R);
+  if (root) {
+    recomputeSizes(root);
+    if (showHeavy) recomputeHeavy(root);
+    clearViz(root);
+  }
+
+  const after = countHeavyRight(root);
+  lastPhi = after;
+  updateCounters(after - before);
+  setInfo("Extracted " + minKey + ". n = " + (root ? root.size : 0) + ", &Phi; = " + after + ".");
+  render();
+  busy = false;
+}
+
+async function opMeldRandom() {
+  if (busy) return;
+  busy = true;
+  const sz = 3 + Math.floor(Math.random() * 5);
+  log("op", "MELD with random heap of size " + sz);
+  setInfo("Building a random heap of " + sz + " keys, then melding.");
+  let other = null;
+  for (let i = 0; i < sz; i++) {
+    other = simpleMeld(other, new Node(Math.floor(Math.random() * 90) + 10));
+  }
+  recomputeSizes(other);
+  const before = countHeavyRight(root) + countHeavyRight(other);
+  root = await meld(root, other);
+  if (root) {
+    recomputeSizes(root);
+    if (showHeavy) recomputeHeavy(root);
+    clearViz(root);
+  }
+  const after = countHeavyRight(root);
+  lastPhi = after;
+  updateCounters(after - before);
+  setInfo("Meld complete. n = " + (root ? root.size : 0) + ", &Phi; = " + after + ".");
+  render();
+  busy = false;
+}
+
+// non-animated meld used to build the random heap quickly
+function simpleMeld(h1, h2) {
+  if (!h1) return h2;
+  if (!h2) return h1;
+  if (h1.key > h2.key) [h1, h2] = [h2, h1];
+  const newRight = simpleMeld(h1.right, h2);
+  h1.right = h1.left;
+  h1.left = newRight;
+  return h1;
+}
+
+function opReset() {
+  if (busy) return;
+  root = null;
+  lastPhi = 0;
+  lastSteps = 0;
+  log("op", "RESET");
+  setInfo("Heap cleared.");
+  updateCounters(0);
+  render();
+}
+
+// ============================================================
+//  Rendering
+// ============================================================
+const svg = document.getElementById("tree-svg");
+const emptyMsg = document.getElementById("empty-msg");
+
+function layout(node, depth, leftEdge, rightEdge) {
+  if (!node) return;
+  const x = (leftEdge + rightEdge) / 2;
+  const y = 40 + depth * 70;
+  node._x = x;
+  node._y = y;
+  const mid = (leftEdge + rightEdge) / 2;
+  layout(node.left, depth + 1, leftEdge, mid);
+  layout(node.right, depth + 1, mid, rightEdge);
+}
+
+function collectEdges(node, out) {
+  if (!node) return;
+  if (node.left) {
+    out.push({ from: node, to: node.left, side: "left" });
+    collectEdges(node.left, out);
+  }
+  if (node.right) {
+    out.push({ from: node, to: node.right, side: "right" });
+    collectEdges(node.right, out);
+  }
+}
+
+function collectNodes(node, out) {
+  if (!node) return;
+  out.push(node);
+  collectNodes(node.left, out);
+  collectNodes(node.right, out);
+}
+
+function render(swapPulse = false) {
+  if (!root) {
+    svg.innerHTML = "";
+    emptyMsg.style.display = "flex";
+    return;
+  }
+  emptyMsg.style.display = "none";
+
+  const width = 800;
+  layout(root, 0, 20, width - 20);
+
+  // determine depth
+  let maxDepth = 0;
+  const nodes = [];
+  collectNodes(root, nodes);
+  nodes.forEach(n => { maxDepth = Math.max(maxDepth, (n._y - 40) / 70); });
+  const height = Math.max(480, 100 + maxDepth * 70);
+  svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+
+  const edges = [];
+  collectEdges(root, edges);
+
+  let svgContent = "";
+  // edges
+  edges.forEach(e => {
+    const isActive = (e.from.cls === "right-spine" || e.from.cls === "recursing") && e.side === "right";
+    const isSwap = swapPulse && e.from.cls === "swapping";
+    const cls = "edge-line" + (isSwap ? " swapping" : (isActive ? " active" : ""));
+    svgContent += `<line class="${cls}" x1="${e.from._x}" y1="${e.from._y}" x2="${e.to._x}" y2="${e.to._y}" />`;
+  });
+
+  // nodes
+  nodes.forEach(n => {
+    let cls = "node-circle " + n.cls;
+    if (showHeavy && n.heavyStatus && n.cls === "default") {
+      cls += " " + n.heavyStatus;
+    }
+    svgContent += `<circle class="${cls}" cx="${n._x}" cy="${n._y}" r="22" />`;
+    svgContent += `<text class="node-text" x="${n._x}" y="${n._y}">${n.key}</text>`;
+  });
+
+  svg.innerHTML = svgContent;
+}
+
+// ============================================================
+//  UI plumbing
+// ============================================================
+const infoText = document.getElementById("info-text");
+const logContent = document.getElementById("log-content");
+
+function setInfo(msg) {
+  infoText.innerHTML = msg;
+}
+
+let logCounter = 1;
+function log(type, msg) {
+  const entry = document.createElement("div");
+  entry.className = "log-entry " + type;
+  entry.innerHTML = `<span class="time">#${String(logCounter++).padStart(3, "0")}</span>${msg}`;
+  logContent.appendChild(entry);
+  logContent.scrollTop = logContent.scrollHeight;
+  while (logContent.children.length > 80) logContent.removeChild(logContent.firstChild);
+}
+
+function updateCounters(delta) {
+  document.getElementById("size-counter").textContent = root ? root.size : 0;
+  document.getElementById("phi-counter").textContent = lastPhi;
+  const dc = document.getElementById("delta-counter");
+  dc.textContent = (delta >= 0 ? "+" : "") + delta;
+  dc.style.color = delta > 0 ? "var(--red)" : (delta < 0 ? "var(--green)" : "var(--muted)");
+  document.getElementById("steps-counter").textContent = lastSteps;
+}
+
+// step / play controls
+document.getElementById("step-btn").addEventListener("click", () => {
+  if (stepResolver) { const r = stepResolver; stepResolver = null; r(); }
+});
+
+const playBtn = document.getElementById("play-btn");
+playBtn.addEventListener("click", () => {
+  playing = !playing;
+  playBtn.textContent = playing ? "Pause" : "Play";
+  playBtn.classList.toggle("primary", playing);
+  if (playing && stepResolver) { const r = stepResolver; stepResolver = null; r(); }
+});
+
+document.getElementById("speed").addEventListener("input", (e) => {
+  speedMs = parseInt(e.target.value, 10);
+  document.getElementById("speed-label").textContent = speedMs + " ms";
+});
+
+document.getElementById("heavy-toggle").addEventListener("change", (e) => {
+  showHeavy = e.target.checked;
+  if (root) {
+    recomputeSizes(root);
+    recomputeHeavy(root);
+  }
+  render();
+});
+
+document.getElementById("insert-btn").addEventListener("click", () => {
+  const v = parseInt(document.getElementById("value-input").value, 10);
+  if (Number.isFinite(v)) {
+    opInsert(v);
+    document.getElementById("value-input").value = Math.floor(Math.random() * 90) + 10;
+  }
+});
+
+document.getElementById("value-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("insert-btn").click();
+});
+
+document.getElementById("extract-btn").addEventListener("click", opExtractMin);
+document.getElementById("meld-btn").addEventListener("click", opMeldRandom);
+document.getElementById("reset-btn").addEventListener("click", opReset);
+
+// ============================================================
+//  Boot — seed a small heap so users see something immediately
+// ============================================================
+(async function init() {
+  setInfo("Booting demo: inserting six values to seed the heap...");
+  playing = true;
+  playBtn.textContent = "Pause";
+  playBtn.classList.add("primary");
+  const seeds = [50, 23, 71, 12, 88, 34];
+  for (const v of seeds) {
+    await opInsert(v);
+    await sleep(120);
+  }
+  playing = false;
+  playBtn.textContent = "Play";
+  playBtn.classList.remove("primary");
+  setInfo("Ready. Try Insert, Extract Min, or Meld to watch the unconditional child swap.");
+})();
+</script>
+</body>
+</html>

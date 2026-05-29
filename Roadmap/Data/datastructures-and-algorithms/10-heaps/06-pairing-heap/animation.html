@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pairing Heap — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  header p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .container {
+    display: grid;
+    grid-template-columns: 320px 1fr 320px;
+    gap: 12px;
+    padding: 12px;
+    min-height: calc(100vh - 70px);
+  }
+
+  @media (max-width: 1100px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--blue);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  input[type="text"], input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+  }
+  input[type="text"]:focus, input[type="number"]:focus {
+    border-color: var(--blue);
+  }
+
+  button {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  button:hover:not(:disabled) {
+    background: #1f2630;
+    border-color: var(--blue);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  button.primary {
+    background: #1f6feb22;
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  button.danger {
+    background: #f8514922;
+    border-color: var(--red);
+    color: var(--red);
+  }
+  button.warn {
+    background: #d2992222;
+    border-color: var(--yellow);
+    color: var(--yellow);
+  }
+
+  .stage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    min-height: 460px;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 460px;
+  }
+
+  .edge {
+    stroke: var(--border);
+    stroke-width: 1.6;
+    fill: none;
+    transition: stroke 0.3s;
+  }
+  .edge.merging { stroke: var(--green); stroke-width: 2.4; }
+  .edge.cutting { stroke: var(--purple); stroke-width: 2.4; stroke-dasharray: 4 4; }
+
+  .node circle {
+    fill: var(--bg);
+    stroke: var(--blue);
+    stroke-width: 2;
+    transition: fill 0.3s, stroke 0.3s, r 0.3s;
+  }
+  .node text {
+    fill: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .node.root circle { stroke: var(--yellow); fill: #d2992222; }
+  .node.cutting circle { stroke: var(--purple); fill: #bc8cff22; }
+  .node.merging circle { stroke: var(--green); fill: #3fb95022; }
+  .node.pair-left circle { stroke: var(--red); fill: #f8514922; }
+  .node.pair-right circle { stroke: var(--orange); fill: #ffa65722; }
+  .node.selected circle { stroke: var(--blue); stroke-width: 3.2; fill: #58a6ff33; }
+
+  .node { cursor: pointer; }
+
+  .info {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 84px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .info b { color: var(--text); font-weight: 600; }
+  .info .k-yellow { color: var(--yellow); }
+  .info .k-green  { color: var(--green); }
+  .info .k-red    { color: var(--red); }
+  .info .k-orange { color: var(--orange); }
+  .info .k-purple { color: var(--purple); }
+  .info .k-blue   { color: var(--blue); }
+
+  .log {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    height: 130px;
+    overflow-y: auto;
+    padding: 8px 12px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+  .log .entry { padding: 1px 0; }
+  .log .entry b { color: var(--text); }
+  .log .entry.op   { color: var(--blue); }
+  .log .entry.warn { color: var(--yellow); }
+  .log .entry.err  { color: var(--red); }
+  .log .entry.ok   { color: var(--green); }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+  }
+  .legend .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--blue);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .stats .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    border-radius: 4px;
+  }
+  .stats .stat b { color: var(--text); display: block; font-size: 14px; }
+  .stats .stat span { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+
+  hr.sep {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pairing Heap — Interactive Visualization</h1>
+  <p>Multiway-tree min-heap. Watch the two-pass merge during extract-min.</p>
+</header>
+
+<div class="container">
+
+  <!-- LEFT: Operations -->
+  <div class="panel">
+    <h2>Operations</h2>
+
+    <div class="row">
+      <input type="number" id="insertVal" placeholder="value" />
+      <button class="primary" id="btnInsert">Insert</button>
+    </div>
+
+    <button class="warn" id="btnExtract">Extract Min (two-pass)</button>
+
+    <hr class="sep" />
+
+    <div class="row">
+      <input type="number" id="decVal" placeholder="new key" />
+      <button id="btnDecrease">Decrease Key</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted)">
+      Click a node to select it, then Decrease/Delete.
+    </div>
+
+    <button class="danger" id="btnDelete">Delete Selected</button>
+
+    <hr class="sep" />
+
+    <button id="btnMeld">Meld with Random Heap</button>
+    <button id="btnRandom">Random 7 Inserts</button>
+    <button class="danger" id="btnReset">Reset</button>
+
+    <hr class="sep" />
+
+    <h2>Step Controls</h2>
+    <div class="row">
+      <button id="btnStep">Step</button>
+      <button id="btnPlay">Play</button>
+    </div>
+    <div class="slider-row">
+      <span>Speed</span>
+      <input type="range" id="speed" min="100" max="1500" value="700" step="50" />
+      <span id="speedVal">700ms</span>
+    </div>
+
+    <hr class="sep" />
+
+    <h2>Stats</h2>
+    <div class="stats">
+      <div class="stat"><b id="statSize">0</b><span>size</span></div>
+      <div class="stat"><b id="statMin">—</b><span>min (root)</span></div>
+    </div>
+
+    <hr class="sep" />
+
+    <h2>Legend</h2>
+    <div class="legend">
+      <span class="chip"><span class="dot" style="background:var(--blue)"></span>default</span>
+      <span class="chip"><span class="dot" style="background:var(--yellow)"></span>root/min</span>
+      <span class="chip"><span class="dot" style="background:var(--red)"></span>pair-left</span>
+      <span class="chip"><span class="dot" style="background:var(--orange)"></span>pair-right</span>
+      <span class="chip"><span class="dot" style="background:var(--green)"></span>merging</span>
+      <span class="chip"><span class="dot" style="background:var(--purple)"></span>cutting</span>
+    </div>
+  </div>
+
+  <!-- CENTER: Stage -->
+  <div class="panel" style="padding:0;">
+    <div class="stage">
+      <svg id="svg" viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet">
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </svg>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- RIGHT: Info -->
+  <div class="panel">
+    <h2>Narration</h2>
+    <div class="info" id="info">Insert some values to begin. The heap is a multiway tree; the root is always the minimum.</div>
+
+    <hr class="sep" />
+
+    <h2>About Pairing Heap</h2>
+    <div class="info" style="min-height:auto;">
+A <b>pairing heap</b> is a self-adjusting heap represented as a multiway tree.
+
+- <b>insert</b>: O(1) — meld a singleton with the root.
+- <b>find-min</b>: O(1) — the root.
+- <b>meld</b>: O(1) — the smaller root becomes parent of the larger.
+- <b>extract-min</b>: amortized O(log n) — two-pass merge over the root's children.
+- <b>decrease-key</b>: amortized o(log n) (open problem); cut the subtree and meld it with the root.
+      </div>
+
+    <hr class="sep" />
+
+    <h2>Two-Pass Merge</h2>
+    <div class="info" style="min-height:auto;">
+<span class="k-red">Pass 1</span>: walk children left-to-right, pairing consecutive ones — meld(c0,c1), meld(c2,c3), ...
+
+<span class="k-green">Pass 2</span>: walk the resulting list right-to-left, melding each into an accumulator.
+
+The final accumulator becomes the new root.
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =========================================================
+ * Pairing Heap — model
+ * Each node: { id, key, child (leftmost), sibling (right), parent }
+ * ========================================================= */
+
+let UID = 0;
+function mkNode(key) {
+  return { id: ++UID, key, child: null, sibling: null, parent: null };
+}
+
+let root = null;
+let size = 0;
+
+let selectedId = null;
+
+const NEG_INF = -Infinity;
+
+/* ---------- Core ops (logical only; animation orchestrates) ---------- */
+
+function linkAsChild(parent, c) {
+  // prepend c as leftmost child of parent
+  c.parent = parent;
+  c.sibling = parent.child;
+  parent.child = c;
+}
+
+function meld(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.key <= b.key) {
+    linkAsChild(a, b);
+    return a;
+  } else {
+    linkAsChild(b, a);
+    return b;
+  }
+}
+
+function collectChildren(node) {
+  const out = [];
+  let c = node.child;
+  while (c) {
+    const nx = c.sibling;
+    c.sibling = null;
+    c.parent = null;
+    out.push(c);
+    c = nx;
+  }
+  node.child = null;
+  return out;
+}
+
+function findById(node, id) {
+  if (!node) return null;
+  if (node.id === id) return node;
+  // siblings/children
+  let c = node.child;
+  while (c) {
+    const f = findById(c, id);
+    if (f) return f;
+    c = c.sibling;
+  }
+  return null;
+}
+
+/* Detach `node` from its parent's child list (does NOT touch its subtree). */
+function detachFromParent(node) {
+  const p = node.parent;
+  if (!p) return;
+  if (p.child === node) {
+    p.child = node.sibling;
+  } else {
+    let s = p.child;
+    while (s && s.sibling !== node) s = s.sibling;
+    if (s) s.sibling = node.sibling;
+  }
+  node.sibling = null;
+  node.parent = null;
+}
+
+/* =========================================================
+ * Animation infrastructure
+ * ========================================================= */
+
+let busy = false;
+let speed = 700;
+let paused = false;
+let stepResolve = null;
+let stepMode = false;
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+async function tick(ms) {
+  if (stepMode) {
+    await new Promise(res => { stepResolve = res; });
+    return;
+  }
+  // honor pause
+  if (paused) {
+    await new Promise(res => { stepResolve = res; });
+  }
+  await sleep(ms ?? speed);
+}
+
+const speedEl = document.getElementById('speed');
+const speedValEl = document.getElementById('speedVal');
+speedEl.addEventListener('input', () => {
+  speed = parseInt(speedEl.value, 10);
+  speedValEl.textContent = speed + 'ms';
+});
+
+document.getElementById('btnStep').addEventListener('click', () => {
+  stepMode = true;
+  if (stepResolve) {
+    const r = stepResolve;
+    stepResolve = null;
+    r();
+  }
+});
+
+const btnPlay = document.getElementById('btnPlay');
+btnPlay.addEventListener('click', () => {
+  stepMode = false;
+  paused = !paused;
+  btnPlay.textContent = paused ? 'Resume' : 'Play';
+  if (!paused && stepResolve) {
+    const r = stepResolve;
+    stepResolve = null;
+    r();
+  }
+});
+
+/* =========================================================
+ * Logging + narration
+ * ========================================================= */
+
+const logEl = document.getElementById('log');
+function log(msg, cls) {
+  const e = document.createElement('div');
+  e.className = 'entry' + (cls ? ' ' + cls : '');
+  e.innerHTML = msg;
+  logEl.appendChild(e);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+const infoEl = document.getElementById('info');
+function say(html) {
+  infoEl.innerHTML = html;
+}
+
+/* =========================================================
+ * Layout (multiway tree)
+ * ========================================================= */
+
+const SVG_W = 900;
+const SVG_H = 460;
+const NODE_R = 18;
+const LEVEL_H = 70;
+
+function computeLayout() {
+  // assign positions to every node via a tidy layout for multiway trees.
+  if (!root) return new Map();
+
+  // 1) compute subtree widths bottom-up
+  const widthMap = new Map();
+  function subtreeWidth(n) {
+    if (!n.child) { widthMap.set(n.id, 1); return 1; }
+    let total = 0;
+    let c = n.child;
+    while (c) { total += subtreeWidth(c); c = c.sibling; }
+    total = Math.max(total, 1);
+    widthMap.set(n.id, total);
+    return total;
+  }
+  subtreeWidth(root);
+
+  const pos = new Map();
+  const totalWidth = widthMap.get(root.id);
+  const unit = Math.min(80, (SVG_W - 80) / Math.max(totalWidth, 1));
+
+  function place(n, leftX, depth) {
+    const w = widthMap.get(n.id);
+    const cx = leftX + (w * unit) / 2;
+    const cy = 50 + depth * LEVEL_H;
+    pos.set(n.id, { x: cx, y: cy });
+    let cur = leftX;
+    let c = n.child;
+    while (c) {
+      const cw = widthMap.get(c.id);
+      place(c, cur, depth + 1);
+      cur += cw * unit;
+      c = c.sibling;
+    }
+  }
+
+  const startX = (SVG_W - totalWidth * unit) / 2;
+  place(root, startX, 0);
+  return pos;
+}
+
+/* =========================================================
+ * Rendering
+ * ========================================================= */
+
+const nodesG = document.getElementById('nodes');
+const edgesG = document.getElementById('edges');
+
+// node id -> { gEl, circleEl, textEl, classes:Set }
+const view = new Map();
+// "parentId-childId" -> path el
+const edgeView = new Map();
+
+function clearStage() {
+  nodesG.innerHTML = '';
+  edgesG.innerHTML = '';
+  view.clear();
+  edgeView.clear();
+}
+
+function render() {
+  const pos = computeLayout();
+
+  // collect all node ids in current tree
+  const liveIds = new Set();
+  function walk(n) {
+    if (!n) return;
+    liveIds.add(n.id);
+    let c = n.child;
+    while (c) { walk(c); c = c.sibling; }
+  }
+  walk(root);
+
+  // remove dead nodes
+  for (const [id, v] of [...view.entries()]) {
+    if (!liveIds.has(id)) {
+      v.gEl.remove();
+      view.delete(id);
+    }
+  }
+  for (const [k, el] of [...edgeView.entries()]) {
+    const [p, c] = k.split('-').map(Number);
+    if (!liveIds.has(p) || !liveIds.has(c)) {
+      el.remove();
+      edgeView.delete(k);
+    }
+  }
+
+  // edges: parent -> child
+  function drawEdges(n) {
+    if (!n) return;
+    let c = n.child;
+    while (c) {
+      const key = n.id + '-' + c.id;
+      const p1 = pos.get(n.id);
+      const p2 = pos.get(c.id);
+      if (p1 && p2) {
+        let el = edgeView.get(key);
+        if (!el) {
+          el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          el.setAttribute('class', 'edge');
+          edgesG.appendChild(el);
+          edgeView.set(key, el);
+        }
+        const midY = (p1.y + p2.y) / 2;
+        el.setAttribute('d', `M${p1.x},${p1.y} C${p1.x},${midY} ${p2.x},${midY} ${p2.x},${p2.y}`);
+      }
+      drawEdges(c);
+      c = c.sibling;
+    }
+  }
+  drawEdges(root);
+
+  // nodes
+  function drawNodes(n, isRoot) {
+    if (!n) return;
+    const p = pos.get(n.id);
+    let v = view.get(n.id);
+    if (!v) {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('class', 'node');
+      g.dataset.id = n.id;
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('r', NODE_R);
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      g.appendChild(c);
+      g.appendChild(t);
+      nodesG.appendChild(g);
+      g.addEventListener('click', () => onNodeClick(n.id));
+      v = { gEl: g, circleEl: c, textEl: t, classes: new Set() };
+      view.set(n.id, v);
+    }
+    v.gEl.setAttribute('transform', `translate(${p.x},${p.y})`);
+    v.textEl.textContent = n.key === NEG_INF ? '-∞' : n.key;
+
+    // update class
+    const cls = ['node'];
+    if (isRoot) cls.push('root');
+    for (const k of v.classes) cls.push(k);
+    if (selectedId === n.id) cls.push('selected');
+    v.gEl.setAttribute('class', cls.join(' '));
+
+    let c = n.child;
+    while (c) { drawNodes(c, false); c = c.sibling; }
+  }
+  drawNodes(root, true);
+
+  updateStats();
+}
+
+function setHL(nodeId, cls, on) {
+  const v = view.get(nodeId);
+  if (!v) return;
+  if (on) v.classes.add(cls); else v.classes.delete(cls);
+  // re-apply class string
+  const arr = ['node'];
+  if (root && nodeId === root.id) arr.push('root');
+  for (const k of v.classes) arr.push(k);
+  if (selectedId === nodeId) arr.push('selected');
+  v.gEl.setAttribute('class', arr.join(' '));
+}
+
+function setEdgeHL(pId, cId, cls, on) {
+  const el = edgeView.get(pId + '-' + cId);
+  if (!el) return;
+  if (on) el.classList.add(cls); else el.classList.remove(cls);
+}
+
+function clearAllHL() {
+  for (const [id, v] of view.entries()) {
+    v.classes.clear();
+    const arr = ['node'];
+    if (root && id === root.id) arr.push('root');
+    if (selectedId === id) arr.push('selected');
+    v.gEl.setAttribute('class', arr.join(' '));
+  }
+  for (const el of edgeView.values()) {
+    el.classList.remove('merging');
+    el.classList.remove('cutting');
+  }
+}
+
+function updateStats() {
+  document.getElementById('statSize').textContent = size;
+  document.getElementById('statMin').textContent = root ? (root.key === NEG_INF ? '-∞' : root.key) : '—';
+}
+
+/* =========================================================
+ * Node selection
+ * ========================================================= */
+
+function onNodeClick(id) {
+  if (busy) return;
+  selectedId = (selectedId === id) ? null : id;
+  render();
+  if (selectedId) {
+    const n = findById(root, selectedId);
+    say(`<b>Selected</b> node with key <b>${n.key}</b>. Use <span class="k-purple">Decrease Key</span> or <span class="k-red">Delete</span>.`);
+  } else {
+    say(`No node selected.`);
+  }
+}
+
+/* =========================================================
+ * Animated operations
+ * ========================================================= */
+
+async function animatedMeld(a, b, narrate) {
+  // both already in the SVG (or one is)
+  if (!a) return b;
+  if (!b) return a;
+  // highlight as merging
+  setHL(a.id, 'merging', true);
+  setHL(b.id, 'merging', true);
+  if (narrate) say(narrate);
+  await tick();
+
+  let parent, child;
+  if (a.key <= b.key) { parent = a; child = b; }
+  else                { parent = b; child = a; }
+
+  log(`meld(<b>${a.key}</b>, <b>${b.key}</b>) → parent <b>${parent.key}</b>`, 'ok');
+  linkAsChild(parent, child);
+  render();
+  // mark new edge
+  setEdgeHL(parent.id, child.id, 'merging', true);
+  await tick();
+  setHL(a.id, 'merging', false);
+  setHL(b.id, 'merging', false);
+  setEdgeHL(parent.id, child.id, 'merging', false);
+  return parent;
+}
+
+async function opInsert(k) {
+  if (busy) return;
+  busy = true;
+  try {
+    const n = mkNode(k);
+    size++;
+    log(`<b>insert(${k})</b>`, 'op');
+    if (!root) {
+      root = n;
+      render();
+      say(`Heap was empty — <b>${k}</b> becomes the root.`);
+      await tick();
+    } else {
+      // show floating-in node briefly: insert into structure first, render, then animate meld
+      // Approach: temporarily render n as a lone tree by placing it as a phantom sibling.
+      // Simpler: add as a sibling forest tracked by melding root with n right away, animated.
+      // To make it visible BEFORE meld, render with n as a separate tiny tree on the side.
+      // We'll cheat: place n above root for one frame using a temp child link from a fake root.
+      // To stay simple, just animate meld of root + n directly.
+      say(`Inserting <b>${k}</b>: meld a singleton with the current root.`);
+      // render n as orphan: temporarily place into SVG via a virtual position
+      // Quick trick: render then animate. We render n by attaching it as last child of root first
+      // — visually wrong. Instead, just call animatedMeld; it will render afterward.
+      root = await animatedMeld(root, n, `Insert <b>${k}</b>: meld with root.`);
+    }
+    render();
+  } finally { busy = false; }
+}
+
+async function twoPassMerge(children) {
+  // PASS 1: pair left-to-right
+  say(`<span class="k-red">Pass 1</span>: pair the ${children.length} children left-to-right.`);
+  await tick();
+
+  const pairsResult = [];
+  let i = 0;
+  while (i < children.length) {
+    const a = children[i];
+    const b = (i + 1 < children.length) ? children[i + 1] : null;
+    if (b) {
+      setHL(a.id, 'pair-left', true);
+      setHL(b.id, 'pair-right', true);
+      log(`pass 1: pair (<b>${a.key}</b>, <b>${b.key}</b>)`, 'op');
+      await tick();
+      const merged = await animatedMeld(a, b,
+        `<span class="k-red">Pair</span> (<b>${a.key}</b>, <b>${b.key}</b>) → meld.`);
+      setHL(a.id, 'pair-left', false);
+      setHL(b.id, 'pair-right', false);
+      pairsResult.push(merged);
+      i += 2;
+    } else {
+      log(`pass 1: <b>${a.key}</b> is alone, carry forward`, 'warn');
+      setHL(a.id, 'pair-left', true);
+      say(`Odd one out: <b>${a.key}</b> has no pair partner; carry it forward.`);
+      await tick();
+      setHL(a.id, 'pair-left', false);
+      pairsResult.push(a);
+      i += 1;
+    }
+  }
+
+  // PASS 2: right-to-left meld
+  say(`<span class="k-green">Pass 2</span>: meld right-to-left into a single accumulator.`);
+  await tick();
+  let acc = pairsResult[pairsResult.length - 1];
+  for (let j = pairsResult.length - 2; j >= 0; j--) {
+    log(`pass 2: meld(<b>${pairsResult[j].key}</b>, <b>${acc.key}</b>)`, 'op');
+    acc = await animatedMeld(pairsResult[j], acc,
+      `<span class="k-green">Pass 2</span>: meld(<b>${pairsResult[j].key}</b>, <b>${acc.key}</b>).`);
+  }
+  return acc;
+}
+
+async function opExtractMin() {
+  if (busy) return;
+  if (!root) { log('extract-min: heap is empty', 'err'); return; }
+  busy = true;
+  try {
+    const minKey = root.key;
+    log(`<b>extract-min()</b> → returns <b>${minKey}</b>`, 'op');
+    say(`Extract the root <b>${minKey === NEG_INF ? '-∞' : minKey}</b>. Two-pass merge its children to form the new root.`);
+    setHL(root.id, 'cutting', true);
+    await tick();
+
+    const children = collectChildren(root);
+    // remove old root visually
+    const oldId = root.id;
+    root = null;
+    render(); // children become forest? Actually multiple roots — render only handles single root.
+    // We need to render each child as a stand-alone tree side by side.
+    // Strategy: synthesise a temporary visual root that has these children, just for layout.
+
+    if (children.length === 0) {
+      size = Math.max(0, size - 1);
+      say(`Old root had no children. Heap is now empty.`);
+      render();
+      return;
+    }
+
+    // build a phantom root for layout purposes
+    const phantom = { id: -1, key: '·', child: null, sibling: null, parent: null };
+    // link children as phantom's children, preserving order
+    for (let k = children.length - 1; k >= 0; k--) {
+      const c = children[k];
+      c.parent = phantom;
+      c.sibling = phantom.child;
+      phantom.child = c;
+    }
+    root = phantom;
+    render();
+    // hide phantom node circle by giving it 0 radius
+    const pv = view.get(-1);
+    if (pv) {
+      pv.circleEl.setAttribute('r', 0);
+      pv.textEl.textContent = '';
+    }
+    await tick();
+
+    // now run two-pass merge
+    const newRoot = await twoPassMerge(children);
+
+    // detach phantom
+    root = newRoot;
+    root.parent = null;
+    root.sibling = null;
+    size = Math.max(0, size - 1);
+    // remove phantom from view
+    const pv2 = view.get(-1);
+    if (pv2) { pv2.gEl.remove(); view.delete(-1); }
+    for (const [k, el] of [...edgeView.entries()]) {
+      if (k.startsWith('-1-')) { el.remove(); edgeView.delete(k); }
+    }
+    render();
+    say(`Extracted <b>${minKey === NEG_INF ? '-∞' : minKey}</b>. New root: <b>${root.key}</b>.`);
+    log(`new root → <b>${root.key}</b>`, 'ok');
+  } finally { busy = false; }
+}
+
+async function opDecreaseKey(id, newKey) {
+  if (busy) return;
+  const n = findById(root, id);
+  if (!n) { log('decrease-key: node not found', 'err'); return; }
+  if (newKey === NEG_INF) {
+    // allowed only via delete path
+  } else if (newKey > n.key) {
+    log(`decrease-key: new key ${newKey} > current ${n.key} (illegal)`, 'err');
+    return;
+  }
+
+  busy = true;
+  try {
+    log(`<b>decrease-key</b>(${n.key} → ${newKey === NEG_INF ? '-∞' : newKey})`, 'op');
+    n.key = newKey;
+    if (n === root) {
+      say(`Decrease key on root — nothing to cut; just update the value.`);
+      render();
+      await tick();
+      return;
+    }
+    // cut subtree
+    setHL(n.id, 'cutting', true);
+    if (n.parent) setEdgeHL(n.parent.id, n.id, 'cutting', true);
+    say(`<span class="k-purple">Cut</span> the subtree rooted at <b>${newKey === NEG_INF ? '-∞' : newKey}</b> from its parent, then meld it with the heap root.`);
+    await tick();
+
+    detachFromParent(n);
+    render();
+    setHL(n.id, 'cutting', false);
+    await tick();
+
+    root = await animatedMeld(root, n,
+      `Meld old root <b>${root.key}</b> with cut subtree root <b>${n.key === NEG_INF ? '-∞' : n.key}</b>.`);
+    render();
+    say(`Decrease-key done. Root is now <b>${root.key === NEG_INF ? '-∞' : root.key}</b>.`);
+  } finally { busy = false; }
+}
+
+async function opDelete(id) {
+  if (busy) return;
+  const n = findById(root, id);
+  if (!n) return;
+  log(`<b>delete</b>(${n.key}) = decrease to -∞ then extract-min`, 'op');
+  // we run two sub-ops back-to-back; release busy briefly between
+  await opDecreaseKey(id, NEG_INF);
+  selectedId = null;
+  await opExtractMin();
+}
+
+async function opMeldRandom() {
+  if (busy) return;
+  busy = true;
+  try {
+    // build a small random heap
+    const vals = [];
+    const count = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < count; i++) vals.push(Math.floor(Math.random() * 90) + 10);
+    log(`<b>meld</b> with random heap: [${vals.join(', ')}]`, 'op');
+    say(`Build a small random heap from [${vals.join(', ')}] then meld with current root.`);
+
+    let other = null;
+    for (const v of vals) {
+      const nn = mkNode(v);
+      other = other ? meld(other, nn) : nn;
+    }
+    size += vals.length;
+
+    if (!root) {
+      root = other;
+      render();
+      await tick();
+      return;
+    }
+
+    // visualise both: synth phantom with two children (root, other)
+    const phantom = { id: -1, key: '·', child: null, sibling: null, parent: null };
+    other.parent = phantom; root.parent = phantom;
+    root.sibling = null; other.sibling = null;
+    phantom.child = root;
+    root.sibling = other;
+    const oldRoot = root;
+    root = phantom;
+    render();
+    const pv = view.get(-1);
+    if (pv) { pv.circleEl.setAttribute('r', 0); pv.textEl.textContent = ''; }
+    await tick();
+
+    const newRoot = await animatedMeld(oldRoot, other,
+      `Meld two heap roots: <b>${oldRoot.key}</b> and <b>${other.key}</b>.`);
+    root = newRoot;
+    root.parent = null;
+    root.sibling = null;
+
+    const pv2 = view.get(-1);
+    if (pv2) { pv2.gEl.remove(); view.delete(-1); }
+    for (const [k, el] of [...edgeView.entries()]) {
+      if (k.startsWith('-1-')) { el.remove(); edgeView.delete(k); }
+    }
+    render();
+    say(`Meld complete. New root is <b>${root.key}</b>.`);
+  } finally { busy = false; }
+}
+
+function reset() {
+  if (busy) return;
+  root = null;
+  size = 0;
+  selectedId = null;
+  UID = 0;
+  clearStage();
+  updateStats();
+  logEl.innerHTML = '';
+  say('Heap reset. Insert values to start.');
+  log('reset', 'warn');
+}
+
+async function randomBatch() {
+  if (busy) return;
+  const vs = [];
+  for (let i = 0; i < 7; i++) vs.push(Math.floor(Math.random() * 90) + 10);
+  log(`<b>batch insert</b> [${vs.join(', ')}]`, 'op');
+  for (const v of vs) {
+    await opInsert(v);
+  }
+}
+
+/* =========================================================
+ * Wire up UI
+ * ========================================================= */
+
+document.getElementById('btnInsert').addEventListener('click', async () => {
+  const inp = document.getElementById('insertVal');
+  const v = parseInt(inp.value, 10);
+  if (Number.isNaN(v)) {
+    log('insert: enter a number', 'err');
+    return;
+  }
+  inp.value = '';
+  await opInsert(v);
+});
+
+document.getElementById('insertVal').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btnInsert').click();
+});
+
+document.getElementById('btnExtract').addEventListener('click', () => opExtractMin());
+
+document.getElementById('btnDecrease').addEventListener('click', async () => {
+  if (selectedId == null) { log('decrease: select a node first', 'err'); return; }
+  const inp = document.getElementById('decVal');
+  const v = parseInt(inp.value, 10);
+  if (Number.isNaN(v)) { log('decrease: enter a new key', 'err'); return; }
+  inp.value = '';
+  await opDecreaseKey(selectedId, v);
+});
+
+document.getElementById('btnDelete').addEventListener('click', async () => {
+  if (selectedId == null) { log('delete: select a node first', 'err'); return; }
+  await opDelete(selectedId);
+});
+
+document.getElementById('btnMeld').addEventListener('click', () => opMeldRandom());
+document.getElementById('btnRandom').addEventListener('click', () => randomBatch());
+document.getElementById('btnReset').addEventListener('click', () => reset());
+
+/* seed a tiny demo so the page isn't empty */
+(async function seed() {
+  await opInsert(8);
+  await opInsert(3);
+  await opInsert(12);
+  await opInsert(6);
+  await opInsert(1);
+  say('Demo heap loaded. Try <b>Extract Min</b> to see the two-pass merge.');
+})();
+
+</script>
+</body>
+</html>
