@@ -26,16 +26,16 @@ Every language ships its own build tool — and every team eventually outgrows i
 
 | # | Topic | Focus |
 |---|---|---|
-| 01 | Build Fundamentals | Compile / assemble / link, static vs dynamic linking, the C ABI |
-| 02 | Dependency Graphs | DAGs, topological order, incremental rebuilds, the "diamond problem" |
-| 03 | Make & Descendants | `make`, `ninja`, `meson`, `cmake` — the lineage and why they exist |
-| 04 | Per-Language Tools | `go build` / `go mod`, `cargo` (Rust), `gradle` / `maven` (Java), `pip` / `poetry` / `uv` (Python), `npm` / `pnpm` / `bun` (JS/TS) |
-| 05 | Polyglot / Hermetic Builds | `bazel`, `buck2`, `pants` — when one tool must build everything reproducibly |
-| 06 | Dependency Management | Semantic versioning, lock files, MVS (Minimum Version Selection), vendoring |
-| 07 | Build Caching | Local caches, remote caches, content-addressable storage, sccache, build farms |
-| 08 | Cross-Compilation | Building for a target that isn't your host (ARM on x86, Windows on Linux) |
-| 09 | Reproducible Builds | Bit-identical outputs, timestamps, paths, SOURCE_DATE_EPOCH |
-| 10 | Build Performance | Parallelism, fan-out, profiling slow builds, the cost of incremental |
+| [01](01-build-fundamentals/) | Build Fundamentals | Compile / assemble / link, static vs dynamic linking, the C ABI |
+| [02](02-dependency-graphs/) | Dependency Graphs | DAGs, topological order, incremental rebuilds, the "diamond problem" |
+| [03](03-make-and-descendants/) | Make & Descendants | `make`, `ninja`, `meson`, `cmake` — the lineage and why they exist |
+| [04](04-per-language-tools/) | Per-Language Tools | `go build` / `go mod`, `cargo` (Rust), `gradle` / `maven` (Java), `pip` / `poetry` / `uv` (Python), `npm` / `pnpm` / `bun` (JS/TS) |
+| [05](05-polyglot-hermetic-builds/) | Polyglot / Hermetic Builds | `bazel`, `buck2`, `pants` — when one tool must build everything reproducibly |
+| [06](06-dependency-management/) | Dependency Management | Semantic versioning, lock files, MVS (Minimum Version Selection), vendoring |
+| [07](07-build-caching/) | Build Caching | Local caches, remote caches, content-addressable storage, sccache, build farms |
+| [08](08-cross-compilation/) | Cross-Compilation | Building for a target that isn't your host (ARM on x86, Windows on Linux) |
+| [09](09-reproducible-builds/) | Reproducible Builds | Bit-identical outputs, timestamps, paths, SOURCE_DATE_EPOCH |
+| [10](10-build-performance/) | Build Performance | Parallelism, fan-out, profiling slow builds, the cost of incremental |
 
 ---
 
