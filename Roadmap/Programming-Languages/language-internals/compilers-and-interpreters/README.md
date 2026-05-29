@@ -34,18 +34,18 @@ This roadmap targets that working-engineer slice — the parts of compilers that
 
 | # | Topic | Focus |
 |---|---|---|
-| 01 | The Big Picture | Source → tokens → AST → IR → target; the phases and what each does |
-| 02 | Lexers / Tokenizers | Regular languages, state machines, hand-written vs generated lexers |
-| 03 | Parsers | Grammar classes (LL, LR, PEG), recursive descent, Pratt parsing, error recovery |
-| 04 | Abstract Syntax Trees | Designing an AST, visitor pattern, immutable trees, source positions |
-| 05 | Semantic Analysis | Name resolution, scopes, type checking, constant folding |
-| 06 | Intermediate Representations | Three-address code, SSA form, LLVM IR, JVM bytecode |
-| 07 | Optimization | Constant folding, inlining, DCE, escape analysis, loop optimizations |
-| 08 | Code Generation | Register allocation, instruction selection, target ABIs |
-| 09 | Interpreters | Tree-walking, bytecode VMs, JIT compilers, AOT vs JIT trade-offs |
-| 10 | Runtimes | GC, threads, FFI, the line between language and runtime |
-| 11 | DSLs in Practice | External vs internal DSLs, when to design one, when to just use a library |
-| 12 | Reading Codegen | Inspecting Go's SSA dumps, JVM bytecode (`javap`), Rust's MIR, LLVM IR |
+| [01](01-the-big-picture/) | The Big Picture | Source → tokens → AST → IR → target; the phases and what each does |
+| [02](02-lexers-and-tokenizers/) | Lexers / Tokenizers | Regular languages, state machines, hand-written vs generated lexers |
+| [03](03-parsers/) | Parsers | Grammar classes (LL, LR, PEG), recursive descent, Pratt parsing, error recovery |
+| [04](04-abstract-syntax-trees/) | Abstract Syntax Trees | Designing an AST, visitor pattern, immutable trees, source positions |
+| [05](05-semantic-analysis/) | Semantic Analysis | Name resolution, scopes, type checking, constant folding |
+| [06](06-intermediate-representations/) | Intermediate Representations | Three-address code, SSA form, LLVM IR, JVM bytecode |
+| [07](07-optimization/) | Optimization | Constant folding, inlining, DCE, escape analysis, loop optimizations |
+| [08](08-code-generation/) | Code Generation | Register allocation, instruction selection, target ABIs |
+| [09](09-interpreters/) | Interpreters | Tree-walking, bytecode VMs, JIT compilers, AOT vs JIT trade-offs |
+| [10](10-runtimes/) | Runtimes | GC, threads, FFI, the line between language and runtime |
+| [11](11-dsls-in-practice/) | DSLs in Practice | External vs internal DSLs, when to design one, when to just use a library |
+| [12](12-reading-codegen/) | Reading Codegen | Inspecting Go's SSA dumps, JVM bytecode (`javap`), Rust's MIR, LLVM IR |
 
 ---
 
@@ -57,7 +57,7 @@ The roadmap is meta-linguistic: examples in **Go** (writing a small interpreter,
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+⏳ **Structure defined; 12 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
 
 ---
 

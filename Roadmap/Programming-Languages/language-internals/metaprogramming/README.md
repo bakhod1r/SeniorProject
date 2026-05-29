@@ -33,16 +33,16 @@ Understanding the spectrum makes you fluent across stacks and lets you judge "is
 
 | # | Topic | Focus |
 |---|---|---|
-| 01 | What Metaprogramming Is (and Isn't) | Reflection, codegen, macros, eval; runtime vs compile-time |
-| 02 | Reflection | Inspecting types and values at runtime — Java `java.lang.reflect`, Go `reflect`, Python `inspect` |
-| 03 | Annotations & Decorators | Java annotations + APT, Python decorators, attribute-driven behavior |
-| 04 | Build-Time Code Generation | `go generate`, protoc, OpenAPI codegen, source-level templating |
-| 05 | Macros | Lisp's homoiconicity, Rust `macro_rules!`, Rust procedural macros (`syn` / `quote`), C preprocessor (briefly) |
-| 06 | Metaclasses & Class-Level Magic | Python metaclasses, Ruby `method_missing`, Smalltalk influences |
-| 07 | Dynamic Dispatch & Proxies | JDK proxies, byte-buddy / ASM, Python `__getattr__`, "duck typing" mechanisms |
-| 08 | DSLs via Metaprogramming | Building internal DSLs with operator overloading, builder patterns, or macros |
-| 09 | When NOT to Metaprogram | Cognitive cost, debuggability, IDE support, "the framework knows but I don't" |
-| 10 | Compile-Time vs Runtime Trade-offs | Startup time, binary size, observability, refactoring safety |
+| [01](01-what-metaprogramming-is/) | What Metaprogramming Is (and Isn't) | Reflection, codegen, macros, eval; runtime vs compile-time |
+| [02](02-reflection/) | Reflection | Inspecting types and values at runtime — Java `java.lang.reflect`, Go `reflect`, Python `inspect` |
+| [03](03-annotations-and-decorators/) | Annotations & Decorators | Java annotations + APT, Python decorators, attribute-driven behavior |
+| [04](04-build-time-code-generation/) | Build-Time Code Generation | `go generate`, protoc, OpenAPI codegen, source-level templating |
+| [05](05-macros/) | Macros | Lisp's homoiconicity, Rust `macro_rules!`, Rust procedural macros (`syn` / `quote`), C preprocessor (briefly) |
+| [06](06-metaclasses/) | Metaclasses & Class-Level Magic | Python metaclasses, Ruby `method_missing`, Smalltalk influences |
+| [07](07-dynamic-dispatch-and-proxies/) | Dynamic Dispatch & Proxies | JDK proxies, byte-buddy / ASM, Python `__getattr__`, "duck typing" mechanisms |
+| [08](08-dsls-via-metaprogramming/) | DSLs via Metaprogramming | Building internal DSLs with operator overloading, builder patterns, or macros |
+| [09](09-when-not-to-metaprogram/) | When NOT to Metaprogram | Cognitive cost, debuggability, IDE support, "the framework knows but I don't" |
+| [10](10-compile-time-vs-runtime-tradeoffs/) | Compile-Time vs Runtime Trade-offs | Startup time, binary size, observability, refactoring safety |
 
 ---
 
@@ -54,7 +54,7 @@ The whole roadmap is a comparison: **Rust** (compile-time, type-checked macros),
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+⏳ **Structure defined; 10 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
 
 ---
 

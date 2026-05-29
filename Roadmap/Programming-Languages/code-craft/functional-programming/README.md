@@ -26,18 +26,18 @@ You don't need to write Haskell to benefit from FP — `map` / `filter` / `reduc
 
 | # | Topic | Focus |
 |---|---|---|
-| 01 | First-Class & Higher-Order Functions | Functions as values, closures, callbacks, partial application |
-| 02 | Pure Functions & Referential Transparency | Determinism, no side effects, equational reasoning |
-| 03 | Immutability | Persistent data structures, structural sharing, copy-on-write |
-| 04 | Map / Filter / Reduce | The core trio, fusion, lazy vs eager |
-| 05 | Composition | `f ∘ g`, pipelines, point-free style, why composition beats inheritance |
-| 06 | Algebraic Data Types | Sum types (`enum`, `Either`, `Option`), product types, pattern matching |
-| 07 | Currying & Partial Application | `f(a)(b)(c)` vs `f(a,b,c)`, why curry, where it pays off |
-| 08 | Recursion & Tail Calls | Recursion as the FP loop, TCO, accumulator pattern |
-| 09 | Monads — Plain English | Why `Promise`, `Optional`, `Result`, and `IO` are all instances of one idea |
-| 10 | Effect Tracking | Pure core / impure shell, `IO` monad, the functional core / imperative shell pattern |
-| 11 | Functional vs OO in Practice | When each paradigm helps, hybrid styles (Scala, Kotlin, modern Java/C#) |
-| 12 | Laziness & Streams | Lazy evaluation, infinite sequences, generators, performance trade-offs |
+| [01](01-first-class-and-higher-order-functions/) | First-Class & Higher-Order Functions | Functions as values, closures, callbacks, partial application |
+| [02](02-pure-functions-and-referential-transparency/) | Pure Functions & Referential Transparency | Determinism, no side effects, equational reasoning |
+| [03](03-immutability/) | Immutability | Persistent data structures, structural sharing, copy-on-write |
+| [04](04-map-filter-reduce/) | Map / Filter / Reduce | The core trio, fusion, lazy vs eager |
+| [05](05-composition/) | Composition | `f ∘ g`, pipelines, point-free style, why composition beats inheritance |
+| [06](06-algebraic-data-types/) | Algebraic Data Types | Sum types (`enum`, `Either`, `Option`), product types, pattern matching |
+| [07](07-currying-and-partial-application/) | Currying & Partial Application | `f(a)(b)(c)` vs `f(a,b,c)`, why curry, where it pays off |
+| [08](08-recursion-and-tail-calls/) | Recursion & Tail Calls | Recursion as the FP loop, TCO, accumulator pattern |
+| [09](09-monads-plain-english/) | Monads — Plain English | Why `Promise`, `Optional`, `Result`, and `IO` are all instances of one idea |
+| [10](10-effect-tracking/) | Effect Tracking | Pure core / impure shell, `IO` monad, the functional core / imperative shell pattern |
+| [11](11-functional-vs-oo-in-practice/) | Functional vs OO in Practice | When each paradigm helps, hybrid styles (Scala, Kotlin, modern Java/C#) |
+| [12](12-laziness-and-streams/) | Laziness & Streams | Lazy evaluation, infinite sequences, generators, performance trade-offs |
 
 ---
 
@@ -49,7 +49,7 @@ Examples in **Go** (limited FP, but `slices` / `maps` packages help), **Java** (
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+⏳ **Structure defined; 12 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
 
 ---
 

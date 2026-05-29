@@ -26,18 +26,18 @@ Every senior engineer eventually hits the wall of "I know how to use generics in
 
 | # | Topic | Focus |
 |---|---|---|
-| 01 | What Is a Type? | Sets of values, tags vs proofs, the Curry–Howard correspondence (briefly) |
-| 02 | Static vs Dynamic | What each style buys you, gradual typing (mypy, TypeScript), hybrid runtimes |
-| 03 | Nominal vs Structural | Java/Rust (nominal) vs Go/TypeScript (structural), pros and cons of each |
-| 04 | Sum, Product, and Unit Types | Records, tuples, tagged unions, why most languages got this half-wrong |
-| 05 | Generics & Parametric Polymorphism | Type parameters, monomorphization vs erasure, the cost models |
-| 06 | Variance | Covariance, contravariance, invariance — why `List<Dog>` isn't a `List<Animal>` |
-| 07 | Bounded Polymorphism | Constraints (`T: Ord`), Go's `comparable`, Rust traits, Java bounded wildcards |
-| 08 | Subtyping & Liskov | When inheritance is type-theoretically sound, and when it isn't |
-| 09 | Higher-Kinded Types | What Scala/Haskell have and Go/Java don't, and why it matters |
-| 10 | Dependent & Refinement Types | A taste of TypeScript template literal types, Idris, F* — types that depend on values |
-| 11 | Type Inference | Hindley–Milner, Go's limited inference, when inference helps and when it hurts |
-| 12 | Practical Patterns | "Parse, don't validate," newtype/wrapper types, phantom types, the typestate pattern |
+| [01](01-what-is-a-type/) | What Is a Type? | Sets of values, tags vs proofs, the Curry–Howard correspondence (briefly) |
+| [02](02-static-vs-dynamic/) | Static vs Dynamic | What each style buys you, gradual typing (mypy, TypeScript), hybrid runtimes |
+| [03](03-nominal-vs-structural/) | Nominal vs Structural | Java/Rust (nominal) vs Go/TypeScript (structural), pros and cons of each |
+| [04](04-sum-product-unit-types/) | Sum, Product, and Unit Types | Records, tuples, tagged unions, why most languages got this half-wrong |
+| [05](05-generics-and-parametric-polymorphism/) | Generics & Parametric Polymorphism | Type parameters, monomorphization vs erasure, the cost models |
+| [06](06-variance/) | Variance | Covariance, contravariance, invariance — why `List<Dog>` isn't a `List<Animal>` |
+| [07](07-bounded-polymorphism/) | Bounded Polymorphism | Constraints (`T: Ord`), Go's `comparable`, Rust traits, Java bounded wildcards |
+| [08](08-subtyping-and-liskov/) | Subtyping & Liskov | When inheritance is type-theoretically sound, and when it isn't |
+| [09](09-higher-kinded-types/) | Higher-Kinded Types | What Scala/Haskell have and Go/Java don't, and why it matters |
+| [10](10-dependent-and-refinement-types/) | Dependent & Refinement Types | A taste of TypeScript template literal types, Idris, F* — types that depend on values |
+| [11](11-type-inference/) | Type Inference | Hindley–Milner, Go's limited inference, when inference helps and when it hurts |
+| [12](12-practical-patterns/) | Practical Patterns | "Parse, don't validate," newtype/wrapper types, phantom types, the typestate pattern |
 
 ---
 
@@ -49,7 +49,7 @@ Cross-language comparison is the whole point. Examples in **Go**, **Java**, **Py
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+⏳ **Structure defined; 12 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
 
 ---
 
