@@ -6,7 +6,7 @@ This roadmap is about **the functional paradigm** — the body of ideas (purity,
 
 > Looking for the *Clean Code chapter* on functional style in everyday code? See [Clean Code → Async & Functional](../clean-code/12-async-and-functional/README.md) and [Clean Code → Pure Functions](../clean-code/15-pure-functions/README.md).
 >
-> Looking for *concurrency* patterns (which borrow heavily from FP)? See [Concurrency](../../language-internals/concurrency/README.md).
+> Looking for *concurrency* patterns (which borrow heavily from FP)? See [Concurrency](../../language-internals/concurrency-async-parallel/concurrency/README.md).
 
 ---
 
