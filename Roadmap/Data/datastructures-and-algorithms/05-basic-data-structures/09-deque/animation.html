@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deque (Double-Ended Queue) Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    color: var(--blue);
+    font-size: 1.6rem;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+  }
+  .badges {
+    display: flex; gap: 8px; justify-content: center; margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+  }
+  .badge.green { background: rgba(63, 185, 80, 0.15); color: var(--green); border: 1px solid var(--green); }
+  .badge.yellow { background: rgba(210, 153, 34, 0.15); color: var(--yellow); border: 1px solid var(--yellow); }
+  .badge.blue { background: rgba(88, 166, 255, 0.15); color: var(--blue); border: 1px solid var(--blue); }
+  .badge.orange { background: rgba(255, 166, 87, 0.15); color: var(--orange); border: 1px solid var(--orange); }
+
+  .container {
+    max-width: 1180px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 320px; gap: 16px;
+  }
+  .main { display: flex; flex-direction: column; gap: 14px; }
+  .side { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h3 {
+    color: var(--blue);
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+  }
+
+  /* Controls */
+  .ctrls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ctrls input[type="number"] {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 5px 8px; width: 70px; font-family: inherit;
+  }
+  .ctrls input[type="number"]:focus { outline: none; border-color: var(--blue); }
+  .ctrls label { color: var(--muted); font-size: 0.85rem; margin-right: 4px; }
+
+  button {
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font-family: inherit; font-size: 0.85rem;
+    transition: all 0.15s;
+  }
+  button:hover:not(:disabled) {
+    background: var(--bg); border-color: var(--blue); color: var(--blue);
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.green  { border-color: var(--green); color: var(--green); }
+  button.green:hover:not(:disabled)  { background: rgba(63, 185, 80, 0.1); }
+  button.red    { border-color: var(--red); color: var(--red); }
+  button.red:hover:not(:disabled)    { background: rgba(248, 81, 73, 0.1); }
+  button.orange { border-color: var(--orange); color: var(--orange); }
+  button.orange:hover:not(:disabled) { background: rgba(255, 166, 87, 0.1); }
+  button.yellow { border-color: var(--yellow); color: var(--yellow); }
+  button.yellow:hover:not(:disabled) { background: rgba(210, 153, 34, 0.1); }
+
+  /* Ring layout */
+  .ring-area {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 10px 0;
+  }
+  .ring {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+    margin: 10px 0;
+  }
+  .slot {
+    width: 64px; height: 64px;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 1.05rem; font-weight: 600;
+    position: relative;
+    transition: all 0.35s ease;
+  }
+  .slot .idx {
+    position: absolute; bottom: 2px; right: 4px;
+    font-size: 0.62rem; color: var(--muted); font-weight: 400;
+  }
+  .slot.empty { color: var(--border); }
+  .slot.empty::before { content: "·"; font-size: 1.6rem; }
+  .slot.occupied { color: var(--text); border-color: var(--blue); background: rgba(88, 166, 255, 0.06); }
+
+  .slot.head-marker {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.25);
+  }
+  .slot.tail-marker {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 2px rgba(255, 166, 87, 0.25);
+  }
+  .slot.head-and-tail-marker {
+    border-color: var(--purple);
+    box-shadow: 0 0 0 2px rgba(188, 140, 255, 0.25);
+  }
+
+  .slot.pushing { background: rgba(63, 185, 80, 0.25); border-color: var(--green); color: var(--green); animation: pulse 0.7s ease-in-out; }
+  .slot.popping { background: rgba(248, 81, 73, 0.25); border-color: var(--red); color: var(--red); animation: pulse 0.7s ease-in-out; }
+  .slot.peeking { background: rgba(210, 153, 34, 0.20); border-color: var(--yellow); color: var(--yellow); }
+
+  @keyframes pulse {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  /* Pointer arrows */
+  .pointer-bar {
+    width: 100%; max-width: 720px;
+    display: flex; justify-content: center; gap: 28px;
+    font-size: 0.78rem; color: var(--muted);
+  }
+  .pointer-bar .pt { display: flex; align-items: center; gap: 6px; }
+  .pointer-bar .pt-h { color: var(--blue); }
+  .pointer-bar .pt-t { color: var(--orange); }
+  .pointer-bar .pt-s { color: var(--green); }
+  .pointer-bar .pt-c { color: var(--purple); }
+  .pointer-bar .pt .val { font-weight: 700; }
+
+  /* Sequence view (logical order) */
+  .seq {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; min-height: 56px; overflow-x: auto; max-width: 100%;
+  }
+  .seq .label { color: var(--muted); font-size: 0.78rem; min-width: 50px; flex-shrink: 0; }
+  .seq .sep { color: var(--muted); }
+  .seq .item { padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-size: 0.88rem; }
+  .seq .item.front { border-color: var(--blue); color: var(--blue); }
+  .seq .item.back  { border-color: var(--orange); color: var(--orange); }
+  .seq .empty-msg { color: var(--muted); font-style: italic; font-size: 0.85rem; }
+
+  /* Info & log */
+  .info-line {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; min-height: 50px; font-size: 0.85rem; line-height: 1.5;
+  }
+  .info-line .op  { color: var(--blue); font-weight: 600; }
+  .info-line .cpx { color: var(--yellow); font-family: monospace; margin-left: 6px; }
+
+  .log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; max-height: 200px; overflow-y: auto;
+    font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.78rem; line-height: 1.55;
+  }
+  .log .entry { padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .log .entry:last-child { border-bottom: none; }
+  .log .e-push { color: var(--green); }
+  .log .e-pop  { color: var(--red); }
+  .log .e-peek { color: var(--yellow); }
+  .log .e-grow { color: var(--purple); }
+  .log .e-info { color: var(--muted); }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px; text-align: center;
+  }
+  .stat .v { font-size: 1.1rem; color: var(--blue); font-weight: 700; }
+  .stat .l { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  /* Big-O table */
+  .bigO { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .bigO th, .bigO td { padding: 5px 8px; border: 1px solid var(--border); text-align: center; }
+  .bigO th { background: var(--bg); color: var(--blue); }
+  .bigO .ok { color: var(--green); }
+  .bigO .bad { color: var(--yellow); }
+
+  /* Legend */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 12px; font-size: 0.78rem;
+  }
+  .legend .l { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .legend .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .legend .sw.head { background: rgba(88, 166, 255, 0.25); border-color: var(--blue); }
+  .legend .sw.tail { background: rgba(255, 166, 87, 0.25); border-color: var(--orange); }
+  .legend .sw.both { background: rgba(188, 140, 255, 0.25); border-color: var(--purple); }
+  .legend .sw.push { background: rgba(63, 185, 80, 0.25); border-color: var(--green); }
+  .legend .sw.pop  { background: rgba(248, 81, 73, 0.25); border-color: var(--red); }
+  .legend .sw.peek { background: rgba(210, 153, 34, 0.20); border-color: var(--yellow); }
+
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Deque (Double-Ended Queue)</h1>
+<p class="subtitle">Circular array implementation &mdash; push and pop at both ends in amortised O(1)</p>
+
+<div class="badges">
+  <span class="badge green">pushFront / pushBack &mdash; O(1) amortised</span>
+  <span class="badge red">popFront / popBack &mdash; O(1)</span>
+  <span class="badge yellow">peekFront / peekBack &mdash; O(1)</span>
+  <span class="badge blue">grow &mdash; O(n) on resize</span>
+</div>
+
+<div class="container">
+
+  <div class="main">
+
+    <!-- CONTROLS -->
+    <div class="panel">
+      <h3>Operations</h3>
+      <div class="ctrls">
+        <label>Value:</label>
+        <input type="number" id="valInput" value="42" min="0" max="99">
+        <button class="green" onclick="doPushFront()">pushFront</button>
+        <button class="green" onclick="doPushBack()">pushBack</button>
+        <button class="red" onclick="doPopFront()">popFront</button>
+        <button class="red" onclick="doPopBack()">popBack</button>
+        <button class="yellow" onclick="doPeekFront()">peekFront</button>
+        <button class="yellow" onclick="doPeekBack()">peekBack</button>
+        <button onclick="doClear()">Clear</button>
+        <button onclick="doRandom()">Random fill</button>
+      </div>
+    </div>
+
+    <!-- RING VISUAL -->
+    <div class="panel">
+      <h3>Circular Array (Ring Buffer)</h3>
+      <div class="ring-area">
+        <div class="ring" id="ring"></div>
+        <div class="pointer-bar">
+          <div class="pt"><span class="pt-h">&#9650; head</span> &rarr; index <span class="val" id="headIdx">0</span></div>
+          <div class="pt"><span class="pt-t">&#9650; tail</span> &rarr; index <span class="val" id="tailIdx">0</span></div>
+          <div class="pt"><span class="pt-s">size</span> = <span class="val" id="sizeVal">0</span></div>
+          <div class="pt"><span class="pt-c">capacity</span> = <span class="val" id="capVal">8</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGICAL SEQUENCE -->
+    <div class="panel">
+      <h3>Logical Deque Order (front &rarr; back)</h3>
+      <div class="seq" id="seq"></div>
+    </div>
+
+    <!-- INFO -->
+    <div class="panel">
+      <h3>Last Operation</h3>
+      <div class="info-line" id="info">Click an operation to begin.</div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+      <div class="l"><span class="sw head"></span> head (front)</div>
+      <div class="l"><span class="sw tail"></span> tail (next slot at back)</div>
+      <div class="l"><span class="sw both"></span> head &equiv; tail (empty or full)</div>
+      <div class="l"><span class="sw push"></span> pushing</div>
+      <div class="l"><span class="sw pop"></span> popping</div>
+      <div class="l"><span class="sw peek"></span> peeking</div>
+    </div>
+
+  </div>
+
+  <div class="side">
+
+    <div class="panel">
+      <h3>Stats</h3>
+      <div class="stats">
+        <div class="stat"><div class="v" id="sSize">0</div><div class="l">Size</div></div>
+        <div class="stat"><div class="v" id="sCap">8</div><div class="l">Capacity</div></div>
+        <div class="stat"><div class="v" id="sLoad">0%</div><div class="l">Load factor</div></div>
+        <div class="stat"><div class="v" id="sGrows">0</div><div class="l">Grows</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="bigO">
+        <thead>
+          <tr><th>Operation</th><th>Time</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>pushFront</td><td class="ok">O(1) amortised</td></tr>
+          <tr><td>pushBack</td><td class="ok">O(1) amortised</td></tr>
+          <tr><td>popFront</td><td class="ok">O(1)</td></tr>
+          <tr><td>popBack</td><td class="ok">O(1)</td></tr>
+          <tr><td>peekFront</td><td class="ok">O(1)</td></tr>
+          <tr><td>peekBack</td><td class="ok">O(1)</td></tr>
+          <tr><td>grow (resize)</td><td class="bad">O(n)</td></tr>
+          <tr><td>random access</td><td class="ok">O(1)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+// Circular-array deque model.
+// Invariants:
+//   - buf has length `capacity`.
+//   - head is the index of the front element (when size > 0).
+//   - tail = (head + size) mod capacity is the next slot at the back.
+//   - When size === 0, head and tail are both legal but point at empty slots.
+// ============================================================
+
+const INITIAL_CAPACITY = 8;
+
+let buf = new Array(INITIAL_CAPACITY).fill(null);
+let head = 0;
+let size = 0;
+let grows = 0;
+let busy = false;
+
+function capacity() { return buf.length; }
+function tailIndex() { return (head + size) % capacity(); }
+
+// ============================================================
+// Operations on the model.
+// ============================================================
+
+function grow() {
+  const newBuf = new Array(capacity() * 2).fill(null);
+  for (let i = 0; i < size; i++) {
+    newBuf[i] = buf[(head + i) % capacity()];
+  }
+  buf = newBuf;
+  head = 0;
+  grows++;
+}
+
+function pushBack(x) {
+  if (size === capacity()) grow();
+  const idx = tailIndex();
+  buf[idx] = x;
+  size++;
+  return idx;
+}
+
+function pushFront(x) {
+  if (size === capacity()) grow();
+  head = (head - 1 + capacity()) % capacity();
+  buf[head] = x;
+  size++;
+  return head;
+}
+
+function popFront() {
+  if (size === 0) return { ok: false };
+  const idx = head;
+  const val = buf[idx];
+  buf[idx] = null;
+  head = (head + 1) % capacity();
+  size--;
+  return { ok: true, idx, val };
+}
+
+function popBack() {
+  if (size === 0) return { ok: false };
+  const idx = (head + size - 1) % capacity();
+  const val = buf[idx];
+  buf[idx] = null;
+  size--;
+  return { ok: true, idx, val };
+}
+
+function peekFront() {
+  if (size === 0) return { ok: false };
+  return { ok: true, idx: head, val: buf[head] };
+}
+
+function peekBack() {
+  if (size === 0) return { ok: false };
+  const idx = (head + size - 1) % capacity();
+  return { ok: true, idx, val: buf[idx] };
+}
+
+// ============================================================
+// Render functions.
+// ============================================================
+
+function render(highlights) {
+  highlights = highlights || {};
+  const ring = document.getElementById('ring');
+  const cap = capacity();
+  const tail = tailIndex();
+  let html = '';
+  for (let i = 0; i < cap; i++) {
+    const cls = ['slot'];
+    const occupied = isOccupied(i);
+    cls.push(occupied ? 'occupied' : 'empty');
+    // head/tail markers — only meaningful when size > 0 for head, always for tail "next-slot"
+    const isHead = (i === head) && size > 0;
+    const isTail = (i === tail);
+    if (isHead && isTail) cls.push('head-and-tail-marker');
+    else if (isHead) cls.push('head-marker');
+    else if (isTail && size < cap) cls.push('tail-marker');
+    if (highlights[i]) cls.push(highlights[i]);
+
+    const val = occupied ? buf[i] : '';
+    html += `<div class="${cls.join(' ')}">${val}<span class="idx">${i}</span></div>`;
+  }
+  ring.innerHTML = html;
+
+  document.getElementById('headIdx').textContent = head;
+  document.getElementById('tailIdx').textContent = tail;
+  document.getElementById('sizeVal').textContent = size;
+  document.getElementById('capVal').textContent  = cap;
+
+  document.getElementById('sSize').textContent  = size;
+  document.getElementById('sCap').textContent   = cap;
+  document.getElementById('sLoad').textContent  = Math.round((size / cap) * 100) + '%';
+  document.getElementById('sGrows').textContent = grows;
+
+  renderSequence();
+}
+
+function isOccupied(i) {
+  if (size === 0) return false;
+  const cap = capacity();
+  // Element at i is in [head, head+size).
+  // Position offset = (i - head + cap) % cap; occupied iff offset < size.
+  const off = (i - head + cap) % cap;
+  return off < size;
+}
+
+function renderSequence() {
+  const seq = document.getElementById('seq');
+  if (size === 0) {
+    seq.innerHTML = '<span class="empty-msg">deque is empty</span>';
+    return;
+  }
+  let html = '<span class="label">front &rarr;</span>';
+  for (let i = 0; i < size; i++) {
+    const v = buf[(head + i) % capacity()];
+    const cls = i === 0 ? 'item front' : (i === size - 1 ? 'item back' : 'item');
+    html += `<span class="${cls}">${v}</span>`;
+    if (i !== size - 1) html += '<span class="sep">&middot;</span>';
+  }
+  html += '<span class="label">&larr; back</span>';
+  seq.innerHTML = html;
+}
+
+function setInfo(opName, msg, cpx) {
+  document.getElementById('info').innerHTML =
+    `<span class="op">${opName}</span> &mdash; ${msg} <span class="cpx">${cpx}</span>`;
+}
+
+function addLog(klass, msg) {
+  const log = document.getElementById('log');
+  const e = document.createElement('div');
+  e.className = 'entry ' + klass;
+  const t = new Date();
+  const stamp = String(t.getHours()).padStart(2, '0') + ':' +
+                String(t.getMinutes()).padStart(2, '0') + ':' +
+                String(t.getSeconds()).padStart(2, '0');
+  e.innerHTML = `[${stamp}] ${msg}`;
+  log.insertBefore(e, log.firstChild);
+  while (log.children.length > 50) log.removeChild(log.lastChild);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// User-triggered handlers (with simple busy-guard).
+// ============================================================
+
+function getInputValue() {
+  const v = parseInt(document.getElementById('valInput').value, 10);
+  if (isNaN(v)) return Math.floor(Math.random() * 100);
+  return v;
+}
+
+async function doPushBack() {
+  if (busy) return;
+  busy = true;
+  const v = getInputValue();
+  const grewBefore = grows;
+  const idx = pushBack(v);
+  if (grows > grewBefore) {
+    setInfo('grow', `capacity doubled to ${capacity()} before pushBack(${v})`, 'O(n) on resize');
+    addLog('e-grow', `grow &rarr; capacity = ${capacity()}`);
+    render();
+    await sleep(450);
+  }
+  render({ [idx]: 'pushing' });
+  setInfo('pushBack', `wrote ${v} at index ${idx}, size = ${size}`, 'O(1) amortised');
+  addLog('e-push', `pushBack(${v}) &rarr; slot ${idx}`);
+  await sleep(650);
+  render();
+  busy = false;
+  document.getElementById('valInput').value = Math.floor(Math.random() * 100);
+}
+
+async function doPushFront() {
+  if (busy) return;
+  busy = true;
+  const v = getInputValue();
+  const grewBefore = grows;
+  const idx = pushFront(v);
+  if (grows > grewBefore) {
+    setInfo('grow', `capacity doubled to ${capacity()} before pushFront(${v})`, 'O(n) on resize');
+    addLog('e-grow', `grow &rarr; capacity = ${capacity()}`);
+    render();
+    await sleep(450);
+  }
+  render({ [idx]: 'pushing' });
+  setInfo('pushFront', `wrote ${v} at index ${idx} (head moved), size = ${size}`, 'O(1) amortised');
+  addLog('e-push', `pushFront(${v}) &rarr; slot ${idx}`);
+  await sleep(650);
+  render();
+  busy = false;
+  document.getElementById('valInput').value = Math.floor(Math.random() * 100);
+}
+
+async function doPopFront() {
+  if (busy) return;
+  busy = true;
+  if (size === 0) {
+    setInfo('popFront', 'deque is empty &mdash; nothing to remove', 'O(1)');
+    addLog('e-info', 'popFront on empty &mdash; ignored');
+    busy = false; return;
+  }
+  // Highlight before removal.
+  const idx = head;
+  const val = buf[idx];
+  render({ [idx]: 'popping' });
+  setInfo('popFront', `removing ${val} from index ${idx}`, 'O(1)');
+  await sleep(650);
+  popFront();
+  setInfo('popFront', `removed ${val}, new head = ${head}, size = ${size}`, 'O(1)');
+  addLog('e-pop', `popFront &rarr; ${val} (was slot ${idx})`);
+  render();
+  busy = false;
+}
+
+async function doPopBack() {
+  if (busy) return;
+  busy = true;
+  if (size === 0) {
+    setInfo('popBack', 'deque is empty &mdash; nothing to remove', 'O(1)');
+    addLog('e-info', 'popBack on empty &mdash; ignored');
+    busy = false; return;
+  }
+  const idx = (head + size - 1) % capacity();
+  const val = buf[idx];
+  render({ [idx]: 'popping' });
+  setInfo('popBack', `removing ${val} from index ${idx}`, 'O(1)');
+  await sleep(650);
+  popBack();
+  setInfo('popBack', `removed ${val}, size = ${size}`, 'O(1)');
+  addLog('e-pop', `popBack &rarr; ${val} (was slot ${idx})`);
+  render();
+  busy = false;
+}
+
+async function doPeekFront() {
+  if (busy) return;
+  busy = true;
+  if (size === 0) {
+    setInfo('peekFront', 'deque is empty', 'O(1)');
+    addLog('e-info', 'peekFront on empty');
+    busy = false; return;
+  }
+  const idx = head;
+  const val = buf[idx];
+  render({ [idx]: 'peeking' });
+  setInfo('peekFront', `front element = ${val} (at index ${idx})`, 'O(1)');
+  addLog('e-peek', `peekFront &rarr; ${val}`);
+  await sleep(700);
+  render();
+  busy = false;
+}
+
+async function doPeekBack() {
+  if (busy) return;
+  busy = true;
+  if (size === 0) {
+    setInfo('peekBack', 'deque is empty', 'O(1)');
+    addLog('e-info', 'peekBack on empty');
+    busy = false; return;
+  }
+  const idx = (head + size - 1) % capacity();
+  const val = buf[idx];
+  render({ [idx]: 'peeking' });
+  setInfo('peekBack', `back element = ${val} (at index ${idx})`, 'O(1)');
+  addLog('e-peek', `peekBack &rarr; ${val}`);
+  await sleep(700);
+  render();
+  busy = false;
+}
+
+function doClear() {
+  if (busy) return;
+  buf = new Array(INITIAL_CAPACITY).fill(null);
+  head = 0;
+  size = 0;
+  grows = 0;
+  setInfo('clear', `reset deque to empty (capacity = ${INITIAL_CAPACITY})`, '&nbsp;');
+  addLog('e-info', 'clear');
+  render();
+}
+
+async function doRandom() {
+  if (busy) return;
+  // Sprinkle 6-9 random ops to demonstrate wraparound.
+  const ops = ['pushBack', 'pushFront', 'pushBack', 'pushBack', 'popFront', 'pushFront', 'pushBack'];
+  for (const op of ops) {
+    document.getElementById('valInput').value = Math.floor(Math.random() * 100);
+    if (op === 'pushBack')   await doPushBack();
+    if (op === 'pushFront')  await doPushFront();
+    if (op === 'popFront')   await doPopFront();
+  }
+}
+
+// ============================================================
+// Initial render.
+// ============================================================
+render();
+addLog('e-info', `Initialised deque with capacity ${capacity()}.`);
+addLog('e-info', 'Try pushBack and pushFront to see the head/tail markers move.');
+
+</script>
+</body>
+</html>

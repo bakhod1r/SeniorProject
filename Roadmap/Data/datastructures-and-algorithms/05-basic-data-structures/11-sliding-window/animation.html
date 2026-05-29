@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sliding Window Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: #58a6ff; margin-bottom: 6px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: #8b949e; margin-bottom: 18px; font-size: 0.85rem; }
+
+  .container {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 18px;
+  }
+  .main-area { display: flex; flex-direction: column; gap: 14px; }
+  .side-panel { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h3 {
+    color: #58a6ff;
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+  }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls label { color: #8b949e; font-size: 0.85rem; }
+  .controls input[type="text"], .controls input[type="number"] {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .controls input[type="text"] { width: 230px; }
+  .controls input[type="number"] { width: 60px; }
+  .controls select {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  button {
+    background: #238636;
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+  }
+  button:hover { background: #2ea043; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: #30363d; color: #e6edf3; }
+  button.secondary:hover { background: #484f58; }
+  button.danger { background: #da3633; }
+  button.danger:hover { background: #f85149; }
+
+  /* Array of cells */
+  .array-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 18px 8px 32px 8px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    position: relative;
+    min-height: 84px;
+  }
+  .cell {
+    position: relative;
+    min-width: 38px;
+    height: 38px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #e6edf3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  }
+  .cell .idx {
+    position: absolute;
+    bottom: -18px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: #8b949e;
+    font-size: 0.7rem;
+  }
+  .cell.in-window {
+    background: #0c2d4d;
+    border-color: #58a6ff;
+    color: #e6edf3;
+  }
+  .cell.entering {
+    background: #1f3a2e;
+    border-color: #3fb950;
+    color: #3fb950;
+    transform: translateY(-3px);
+  }
+  .cell.leaving {
+    background: #3a1f1f;
+    border-color: #f85149;
+    color: #f85149;
+    transform: translateY(3px);
+  }
+  .cell.duplicate {
+    background: #3a2f0a;
+    border-color: #d29922;
+    color: #d29922;
+  }
+
+  /* Pointer markers */
+  .pointer-row {
+    display: flex;
+    gap: 4px;
+    padding: 0 8px;
+    flex-wrap: wrap;
+    margin-top: -10px;
+    margin-bottom: 4px;
+  }
+  .pointer-slot {
+    min-width: 38px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: #58a6ff;
+    font-weight: bold;
+  }
+
+  /* Window state panel */
+  .state-display {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 10px;
+    font-size: 0.85rem;
+    min-height: 50px;
+  }
+  .state-key {
+    display: inline-block;
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin: 2px;
+    font-size: 0.8rem;
+  }
+  .state-key .v { color: #bc8cff; margin-left: 4px; }
+  .state-empty { color: #8b949e; font-style: italic; }
+  .state-num { font-size: 1.4rem; color: #3fb950; font-weight: bold; }
+
+  /* Info panel */
+  .info-text {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 10px;
+    font-size: 0.85rem;
+    min-height: 56px;
+    line-height: 1.5;
+  }
+  .info-text .hl-blue { color: #58a6ff; }
+  .info-text .hl-green { color: #3fb950; }
+  .info-text .hl-red { color: #f85149; }
+  .info-text .hl-yellow { color: #d29922; }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .stat {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+  }
+  .stat .val { font-size: 1.1rem; color: #58a6ff; font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; color: #8b949e; margin-top: 2px; }
+
+  /* Big-O table */
+  .complexity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+  .complexity-table th, .complexity-table td {
+    padding: 5px 8px;
+    border: 1px solid #30363d;
+    text-align: center;
+  }
+  .complexity-table th { background: #21262d; color: #58a6ff; }
+  .complexity-table td { color: #e6edf3; }
+  .complexity-table .good { color: #3fb950; }
+  .complexity-table .bad { color: #f85149; }
+
+  /* Log */
+  .log-area {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  .log-entry { border-bottom: 1px solid #21262d; padding: 2px 0; }
+  .log-entry .expand { color: #3fb950; }
+  .log-entry .shrink { color: #f85149; }
+  .log-entry .answer { color: #d29922; }
+  .log-entry .init { color: #58a6ff; }
+  .log-entry .done { color: #bc8cff; }
+
+  /* Legend */
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #8b949e; }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid #30363d;
+  }
+</style>
+</head>
+<body>
+
+<h1>Sliding Window Visualization</h1>
+<p class="subtitle">Fixed-size max-sum &nbsp;|&nbsp; Variable-size longest-no-repeat</p>
+
+<div class="container">
+  <div class="main-area">
+    <div class="panel">
+      <h3>Configuration</h3>
+      <div class="controls">
+        <label>Problem:</label>
+        <select id="problemSelect">
+          <option value="fixedSum">Fixed-size max-sum (k)</option>
+          <option value="longestUnique">Longest substring no repeat</option>
+        </select>
+        <label>Input:</label>
+        <input type="text" id="inputBox" placeholder="2,1,5,1,3,2 or abcabcbb">
+        <label id="kLabel">k:</label>
+        <input type="number" id="kBox" value="3" min="1" max="20">
+        <button onclick="loadInput()">Load</button>
+        <button class="secondary" onclick="loadSample()">Sample</button>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#0c2d4d;border-color:#58a6ff"></div>in window [l..r]</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#1f3a2e;border-color:#3fb950"></div>entering (right++)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#3a1f1f;border-color:#f85149"></div>leaving (left++)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#3a2f0a;border-color:#d29922"></div>duplicate detected</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Array</h3>
+      <div class="pointer-row" id="pointerRow"></div>
+      <div class="array-row" id="arrayRow"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Window State</h3>
+      <div class="state-display" id="stateDisplay">
+        <span class="state-empty">empty</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Step Info</h3>
+      <div class="info-text" id="infoText">
+        Choose a problem, load input, then press <span class="hl-blue">Step</span> or <span class="hl-blue">Run</span>.
+      </div>
+      <div class="controls" style="margin-top:10px">
+        <button onclick="step()">Step</button>
+        <button onclick="run()" id="runBtn">Run</button>
+        <button class="secondary" onclick="pause()" id="pauseBtn" disabled>Pause</button>
+        <button class="danger" onclick="reset()">Reset</button>
+        <label>Speed:</label>
+        <input type="range" id="speed" min="1" max="10" value="5" style="accent-color:#58a6ff">
+      </div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="stN">0</div><div class="lbl">n (input length)</div></div>
+        <div class="stat"><div class="val" id="stStep">0</div><div class="lbl">steps taken</div></div>
+        <div class="stat"><div class="val" id="stL">0</div><div class="lbl">left ptr</div></div>
+        <div class="stat"><div class="val" id="stR">-1</div><div class="lbl">right ptr</div></div>
+        <div class="stat"><div class="val" id="stWin">0</div><div class="lbl">window width</div></div>
+        <div class="stat"><div class="val" id="stAns">0</div><div class="lbl">current answer</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O</h3>
+      <table class="complexity-table">
+        <tr><th>Aspect</th><th>Sliding</th><th>Brute</th></tr>
+        <tr><td>Time</td><td class="good">O(n)</td><td class="bad">O(n&middot;k) or O(n&sup2;)</td></tr>
+        <tr><td>Space</td><td class="good">O(1) or O(alphabet)</td><td class="good">O(1)</td></tr>
+        <tr><td>Per step</td><td class="good">O(1) amortized</td><td class="bad">O(k)</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let problem = 'fixedSum';
+let rawInput = [];            // array of values (numbers or chars)
+let k = 3;
+let steps = [];               // precomputed steps
+let stepIdx = 0;
+let timer = null;
+let running = false;
+
+// ============================================================
+// Sample data per problem
+// ============================================================
+const SAMPLES = {
+  fixedSum: { input: '2,1,5,1,3,2', k: 3 },
+  longestUnique: { input: 'pwwkew', k: 0 }
+};
+
+// ============================================================
+// Input parsing
+// ============================================================
+function parseInput(text, mode) {
+  if (mode === 'fixedSum') {
+    return text.split(',').map(s => parseInt(s.trim()))
+      .filter(n => !isNaN(n));
+  } else {
+    return text.replace(/\s+/g, '').split('');
+  }
+}
+
+function loadInput() {
+  problem = document.getElementById('problemSelect').value;
+  const text = document.getElementById('inputBox').value;
+  rawInput = parseInput(text, problem);
+  k = parseInt(document.getElementById('kBox').value) || 3;
+  if (rawInput.length === 0) {
+    rawInput = parseInput(SAMPLES[problem].input, problem);
+    document.getElementById('inputBox').value = SAMPLES[problem].input;
+  }
+  buildSteps();
+  reset(false);
+  document.getElementById('stN').textContent = rawInput.length;
+}
+
+function loadSample() {
+  const sel = document.getElementById('problemSelect').value;
+  document.getElementById('inputBox').value = SAMPLES[sel].input;
+  if (sel === 'fixedSum') {
+    document.getElementById('kBox').value = SAMPLES[sel].k;
+  }
+  loadInput();
+}
+
+// ============================================================
+// Step generators
+// ============================================================
+function buildSteps() {
+  steps = [];
+  if (problem === 'fixedSum') {
+    buildFixedSumSteps();
+  } else {
+    buildLongestUniqueSteps();
+  }
+}
+
+function buildFixedSumSteps() {
+  const a = rawInput;
+  const n = a.length;
+  if (k <= 0 || k > n) {
+    steps.push({
+      l: 0, r: -1, window: new Set(),
+      state: { type: 'sum', sum: 0 },
+      info: `<span class="hl-red">Invalid k=${k} for n=${n}.</span>`,
+      logKind: 'init', logMsg: `invalid configuration`,
+      ans: 0
+    });
+    return;
+  }
+
+  // Phase 1: prime the window with a[0..k-1]
+  let sum = 0;
+  let win = new Set();
+  for (let i = 0; i < k; i++) {
+    sum += a[i];
+    win = new Set([...win, i]);
+    steps.push({
+      l: 0, r: i, window: new Set(win),
+      entering: i,
+      state: { type: 'sum', sum },
+      info: `Priming: add <span class="hl-green">a[${i}]=${a[i]}</span>; running sum = <span class="hl-yellow">${sum}</span>.`,
+      logKind: 'init',
+      logMsg: `add a[${i}]=${a[i]}, sum=${sum}`,
+      ans: i === k - 1 ? sum : null
+    });
+  }
+  let best = sum;
+  steps.push({
+    l: 0, r: k - 1, window: new Set(win),
+    state: { type: 'sum', sum },
+    info: `Initial window [0..${k - 1}] sum = <span class="hl-yellow">${sum}</span>. Best so far: <span class="hl-blue">${best}</span>.`,
+    logKind: 'answer',
+    logMsg: `window [0..${k-1}] sum=${sum}, best=${best}`,
+    ans: best
+  });
+
+  // Phase 2: slide
+  for (let r = k; r < n; r++) {
+    const leftOut = r - k;
+
+    // Add a[r], remove a[leftOut]
+    sum += a[r] - a[leftOut];
+    win.delete(leftOut);
+    win.add(r);
+
+    steps.push({
+      l: leftOut + 1, r,
+      window: new Set(win),
+      entering: r, leaving: leftOut,
+      state: { type: 'sum', sum },
+      info: `Slide right: enter <span class="hl-green">a[${r}]=${a[r]}</span>, leave <span class="hl-red">a[${leftOut}]=${a[leftOut]}</span>. Sum = <span class="hl-yellow">${sum}</span>.`,
+      logKind: 'expand',
+      logMsg: `+a[${r}]=${a[r]} -a[${leftOut}]=${a[leftOut]} sum=${sum}`,
+      ans: null
+    });
+
+    if (sum > best) best = sum;
+
+    steps.push({
+      l: leftOut + 1, r,
+      window: new Set(win),
+      state: { type: 'sum', sum },
+      info: `Window [${leftOut+1}..${r}] sum = <span class="hl-yellow">${sum}</span>. Best so far: <span class="hl-blue">${best}</span>.`,
+      logKind: 'answer',
+      logMsg: `window [${leftOut+1}..${r}] sum=${sum}, best=${best}`,
+      ans: best
+    });
+  }
+
+  steps.push({
+    l: n - k, r: n - 1,
+    window: new Set(win),
+    state: { type: 'sum', sum },
+    info: `Done. Maximum sum of any window of size ${k} = <span class="hl-blue">${best}</span>.`,
+    logKind: 'done',
+    logMsg: `final answer = ${best}`,
+    ans: best,
+    final: true
+  });
+}
+
+function buildLongestUniqueSteps() {
+  const a = rawInput;
+  const n = a.length;
+  const count = {};
+  let l = 0;
+  let best = 0;
+  let bestL = 0, bestR = -1;
+  const win = new Set();
+
+  if (n === 0) {
+    steps.push({
+      l: 0, r: -1, window: new Set(),
+      state: { type: 'count', count: {} },
+      info: `Empty input. Answer = 0.`,
+      logKind: 'done', logMsg: `empty input`, ans: 0, final: true
+    });
+    return;
+  }
+
+  for (let r = 0; r < n; r++) {
+    const ch = a[r];
+    count[ch] = (count[ch] || 0) + 1;
+    win.add(r);
+
+    steps.push({
+      l, r,
+      window: new Set(win),
+      entering: r,
+      state: { type: 'count', count: { ...count } },
+      info: `Expand: add <span class="hl-green">'${ch}'</span> at r=${r}. count['${ch}']=${count[ch]}.`,
+      logKind: 'expand',
+      logMsg: `+a[${r}]='${ch}', count='${ch}':${count[ch]}`,
+      ans: null
+    });
+
+    // Shrink while duplicate
+    while (count[ch] > 1) {
+      const leftCh = a[l];
+      steps.push({
+        l, r,
+        window: new Set(win),
+        duplicate: r,
+        state: { type: 'count', count: { ...count } },
+        info: `Invariant violated: <span class="hl-yellow">'${ch}'</span> appears ${count[ch]} times. Shrink left.`,
+        logKind: 'shrink',
+        logMsg: `duplicate '${ch}' detected; shrink`,
+        ans: null
+      });
+
+      count[leftCh]--;
+      if (count[leftCh] === 0) delete count[leftCh];
+      win.delete(l);
+      const leavingIdx = l;
+      l++;
+
+      steps.push({
+        l, r,
+        window: new Set(win),
+        leaving: leavingIdx,
+        state: { type: 'count', count: { ...count } },
+        info: `Remove <span class="hl-red">'${leftCh}'</span> at index ${leavingIdx}. l=${l}.`,
+        logKind: 'shrink',
+        logMsg: `-a[${leavingIdx}]='${leftCh}', l=${l}`,
+        ans: null
+      });
+    }
+
+    const len = r - l + 1;
+    if (len > best) {
+      best = len; bestL = l; bestR = r;
+    }
+    steps.push({
+      l, r,
+      window: new Set(win),
+      state: { type: 'count', count: { ...count } },
+      info: `Window [${l}..${r}] length = <span class="hl-yellow">${len}</span>. Best so far: <span class="hl-blue">${best}</span> at [${bestL}..${bestR}].`,
+      logKind: 'answer',
+      logMsg: `len=${len}, best=${best}`,
+      ans: best
+    });
+  }
+
+  steps.push({
+    l, r: n - 1,
+    window: new Set(win),
+    state: { type: 'count', count: { ...count } },
+    info: `Done. Longest substring with no repeats: length <span class="hl-blue">${best}</span> at [${bestL}..${bestR}].`,
+    logKind: 'done',
+    logMsg: `final answer = ${best}`,
+    ans: best,
+    final: true
+  });
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function renderArray(step) {
+  const row = document.getElementById('arrayRow');
+  const ptr = document.getElementById('pointerRow');
+
+  row.innerHTML = rawInput.map((v, i) => {
+    let cls = '';
+    if (step.window && step.window.has(i)) cls += ' in-window';
+    if (step.entering === i) cls += ' entering';
+    if (step.leaving === i) cls += ' leaving';
+    if (step.duplicate === i) cls += ' duplicate';
+    return `<div class="cell${cls}">${v}<span class="idx">${i}</span></div>`;
+  }).join('');
+
+  ptr.innerHTML = rawInput.map((_, i) => {
+    let label = '';
+    if (i === step.l && i === step.r) label = 'l,r';
+    else if (i === step.l) label = 'l';
+    else if (i === step.r) label = 'r';
+    return `<div class="pointer-slot">${label}</div>`;
+  }).join('');
+}
+
+function renderState(step) {
+  const s = document.getElementById('stateDisplay');
+  if (!step.state) {
+    s.innerHTML = '<span class="state-empty">empty</span>';
+    return;
+  }
+  if (step.state.type === 'sum') {
+    s.innerHTML = `<span class="state-num">sum = ${step.state.sum}</span>`;
+  } else if (step.state.type === 'count') {
+    const entries = Object.entries(step.state.count);
+    if (entries.length === 0) {
+      s.innerHTML = '<span class="state-empty">empty counter</span>';
+      return;
+    }
+    s.innerHTML = entries.map(([k, v]) =>
+      `<span class="state-key">${k}<span class="v">${v}</span></span>`
+    ).join('');
+  }
+}
+
+function renderInfo(step) {
+  document.getElementById('infoText').innerHTML = step.info;
+}
+
+function renderStats(step) {
+  document.getElementById('stStep').textContent = stepIdx;
+  document.getElementById('stL').textContent = step.l;
+  document.getElementById('stR').textContent = step.r;
+  const width = step.r >= step.l ? (step.r - step.l + 1) : 0;
+  document.getElementById('stWin').textContent = width;
+  document.getElementById('stAns').textContent = step.ans !== null && step.ans !== undefined
+    ? step.ans : '-';
+}
+
+function addLog(step) {
+  const log = document.getElementById('logArea');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="${step.logKind}">[${step.logKind}]</span> step ${stepIdx}: ${step.logMsg}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderStep(advance = true) {
+  if (stepIdx >= steps.length) return false;
+  const step = steps[stepIdx];
+  renderArray(step);
+  renderState(step);
+  renderInfo(step);
+  renderStats(step);
+  addLog(step);
+  if (advance) stepIdx++;
+  return !step.final;
+}
+
+// ============================================================
+// Controls
+// ============================================================
+function step() {
+  if (steps.length === 0) buildSteps();
+  if (stepIdx < steps.length) {
+    renderStep();
+  }
+}
+
+function run() {
+  if (running) return;
+  if (steps.length === 0) buildSteps();
+  running = true;
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+
+function tick() {
+  if (!running) return;
+  if (stepIdx >= steps.length) { pause(); return; }
+  const more = renderStep();
+  if (!more) { pause(); return; }
+  const speed = parseInt(document.getElementById('speed').value);
+  const delay = 1100 - speed * 100;
+  timer = setTimeout(tick, delay);
+}
+
+function pause() {
+  running = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset(rebuild = true) {
+  pause();
+  stepIdx = 0;
+  document.getElementById('logArea').innerHTML = '';
+  document.getElementById('stStep').textContent = '0';
+  document.getElementById('stL').textContent = '0';
+  document.getElementById('stR').textContent = '-1';
+  document.getElementById('stWin').textContent = '0';
+  document.getElementById('stAns').textContent = '0';
+  document.getElementById('stN').textContent = rawInput.length;
+  if (rebuild && rawInput.length > 0) buildSteps();
+  // Initial render (empty window)
+  renderInitial();
+}
+
+function renderInitial() {
+  const row = document.getElementById('arrayRow');
+  const ptr = document.getElementById('pointerRow');
+  if (rawInput.length === 0) {
+    row.innerHTML = '<span style="color:#8b949e;font-style:italic">load input to begin</span>';
+    ptr.innerHTML = '';
+    document.getElementById('stateDisplay').innerHTML = '<span class="state-empty">empty</span>';
+    document.getElementById('infoText').innerHTML = 'Choose a problem, load input, then press <span class="hl-blue">Step</span> or <span class="hl-blue">Run</span>.';
+    return;
+  }
+  row.innerHTML = rawInput.map((v, i) =>
+    `<div class="cell">${v}<span class="idx">${i}</span></div>`
+  ).join('');
+  ptr.innerHTML = rawInput.map(() => '<div class="pointer-slot"></div>').join('');
+  document.getElementById('stateDisplay').innerHTML = '<span class="state-empty">empty</span>';
+  document.getElementById('infoText').innerHTML = 'Ready. Press <span class="hl-blue">Step</span> to advance one transition.';
+}
+
+// React to problem-type change
+document.getElementById('problemSelect').addEventListener('change', () => {
+  const sel = document.getElementById('problemSelect').value;
+  document.getElementById('kLabel').style.display = sel === 'fixedSum' ? '' : 'none';
+  document.getElementById('kBox').style.display   = sel === 'fixedSum' ? '' : 'none';
+  document.getElementById('inputBox').value = SAMPLES[sel].input;
+  if (sel === 'fixedSum') document.getElementById('kBox').value = SAMPLES[sel].k;
+  loadInput();
+});
+
+// Boot
+document.getElementById('inputBox').value = SAMPLES.fixedSum.input;
+loadInput();
+</script>
+
+</body>
+</html>

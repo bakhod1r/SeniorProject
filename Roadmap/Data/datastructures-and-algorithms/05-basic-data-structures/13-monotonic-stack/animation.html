@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monotonic Stack Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { color: var(--blue); text-align: center; font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); text-align: center; margin-bottom: 18px; font-size: 0.85rem; }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 14px;
+  }
+  .left { display: flex; flex-direction: column; gap: 12px; }
+  .right { display: flex; flex-direction: column; gap: 12px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h3 { color: var(--blue); font-size: 0.92rem; margin-bottom: 10px; }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .controls input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    flex: 1;
+    min-width: 200px;
+  }
+  .controls label { color: var(--muted); font-size: 0.82rem; }
+  button {
+    background: var(--green);
+    color: #0d1117;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: filter 0.2s;
+  }
+  button:hover { filter: brightness(1.15); }
+  button.secondary { background: var(--border); color: var(--text); }
+  button.danger { background: var(--red); color: #fff; }
+  button.accent { background: var(--blue); color: #0d1117; }
+  button.warn { background: var(--orange); color: #0d1117; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.82rem;
+  }
+
+  /* ===== Visualization area: bars + stack side by side ===== */
+  .viz {
+    display: grid;
+    grid-template-columns: 1fr 130px;
+    gap: 14px;
+    min-height: 360px;
+  }
+  .bars-area {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    overflow-x: auto;
+    position: relative;
+    min-height: 340px;
+  }
+  .bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    position: relative;
+    transition: all 0.25s ease;
+  }
+  .bar-visual {
+    width: 36px;
+    border-radius: 4px 4px 0 0;
+    transition: all 0.25s ease;
+    background: var(--purple);
+    border: 1px solid transparent;
+    position: relative;
+  }
+  .bar-visual.scan { background: var(--yellow); }
+  .bar-visual.in-stack { background: var(--blue); }
+  .bar-visual.popping { background: var(--red); animation: pulse 0.5s ease-in-out; }
+  .bar-visual.pushed { background: var(--green); animation: pulse 0.5s ease-in-out; }
+  .bar-visual.resolved { background: var(--orange); }
+  .bar-visual.in-rect {
+    box-shadow: inset 0 0 0 2px var(--green);
+  }
+  .bar-label {
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .bar-index {
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .scan-arrow {
+    position: absolute;
+    top: -16px;
+    color: var(--yellow);
+    font-size: 0.9rem;
+    font-weight: bold;
+  }
+  @keyframes pulse {
+    0% { transform: scaleY(1.05); }
+    50% { transform: scaleY(1.15); }
+    100% { transform: scaleY(1); }
+  }
+
+  .stack-area {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 3px;
+    overflow-y: auto;
+    position: relative;
+  }
+  .stack-label {
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    color: var(--muted);
+    font-size: 0.7rem;
+  }
+  .stack-top-label {
+    color: var(--blue);
+    font-size: 0.65rem;
+    margin-bottom: 2px;
+  }
+  .stack-cell {
+    width: 90%;
+    padding: 5px 6px;
+    background: var(--blue);
+    color: #0d1117;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+  .stack-cell.fresh { background: var(--green); animation: pulse 0.5s ease; }
+  .stack-cell.leaving { background: var(--red); animation: pulse 0.5s ease; }
+
+  /* ===== Side panel content ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    text-align: center;
+  }
+  .stat .val { font-size: 1.05rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
+  .info-line {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    min-height: 50px;
+  }
+  .info-line .step-tag {
+    color: var(--orange);
+    font-weight: bold;
+    margin-right: 4px;
+  }
+  .info-line .num { color: var(--green); }
+  .info-line .idx { color: var(--purple); }
+
+  .complexity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.74rem;
+  }
+  .complexity-table th, .complexity-table td {
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .complexity-table th { background: var(--bg); color: var(--blue); }
+  .complexity-table .good { color: var(--green); }
+  .complexity-table .bad { color: var(--red); }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-size: 0.7rem;
+    line-height: 1.45;
+  }
+  .log-entry { border-bottom: 1px solid var(--border); padding: 2px 0; }
+  .log-entry:last-child { border-bottom: 0; }
+  .log-entry .tag-push { color: var(--green); }
+  .log-entry .tag-pop  { color: var(--red); }
+  .log-entry .tag-scan { color: var(--yellow); }
+  .log-entry .tag-rect { color: var(--orange); }
+  .log-entry .tag-done { color: var(--blue); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.7rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+
+  @media (max-width: 880px) {
+    .container { grid-template-columns: 1fr; }
+    .viz { grid-template-columns: 1fr; }
+    .stack-area { flex-direction: row-reverse; min-height: 90px; max-height: 110px; overflow-x: auto; overflow-y: hidden; }
+    .stack-cell { width: auto; min-width: 50px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Monotonic Stack</h1>
+<p class="subtitle">Interactive Visualization: Next Greater Element &amp; Largest Rectangle in Histogram</p>
+
+<div class="container">
+  <div class="left">
+    <div class="panel">
+      <h3>Configuration</h3>
+      <div class="controls" style="margin-bottom:8px">
+        <label>Mode:</label>
+        <select id="modeSelect">
+          <option value="nge">Next Greater Element</option>
+          <option value="lrh">Largest Rectangle (histogram)</option>
+        </select>
+        <label>Array:</label>
+        <input type="text" id="arrayInput" value="3, 1, 4, 1, 5, 9, 2, 6">
+        <button class="accent" onclick="loadArray()">Load</button>
+        <button class="secondary" onclick="randomArray()">Random</button>
+      </div>
+      <div class="controls">
+        <button class="warn" id="playBtn" onclick="play()">Play</button>
+        <button onclick="stepForward()">Step &gt;</button>
+        <button class="secondary" onclick="pause()" id="pauseBtn" disabled>Pause</button>
+        <button class="danger" onclick="reset()">Reset</button>
+        <label>Speed:</label>
+        <input type="range" id="speed" min="1" max="10" value="5" style="width:100px">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Visualization</h3>
+      <div class="viz">
+        <div class="bars-area" id="barsArea"></div>
+        <div class="stack-area" id="stackArea">
+          <span class="stack-label">Stack</span>
+        </div>
+      </div>
+      <div class="legend" style="margin-top:10px">
+        <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>idle</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>scan (current i)</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>on stack</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>just pushed</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>just popped</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>resolved / rectangle</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Step</h3>
+      <div class="info-line" id="infoLine">
+        <span class="step-tag">READY</span>
+        Press <b>Play</b> to start, or <b>Step &gt;</b> to advance one operation.
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statStep">0</div><div class="lbl">Step</div></div>
+        <div class="stat"><div class="val" id="statI">-</div><div class="lbl">Index i</div></div>
+        <div class="stat"><div class="val" id="statDepth">0</div><div class="lbl">Stack Depth</div></div>
+        <div class="stat"><div class="val" id="statMaxDepth">0</div><div class="lbl">Max Depth</div></div>
+        <div class="stat"><div class="val" id="statPushes">0</div><div class="lbl">Pushes</div></div>
+        <div class="stat"><div class="val" id="statPops">0</div><div class="lbl">Pops</div></div>
+        <div class="stat" id="statBestBox"><div class="val" id="statBest">-</div><div class="lbl">Best Area</div></div>
+        <div class="stat"><div class="val" id="statN">0</div><div class="lbl">N</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O</h3>
+      <table class="complexity-table">
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Time</td><td class="good">O(n)</td></tr>
+        <tr><td>Space</td><td class="good">O(n)</td></tr>
+        <tr><td>Pushes total</td><td class="good">n</td></tr>
+        <tr><td>Pops total</td><td class="good">&le; n</td></tr>
+        <tr><td>Worst burst</td><td class="bad">O(n) once</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Log</h3>
+      <div class="log" id="logArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===========================================================================
+   State
+   =========================================================================== */
+let array = [3, 1, 4, 1, 5, 9, 2, 6];
+let mode = 'nge';           // 'nge' or 'lrh'
+let steps = [];
+let stepIdx = 0;
+let playing = false;
+let timer = null;
+let maxDepthSeen = 0;
+let pushCount = 0;
+let popCount = 0;
+let bestArea = 0;
+let bestRectRange = null;   // [l, r] inclusive when in lrh mode
+
+/* ===========================================================================
+   Step generation -- precomputed for replay & reverse
+   =========================================================================== */
+function genStepsNGE(a) {
+  const out = [];
+  const stack = []; // indices
+  const result = new Array(a.length).fill(-1);
+
+  out.push({
+    type: 'init',
+    stack: [...stack],
+    i: -1,
+    result: [...result],
+    desc: 'Initialize empty decreasing stack. Result[] starts as all -1.'
+  });
+
+  for (let i = 0; i < a.length; i++) {
+    out.push({
+      type: 'scan',
+      stack: [...stack],
+      i,
+      result: [...result],
+      desc: `Scan i=${i}, a[${i}]=${a[i]}.`
+    });
+
+    while (stack.length > 0 && a[stack[stack.length - 1]] < a[i]) {
+      const top = stack.pop();
+      result[top] = a[i];
+      out.push({
+        type: 'pop',
+        stack: [...stack],
+        i,
+        popped: top,
+        result: [...result],
+        desc: `a[${top}]=${a[top]} &lt; a[${i}]=${a[i]} -> pop ${top}, nextGreater[${top}]=${a[i]}.`
+      });
+    }
+
+    stack.push(i);
+    out.push({
+      type: 'push',
+      stack: [...stack],
+      i,
+      result: [...result],
+      desc: `Push ${i} onto stack (a[${i}]=${a[i]}). Stack invariant: values decreasing bottom -> top.`
+    });
+  }
+
+  out.push({
+    type: 'done',
+    stack: [...stack],
+    i: a.length,
+    result: [...result],
+    desc: `Done. Indices still on stack have no greater element to their right (result = -1).`
+  });
+  return out;
+}
+
+function genStepsLRH(h) {
+  const out = [];
+  const stack = []; // indices, heights increasing bottom -> top
+  let best = 0;
+  let bestRange = null;
+
+  out.push({
+    type: 'init',
+    stack: [...stack],
+    i: -1,
+    best,
+    bestRange,
+    desc: 'Initialize empty increasing stack. A virtual height-0 bar past the end drains the stack.'
+  });
+
+  for (let i = 0; i <= h.length; i++) {
+    const cur = (i === h.length) ? 0 : h[i];
+    out.push({
+      type: 'scan',
+      stack: [...stack],
+      i,
+      best,
+      bestRange,
+      desc: i === h.length
+        ? `Sentinel: virtual height-0 bar past the right edge -> drain stack.`
+        : `Scan i=${i}, h[${i}]=${cur}.`
+    });
+
+    while (stack.length > 0 && h[stack[stack.length - 1]] > cur) {
+      const top = stack.pop();
+      const width = stack.length === 0 ? i : i - stack[stack.length - 1] - 1;
+      const area = h[top] * width;
+      const l = stack.length === 0 ? 0 : stack[stack.length - 1] + 1;
+      const r = i - 1;
+      let newBest = best;
+      let newBestRange = bestRange;
+      if (area > best) {
+        newBest = area;
+        newBestRange = [l, r];
+      }
+      out.push({
+        type: 'pop',
+        stack: [...stack],
+        i,
+        popped: top,
+        best: newBest,
+        bestRange: newBestRange,
+        rectRange: [l, r],
+        rectHeight: h[top],
+        rectArea: area,
+        desc: `Pop ${top} (height ${h[top]}). width = ${width}, area = ${h[top]} &times; ${width} = ${area}.` +
+              (area > best ? ` <b>New best!</b>` : ``)
+      });
+      best = newBest;
+      bestRange = newBestRange;
+    }
+
+    if (i < h.length) {
+      stack.push(i);
+      out.push({
+        type: 'push',
+        stack: [...stack],
+        i,
+        best,
+        bestRange,
+        desc: `Push ${i} onto stack (height ${h[i]}). Stack invariant: heights increasing.`
+      });
+    }
+  }
+
+  out.push({
+    type: 'done',
+    stack: [],
+    i: h.length,
+    best,
+    bestRange,
+    desc: `Done. Largest rectangle has area <b>${best}</b>` + (bestRange ? ` over indices [${bestRange[0]}, ${bestRange[1]}].` : '.')
+  });
+  return out;
+}
+
+/* ===========================================================================
+   Rendering
+   =========================================================================== */
+function render(step) {
+  const barsArea = document.getElementById('barsArea');
+  const stackArea = document.getElementById('stackArea');
+
+  const maxVal = Math.max(...array, 1);
+  const barHeightPx = 280;
+
+  // Build bars
+  barsArea.innerHTML = '';
+  const stackSet = new Set(step.stack);
+  const inRect = new Set();
+  if (mode === 'lrh' && step.rectRange) {
+    for (let k = step.rectRange[0]; k <= step.rectRange[1]; k++) inRect.add(k);
+  }
+
+  for (let idx = 0; idx < array.length; idx++) {
+    const v = array[idx];
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+
+    const arrow = document.createElement('div');
+    arrow.className = 'scan-arrow';
+    arrow.textContent = (idx === step.i) ? 'i' : '';
+    bar.appendChild(arrow);
+
+    const vis = document.createElement('div');
+    let cls = 'bar-visual';
+    if (idx === step.popped) cls += ' popping';
+    else if (idx === step.i && step.type === 'push') cls += ' pushed';
+    else if (idx === step.i) cls += ' scan';
+    else if (stackSet.has(idx)) cls += ' in-stack';
+
+    if (mode === 'nge' && step.result && step.result[idx] !== -1) {
+      cls += ' resolved';
+    }
+    if (mode === 'lrh' && inRect.has(idx)) {
+      cls += ' in-rect';
+    }
+
+    vis.className = cls;
+    vis.style.height = (v / maxVal * barHeightPx) + 'px';
+
+    bar.appendChild(vis);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'bar-label';
+    lbl.textContent = v;
+    bar.appendChild(lbl);
+
+    const ilbl = document.createElement('div');
+    ilbl.className = 'bar-index';
+    ilbl.textContent = '[' + idx + ']';
+    if (mode === 'nge' && step.result && step.result[idx] !== -1) {
+      ilbl.textContent += ' -> ' + step.result[idx];
+      ilbl.style.color = 'var(--orange)';
+    }
+    bar.appendChild(ilbl);
+
+    barsArea.appendChild(bar);
+  }
+
+  // Build stack (top = highest index in stack array; render top first via column-reverse)
+  stackArea.innerHTML = '<span class="stack-label">Stack (top ↑)</span>';
+  step.stack.forEach((idx, k) => {
+    const cell = document.createElement('div');
+    cell.className = 'stack-cell';
+    if (step.type === 'push' && k === step.stack.length - 1) cell.classList.add('fresh');
+    const val = array[idx];
+    cell.textContent = `[${idx}]=${val}`;
+    stackArea.appendChild(cell);
+  });
+  if (step.type === 'pop' && step.popped !== undefined) {
+    const ghost = document.createElement('div');
+    ghost.className = 'stack-cell leaving';
+    ghost.textContent = `[${step.popped}]=${array[step.popped]}`;
+    stackArea.appendChild(ghost);
+  }
+
+  // Info line
+  const infoLine = document.getElementById('infoLine');
+  const tag = step.type.toUpperCase();
+  infoLine.innerHTML = `<span class="step-tag">${tag}</span> ${step.desc}`;
+
+  // Stats
+  document.getElementById('statStep').textContent = stepIdx + 1;
+  document.getElementById('statI').textContent = (step.i >= 0 && step.i < array.length) ? step.i : '-';
+  document.getElementById('statDepth').textContent = step.stack.length;
+  if (step.stack.length > maxDepthSeen) maxDepthSeen = step.stack.length;
+  document.getElementById('statMaxDepth').textContent = maxDepthSeen;
+  document.getElementById('statPushes').textContent = pushCount;
+  document.getElementById('statPops').textContent = popCount;
+  document.getElementById('statN').textContent = array.length;
+  document.getElementById('statBest').textContent =
+    mode === 'lrh' ? (step.best !== undefined ? step.best : bestArea) : '-';
+}
+
+/* ===========================================================================
+   Driver
+   =========================================================================== */
+function loadArray() {
+  const raw = document.getElementById('arrayInput').value;
+  const nums = raw.split(/[,\s]+/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 0);
+  if (nums.length === 0) return;
+  array = nums.slice(0, 40); // cap to keep visualization readable
+  reset();
+}
+
+function randomArray() {
+  const n = 6 + Math.floor(Math.random() * 8);
+  array = Array.from({length: n}, () => 1 + Math.floor(Math.random() * 15));
+  document.getElementById('arrayInput').value = array.join(', ');
+  reset();
+}
+
+function buildSteps() {
+  if (mode === 'nge') steps = genStepsNGE(array);
+  else steps = genStepsLRH(array);
+}
+
+function reset() {
+  pause();
+  stepIdx = 0;
+  pushCount = 0;
+  popCount = 0;
+  maxDepthSeen = 0;
+  bestArea = 0;
+  bestRectRange = null;
+  mode = document.getElementById('modeSelect').value;
+  document.getElementById('statBestBox').style.display = (mode === 'lrh') ? '' : 'none';
+  document.getElementById('logArea').innerHTML = '';
+  buildSteps();
+  render(steps[0]);
+}
+
+function applyStepEffects(step) {
+  if (step.type === 'push') {
+    pushCount++;
+    addLog(`push ${step.i}`, 'tag-push');
+  } else if (step.type === 'pop') {
+    popCount++;
+    if (mode === 'nge') {
+      addLog(`pop ${step.popped} -> resolved by a[${step.i}]=${array[step.i]}`, 'tag-pop');
+    } else {
+      addLog(`pop ${step.popped} -> area ${step.rectArea}` + (step.best === step.rectArea ? ' (best!)' : ''), 'tag-pop');
+      if (step.best !== undefined && step.best > bestArea) {
+        bestArea = step.best;
+        bestRectRange = step.bestRange;
+      }
+    }
+  } else if (step.type === 'scan') {
+    addLog(`scan i=${step.i}`, 'tag-scan');
+  } else if (step.type === 'done') {
+    addLog(`done`, 'tag-done');
+  }
+}
+
+function stepForward() {
+  if (stepIdx >= steps.length - 1) { pause(); return; }
+  stepIdx++;
+  applyStepEffects(steps[stepIdx]);
+  render(steps[stepIdx]);
+}
+
+function play() {
+  if (stepIdx >= steps.length - 1) reset();
+  playing = true;
+  document.getElementById('playBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  runAnim();
+}
+
+function runAnim() {
+  if (!playing) return;
+  if (stepIdx >= steps.length - 1) { pause(); return; }
+  stepForward();
+  const delay = 1100 - parseInt(document.getElementById('speed').value, 10) * 100;
+  timer = setTimeout(runAnim, delay);
+}
+
+function pause() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('playBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function addLog(msg, cls) {
+  const area = document.getElementById('logArea');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="${cls}">${msg}</span>`;
+  area.prepend(entry);
+  while (area.children.length > 60) area.removeChild(area.lastChild);
+}
+
+document.getElementById('modeSelect').addEventListener('change', reset);
+document.getElementById('speed').addEventListener('input', () => {
+  if (playing) {
+    clearTimeout(timer);
+    runAnim();
+  }
+});
+
+// Initial render
+reset();
+</script>
+
+</body>
+</html>
+</content>
+</invoke>

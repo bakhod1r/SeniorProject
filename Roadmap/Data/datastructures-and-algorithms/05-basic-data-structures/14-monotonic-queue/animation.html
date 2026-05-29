@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monotonic Queue Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    padding: 18px;
+  }
+  h1 {
+    text-align: center;
+    color: #58a6ff;
+    margin-bottom: 6px;
+    font-size: 1.4rem;
+  }
+  .subtitle {
+    text-align: center;
+    color: #8b949e;
+    margin-bottom: 18px;
+    font-size: 0.82rem;
+  }
+
+  .container {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+  }
+  .main-area { display: flex; flex-direction: column; gap: 14px; }
+  .side-panel { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .panel h3 {
+    color: #58a6ff;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+  }
+
+  /* ===== CONTROLS ===== */
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .controls input[type="text"] {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 6px 10px;
+    border-radius: 4px;
+    width: 240px;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .controls input[type="number"] {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 6px 10px;
+    border-radius: 4px;
+    width: 60px;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .controls label {
+    color: #8b949e;
+    font-size: 0.82rem;
+  }
+  button {
+    background: #238636;
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    transition: background 0.2s;
+  }
+  button:hover { background: #2ea043; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: #30363d; color: #c9d1d9; }
+  button.secondary:hover { background: #484f58; }
+  button.danger { background: #da3633; }
+  button.danger:hover { background: #f85149; }
+
+  /* ===== ARRAY ROW ===== */
+  .array-row {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    padding: 16px 8px 8px 8px;
+    background: #0d1117;
+    border-radius: 6px;
+    border: 1px solid #21262d;
+    position: relative;
+    min-height: 100px;
+  }
+  .cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 44px;
+    flex: 0 0 auto;
+    transition: all 0.25s ease;
+  }
+  .cell-value {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px 0;
+    width: 44px;
+    text-align: center;
+    font-weight: bold;
+    color: #c9d1d9;
+    font-size: 0.95rem;
+    transition: all 0.25s ease;
+  }
+  .cell-index {
+    color: #8b949e;
+    font-size: 0.7rem;
+  }
+
+  /* states */
+  .cell.in-window .cell-value {
+    background: #1f3a2e;
+    border-color: #2ea043;
+    color: #7ee787;
+  }
+  .cell.current .cell-value {
+    background: #2d1a00;
+    border-color: #f0883e;
+    color: #f0883e;
+    box-shadow: 0 0 8px rgba(240, 136, 62, 0.35);
+  }
+  .cell.expired .cell-value {
+    background: #21262d;
+    border-color: #30363d;
+    color: #484f58;
+  }
+  .window-bracket {
+    height: 4px;
+    background: #58a6ff;
+    border-radius: 2px;
+    margin-top: 6px;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .window-bracket::before, .window-bracket::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    width: 4px;
+    height: 12px;
+    background: #58a6ff;
+    border-radius: 2px;
+  }
+  .window-bracket::before { left: 0; }
+  .window-bracket::after { right: 0; }
+
+  /* ===== DEQUE ROW ===== */
+  .deque-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 14px 12px;
+    background: #0d1117;
+    border-radius: 6px;
+    border: 1px solid #21262d;
+    min-height: 84px;
+    overflow-x: auto;
+  }
+  .deque-empty {
+    color: #484f58;
+    font-style: italic;
+    font-size: 0.85rem;
+  }
+  .deque-cell {
+    background: #1f2937;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 48px;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .deque-cell .dq-value {
+    font-weight: bold;
+    color: #c9d1d9;
+    font-size: 0.95rem;
+  }
+  .deque-cell .dq-index {
+    color: #8b949e;
+    font-size: 0.7rem;
+    margin-top: 2px;
+  }
+  .deque-cell .dq-tag {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.62rem;
+    color: #8b949e;
+    background: #161b22;
+    padding: 0 4px;
+  }
+  .deque-cell.flash-push {
+    background: #1f3a2e;
+    border-color: #2ea043;
+    animation: pulseGreen 0.5s ease;
+  }
+  .deque-cell.flash-pop-back {
+    background: #3a1f1f;
+    border-color: #f85149;
+    animation: pulseRed 0.5s ease;
+  }
+  .deque-cell.flash-pop-front {
+    background: #2c1a3a;
+    border-color: #bc8cff;
+    animation: pulsePurple 0.5s ease;
+  }
+  .deque-arrow {
+    color: #484f58;
+    font-size: 1rem;
+  }
+  @keyframes pulseGreen { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  @keyframes pulseRed { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  @keyframes pulsePurple { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+
+  /* ===== INFO PANEL ===== */
+  .info-box {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    min-height: 50px;
+  }
+  .info-op { color: #f0883e; font-weight: bold; }
+  .info-cplx { color: #7ee787; }
+  .info-detail { color: #c9d1d9; }
+
+  /* ===== STATS ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+  }
+  .stat .val {
+    font-size: 1.1rem;
+    color: #58a6ff;
+    font-weight: bold;
+  }
+  .stat .lbl {
+    font-size: 0.68rem;
+    color: #8b949e;
+    margin-top: 2px;
+  }
+
+  /* ===== BIG-O TABLE ===== */
+  .bigo-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  .bigo-table th, .bigo-table td {
+    padding: 5px 8px;
+    border: 1px solid #30363d;
+    text-align: center;
+  }
+  .bigo-table th { background: #21262d; color: #58a6ff; }
+  .bigo-table .good { color: #7ee787; }
+  .bigo-table .bad { color: #ff7b72; }
+
+  /* ===== LOG ===== */
+  .log-area {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 0.76rem;
+    line-height: 1.5;
+  }
+  .log-entry { border-bottom: 1px solid #21262d; padding: 2px 0; }
+  .log-push { color: #7ee787; }
+  .log-pop-back { color: #f85149; }
+  .log-pop-front { color: #bc8cff; }
+  .log-record { color: #f0883e; }
+  .log-info { color: #58a6ff; }
+
+  /* ===== MODE TOGGLE ===== */
+  .mode-toggle {
+    display: flex;
+    gap: 6px;
+    background: #21262d;
+    padding: 4px;
+    border-radius: 6px;
+  }
+  .mode-toggle button {
+    background: transparent;
+    color: #8b949e;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+  }
+  .mode-toggle button.active {
+    background: #58a6ff;
+    color: #0d1117;
+  }
+</style>
+</head>
+<body>
+
+<h1>Monotonic Queue (Monotonic Deque)</h1>
+<p class="subtitle">Sliding Window Maximum / Minimum — Step-by-Step Visualization</p>
+
+<div class="container">
+  <div class="main-area">
+    <div class="panel">
+      <h3>Input</h3>
+      <div class="controls">
+        <label>Array:</label>
+        <input type="text" id="arrayInput" value="1, 3, -1, -3, 5, 3, 6, 7">
+        <label>k:</label>
+        <input type="number" id="kInput" value="3" min="1">
+        <button onclick="loadInput()">Load</button>
+        <button class="secondary" onclick="loadRandom()">Random</button>
+        <div class="mode-toggle">
+          <button id="modeMaxBtn" class="active" onclick="setMode('max')">Max</button>
+          <button id="modeMinBtn" onclick="setMode('min')">Min</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Array (window highlighted)</h3>
+      <div class="array-row" id="arrayRow"></div>
+      <div style="margin-top:8px;font-size:0.78rem;color:#8b949e">
+        <span style="color:#7ee787">Green</span> = inside current window
+        &nbsp;|&nbsp;<span style="color:#f0883e">Orange</span> = current i
+        &nbsp;|&nbsp;<span style="color:#58a6ff">Blue bracket</span> = window [l..r]
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Monotonic Deque (front -> back, stores indices)</h3>
+      <div class="deque-row" id="dequeRow"><span class="deque-empty">empty</span></div>
+      <div style="margin-top:8px;font-size:0.78rem;color:#8b949e">
+        <span style="color:#7ee787">Push</span> (green)
+        &nbsp;|&nbsp;<span style="color:#f85149">Pop back</span> (red, smaller than incoming)
+        &nbsp;|&nbsp;<span style="color:#bc8cff">Pop front</span> (purple, expired)
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Step Info</h3>
+      <div class="info-box" id="infoBox">
+        Press <strong>Step</strong> to advance one operation, or <strong>Play</strong> to auto-run.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls">
+        <button onclick="step()">Step</button>
+        <button onclick="play()" id="playBtn">Play</button>
+        <button class="secondary" onclick="pause()" id="pauseBtn" disabled>Pause</button>
+        <button class="danger" onclick="reset()">Reset</button>
+        <label>Speed (ms):</label>
+        <input type="number" id="speedInput" value="700" min="100" max="3000" step="100">
+      </div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statI">-</div><div class="lbl">Current i</div></div>
+        <div class="stat"><div class="val" id="statDeque">0</div><div class="lbl">Deque Size</div></div>
+        <div class="stat"><div class="val" id="statPushes">0</div><div class="lbl">Pushes</div></div>
+        <div class="stat"><div class="val" id="statPopBack">0</div><div class="lbl">Back Pops</div></div>
+        <div class="stat"><div class="val" id="statPopFront">0</div><div class="lbl">Front Pops</div></div>
+        <div class="stat"><div class="val" id="statAnswers">0</div><div class="lbl">Recorded</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Current Answer Sequence</h3>
+      <div class="info-box" id="answerBox" style="min-height:32px">[]</div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="bigo-table">
+        <tr><th>Aspect</th><th>Value</th></tr>
+        <tr><td>Total time</td><td class="good">O(n)</td></tr>
+        <tr><td>Per element (amortized)</td><td class="good">O(1)</td></tr>
+        <tr><td>Per element (worst single)</td><td class="bad">O(k)</td></tr>
+        <tr><td>Space</td><td class="good">O(k)</td></tr>
+        <tr><td>Brute force</td><td class="bad">O(n*k)</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let array = [1, 3, -1, -3, 5, 3, 6, 7];
+let k = 3;
+let mode = 'max'; // 'max' or 'min'
+
+// Animation state
+let i = -1;
+let phase = 'next'; // 'next' (advance i), 'expire', 'back-pop', 'push', 'record'
+let dq = [];        // indices
+let answers = [];
+let pushes = 0;
+let popBack = 0;
+let popFront = 0;
+let playing = false;
+let playTimer = null;
+let flash = null;   // { type: 'push' | 'pop-back' | 'pop-front', index: deque-position }
+
+function clampK() {
+  if (k < 1) k = 1;
+  if (k > array.length) k = array.length;
+  document.getElementById('kInput').value = k;
+}
+
+function loadInput() {
+  const raw = document.getElementById('arrayInput').value;
+  const nums = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  if (nums.length === 0) return;
+  array = nums;
+  k = parseInt(document.getElementById('kInput').value) || 1;
+  clampK();
+  reset(true);
+}
+
+function loadRandom() {
+  const n = 6 + Math.floor(Math.random() * 6); // 6..11
+  array = Array.from({length: n}, () => Math.floor(Math.random() * 19) - 9);
+  document.getElementById('arrayInput').value = array.join(', ');
+  k = 1 + Math.floor(Math.random() * Math.min(4, n - 1));
+  document.getElementById('kInput').value = k;
+  reset(true);
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('modeMaxBtn').classList.toggle('active', m === 'max');
+  document.getElementById('modeMinBtn').classList.toggle('active', m === 'min');
+  reset(true);
+}
+
+function reset(silent) {
+  pause();
+  i = -1;
+  phase = 'next';
+  dq = [];
+  answers = [];
+  pushes = 0;
+  popBack = 0;
+  popFront = 0;
+  flash = null;
+  if (!silent) addLog('Reset.', 'log-info');
+  document.getElementById('logArea').innerHTML = '';
+  document.getElementById('infoBox').innerHTML =
+    'Press <strong>Step</strong> to advance one operation, or <strong>Play</strong> to auto-run.';
+  render();
+  updateStats();
+  updateAnswers();
+}
+
+function renderArray() {
+  const row = document.getElementById('arrayRow');
+  row.innerHTML = '';
+  const l = Math.max(0, i - k + 1);
+  for (let j = 0; j < array.length; j++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    if (j === i) cell.classList.add('current');
+    else if (i >= 0 && j >= l && j <= i) cell.classList.add('in-window');
+    if (i >= 0 && j < l) cell.classList.add('expired');
+
+    const v = document.createElement('div');
+    v.className = 'cell-value';
+    v.textContent = array[j];
+
+    const idx = document.createElement('div');
+    idx.className = 'cell-index';
+    idx.textContent = j;
+
+    cell.appendChild(v);
+    cell.appendChild(idx);
+
+    if (i >= 0 && i >= k - 1 && j === l) {
+      // start of window bracket below this cell
+      const bracket = document.createElement('div');
+      bracket.className = 'window-bracket';
+      // width spans k cells (44px each + 4px gap)
+      bracket.style.width = (k * 48 - 4) + 'px';
+      cell.appendChild(bracket);
+    }
+
+    row.appendChild(cell);
+  }
+}
+
+function renderDeque() {
+  const row = document.getElementById('dequeRow');
+  row.innerHTML = '';
+  if (dq.length === 0) {
+    row.innerHTML = '<span class="deque-empty">empty</span>';
+    return;
+  }
+  for (let pos = 0; pos < dq.length; pos++) {
+    const cell = document.createElement('div');
+    cell.className = 'deque-cell';
+    if (pos === 0) {
+      const tag = document.createElement('div');
+      tag.className = 'dq-tag';
+      tag.textContent = 'front';
+      cell.appendChild(tag);
+    }
+    if (pos === dq.length - 1 && dq.length > 1) {
+      const tag = document.createElement('div');
+      tag.className = 'dq-tag';
+      tag.textContent = 'back';
+      cell.appendChild(tag);
+    }
+    if (flash && flash.posType === 'idx' && flash.value === dq[pos]) {
+      cell.classList.add('flash-' + flash.type);
+    }
+    const v = document.createElement('div');
+    v.className = 'dq-value';
+    v.textContent = array[dq[pos]];
+    const idx = document.createElement('div');
+    idx.className = 'dq-index';
+    idx.textContent = 'i=' + dq[pos];
+    cell.appendChild(v);
+    cell.appendChild(idx);
+    row.appendChild(cell);
+
+    if (pos < dq.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.className = 'deque-arrow';
+      arrow.textContent = '→';
+      row.appendChild(arrow);
+    }
+  }
+}
+
+function render() {
+  renderArray();
+  renderDeque();
+}
+
+function updateStats() {
+  document.getElementById('statI').textContent = i < 0 ? '-' : i;
+  document.getElementById('statDeque').textContent = dq.length;
+  document.getElementById('statPushes').textContent = pushes;
+  document.getElementById('statPopBack').textContent = popBack;
+  document.getElementById('statPopFront').textContent = popFront;
+  document.getElementById('statAnswers').textContent = answers.length;
+}
+
+function updateAnswers() {
+  document.getElementById('answerBox').textContent = '[' + answers.join(', ') + ']';
+}
+
+function setInfo(html) {
+  document.getElementById('infoBox').innerHTML = html;
+}
+
+function addLog(msg, cls) {
+  const area = document.getElementById('logArea');
+  const e = document.createElement('div');
+  e.className = 'log-entry';
+  e.innerHTML = '<span class="' + cls + '">' + msg + '</span>';
+  area.prepend(e);
+  if (area.children.length > 80) area.removeChild(area.lastChild);
+}
+
+function backPopShouldFire(incoming) {
+  if (dq.length === 0) return false;
+  const back = array[dq[dq.length - 1]];
+  if (mode === 'max') return back < incoming;
+  return back > incoming;
+}
+
+function step() {
+  if (i >= array.length - 1 && phase === 'next') {
+    setInfo('<span class="info-op">DONE.</span> All windows processed. ' +
+            '<span class="info-cplx">Total ops: ' + (pushes + popBack + popFront) +
+            ' over n = ' + array.length + ' → amortized O(1) per index.</span>');
+    pause();
+    return;
+  }
+
+  flash = null;
+
+  if (phase === 'next') {
+    i++;
+    flash = null;
+    setInfo('<span class="info-op">i = ' + i + '</span>: ' +
+            'advance to value <span class="info-detail">a[' + i + '] = ' + array[i] + '</span>. ' +
+            '<span class="info-cplx">O(1)</span>');
+    addLog('--- i = ' + i + ' (a[i] = ' + array[i] + ') ---', 'log-info');
+    phase = 'expire';
+  } else if (phase === 'expire') {
+    if (dq.length > 0 && dq[0] < i - k + 1) {
+      const removed = dq[0];
+      flash = { type: 'pop-front', posType: 'idx', value: removed };
+      render();
+      setTimeout(() => {
+        dq.shift();
+        popFront++;
+        addLog('POP FRONT: index ' + removed + ' (left the window).', 'log-pop-front');
+        setInfo('<span class="info-op">EXPIRE</span>: front index ' + removed +
+                ' < window_left (' + (i - k + 1) + '). Pop from front. ' +
+                '<span class="info-cplx">O(1)</span>');
+        render();
+        updateStats();
+        if (playing) playTimer = setTimeout(step, getSpeed());
+      }, 220);
+      phase = 'back-pop';
+      return;
+    }
+    phase = 'back-pop';
+    // fall through to next call
+  } else if (phase === 'back-pop') {
+    if (backPopShouldFire(array[i])) {
+      const removed = dq[dq.length - 1];
+      flash = { type: 'pop-back', posType: 'idx', value: removed };
+      render();
+      setTimeout(() => {
+        dq.pop();
+        popBack++;
+        const op = mode === 'max' ? '<' : '>';
+        addLog('POP BACK: index ' + removed + ' (a[' + removed + ']=' + array[removed] +
+               ' ' + op + ' a[' + i + ']=' + array[i] + ').', 'log-pop-back');
+        setInfo('<span class="info-op">MAINTAIN</span>: back value ' + array[removed] +
+                ' is dominated by incoming ' + array[i] + '. Pop from back. ' +
+                '<span class="info-cplx">O(1) amortized</span>');
+        render();
+        updateStats();
+        if (playing) playTimer = setTimeout(step, getSpeed());
+      }, 220);
+      // stay in back-pop until invariant restored
+      return;
+    }
+    phase = 'push';
+  }
+
+  if (phase === 'push') {
+    dq.push(i);
+    pushes++;
+    flash = { type: 'push', posType: 'idx', value: i };
+    addLog('PUSH BACK: index ' + i + ' (value ' + array[i] + '). Deque size = ' + dq.length + '.',
+           'log-push');
+    setInfo('<span class="info-op">PUSH</span> index ' + i + ' to the back. ' +
+            'Deque (values from front): [' +
+            dq.map(j => array[j]).join(', ') + '] ' +
+            '<span class="info-cplx">O(1)</span>');
+    phase = 'record';
+    render();
+    updateStats();
+    if (playing) playTimer = setTimeout(step, getSpeed());
+    return;
+  }
+
+  if (phase === 'record') {
+    if (i >= k - 1) {
+      const ans = array[dq[0]];
+      answers.push(ans);
+      addLog('RECORD: window [' + (i - k + 1) + '..' + i + '] -> ' +
+             (mode === 'max' ? 'max' : 'min') + ' = ' + ans +
+             ' (at index ' + dq[0] + ').', 'log-record');
+      setInfo('<span class="info-op">RECORD</span> window [' + (i - k + 1) + '..' + i +
+              '] ' + (mode === 'max' ? 'max' : 'min') + ' = ' +
+              '<span class="info-detail">' + ans + '</span> ' +
+              '(front of deque, index ' + dq[0] + '). ' +
+              '<span class="info-cplx">O(1)</span>');
+      updateAnswers();
+    } else {
+      setInfo('<span class="info-op">NO ANSWER YET</span>: window not full ' +
+              '(need i ≥ ' + (k - 1) + ', currently ' + i + ').');
+      addLog('No record: window not full yet.', 'log-info');
+    }
+    phase = 'next';
+    render();
+    updateStats();
+    if (playing) playTimer = setTimeout(step, getSpeed());
+    return;
+  }
+
+  // Default fallthrough
+  render();
+  updateStats();
+  if (playing) playTimer = setTimeout(step, getSpeed());
+}
+
+function getSpeed() {
+  const v = parseInt(document.getElementById('speedInput').value) || 700;
+  return Math.max(100, Math.min(3000, v));
+}
+
+function play() {
+  if (playing) return;
+  playing = true;
+  document.getElementById('playBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  step();
+}
+
+function pause() {
+  playing = false;
+  if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+  document.getElementById('playBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+// Initial render
+clampK();
+render();
+updateStats();
+updateAnswers();
+</script>
+
+</body>
+</html>

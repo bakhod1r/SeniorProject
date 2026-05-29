@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Binary Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;color:var(--blue);
+       border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.active{background:var(--blue);color:var(--bg)}
+input[type=text]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem;width:340px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+select{padding:8px 14px;border:2px solid var(--border);background:var(--surface);color:var(--text);
+       border-radius:6px;font-size:.95rem}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:24px;margin-bottom:16px;width:100%;max-width:1100px;
+       min-height:420px;overflow-x:auto}
+svg{display:block;margin:0 auto}
+.node circle{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .25s}
+.node.visited circle{fill:var(--green);stroke:var(--green)}
+.node.current circle{fill:var(--yellow);stroke:var(--yellow)}
+.node.queued circle{fill:var(--surface);stroke:var(--purple)}
+.node text{fill:var(--text);text-anchor:middle;dominant-baseline:central;
+           font-family:monospace;font-size:.95rem;font-weight:700}
+.node.current text,.node.visited text{fill:var(--bg)}
+.node .order{fill:var(--orange);font-size:.7rem;text-anchor:middle}
+.edge{stroke:var(--border);stroke-width:2;fill:none}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:50%;border:2px solid var(--border)}
+.queue-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;margin-bottom:16px;width:100%;max-width:1100px;
+       font-family:monospace;font-size:.9rem;min-height:40px}
+.queue-panel .lbl{color:var(--muted);margin-right:8px}
+.queue-panel .item{display:inline-block;padding:2px 8px;margin:2px;border-radius:4px;
+       background:var(--bg);border:1px solid var(--purple);color:var(--purple)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>Binary Tree</h1>
+<p class="subtitle">Traversal order matters: preorder (root-left-right), inorder (left-root-right), postorder (left-right-root), level-order (BFS).</p>
+
+<div class="badges">
+<span class="badge best">Traversal: O(n)</span>
+<span class="badge space">Space: O(h) recursive</span>
+<span class="badge best">DFS or BFS</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="customInput" placeholder="Level-order (use 'null' for missing): 1,2,3,null,4,5,6">
+<button onclick="loadInput()">Load</button>
+<button onclick="genRandom()" class="secondary">Random</button>
+</div>
+
+<div class="controls">
+<span style="color:var(--muted);font-size:.85rem">Traversal:</span>
+<button id="preBtn" class="active" onclick="setMode('preorder')">Preorder</button>
+<button id="inBtn" onclick="setMode('inorder')">Inorder</button>
+<button id="postBtn" onclick="setMode('postorder')">Postorder</button>
+<button id="lvlBtn" onclick="setMode('levelorder')">Level-order</button>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">▶ Start</button>
+<button id="stepBtn" onclick="stepFwd()">▷ Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>❚❚ Pause</button>
+<button id="resetBtn" onclick="reset()" class="secondary">↺ Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<span style="color:var(--muted);font-size:.8rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="5">
+<span style="color:var(--muted);font-size:.8rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg)"></div>Unvisited</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow);border-color:var(--yellow)"></div>Current</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green);border-color:var(--green)"></div>Visited</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--surface);border-color:var(--purple)"></div>Queued / Stacked</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Nodes</div><div class="stat-value" id="nCount">0</div></div>
+<div><div class="stat-label">Height</div><div class="stat-value" id="hVal">0</div></div>
+<div><div class="stat-label">Leaves</div><div class="stat-value" id="lCount">0</div></div>
+<div><div class="stat-label">Step</div><div class="stat-value" id="stepIdx">0</div></div>
+<div><div class="stat-label">Mode</div><div class="stat-value" id="modeStat">preorder</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="queue-panel" id="qPanel"><span class="lbl">aux:</span><span id="qList"></span></div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Press <span class="highlight">Start</span> to run traversal.</div>
+</div>
+
+<p class="footer-note">A binary tree is the recursive building block of BSTs, heaps, segment trees, and tries. Every traversal visits each node exactly once, so all four are O(n) time. Recursive DFS uses O(h) stack; iterative BFS uses an O(width) queue.</p>
+
+<script>
+let raw='1,2,3,4,5,null,6,7,null,null,8';
+let root=null;
+let nodes=[];      // flat list with positions and metadata
+let steps=[],idx=0,running=false,timer=null;
+let mode='preorder';
+
+function parseLevelOrder(s){
+  const tokens=s.split(/[, ]+/).filter(t=>t.length>0);
+  if(tokens.length===0||tokens[0]==='null') return null;
+  const root={val:tokens[0],left:null,right:null,id:0};
+  const q=[root];
+  let i=1, idc=1;
+  while(q.length>0 && i<tokens.length){
+    const n=q.shift();
+    if(i<tokens.length){
+      const v=tokens[i++];
+      if(v!=='null'){ n.left={val:v,left:null,right:null,id:idc++}; q.push(n.left); }
+    }
+    if(i<tokens.length){
+      const v=tokens[i++];
+      if(v!=='null'){ n.right={val:v,left:null,right:null,id:idc++}; q.push(n.right); }
+    }
+  }
+  return root;
+}
+
+function layoutTree(r){
+  // assign x by inorder index, y by depth
+  const arr=[];
+  let order=0;
+  function walk(n,depth){
+    if(!n) return;
+    walk(n.left,depth+1);
+    n._x=order++;
+    n._depth=depth;
+    arr.push(n);
+    walk(n.right,depth+1);
+  }
+  walk(r,0);
+  return arr;
+}
+
+function countNodes(r){ if(!r) return 0; return 1+countNodes(r.left)+countNodes(r.right); }
+function height(r){ if(!r) return 0; return 1+Math.max(height(r.left),height(r.right)); }
+function countLeaves(r){ if(!r) return 0; if(!r.left&&!r.right) return 1; return countLeaves(r.left)+countLeaves(r.right); }
+
+function buildSteps(r, m){
+  const out=[];
+  if(!r) return out;
+  if(m==='preorder'){
+    const stack=[r];
+    out.push({type:'init',cur:null,visited:new Set(),aux:[r.id],auxName:'stack'});
+    while(stack.length>0){
+      const n=stack.pop();
+      const aux=stack.map(x=>x.id);
+      out.push({type:'visit',cur:n.id,visited:new Set([...(out[out.length-1].visited)]),aux,auxName:'stack',
+                note:`Pop ${n.val} → visit. Push right then left so left is processed next.`});
+      const vis=new Set([...(out[out.length-1].visited),n.id]);
+      if(n.right) stack.push(n.right);
+      if(n.left) stack.push(n.left);
+      out.push({type:'after',cur:null,visited:vis,aux:stack.map(x=>x.id),auxName:'stack'});
+    }
+  } else if(m==='inorder'){
+    const stack=[]; let cur=r;
+    out.push({type:'init',cur:null,visited:new Set(),aux:[],auxName:'stack'});
+    while(cur||stack.length>0){
+      while(cur){ stack.push(cur);
+        out.push({type:'descend',cur:cur.id,visited:new Set([...(out[out.length-1].visited)]),aux:stack.map(x=>x.id),auxName:'stack',
+                  note:`Push ${cur.val}, go left.`});
+        cur=cur.left;
+      }
+      const n=stack.pop();
+      const aux=stack.map(x=>x.id);
+      out.push({type:'visit',cur:n.id,visited:new Set([...(out[out.length-1].visited)]),aux,auxName:'stack',
+                note:`Pop ${n.val} → visit. Now go to its right subtree.`});
+      const vis=new Set([...(out[out.length-1].visited),n.id]);
+      out.push({type:'after',cur:null,visited:vis,aux:stack.map(x=>x.id),auxName:'stack'});
+      cur=n.right;
+    }
+  } else if(m==='postorder'){
+    const stack=[r], outStack=[];
+    while(stack.length>0){
+      const n=stack.pop(); outStack.push(n);
+      if(n.left) stack.push(n.left);
+      if(n.right) stack.push(n.right);
+    }
+    out.push({type:'init',cur:null,visited:new Set(),aux:outStack.map(x=>x.id).reverse(),auxName:'pending'});
+    while(outStack.length>0){
+      const n=outStack.pop();
+      out.push({type:'visit',cur:n.id,visited:new Set([...(out[out.length-1].visited)]),aux:outStack.map(x=>x.id).reverse(),auxName:'pending',
+                note:`Visit ${n.val} (left/right subtrees done).`});
+      const vis=new Set([...(out[out.length-1].visited),n.id]);
+      out.push({type:'after',cur:null,visited:vis,aux:outStack.map(x=>x.id).reverse(),auxName:'pending'});
+    }
+  } else if(m==='levelorder'){
+    const q=[r];
+    out.push({type:'init',cur:null,visited:new Set(),aux:[r.id],auxName:'queue'});
+    while(q.length>0){
+      const n=q.shift();
+      const aux=q.map(x=>x.id);
+      out.push({type:'visit',cur:n.id,visited:new Set([...(out[out.length-1].visited)]),aux,auxName:'queue',
+                note:`Dequeue ${n.val} → visit. Enqueue its children.`});
+      const vis=new Set([...(out[out.length-1].visited),n.id]);
+      if(n.left) q.push(n.left);
+      if(n.right) q.push(n.right);
+      out.push({type:'after',cur:null,visited:vis,aux:q.map(x=>x.id),auxName:'queue'});
+    }
+  }
+  return out;
+}
+
+function render(s){
+  const c=document.getElementById('canvas');
+  if(!root||nodes.length===0){ c.innerHTML='<p style="color:var(--muted);text-align:center">Empty tree.</p>'; return; }
+  const W=Math.max(700, nodes.length*60);
+  const H=Math.max(360, (height(root))*80);
+  const xs=nodes.map(n=>n._x);
+  const maxX=Math.max(...xs);
+  const sx = i => 40 + i*(W-80)/(Math.max(1,maxX));
+  const sy = d => 40 + d*(H-80)/(Math.max(1,height(root)-1));
+
+  let edges='';
+  function ed(n){
+    if(!n) return;
+    if(n.left){ edges+=`<line class="edge" x1="${sx(n._x)}" y1="${sy(n._depth)}" x2="${sx(n.left._x)}" y2="${sy(n.left._depth)}"/>`; ed(n.left); }
+    if(n.right){ edges+=`<line class="edge" x1="${sx(n._x)}" y1="${sy(n._depth)}" x2="${sx(n.right._x)}" y2="${sy(n.right._depth)}"/>`; ed(n.right); }
+  }
+  ed(root);
+
+  let nodesSvg='';
+  const order=new Map();
+  let o=1;
+  // compute visit-order labels: assign sequential numbers to visited nodes in steps so far
+  if(s && s.visited){
+    // reconstruct order from steps up to idx
+    let ctr=1;
+    for(let k=0;k<=Math.min(idx-1,steps.length-1);k++){
+      if(steps[k].type==='visit'){ order.set(steps[k].cur, ctr++); }
+    }
+  }
+  for(const n of nodes){
+    let cls='node';
+    if(s){
+      if(s.cur===n.id) cls+=' current';
+      else if(s.visited.has(n.id)) cls+=' visited';
+      else if((s.aux||[]).includes(n.id)) cls+=' queued';
+    }
+    nodesSvg+=`<g class="${cls}">
+      <circle cx="${sx(n._x)}" cy="${sy(n._depth)}" r="20"/>
+      <text x="${sx(n._x)}" y="${sy(n._depth)}">${n.val}</text>
+      ${order.has(n.id)?`<text class="order" x="${sx(n._x)}" y="${sy(n._depth)+34}">#${order.get(n.id)}</text>`:''}
+    </g>`;
+  }
+  c.innerHTML=`<svg width="${W}" height="${H+30}">${edges}${nodesSvg}</svg>`;
+
+  document.getElementById('nCount').textContent=countNodes(root);
+  document.getElementById('hVal').textContent=height(root);
+  document.getElementById('lCount').textContent=countLeaves(root);
+  document.getElementById('stepIdx').textContent=idx;
+  document.getElementById('modeStat').textContent=mode;
+
+  const qList=document.getElementById('qList');
+  if(s){
+    document.querySelector('.queue-panel .lbl').textContent=(s.auxName||'aux')+':';
+    qList.innerHTML=(s.aux||[]).map(id=>{
+      const n=nodes.find(x=>x.id===id);
+      return n?`<span class="item">${n.val}</span>`:'';
+    }).join('');
+  } else { qList.innerHTML=''; }
+
+  const info=document.getElementById('info');
+  if(!s) info.innerHTML='Press <span class="highlight">Start</span>.';
+  else if(s.type==='init') info.innerHTML=`<b>Init ${mode}</b>: ${s.auxName} seeded with root.`;
+  else if(s.type==='descend') info.innerHTML=s.note;
+  else if(s.type==='visit') info.innerHTML=`<span class="ok">VISIT</span> ${s.note}`;
+  else if(s.type==='after') info.innerHTML=`Updated ${s.auxName} after the visit.`;
+}
+
+function delay(){ return 1100-parseInt(document.getElementById('speedSlider').value)*100; }
+function start(){
+  if(steps.length===0){ steps=buildSteps(root,mode); }
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  tick();
+}
+function tick(){
+  if(!running||idx>=steps.length){ pause(); return; }
+  render(steps[idx]); idx++;
+  timer=setTimeout(tick,delay());
+}
+function stepFwd(){
+  if(steps.length===0){ steps=buildSteps(root,mode); }
+  if(idx<steps.length){ render(steps[idx]); idx++; }
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); steps=[]; idx=0;
+  rebuild();
+}
+function setMode(m){
+  mode=m;
+  ['preBtn','inBtn','postBtn','lvlBtn'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById({preorder:'preBtn',inorder:'inBtn',postorder:'postBtn',levelorder:'lvlBtn'}[m]).classList.add('active');
+  reset();
+}
+function rebuild(){
+  root=parseLevelOrder(raw);
+  nodes=layoutTree(root);
+  render(null);
+}
+function loadInput(){
+  raw=document.getElementById('customInput').value.trim();
+  if(!raw) raw='1';
+  reset();
+}
+function genRandom(){
+  const n=8+Math.floor(Math.random()*8);
+  const arr=[];
+  for(let i=0;i<n;i++){
+    arr.push(Math.random()<0.85?(Math.floor(Math.random()*90)+10).toString():'null');
+  }
+  raw=arr.join(',');
+  document.getElementById('customInput').value=raw;
+  reset();
+}
+document.getElementById('customInput').value=raw;
+rebuild();
+</script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prefix Sums & Difference Arrays Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; background: #0d1117; color: #c9d1d9; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: #58a6ff; margin-bottom: 6px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: #8b949e; margin-bottom: 16px; font-size: 0.85rem; }
+
+  .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 18px; }
+  .main-area { display: flex; flex-direction: column; gap: 14px; }
+  .side-panel { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; }
+  .panel h3 { color: #58a6ff; margin-bottom: 10px; font-size: 0.95rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="number"], .controls input[type="text"] {
+    background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 0.85rem;
+  }
+  .controls input[type="number"] { width: 70px; }
+  .controls input[type="text"] { width: 260px; }
+  .controls label { color: #8b949e; font-size: 0.85rem; }
+
+  button { background: #238636; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: background 0.2s; }
+  button:hover { background: #2ea043; }
+  button.secondary { background: #30363d; color: #c9d1d9; }
+  button.secondary:hover { background: #484f58; }
+  button.danger { background: #da3633; }
+  button.danger:hover { background: #f85149; }
+  button.mode { background: transparent; border: 1px solid #30363d; color: #8b949e; }
+  button.mode.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+
+  .mode-row { display: flex; gap: 8px; margin-bottom: 10px; }
+
+  /* ===== Cells ===== */
+  .row { display: flex; align-items: stretch; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
+  .row-label { color: #8b949e; min-width: 80px; padding: 8px 6px; font-size: 0.8rem; }
+  .cell {
+    min-width: 44px; height: 44px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #21262d; border: 1px solid #30363d; border-radius: 4px;
+    color: #c9d1d9; font-size: 0.85rem; position: relative;
+    transition: background 0.25s, border-color 0.25s, transform 0.2s;
+  }
+  .cell .idx { position: absolute; bottom: -16px; font-size: 0.65rem; color: #6e7681; }
+  .cell.l-mark { background: #1f3a52; border-color: #58a6ff; color: #58a6ff; }
+  .cell.r-mark { background: #5a3a18; border-color: #f0883e; color: #f0883e; }
+  .cell.in-range { background: #1f3a2e; border-color: #2ea043; color: #7ee787; }
+  .cell.diff-update { background: #3a1f3a; border-color: #bc8cff; color: #bc8cff; animation: pulse 0.6s ease-in-out 2; }
+  .cell.reconstruct { background: #2d2916; border-color: #d29922; color: #d29922; }
+  .cell.minus { color: #ff7b72; }
+  .cell.plus  { color: #7ee787; }
+
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+
+  .row-wrap { padding-bottom: 16px; } /* room for idx labels */
+
+  .formula {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 10px; font-size: 0.85rem; color: #c9d1d9; line-height: 1.6;
+  }
+  .formula .blue { color: #58a6ff; }
+  .formula .orange { color: #f0883e; }
+  .formula .green { color: #7ee787; }
+  .formula .purple { color: #bc8cff; }
+  .formula .yellow { color: #d29922; }
+  .formula .red { color: #ff7b72; }
+
+  /* ===== Stats / side panels ===== */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 8px; text-align: center; }
+  .stat .val { font-size: 1.1rem; color: #58a6ff; font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; color: #8b949e; margin-top: 2px; }
+
+  .bigO-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .bigO-table th, .bigO-table td { padding: 5px 6px; border: 1px solid #30363d; text-align: center; }
+  .bigO-table th { background: #21262d; color: #58a6ff; }
+  .bigO-table .good { color: #7ee787; }
+  .bigO-table .bad { color: #ff7b72; }
+
+  .log {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+    padding: 8px; max-height: 200px; overflow-y: auto; font-size: 0.78rem; line-height: 1.5;
+  }
+  .log .entry { border-bottom: 1px solid #21262d; padding: 2px 0; }
+  .log .op-query { color: #58a6ff; }
+  .log .op-update { color: #bc8cff; }
+  .log .op-info { color: #f0883e; }
+  .log .op-reset { color: #8b949e; }
+</style>
+</head>
+<body>
+
+<h1>Prefix Sums &amp; Difference Arrays</h1>
+<p class="subtitle">Two duals: read-fast (prefix) vs write-fast (difference)</p>
+
+<div class="container">
+  <div class="main-area">
+
+    <div class="panel">
+      <h3>Mode</h3>
+      <div class="mode-row">
+        <button id="modePrefixBtn" class="mode active" onclick="setMode('prefix')">Prefix Sum Mode</button>
+        <button id="modeDiffBtn" class="mode" onclick="setMode('diff')">Difference Array Mode</button>
+      </div>
+
+      <div id="prefixControls" class="controls">
+        <label>l:</label>
+        <input type="number" id="lInput" min="0" value="2">
+        <label>r:</label>
+        <input type="number" id="rInput" min="0" value="5">
+        <button onclick="doQuery()">Query a[l..r]</button>
+        <button class="secondary" onclick="rebuild()">Rebuild Array</button>
+        <button class="secondary" onclick="randomArray()">Random</button>
+        <button class="danger" onclick="reset()">Reset</button>
+      </div>
+
+      <div id="diffControls" class="controls" style="display:none">
+        <label>l:</label>
+        <input type="number" id="dlInput" min="0" value="1">
+        <label>r:</label>
+        <input type="number" id="drInput" min="0" value="4">
+        <label>v:</label>
+        <input type="number" id="dvInput" value="3">
+        <button onclick="doRangeUpdate()">Range +v</button>
+        <button class="secondary" onclick="reconstructDiff()">Reconstruct a[]</button>
+        <button class="secondary" onclick="randomArray()">Random</button>
+        <button class="danger" onclick="reset()">Reset</button>
+      </div>
+
+      <div class="controls" style="margin-top:8px">
+        <label>Custom a[]:</label>
+        <input type="text" id="customInput" placeholder="e.g. 3, 1, 4, 1, 5, 9, 2, 6">
+        <button class="secondary" onclick="loadCustom()">Load</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 id="topRowTitle">Array a[]</h3>
+      <div class="row-wrap"><div class="row" id="aRow"></div></div>
+    </div>
+
+    <div class="panel">
+      <h3 id="bottomRowTitle">Prefix prefix[]   (length n+1, prefix[0] = 0)</h3>
+      <div class="row-wrap"><div class="row" id="bRow"></div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Formula</h3>
+      <div class="formula" id="formula">
+        Pick <span class="blue">l</span> and <span class="orange">r</span> and press <em>Query</em>
+        to see <span class="green">prefix[r+1] - prefix[l]</span>.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="side-panel">
+
+    <div class="panel">
+      <h3>Stats</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statN">0</div><div class="lbl">array size n</div></div>
+        <div class="stat"><div class="val" id="statQ">0</div><div class="lbl">queries done</div></div>
+        <div class="stat"><div class="val" id="statU">0</div><div class="lbl">updates done</div></div>
+        <div class="stat"><div class="val" id="statSum">0</div><div class="lbl">last result</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O</h3>
+      <table class="bigO-table">
+        <tr><th>Op</th><th>Prefix</th><th>Diff</th></tr>
+        <tr><td>Build</td><td>O(n)</td><td>O(n)</td></tr>
+        <tr><td>Range query</td><td class="good">O(1)</td><td class="bad">O(n)</td></tr>
+        <tr><td>Range update</td><td class="bad">O(n)</td><td class="good">O(1)</td></tr>
+        <tr><td>Point query</td><td class="good">O(1)</td><td class="bad">O(n)*</td></tr>
+        <tr><td>Space</td><td>O(n)</td><td>O(n)</td></tr>
+      </table>
+      <div style="font-size:0.7rem;color:#8b949e;margin-top:6px">
+        * O(1) after a one-time O(n) reconstruction
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ===== State =====
+  const INITIAL = [3, 1, 4, 1, 5, 9, 2, 6];
+  let a = INITIAL.slice();
+  let prefix = [];
+  let diff = [];
+  let mode = 'prefix'; // 'prefix' or 'diff'
+  let stats = { q: 0, u: 0, lastSum: 0 };
+
+  // ===== Build =====
+  function buildPrefix() {
+    prefix = new Array(a.length + 1).fill(0);
+    for (let i = 0; i < a.length; i++) prefix[i + 1] = prefix[i] + a[i];
+  }
+  function buildDiff() {
+    diff = new Array(a.length + 1).fill(0);
+    diff[0] = a[0];
+    for (let i = 1; i < a.length; i++) diff[i] = a[i] - a[i - 1];
+  }
+
+  // ===== Rendering =====
+  function renderRow(elId, arr, highlights, signs) {
+    const el = document.getElementById(elId);
+    el.innerHTML = '';
+    arr.forEach((v, i) => {
+      const c = document.createElement('div');
+      c.className = 'cell';
+      if (highlights && highlights[i]) c.classList.add(highlights[i]);
+      if (signs && signs[i]) c.classList.add(signs[i]);
+      let val = v;
+      if (signs && signs[i] === 'plus' && typeof v === 'number') val = '+' + v;
+      c.innerHTML = `<span>${val}</span><span class="idx">${i}</span>`;
+      el.appendChild(c);
+    });
+  }
+  function render(highlightsA, highlightsB, signsA, signsB) {
+    if (mode === 'prefix') {
+      document.getElementById('topRowTitle').textContent = 'Array a[]';
+      document.getElementById('bottomRowTitle').textContent =
+        'Prefix prefix[]   (length n+1, prefix[0] = 0)';
+      renderRow('aRow', a, highlightsA, signsA);
+      renderRow('bRow', prefix, highlightsB, signsB);
+    } else {
+      document.getElementById('topRowTitle').textContent = 'Diff diff[]   (size n+1; diff[n] is the right sentinel)';
+      document.getElementById('bottomRowTitle').textContent = 'Reconstructed a[]';
+      renderRow('aRow', diff, highlightsA, signsA);
+      renderRow('bRow', a, highlightsB, signsB);
+    }
+    document.getElementById('statN').textContent = a.length;
+    document.getElementById('statQ').textContent = stats.q;
+    document.getElementById('statU').textContent = stats.u;
+    document.getElementById('statSum').textContent = stats.lastSum;
+  }
+
+  // ===== Logging =====
+  function log(msg, klass = 'op-info') {
+    const el = document.getElementById('log');
+    const e = document.createElement('div');
+    e.className = 'entry ' + klass;
+    e.innerHTML = msg;
+    el.insertBefore(e, el.firstChild);
+  }
+
+  // ===== Mode switching =====
+  function setMode(m) {
+    mode = m;
+    document.getElementById('modePrefixBtn').classList.toggle('active', m === 'prefix');
+    document.getElementById('modeDiffBtn').classList.toggle('active', m === 'diff');
+    document.getElementById('prefixControls').style.display = (m === 'prefix') ? 'flex' : 'none';
+    document.getElementById('diffControls').style.display = (m === 'diff') ? 'flex' : 'none';
+    if (m === 'prefix') {
+      buildPrefix();
+      document.getElementById('formula').innerHTML =
+        'Pick <span class="blue">l</span> and <span class="orange">r</span> and press <em>Query</em> ' +
+        'to see <span class="green">prefix[r+1] - prefix[l]</span>.';
+    } else {
+      buildDiff();
+      document.getElementById('formula').innerHTML =
+        'Pick <span class="blue">l</span>, <span class="orange">r</span>, value <span class="purple">v</span>; ' +
+        'pressing <em>Range +v</em> does <span class="purple">diff[l] += v</span> and <span class="red">diff[r+1] -= v</span>.';
+    }
+    render({}, {});
+    log('Switched to ' + m + ' mode.', 'op-info');
+  }
+
+  // ===== Operations =====
+  function doQuery() {
+    const l = parseInt(document.getElementById('lInput').value, 10);
+    const r = parseInt(document.getElementById('rInput').value, 10);
+    if (isNaN(l) || isNaN(r) || l < 0 || r >= a.length || l > r) {
+      log('Invalid range. Need 0 &lt;= l &lt;= r &lt; ' + a.length, 'op-info');
+      return;
+    }
+    const aHighlights = {};
+    for (let i = l; i <= r; i++) aHighlights[i] = 'in-range';
+    const bHighlights = {};
+    bHighlights[l] = 'l-mark';
+    bHighlights[r + 1] = 'r-mark';
+    const sum = prefix[r + 1] - prefix[l];
+    stats.q++;
+    stats.lastSum = sum;
+    render(aHighlights, bHighlights);
+    document.getElementById('formula').innerHTML =
+      'sum(a[<span class="blue">' + l + '</span>..<span class="orange">' + r + '</span>]) = ' +
+      '<span class="orange">prefix[' + (r + 1) + ']</span> - <span class="blue">prefix[' + l + ']</span> = ' +
+      prefix[r + 1] + ' - ' + prefix[l] + ' = <span class="green">' + sum + '</span>';
+    log(`Query a[${l}..${r}] = prefix[${r + 1}] - prefix[${l}] = ${prefix[r + 1]} - ${prefix[l]} = <b>${sum}</b>`, 'op-query');
+  }
+
+  function doRangeUpdate() {
+    const l = parseInt(document.getElementById('dlInput').value, 10);
+    const r = parseInt(document.getElementById('drInput').value, 10);
+    const v = parseInt(document.getElementById('dvInput').value, 10);
+    if (isNaN(l) || isNaN(r) || isNaN(v) || l < 0 || r >= a.length || l > r) {
+      log('Invalid range/value.', 'op-info');
+      return;
+    }
+    diff[l] += v;
+    diff[r + 1] -= v;
+    stats.u++;
+    const aHighlights = {};
+    aHighlights[l] = 'diff-update';
+    aHighlights[r + 1] = 'diff-update';
+    const signs = {};
+    signs[l] = 'plus';
+    signs[r + 1] = 'minus';
+    render(aHighlights, {}, signs, {});
+    document.getElementById('formula').innerHTML =
+      'Range +<span class="purple">' + v + '</span> on a[<span class="blue">' + l + '</span>..<span class="orange">' + r + '</span>]: ' +
+      '<span class="purple">diff[' + l + '] += ' + v + '</span>, ' +
+      '<span class="red">diff[' + (r + 1) + '] -= ' + v + '</span>';
+    log(`Range update a[${l}..${r}] += ${v}: diff[${l}] += ${v}, diff[${r + 1}] -= ${v}`, 'op-update');
+  }
+
+  function reconstructDiff() {
+    let cur = 0;
+    for (let i = 0; i < a.length; i++) {
+      cur += diff[i];
+      a[i] = cur;
+    }
+    const bHighlights = {};
+    for (let i = 0; i < a.length; i++) bHighlights[i] = 'reconstruct';
+    render({}, bHighlights);
+    document.getElementById('formula').innerHTML =
+      'Reconstructed <span class="yellow">a[i] = prefix sum of diff[0..i]</span>. Diff array is now zeroed-equivalent for the new baseline.';
+    log('Reconstructed a[] from diff[]. New array: [' + a.join(', ') + ']', 'op-update');
+    // After reconstruction, reset diff to reflect new baseline.
+    buildDiff();
+  }
+
+  // ===== Setup =====
+  function rebuild() {
+    buildPrefix();
+    buildDiff();
+    render({}, {});
+    log('Rebuilt prefix and diff from a[].', 'op-info');
+  }
+
+  function reset() {
+    a = INITIAL.slice();
+    stats = { q: 0, u: 0, lastSum: 0 };
+    buildPrefix();
+    buildDiff();
+    render({}, {});
+    document.getElementById('formula').innerHTML =
+      mode === 'prefix'
+        ? 'Pick <span class="blue">l</span> and <span class="orange">r</span> and press <em>Query</em>.'
+        : 'Pick <span class="blue">l</span>, <span class="orange">r</span>, <span class="purple">v</span> and press <em>Range +v</em>.';
+    log('Reset to initial array.', 'op-reset');
+  }
+
+  function randomArray() {
+    const n = 6 + Math.floor(Math.random() * 5); // 6-10
+    a = Array.from({ length: n }, () => Math.floor(Math.random() * 9) + 1);
+    stats = { q: 0, u: 0, lastSum: 0 };
+    buildPrefix();
+    buildDiff();
+    document.getElementById('customInput').value = a.join(', ');
+    render({}, {});
+    log('Generated random array of length ' + n + '.', 'op-info');
+  }
+
+  function loadCustom() {
+    const txt = document.getElementById('customInput').value;
+    const parts = txt.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    if (parts.length < 1) {
+      log('No valid numbers parsed.', 'op-info');
+      return;
+    }
+    a = parts;
+    stats = { q: 0, u: 0, lastSum: 0 };
+    buildPrefix();
+    buildDiff();
+    render({}, {});
+    log('Loaded custom array of length ' + a.length + '.', 'op-info');
+  }
+
+  // ===== Init =====
+  document.getElementById('customInput').value = a.join(', ');
+  buildPrefix();
+  buildDiff();
+  render({}, {});
+  log('Ready. Click Query or Range +v to begin.', 'op-info');
+</script>
+
+</body>
+</html>

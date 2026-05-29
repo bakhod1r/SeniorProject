@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bucket Sort — Visual Animation</title>
+<style>
+:root { --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+        --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; background:var(--bg); color:var(--text);
+       min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:20px; }
+h1 { font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center; }
+.subtitle { color:var(--muted); margin-bottom:16px; text-align:center; max-width:760px; }
+.badges { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; justify-content:center; }
+.badge { padding:4px 10px; border-radius:12px; font-size:.78rem; font-weight:600;
+         border:1px solid var(--border); background:var(--surface); }
+.badge.best { color:var(--green); border-color:var(--green); }
+.badge.worst { color:var(--red); border-color:var(--red); }
+.badge.space { color:var(--blue); border-color:var(--blue); }
+.badge.note { color:var(--purple); border-color:var(--purple); }
+.controls,.input-control { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; justify-content:center; }
+button { padding:8px 16px; border:2px solid var(--blue); background:transparent; color:var(--blue);
+         border-radius:6px; cursor:pointer; font-size:.92rem; transition:all .2s; }
+button:hover:not(:disabled) { background:var(--blue); color:var(--bg); }
+button:disabled { opacity:.4; cursor:not-allowed; }
+button.secondary { border-color:var(--border); color:var(--muted); }
+button.secondary:hover:not(:disabled) { background:var(--border); color:var(--text); }
+input[type=text] { padding:8px 12px; border:2px solid var(--border); background:var(--surface);
+                   color:var(--text); border-radius:6px; font-size:.9rem; width:300px; }
+input[type=text]:focus { outline:none; border-color:var(--blue); }
+input[type=range] { width:160px; accent-color:var(--blue); }
+.speed-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.speed-row span { color:var(--muted); font-size:.78rem; }
+.legend { display:flex; gap:16px; margin-bottom:14px; flex-wrap:wrap; justify-content:center; }
+.legend-item { display:flex; align-items:center; gap:5px; font-size:.78rem; color:var(--muted); }
+.legend-color { width:14px; height:14px; border-radius:3px; }
+.stats { background:var(--surface); border:2px solid var(--border); border-radius:12px;
+         padding:10px 18px; display:flex; gap:24px; margin-bottom:14px; flex-wrap:wrap; justify-content:center; }
+.stat-label { color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; }
+.stat-value { color:var(--blue); font-size:1.1rem; font-weight:700; font-family:monospace; }
+.canvas-container { background:var(--surface); border:2px solid var(--border); border-radius:12px;
+                    padding:18px; margin-bottom:14px; width:100%; max-width:1100px; overflow-x:auto; }
+.section-label { color:var(--muted); font-size:.78rem; text-transform:uppercase;
+                 letter-spacing:.06em; margin:8px 4px 6px 4px; }
+.input-row { display:flex; justify-content:center; gap:3px; padding:8px;
+             background:rgba(88,166,255,.05); border-radius:8px; flex-wrap:wrap; }
+.cell { min-width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+        background:var(--bg); border:1px solid var(--border); border-radius:5px;
+        font-size:.78rem; font-family:monospace; color:var(--text); transition:all .25s; position:relative; }
+.cell.scattering { transform:translateY(-6px); }
+.cell.taken { opacity:.15; }
+.cell.b0 { border-color:var(--blue); background:rgba(88,166,255,.18); }
+.cell.b1 { border-color:var(--green); background:rgba(63,185,80,.18); }
+.cell.b2 { border-color:var(--yellow); background:rgba(210,153,34,.18); }
+.cell.b3 { border-color:var(--red); background:rgba(248,81,73,.18); }
+.cell.b4 { border-color:var(--purple); background:rgba(188,140,255,.18); }
+.cell.b5 { border-color:var(--orange); background:rgba(255,166,87,.18); }
+.cell.b6 { border-color:#79c0ff; background:rgba(121,192,255,.18); }
+.cell.b7 { border-color:#56d364; background:rgba(86,211,100,.18); }
+.cell.b8 { border-color:#e3b341; background:rgba(227,179,65,.18); }
+.cell.b9 { border-color:#ff7b72; background:rgba(255,123,114,.18); }
+.cell.comparing { box-shadow:0 0 0 2px var(--yellow); }
+.cell.swapping { box-shadow:0 0 0 2px var(--orange); transform:translateY(-3px); }
+.cell.sorted { background:rgba(63,185,80,.30); border-color:var(--green); color:var(--text); }
+.buckets-grid { display:grid; grid-template-columns:repeat(10, 1fr); gap:6px;
+                padding:8px; background:rgba(188,140,255,.04); border-radius:8px; }
+.bucket { border:1px dashed var(--border); border-radius:6px; padding:6px 4px;
+          min-height:60px; display:flex; flex-direction:column; align-items:center; gap:3px; transition:all .25s; }
+.bucket.active { border-color:var(--yellow); background:rgba(210,153,34,.08); }
+.bucket.sorted { border-color:var(--green); background:rgba(63,185,80,.06); }
+.bucket-label { font-size:.65rem; color:var(--muted); font-family:monospace; margin-bottom:3px;
+                text-transform:uppercase; letter-spacing:.04em; }
+.bucket-cells { display:flex; flex-direction:column; gap:2px; align-items:center; }
+.bucket .cell { min-width:30px; height:26px; font-size:.7rem; }
+.output-row { display:flex; justify-content:center; gap:3px; padding:8px;
+              background:rgba(63,185,80,.06); border-radius:8px; flex-wrap:wrap; min-height:48px; }
+.info-panel { background:var(--surface); border:2px solid var(--border); border-radius:12px;
+              padding:14px 18px; width:100%; max-width:1100px; margin-bottom:14px; }
+.info-panel h3 { color:var(--blue); margin-bottom:6px; font-size:.95rem; }
+.step-info { font-family:monospace; font-size:.88rem; line-height:1.55; color:var(--text); }
+.step-info .highlight { color:var(--yellow); font-weight:600; }
+.step-info .ok { color:var(--green); }
+.complexity-table { background:var(--surface); border:2px solid var(--border); border-radius:12px;
+                    padding:10px 18px; margin-bottom:14px; width:100%; max-width:1100px; }
+.complexity-table table { width:100%; border-collapse:collapse; font-size:.82rem; }
+.complexity-table th, .complexity-table td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); }
+.complexity-table th { color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-size:.7rem; }
+.complexity-table .green { color:var(--green); font-family:monospace; }
+.complexity-table .yellow { color:var(--yellow); font-family:monospace; }
+.complexity-table .red { color:var(--red); font-family:monospace; }
+.footer-note { color:var(--muted); font-size:.74rem; margin-top:6px; text-align:center; max-width:760px; }
+</style>
+</head>
+<body>
+
+<h1>Bucket Sort</h1>
+<p class="subtitle">
+  Distribution sort: scatter elements into <strong>k</strong> buckets,
+  sort each bucket independently, then gather buckets in order. O(n) average
+  on uniform input; O(n^2) worst on skewed input.
+</p>
+
+<div class="badges">
+  <span class="badge best">Best: O(n + k)</span>
+  <span class="badge best">Avg: O(n)</span>
+  <span class="badge worst">Worst: O(n^2)</span>
+  <span class="badge space">Space: O(n + k)</span>
+  <span class="badge note">Stable if inner sort is stable</span>
+</div>
+
+<div class="input-control">
+  <input type="text" id="customInput" placeholder="Enter floats in [0,1): 0.42, 0.32, 0.23, 0.52, 0.25">
+  <button onclick="loadCustomInput()">Load</button>
+  <button onclick="generateUniform()" class="secondary">Uniform</button>
+  <button onclick="generateSkewed()" class="secondary">Skewed</button>
+</div>
+
+<div class="controls">
+  <button id="startBtn" onclick="start()">Play</button>
+  <button id="stepBtn" onclick="stepForward()">Step</button>
+  <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+  <button id="resetBtn" onclick="reset()" class="secondary">Reset</button>
+</div>
+
+<div class="speed-row">
+  <span>slow</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span>fast</span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.4)"></div>Bucket 0</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.4)"></div>Bucket 1</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.4)"></div>Bucket 2</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.4)"></div>Bucket 3</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(188,140,255,.4)"></div>Bucket 4</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Comparing</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Sorted</div>
+</div>
+
+<div class="stats">
+  <div><div class="stat-label">Step</div><div class="stat-value"><span id="curStep">0</span>/<span id="totSteps">0</span></div></div>
+  <div><div class="stat-label">Phase</div><div class="stat-value" id="phase">-</div></div>
+  <div><div class="stat-label">Buckets (k)</div><div class="stat-value" id="kVal">0</div></div>
+  <div><div class="stat-label">Comparisons</div><div class="stat-value" id="comps">0</div></div>
+  <div><div class="stat-label">Max bucket</div><div class="stat-value" id="maxBucket">0</div></div>
+</div>
+
+<div class="canvas-container">
+  <div class="section-label">Input array</div>
+  <div class="input-row" id="inputRow"></div>
+  <div class="section-label">Buckets (after scatter, sorted within)</div>
+  <div class="buckets-grid" id="bucketsGrid"></div>
+  <div class="section-label">Output (gather)</div>
+  <div class="output-row" id="outputRow"></div>
+</div>
+
+<div class="info-panel">
+  <h3>Algorithm Explanation</h3>
+  <div class="step-info" id="stepInfo">
+    Press <span class="highlight">Play</span> to animate, or <span class="highlight">Step</span> for single-step.
+    Try <span class="highlight">Skewed</span> to see Bucket Sort's worst case in action.
+  </div>
+</div>
+
+<div class="complexity-table">
+  <table>
+    <thead>
+      <tr><th>Operation</th><th>Best</th><th>Average</th><th>Worst</th><th>Note</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Scatter</td><td class="green">O(n)</td><td class="green">O(n)</td><td class="green">O(n)</td><td>One pass</td></tr>
+      <tr><td>Inner sort (per bucket)</td><td class="green">O(1)</td><td class="green">O(1)</td><td class="red">O(n^2)</td><td>Insertion sort</td></tr>
+      <tr><td>Gather</td><td class="green">O(n + k)</td><td class="green">O(n + k)</td><td class="green">O(n + k)</td><td>Concatenation</td></tr>
+      <tr><td>Total time</td><td class="green">O(n + k)</td><td class="green">O(n)</td><td class="red">O(n^2)</td><td>O(n) when k ≈ n, uniform</td></tr>
+      <tr><td>Space</td><td class="yellow">O(n + k)</td><td class="yellow">O(n + k)</td><td class="yellow">O(n + k)</td><td>Not in-place</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="footer-note">
+  Distribution sort: not a comparison sort, so it can beat the Ω(n log n) lower bound
+  when inputs are uniformly distributed. Differs from Counting Sort (one value per bucket)
+  and Radix Sort (chain of bucket-sort passes on digits).
+</p>
+
+<script>
+"use strict";
+
+// =========================================================================
+// State
+// =========================================================================
+const K = 10; // number of buckets
+let array = [0.42, 0.32, 0.23, 0.52, 0.25, 0.47, 0.51, 0.18, 0.85, 0.07];
+let steps = [];
+let stepIdx = 0;
+let busy = false;
+let animTimer = null;
+let comparisons = 0;
+
+// =========================================================================
+// Helpers
+// =========================================================================
+function fmt(v) { return v.toFixed(2); }
+function bucketOf(x) {
+  let i = Math.floor(K * x);
+  if (i >= K) i = K - 1;
+  if (i < 0) i = 0;
+  return i;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function getSpeed() {
+  const s = parseInt(document.getElementById('speedSlider').value);
+  return 1100 - s * 100; // 100..1000 ms
+}
+
+// =========================================================================
+// Step generation
+// Step shape:
+// {
+//   phase: 'scatter' | 'sort' | 'gather' | 'done',
+//   inputState: [{val, taken, scattering, bucketIdx}],
+//   buckets: [[{val, comparing, swapping, sorted}], ...],
+//   output: [val, ...],
+//   description: string,
+//   comps: number,
+//   activeBucket: number | null
+// }
+// =========================================================================
+function generateSteps(arr) {
+  steps = [];
+  comparisons = 0;
+  const n = arr.length;
+  const inputState = arr.map(v => ({ val: v, taken: false, scattering: false, bucketIdx: bucketOf(v) }));
+  const buckets = Array.from({ length: K }, () => []);
+  const output = [];
+
+  function snap(phase, desc, active) {
+    steps.push({
+      phase,
+      inputState: structuredClone(inputState),
+      buckets: structuredClone(buckets),
+      output: [...output],
+      description: desc,
+      comps: comparisons,
+      activeBucket: active
+    });
+  }
+
+  snap('init',
+    `Input has <span class="highlight">${n}</span> floats. Scatter into <span class="highlight">${K}</span> buckets via <code>idx = floor(${K} * x)</code>, sort each, gather.`,
+    null);
+
+  // Phase 1: Scatter
+  for (let i = 0; i < n; i++) {
+    const x = arr[i];
+    const idx = bucketOf(x);
+    inputState[i].scattering = true;
+    snap('scatter',
+      `Scatter ${i + 1}/${n}: x = <span class="highlight">${fmt(x)}</span>, floor(${K} * ${fmt(x)}) = <span class="highlight">${idx}</span>. Bucket ${idx}.`,
+      idx);
+    inputState[i].scattering = false;
+    inputState[i].taken = true;
+    buckets[idx].push({ val: x, comparing: false, swapping: false, sorted: false });
+    snap('scatter',
+      `Placed <span class="highlight">${fmt(x)}</span> in bucket ${idx} = [${buckets[idx].map(c => fmt(c.val)).join(', ')}].`,
+      idx);
+  }
+
+  // Phase 2: Sort each bucket (Insertion Sort)
+  for (let b = 0; b < K; b++) {
+    if (buckets[b].length === 0) continue;
+    if (buckets[b].length === 1) {
+      buckets[b][0].sorted = true;
+      snap('sort', `Sort bucket ${b}: single element, already sorted.`, b);
+      continue;
+    }
+    for (let i = 1; i < buckets[b].length; i++) {
+      const key = buckets[b][i].val;
+      let j = i - 1;
+      while (j >= 0) {
+        comparisons++;
+        buckets[b].forEach(c => { c.comparing = false; c.swapping = false; });
+        buckets[b][j].comparing = true;
+        buckets[b][j + 1].comparing = true;
+        snap('sort', `Sort bucket ${b}: compare ${fmt(buckets[b][j].val)} and ${fmt(buckets[b][j + 1].val)}.`, b);
+        if (buckets[b][j].val > key) {
+          buckets[b][j].swapping = true;
+          buckets[b][j + 1].swapping = true;
+          [buckets[b][j], buckets[b][j + 1]] = [buckets[b][j + 1], buckets[b][j]];
+          snap('sort', `Sort bucket ${b}: ${fmt(buckets[b][j + 1].val)} > ${fmt(key)} — shift right.`, b);
+          j--;
+        } else break;
+      }
+      buckets[b].forEach(c => { c.comparing = false; c.swapping = false; });
+    }
+    buckets[b].forEach(c => { c.sorted = true; });
+    snap('sort', `Bucket ${b} sorted: [${buckets[b].map(c => fmt(c.val)).join(', ')}].`, b);
+  }
+
+  // Phase 3: Gather
+  for (let b = 0; b < K; b++) {
+    for (let i = 0; i < buckets[b].length; i++) {
+      output.push(buckets[b][i].val);
+      snap('gather',
+        `Gather: append ${fmt(buckets[b][i].val)} from bucket ${b} → output position ${output.length - 1}.`,
+        b);
+    }
+  }
+
+  snap('done', `<span class="ok">Sorted!</span> Final output: [${output.map(fmt).join(', ')}].`, null);
+  document.getElementById('totSteps').textContent = steps.length;
+  document.getElementById('kVal').textContent = K;
+}
+
+// =========================================================================
+// Rendering
+// =========================================================================
+function render(step) {
+  // Input row
+  const inputRow = document.getElementById('inputRow');
+  inputRow.innerHTML = step.inputState.map(it => {
+    const cls = ['cell'];
+    if (it.taken) cls.push('taken');
+    if (it.scattering) cls.push('scattering');
+    cls.push('b' + (it.bucketIdx % 10));
+    return `<div class="${cls.join(' ')}">${fmt(it.val)}</div>`;
+  }).join('');
+
+  // Buckets grid
+  const grid = document.getElementById('bucketsGrid');
+  grid.innerHTML = step.buckets.map((b, idx) => {
+    const bucketClasses = ['bucket'];
+    if (step.activeBucket === idx) bucketClasses.push('active');
+    if (b.length > 0 && b.every(c => c.sorted)) bucketClasses.push('sorted');
+    const cells = b.map(c => {
+      const cls = ['cell', 'b' + (idx % 10)];
+      if (c.comparing) cls.push('comparing');
+      if (c.swapping) cls.push('swapping');
+      if (c.sorted) cls.push('sorted');
+      return `<div class="${cls.join(' ')}">${fmt(c.val)}</div>`;
+    }).join('');
+    return `
+      <div class="${bucketClasses.join(' ')}">
+        <div class="bucket-label">b${idx}</div>
+        <div class="bucket-cells">${cells}</div>
+      </div>`;
+  }).join('');
+
+  // Output row
+  const outRow = document.getElementById('outputRow');
+  outRow.innerHTML = step.output.map(v =>
+    `<div class="cell sorted">${fmt(v)}</div>`
+  ).join('') || `<div style="color:var(--muted); font-size:.78rem; padding:8px">(empty — gather not started)</div>`;
+
+  // Stats
+  document.getElementById('curStep').textContent = stepIdx + 1;
+  document.getElementById('comps').textContent = step.comps;
+  document.getElementById('phase').textContent = step.phase;
+  const maxB = Math.max(0, ...step.buckets.map(b => b.length));
+  document.getElementById('maxBucket').textContent = maxB;
+  document.getElementById('stepInfo').innerHTML = step.description;
+}
+
+function renderInitial() {
+  const inputRow = document.getElementById('inputRow');
+  inputRow.innerHTML = array.map(v =>
+    `<div class="cell b${bucketOf(v) % 10}">${fmt(v)}</div>`
+  ).join('');
+  const grid = document.getElementById('bucketsGrid');
+  grid.innerHTML = Array.from({ length: K }, (_, i) =>
+    `<div class="bucket"><div class="bucket-label">b${i}</div><div class="bucket-cells"></div></div>`
+  ).join('');
+  document.getElementById('outputRow').innerHTML =
+    `<div style="color:var(--muted); font-size:.78rem; padding:8px">(empty — press Play)</div>`;
+  document.getElementById('kVal').textContent = K;
+  document.getElementById('maxBucket').textContent = '0';
+}
+
+// =========================================================================
+// Controls
+// =========================================================================
+function start() {
+  if (busy) return;
+  if (steps.length === 0) generateSteps(array);
+  busy = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  runAnimation();
+}
+
+function runAnimation() {
+  if (!busy || stepIdx >= steps.length) {
+    pause();
+    return;
+  }
+  render(steps[stepIdx]);
+  stepIdx++;
+  animTimer = setTimeout(runAnimation, getSpeed());
+}
+
+function stepForward() {
+  if (steps.length === 0) generateSteps(array);
+  if (stepIdx < steps.length) {
+    render(steps[stepIdx]);
+    stepIdx++;
+  }
+}
+
+function pause() {
+  busy = false;
+  if (animTimer) { clearTimeout(animTimer); animTimer = null; }
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  stepIdx = 0;
+  comparisons = 0;
+  steps = [];
+  document.getElementById('curStep').textContent = '0';
+  document.getElementById('totSteps').textContent = '0';
+  document.getElementById('comps').textContent = '0';
+  document.getElementById('phase').textContent = '-';
+  document.getElementById('stepInfo').innerHTML =
+    'Press <span class="highlight">Play</span> to animate, or <span class="highlight">Step</span> for single-step.';
+  renderInitial();
+}
+
+function loadCustomInput() {
+  const raw = document.getElementById('customInput').value;
+  const nums = raw.split(',')
+    .map(s => parseFloat(s.trim()))
+    .filter(v => !isNaN(v) && v >= 0 && v < 1);
+  if (nums.length > 0 && nums.length <= 16) {
+    array = nums;
+    reset();
+  }
+}
+
+function generateUniform() {
+  const size = 10;
+  array = Array.from({ length: size }, () => Math.round(Math.random() * 99) / 100);
+  // ensure all in [0, 1)
+  array = array.map(v => Math.min(v, 0.99));
+  document.getElementById('customInput').value = array.map(fmt).join(', ');
+  reset();
+}
+
+function generateSkewed() {
+  // Most values clustered near 0.3 to simulate fat-bucket failure mode
+  const size = 10;
+  array = Array.from({ length: size }, () => {
+    const r = Math.random();
+    return r < 0.7 ? 0.28 + Math.random() * 0.10 : Math.random();
+  }).map(v => Math.min(Math.max(v, 0), 0.99));
+  document.getElementById('customInput').value = array.map(fmt).join(', ');
+  reset();
+}
+
+// =========================================================================
+// Init
+// =========================================================================
+document.getElementById('customInput').value = array.map(fmt).join(', ');
+renderInitial();
+</script>
+</body>
+</html>

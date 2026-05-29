@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fenwick Tree (BIT) — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text],input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.95rem}
+input[type=text]{width:340px}
+input[type=number]{width:80px}
+.dual{display:grid;grid-template-columns:1fr;gap:12px;width:100%;max-width:1100px;margin-bottom:16px}
+.row-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:18px 24px}
+.row-panel h3{color:var(--blue);font-size:.95rem;margin-bottom:10px;font-family:monospace}
+.cells{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+.cell{min-width:60px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--border);border-radius:6px;font-family:monospace;transition:all .3s;position:relative}
+.cell .val{font-size:1.05rem;font-weight:700;color:var(--text)}
+.cell .idx{font-size:.62rem;color:var(--muted);position:absolute;top:2px;left:4px}
+.cell .bin{font-size:.55rem;color:var(--muted);position:absolute;bottom:2px}
+.cell.touched{border-color:var(--yellow);background:rgba(210,153,34,.18)}
+.cell.touched .val{color:var(--yellow)}
+.cell.accumulated{border-color:var(--green);background:rgba(63,185,80,.18)}
+.cell.accumulated .val{color:var(--green)}
+.cell.target{border-color:var(--purple);background:rgba(188,140,255,.18)}
+.cell.target .val{color:var(--purple)}
+.info-panel,.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.stats{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:12px 20px}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>Fenwick Tree (Binary Indexed Tree)</h1>
+<p class="subtitle">Peter Fenwick 1994. Prefix sums under point updates in O(log n), half the memory of a segment tree, ~6 lines of code each for update/query. The magic: <code>i &amp; -i</code> isolates the lowest set bit.</p>
+
+<div class="badges">
+<span class="badge best">Update: O(log n)</span>
+<span class="badge best">Prefix: O(log n)</span>
+<span class="badge space">Memory: n+1</span>
+<span class="badge best">1-indexed</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="arrIn" value="3,2,-1,6,5,4,-3,3" placeholder="Array (1-indexed semantically)">
+<button onclick="loadArr()">Load &amp; Build</button>
+</div>
+
+<div class="input-control">
+<span style="color:var(--muted);font-size:.85rem">Update:</span>
+<input type="number" id="uI" value="3" style="width:60px">
+<input type="number" id="uD" value="2" style="width:70px">
+<button onclick="doUpdate()">update(i, +Δ)</button>
+<span style="color:var(--muted);font-size:.85rem;margin-left:12px">Prefix:</span>
+<input type="number" id="qI" value="5" style="width:60px">
+<button onclick="doPrefix()">prefix(i)</button>
+<span style="color:var(--muted);font-size:.85rem;margin-left:12px">Range:</span>
+<input type="number" id="rL" value="2" style="width:60px">
+<input type="number" id="rR" value="6" style="width:60px">
+<button onclick="doRange()">rangeSum(l, r)</button>
+<button onclick="resetVis()" class="secondary">↺ Clear</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color"></div>Idle BIT cell</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.18);border-color:var(--yellow)"></div>Touched (update propagation)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.18);border-color:var(--green)"></div>Accumulated (prefix walk)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(188,140,255,.18);border-color:var(--purple)"></div>Target index</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">n</div><div class="stat-value" id="nVal">0</div></div>
+<div><div class="stat-label">log₂ n</div><div class="stat-value" id="logVal">0</div></div>
+<div><div class="stat-label">Cells touched</div><div class="stat-value" id="touched">0</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+<div><div class="stat-label">Result</div><div class="stat-value" id="resultVal">-</div></div>
+</div>
+
+<div class="dual">
+<div class="row-panel">
+  <h3>arr (1-indexed)</h3>
+  <div class="cells" id="arrCells"></div>
+</div>
+<div class="row-panel">
+  <h3>BIT (binary indexed tree)</h3>
+  <div class="cells" id="bitCells"></div>
+</div>
+</div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Click <span class="highlight">update</span> or <span class="highlight">prefix</span> to walk the BIT. <code>lowbit(i) = i &amp; -i</code> isolates the lowest set bit; update goes <code>i += lowbit(i)</code> upward, prefix goes <code>i -= lowbit(i)</code> downward.</div>
+</div>
+
+<p class="footer-note">BIT supports invertible aggregates (sum, XOR, count). Range sum = prefix(r) − prefix(l−1). Range update + range query needs two BITs. Beats segment tree on cache/locality at the cost of being limited to invertible operations.</p>
+
+<script>
+let arr=[3,2,-1,6,5,4,-3,3];
+let BIT=[]; let n=0;
+let touchedCells=new Set(), accumCells=new Set(), targetIdx=-1;
+let touchCount=0;
+
+function lowbit(i){ return i & -i; }
+function build(){
+  n=arr.length;
+  BIT=new Array(n+1).fill(0);
+  for(let i=0;i<n;i++){ updateRaw(i+1, arr[i]); }
+}
+function updateRaw(i,d){ while(i<=n){ BIT[i]+=d; i+=lowbit(i); } }
+function update(i,d){ while(i<=n){ BIT[i]+=d; touchedCells.add(i); touchCount++; i+=lowbit(i); } arr[i-1]; }
+function prefix(i){ let s=0; while(i>0){ s+=BIT[i]; accumCells.add(i); touchCount++; i-=lowbit(i); } return s; }
+function arrCellTrigger(i){ /* visual marker for arr index */ }
+
+function rebuild(){
+  build();
+  document.getElementById('nVal').textContent=n;
+  document.getElementById('logVal').textContent=Math.ceil(Math.log2(n+1));
+  resetVis();
+}
+function loadArr(){
+  const nums=document.getElementById('arrIn').value.split(/[, ]+/).map(x=>parseInt(x)).filter(x=>!isNaN(x));
+  if(nums.length>0){ arr=nums; rebuild(); }
+}
+
+function binStr(i){ if(i===0) return '0'; return i.toString(2); }
+
+function render(){
+  const arrEl=document.getElementById('arrCells');
+  const bitEl=document.getElementById('bitCells');
+  arrEl.innerHTML=arr.map((v,i)=>{
+    const idx=i+1;
+    const cls = idx===targetIdx ? 'target' : '';
+    return `<div class="cell ${cls}"><span class="idx">${idx}</span><span class="val">${v}</span></div>`;
+  }).join('');
+  bitEl.innerHTML=BIT.slice(1).map((v,i)=>{
+    const idx=i+1;
+    let cls='';
+    if(idx===targetIdx) cls='target';
+    if(touchedCells.has(idx)) cls='touched';
+    if(accumCells.has(idx)) cls='accumulated';
+    const lb=lowbit(idx);
+    return `<div class="cell ${cls}"><span class="idx">${idx}</span><span class="val">${v}</span><span class="bin">b=${binStr(idx)} lb=${lb}</span></div>`;
+  }).join('');
+  document.getElementById('touched').textContent=touchCount;
+}
+
+function doUpdate(){
+  const i=parseInt(document.getElementById('uI').value), d=parseInt(document.getElementById('uD').value);
+  if(isNaN(i)||isNaN(d)||i<1||i>n){ document.getElementById('info').innerHTML='<span style="color:var(--red)">Invalid index.</span>'; return; }
+  touchedCells=new Set(); accumCells=new Set(); touchCount=0; targetIdx=i;
+  arr[i-1]+=d;
+  let idx=i;
+  while(idx<=n){ BIT[idx]+=d; touchedCells.add(idx); touchCount++; idx+=lowbit(idx); }
+  document.getElementById('lastOp').textContent=`update(${i}, +${d})`;
+  document.getElementById('resultVal').textContent=`arr[${i}]=${arr[i-1]}`;
+  document.getElementById('info').innerHTML=`Walked upward via <span class="highlight">i += lowbit(i)</span>: touched ${touchCount} BIT cell(s). Path length is the number of set bits along the way (≤ ⌈log₂ n⌉).`;
+  render();
+}
+function doPrefix(){
+  const i=parseInt(document.getElementById('qI').value);
+  if(isNaN(i)||i<0||i>n){ document.getElementById('info').innerHTML='<span style="color:var(--red)">Invalid index.</span>'; return; }
+  touchedCells=new Set(); accumCells=new Set(); touchCount=0; targetIdx=i;
+  let s=0, idx=i;
+  while(idx>0){ s+=BIT[idx]; accumCells.add(idx); touchCount++; idx-=lowbit(idx); }
+  document.getElementById('lastOp').textContent=`prefix(${i})`;
+  document.getElementById('resultVal').textContent=s;
+  document.getElementById('info').innerHTML=`<span class="ok">prefix(${i}) = ${s}</span>. Walked downward via <span class="highlight">i -= lowbit(i)</span>, accumulating ${touchCount} BIT cell(s).`;
+  render();
+}
+function doRange(){
+  const l=parseInt(document.getElementById('rL').value), r=parseInt(document.getElementById('rR').value);
+  if(isNaN(l)||isNaN(r)||l<1||r>n||l>r){ document.getElementById('info').innerHTML='<span style="color:var(--red)">Invalid range.</span>'; return; }
+  touchedCells=new Set(); accumCells=new Set(); touchCount=0; targetIdx=-1;
+  let s1=0, i=r;
+  while(i>0){ s1+=BIT[i]; accumCells.add(i); touchCount++; i-=lowbit(i); }
+  let s0=0; i=l-1;
+  while(i>0){ s0+=BIT[i]; accumCells.add(i); touchCount++; i-=lowbit(i); }
+  const res=s1-s0;
+  document.getElementById('lastOp').textContent=`range(${l},${r})`;
+  document.getElementById('resultVal').textContent=res;
+  document.getElementById('info').innerHTML=`<span class="ok">rangeSum(${l},${r}) = prefix(${r}) − prefix(${l-1}) = ${s1} − ${s0} = ${res}</span>. ${touchCount} cells accumulated.`;
+  render();
+}
+function resetVis(){ touchedCells=new Set(); accumCells=new Set(); touchCount=0; targetIdx=-1; document.getElementById('lastOp').textContent='-'; document.getElementById('resultVal').textContent='-'; document.getElementById('touched').textContent='0'; document.getElementById('info').innerHTML='Cleared.'; render(); }
+rebuild();
+</script>
+</body>
+</html>

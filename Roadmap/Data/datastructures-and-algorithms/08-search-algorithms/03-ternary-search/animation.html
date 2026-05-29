@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ternary Search — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;font-size:.92rem;max-width:780px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--yellow);border-color:var(--yellow)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.req{color:var(--purple);border-color:var(--purple)}
+
+.mode-toggle{display:flex;gap:0;margin-bottom:18px;background:var(--surface);border:2px solid var(--border);
+       border-radius:8px;overflow:hidden}
+.mode-toggle button{border:none;background:transparent;color:var(--muted);padding:10px 22px;
+       font-size:.95rem;cursor:pointer;border-radius:0;font-family:inherit;font-weight:500}
+.mode-toggle button.active{background:var(--blue);color:var(--bg);font-weight:600}
+.mode-toggle button:hover:not(.active){color:var(--text);background:rgba(88,166,255,.08)}
+
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem;font-weight:500;font-family:inherit}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+select,input[type=number],input[type=text]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem;font-family:inherit}
+input[type=number]{width:110px}
+input[type=text]{width:300px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.speed-row{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:24px;margin-bottom:16px;width:100%;max-width:1100px;position:relative;min-height:320px}
+svg{display:block;width:100%;height:auto;max-height:440px}
+
+.bars-row{display:flex;justify-content:center;align-items:flex-end;gap:4px;flex-wrap:nowrap;
+       min-height:280px;padding-bottom:6px}
+.bar{display:flex;flex-direction:column;align-items:center;transition:all .3s ease;flex-shrink:0}
+.bar-visual{width:42px;border-radius:6px 6px 0 0;background:var(--blue);position:relative;
+       transition:all .35s ease;border:1px solid transparent}
+.bar.in-range .bar-visual{background:var(--blue)}
+.bar.out-of-range .bar-visual{background:var(--surface);opacity:.35;border-color:var(--border)}
+.bar.probe-m1 .bar-visual{background:var(--purple);box-shadow:0 0 0 2px var(--purple),0 0 14px rgba(188,140,255,.55)}
+.bar.probe-m2 .bar-visual{background:var(--purple);box-shadow:0 0 0 2px var(--purple),0 0 14px rgba(188,140,255,.55)}
+.bar.discarding .bar-visual{background:var(--red);opacity:.55}
+.bar.found .bar-visual{background:var(--green);box-shadow:0 0 0 2px var(--green),0 0 16px rgba(63,185,80,.6)}
+.bar.notfound .bar-visual{background:var(--red);box-shadow:0 0 0 2px var(--red)}
+.bar-label{margin-top:6px;font-size:.78rem;color:var(--muted);font-family:monospace;font-weight:600}
+.bar-index{font-size:.65rem;color:var(--muted);margin-top:2px;font-family:monospace}
+.bar-pointer{font-size:.62rem;font-family:monospace;font-weight:700;height:14px;margin-bottom:2px}
+
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:'Courier New',monospace;font-size:.92rem;line-height:1.7}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.step-info .pos{color:var(--blue);font-weight:600}
+.step-info .probe{color:var(--purple);font-weight:600}
+
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat{text-align:center}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+
+.complexity{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:30px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.cx-item{text-align:center}
+.cx-label{color:var(--muted);font-size:.7rem;text-transform:uppercase}
+.cx-value{color:var(--blue);font-size:1.05rem;font-weight:700;font-family:monospace}
+
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:820px;line-height:1.55}
+label.lbl{color:var(--muted);font-size:.85rem}
+.mode-panel{display:none}
+.mode-panel.visible{display:block;width:100%;max-width:1100px}
+</style>
+</head>
+<body>
+<h1>Ternary Search</h1>
+<p class="subtitle">Split the range into three parts; eliminate one outer third per step. Built for unimodal optimization, occasionally used on sorted arrays.</p>
+
+<div class="badges">
+<span class="badge best">Time: O(log<sub>3/2</sub>(L/eps))</span>
+<span class="badge worst">2 probes / iter</span>
+<span class="badge space">Space: O(1)</span>
+<span class="badge req">Requires: unimodal or sorted</span>
+</div>
+
+<div class="mode-toggle" role="tablist">
+  <button id="modeFnBtn" class="active" onclick="switchMode('fn')">Unimodal function</button>
+  <button id="modeArrBtn" onclick="switchMode('arr')">Sorted array</button>
+</div>
+
+<!-- ===== Unimodal function mode controls ===== -->
+<div id="fnControls" class="mode-panel visible">
+  <div class="input-control">
+    <label class="lbl">Function:</label>
+    <select id="fnSelect">
+      <option value="parabola">Symmetric parabola: -(x-30)^2/9 + 100 on [0, 60]</option>
+      <option value="shifted">Asymmetric peak: -(x-7)^2 + 50 on [0, 20]</option>
+      <option value="hill">Smooth hill: 10*exp(-(x-4)^2/4) on [0, 10]</option>
+      <option value="cosine">Cosine arch: 5 + 3*cos(x-2) on [0.5, 3.6]</option>
+      <option value="cubic">Cubic peak: -(x-5)^3 + 30*x on [0, 10]</option>
+    </select>
+    <label class="lbl">eps:</label>
+    <input type="number" id="epsInput" value="0.05" step="0.01" min="0.001">
+    <button onclick="loadFnConfig()">Load</button>
+  </div>
+</div>
+
+<!-- ===== Sorted array mode controls ===== -->
+<div id="arrControls" class="mode-panel">
+  <div class="input-control">
+    <label class="lbl">Sorted array:</label>
+    <input type="text" id="arrInput" value="1, 3, 5, 8, 11, 14, 17, 20, 23, 27, 31, 36, 41, 47, 53">
+    <label class="lbl">target:</label>
+    <input type="number" id="targetInput" value="27">
+    <button onclick="loadArrConfig()">Load</button>
+    <button onclick="genRandomArr()" class="secondary">Random sorted</button>
+  </div>
+</div>
+
+<!-- ===== Common controls ===== -->
+<div class="controls">
+  <button id="startBtn" onclick="start()">Start</button>
+  <button id="stepBtn" onclick="stepFwd()">Step</button>
+  <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+  <button id="resetBtn" onclick="reset()" class="secondary">Reset</button>
+</div>
+
+<div class="speed-row">
+  <span style="color:var(--muted);font-size:.8rem">slow</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span style="color:var(--muted);font-size:.8rem">fast</span>
+</div>
+
+<!-- ===== Complexity ===== -->
+<div class="complexity" id="complexityPanel">
+  <div class="cx-item"><div class="cx-label">Time</div><div class="cx-value" id="cxTime">O(log<sub>3/2</sub>(L/eps))</div></div>
+  <div class="cx-item"><div class="cx-label">Shrink / iter</div><div class="cx-value">2/3</div></div>
+  <div class="cx-item"><div class="cx-label">Probes / iter</div><div class="cx-value">2</div></div>
+  <div class="cx-item"><div class="cx-label">vs Binary search</div><div class="cx-value" id="cxVsBin">N/A (binary fails)</div></div>
+</div>
+
+<!-- ===== Legend ===== -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div><span>Search range [lo, hi]</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div><span>Probes m1, m2</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--red);opacity:.5"></div><span>Discarded third</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div><span>Found / optimum</span></div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--surface);opacity:.4"></div><span>Out of range</span></div>
+</div>
+
+<!-- ===== Stats ===== -->
+<div class="stats" id="statsPanel">
+  <div class="stat"><div class="stat-label">Iteration</div><div class="stat-value" id="iterStat">0</div></div>
+  <div class="stat"><div class="stat-label" id="widthLbl">Width (hi-lo)</div><div class="stat-value" id="widthStat">-</div></div>
+  <div class="stat"><div class="stat-label">Probes</div><div class="stat-value" id="callsStat">0</div></div>
+  <div class="stat"><div class="stat-label" id="estLbl">x estimate</div><div class="stat-value" id="estStat">-</div></div>
+  <div class="stat"><div class="stat-label" id="festLbl">f(x) estimate</div><div class="stat-value" id="festStat">-</div></div>
+</div>
+
+<!-- ===== Visualization ===== -->
+<div class="canvas-container" id="canvas">
+  <svg id="plot" viewBox="0 0 1000 380" preserveAspectRatio="xMidYMid meet"></svg>
+  <div id="barsView" class="bars-row" style="display:none"></div>
+</div>
+
+<!-- ===== Info panel ===== -->
+<div class="info-panel">
+  <h3>Step Explanation</h3>
+  <div class="step-info" id="stepInfo">
+    Press <span class="highlight">Start</span> to begin the animation, or <span class="highlight">Step</span> to advance one iteration at a time.
+    Each iteration computes <span class="probe">m1 = lo + (hi-lo)/3</span> and <span class="probe">m2 = hi - (hi-lo)/3</span>,
+    then eliminates the outer third on the losing side.
+  </div>
+</div>
+
+<p class="footer-note">
+  <strong>Note.</strong> Ternary search beats binary search for <em>unimodal optimization</em>, where "greater/less" no longer reveals the direction of the peak.
+  On a <em>sorted array</em>, however, binary search wins: ternary makes 2 comparisons per step and shrinks by 2/3, giving worst-case
+  ~2&middot;log<sub>3/2</sub>(n) &approx; 3.42&middot;log<sub>2</sub>(n) comparisons vs binary's log<sub>2</sub>(n). Use ternary for peaks, binary for lookups.
+</p>
+
+<script>
+// ============================================================
+//                   GLOBAL STATE
+// ============================================================
+let mode = 'fn';           // 'fn' | 'arr'
+let busy = false;
+let running = false;
+let timer = null;
+
+// ===== Unimodal function state =====
+const FUNCTIONS = {
+  parabola: { f: x => -((x - 30) ** 2) / 9 + 100, lo: 0, hi: 60, name: "-(x-30)^2/9 + 100" },
+  shifted:  { f: x => -((x - 7) ** 2) + 50,       lo: 0, hi: 20, name: "-(x-7)^2 + 50" },
+  hill:     { f: x => 10 * Math.exp(-((x - 4) ** 2) / 4), lo: 0, hi: 10, name: "10*exp(-(x-4)^2/4)" },
+  cosine:   { f: x => 5 + 3 * Math.cos(x - 2),    lo: 0.5, hi: 3.6, name: "5 + 3*cos(x-2)" },
+  cubic:    { f: x => -((x - 5) ** 3) + 30 * x,   lo: 0, hi: 10, name: "-(x-5)^3 + 30x" }
+};
+let currentFn = FUNCTIONS.parabola;
+let fnLo = currentFn.lo, fnHi = currentFn.hi;
+let fnEps = 0.05;
+let fnIter = 0, fnCalls = 0;
+let fnHistory = [];                 // {from,to} eliminated thirds
+let fnLastM1 = null, fnLastM2 = null;
+let fnEstX = null, fnEstY = null;
+
+// ===== Sorted array state =====
+let arr = [1, 3, 5, 8, 11, 14, 17, 20, 23, 27, 31, 36, 41, 47, 53];
+let target = 27;
+let arrLo = 0, arrHi = arr.length - 1;
+let arrIter = 0, arrCalls = 0;
+let arrLastM1 = null, arrLastM2 = null;
+let arrFoundIdx = null;             // index where target was found
+let arrFinished = false;            // search completed (found or not)
+
+// ============================================================
+//                   PLOT (function mode)
+// ============================================================
+const SVG_W = 1000, SVG_H = 380;
+const PAD_L = 60, PAD_R = 30, PAD_T = 30, PAD_B = 50;
+const PLOT_W = SVG_W - PAD_L - PAD_R;
+const PLOT_H = SVG_H - PAD_T - PAD_B;
+
+function fnSample(f, lo, hi, n = 400) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const x = lo + (i / n) * (hi - lo);
+    pts.push([x, f(x)]);
+  }
+  return pts;
+}
+
+function plotBounds(pts) {
+  let yMin = Infinity, yMax = -Infinity;
+  for (const [, y] of pts) {
+    if (y < yMin) yMin = y;
+    if (y > yMax) yMax = y;
+  }
+  const pad = (yMax - yMin) * 0.12 || 1;
+  return [yMin - pad, yMax + pad];
+}
+
+function scaler(xMin, xMax, yMin, yMax) {
+  return {
+    sx: x => PAD_L + ((x - xMin) / (xMax - xMin)) * PLOT_W,
+    sy: y => PAD_T + PLOT_H - ((y - yMin) / (yMax - yMin)) * PLOT_H
+  };
+}
+
+function renderFn() {
+  const svg = document.getElementById('plot');
+  const pts = fnSample(currentFn.f, currentFn.lo, currentFn.hi);
+  const [yMin, yMax] = plotBounds(pts);
+  const { sx, sy } = scaler(currentFn.lo, currentFn.hi, yMin, yMax);
+
+  let html = '';
+
+  // axes
+  html += `<line x1="${PAD_L}" y1="${PAD_T + PLOT_H}" x2="${PAD_L + PLOT_W}" y2="${PAD_T + PLOT_H}" stroke="#30363d" stroke-width="1.5"/>`;
+  html += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${PAD_T + PLOT_H}" stroke="#30363d" stroke-width="1.5"/>`;
+
+  // x ticks
+  const xTicks = 6;
+  for (let i = 0; i <= xTicks; i++) {
+    const xv = currentFn.lo + (i / xTicks) * (currentFn.hi - currentFn.lo);
+    const x = sx(xv);
+    html += `<line x1="${x}" y1="${PAD_T + PLOT_H}" x2="${x}" y2="${PAD_T + PLOT_H + 5}" stroke="#30363d"/>`;
+    html += `<text x="${x}" y="${PAD_T + PLOT_H + 20}" fill="#8b949e" font-size="11" text-anchor="middle" font-family="monospace">${xv.toFixed(1)}</text>`;
+  }
+  // y ticks
+  for (let i = 0; i <= 4; i++) {
+    const yv = yMin + (i / 4) * (yMax - yMin);
+    const yp = sy(yv);
+    html += `<line x1="${PAD_L - 5}" y1="${yp}" x2="${PAD_L}" y2="${yp}" stroke="#30363d"/>`;
+    html += `<text x="${PAD_L - 8}" y="${yp + 4}" fill="#8b949e" font-size="11" text-anchor="end" font-family="monospace">${yv.toFixed(1)}</text>`;
+  }
+  html += `<text x="${PAD_L + PLOT_W / 2}" y="${SVG_H - 10}" fill="#8b949e" font-size="12" text-anchor="middle">x</text>`;
+  html += `<text x="20" y="${PAD_T + PLOT_H / 2}" fill="#8b949e" font-size="12" text-anchor="middle" transform="rotate(-90 20 ${PAD_T + PLOT_H / 2})">f(x)</text>`;
+
+  // discarded thirds (red overlay)
+  for (const h of fnHistory) {
+    const x1 = sx(h.from), x2 = sx(h.to);
+    html += `<rect x="${x1}" y="${PAD_T}" width="${x2 - x1}" height="${PLOT_H}" fill="#f85149" opacity="0.10"/>`;
+  }
+
+  // active interval [lo, hi] band
+  const xL = sx(fnLo), xR = sx(fnHi);
+  html += `<rect x="${xL}" y="${PAD_T}" width="${xR - xL}" height="${PLOT_H}" fill="#58a6ff" opacity="0.08"/>`;
+  html += `<line x1="${xL}" y1="${PAD_T}" x2="${xL}" y2="${PAD_T + PLOT_H}" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4,3"/>`;
+  html += `<line x1="${xR}" y1="${PAD_T}" x2="${xR}" y2="${PAD_T + PLOT_H}" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4,3"/>`;
+  html += `<text x="${xL}" y="${PAD_T - 8}" fill="#58a6ff" font-size="13" text-anchor="middle" font-family="monospace" font-weight="700">lo=${fnLo.toFixed(2)}</text>`;
+  html += `<text x="${xR}" y="${PAD_T - 8}" fill="#58a6ff" font-size="13" text-anchor="middle" font-family="monospace" font-weight="700">hi=${fnHi.toFixed(2)}</text>`;
+
+  // curve
+  let d = '';
+  for (let i = 0; i < pts.length; i++) {
+    const [x, y] = pts[i];
+    d += (i === 0 ? 'M' : 'L') + sx(x).toFixed(2) + ',' + sy(y).toFixed(2) + ' ';
+  }
+  html += `<path d="${d}" fill="none" stroke="#e6edf3" stroke-width="2"/>`;
+
+  // probes
+  if (fnLastM1 != null) {
+    const y1 = currentFn.f(fnLastM1);
+    const xp = sx(fnLastM1), yp = sy(y1);
+    html += `<line x1="${xp}" y1="${yp}" x2="${xp}" y2="${PAD_T + PLOT_H}" stroke="#bc8cff" stroke-width="1.5" stroke-dasharray="3,3"/>`;
+    html += `<circle cx="${xp}" cy="${yp}" r="7" fill="#bc8cff" stroke="#0d1117" stroke-width="2"/>`;
+    html += `<text x="${xp}" y="${yp - 12}" fill="#bc8cff" font-size="12" text-anchor="middle" font-family="monospace" font-weight="700">m1</text>`;
+    html += `<text x="${xp}" y="${PAD_T + PLOT_H + 35}" fill="#bc8cff" font-size="10" text-anchor="middle" font-family="monospace">f=${y1.toFixed(2)}</text>`;
+  }
+  if (fnLastM2 != null) {
+    const y2 = currentFn.f(fnLastM2);
+    const xp = sx(fnLastM2), yp = sy(y2);
+    html += `<line x1="${xp}" y1="${yp}" x2="${xp}" y2="${PAD_T + PLOT_H}" stroke="#bc8cff" stroke-width="1.5" stroke-dasharray="3,3"/>`;
+    html += `<circle cx="${xp}" cy="${yp}" r="7" fill="#bc8cff" stroke="#0d1117" stroke-width="2"/>`;
+    html += `<text x="${xp}" y="${yp - 12}" fill="#bc8cff" font-size="12" text-anchor="middle" font-family="monospace" font-weight="700">m2</text>`;
+    html += `<text x="${xp}" y="${PAD_T + PLOT_H + 35}" fill="#bc8cff" font-size="10" text-anchor="middle" font-family="monospace">f=${y2.toFixed(2)}</text>`;
+  }
+
+  // estimated peak
+  if (fnEstX != null) {
+    const xp = sx(fnEstX), yp = sy(fnEstY);
+    html += `<circle cx="${xp}" cy="${yp}" r="10" fill="#3fb950" stroke="#0d1117" stroke-width="2.5"/>`;
+    html += `<text x="${xp}" y="${yp - 16}" fill="#3fb950" font-size="13" text-anchor="middle" font-family="monospace" font-weight="700">x*~${fnEstX.toFixed(3)}</text>`;
+  }
+
+  svg.innerHTML = html;
+
+  // stats
+  document.getElementById('iterStat').textContent = fnIter;
+  document.getElementById('widthStat').textContent = (fnHi - fnLo).toExponential(2);
+  document.getElementById('callsStat').textContent = fnCalls;
+  document.getElementById('estStat').textContent = ((fnLo + fnHi) / 2).toFixed(4);
+  document.getElementById('festStat').textContent = currentFn.f((fnLo + fnHi) / 2).toFixed(4);
+}
+
+function stepFn() {
+  if (fnHi - fnLo <= fnEps) {
+    fnEstX = (fnLo + fnHi) / 2;
+    fnEstY = currentFn.f(fnEstX);
+    setInfo(`<span class="ok">Converged.</span> Final width <span class="pos">${(fnHi - fnLo).toExponential(2)}</span> &lt; eps=<span class="highlight">${fnEps}</span>.
+             Estimated optimum at <span class="ok">x* = ${fnEstX.toFixed(4)}</span> with f(x*) = <span class="ok">${fnEstY.toFixed(4)}</span>.
+             Total iterations: <span class="pos">${fnIter}</span>, probes: <span class="pos">${fnCalls}</span>.`);
+    pause();
+    renderFn();
+    return false;
+  }
+  const m1 = fnLo + (fnHi - fnLo) / 3;
+  const m2 = fnHi - (fnHi - fnLo) / 3;
+  const f1 = currentFn.f(m1);
+  const f2 = currentFn.f(m2);
+  fnCalls += 2;
+  fnIter += 1;
+  fnLastM1 = m1; fnLastM2 = m2;
+
+  let msg;
+  if (f1 < f2) {
+    fnHistory.push({ from: fnLo, to: m1 });
+    msg = `Iter <span class="pos">${fnIter}</span>: <span class="probe">m1=${m1.toFixed(3)}</span>, <span class="probe">m2=${m2.toFixed(3)}</span>.
+           f(m1)=${f1.toFixed(3)} <span class="bad">&lt;</span> f(m2)=${f2.toFixed(3)} &rarr; peak is right of m1.
+           <span class="bad">Discard [lo, m1].</span> Set <span class="pos">lo = m1</span>. New width=${(fnHi - m1).toExponential(2)}.`;
+    fnLo = m1;
+  } else {
+    fnHistory.push({ from: m2, to: fnHi });
+    msg = `Iter <span class="pos">${fnIter}</span>: <span class="probe">m1=${m1.toFixed(3)}</span>, <span class="probe">m2=${m2.toFixed(3)}</span>.
+           f(m1)=${f1.toFixed(3)} <span class="ok">&ge;</span> f(m2)=${f2.toFixed(3)} &rarr; peak is left of m2.
+           <span class="bad">Discard [m2, hi].</span> Set <span class="pos">hi = m2</span>. New width=${(m2 - fnLo).toExponential(2)}.`;
+    fnHi = m2;
+  }
+  setInfo(msg);
+  renderFn();
+  return true;
+}
+
+// ============================================================
+//                   ARRAY MODE
+// ============================================================
+function renderArr() {
+  const view = document.getElementById('barsView');
+  const maxVal = Math.max(...arr.map(v => Math.abs(v)));
+  let html = '';
+
+  for (let i = 0; i < arr.length; i++) {
+    let cls = 'bar ';
+    let pointer = '';
+
+    if (arrFoundIdx === i) {
+      cls += 'found';
+    } else if (i < arrLo || i > arrHi) {
+      cls += 'out-of-range';
+    } else if (arrLastM1 === i || arrLastM2 === i) {
+      cls += (arrLastM1 === i ? 'probe-m1' : 'probe-m2');
+    } else {
+      cls += 'in-range';
+    }
+
+    if (i === arrLo && !arrFinished) pointer += '<div class="bar-pointer" style="color:var(--blue)">lo</div>';
+    else if (i === arrHi && !arrFinished) pointer += '<div class="bar-pointer" style="color:var(--blue)">hi</div>';
+    else if (arrLastM1 === i) pointer += '<div class="bar-pointer" style="color:var(--purple)">m1</div>';
+    else if (arrLastM2 === i) pointer += '<div class="bar-pointer" style="color:var(--purple)">m2</div>';
+    else pointer += '<div class="bar-pointer"></div>';
+
+    const h = Math.max(28, (Math.abs(arr[i]) / maxVal) * 220);
+    html += `<div class="${cls}">${pointer}
+              <div class="bar-visual" style="height:${h}px"></div>
+              <div class="bar-label">${arr[i]}</div>
+              <div class="bar-index">[${i}]</div>
+            </div>`;
+  }
+
+  view.innerHTML = html;
+
+  // stats
+  document.getElementById('iterStat').textContent = arrIter;
+  document.getElementById('widthStat').textContent = Math.max(0, arrHi - arrLo + 1);
+  document.getElementById('callsStat').textContent = arrCalls;
+  document.getElementById('estStat').textContent = target;
+  document.getElementById('festStat').textContent = (arrFoundIdx != null ? `idx ${arrFoundIdx}` : (arrFinished ? 'not found' : '-'));
+}
+
+function stepArr() {
+  if (arrFinished) {
+    return false;
+  }
+  if (arrHi < arrLo) {
+    arrFinished = true;
+    setInfo(`<span class="bad">Target ${target} not found.</span> Search range collapsed (lo &gt; hi).
+             Iterations: <span class="pos">${arrIter}</span>, comparisons: <span class="pos">${arrCalls}</span>.`);
+    pause();
+    renderArr();
+    return false;
+  }
+  if (arrHi - arrLo < 2) {
+    // small range: linear scan finish (per spec: when hi-lo < 3, do linear sweep)
+    arrIter += 1;
+    for (let i = arrLo; i <= arrHi; i++) {
+      arrCalls += 1;
+      if (arr[i] === target) {
+        arrFoundIdx = i;
+        arrFinished = true;
+        arrLastM1 = null; arrLastM2 = null;
+        setInfo(`<span class="ok">Found target ${target} at index ${i}</span> via linear sweep of residual range [${arrLo}, ${arrHi}] (hi-lo &lt; 3).
+                 Iterations: <span class="pos">${arrIter}</span>, comparisons: <span class="pos">${arrCalls}</span>.`);
+        pause();
+        renderArr();
+        return false;
+      }
+    }
+    arrFinished = true;
+    setInfo(`<span class="bad">Target ${target} not in residual range [${arrLo}, ${arrHi}].</span>
+             Iterations: <span class="pos">${arrIter}</span>, comparisons: <span class="pos">${arrCalls}</span>.`);
+    pause();
+    renderArr();
+    return false;
+  }
+
+  const m1 = arrLo + Math.floor((arrHi - arrLo) / 3);
+  const m2 = arrHi - Math.floor((arrHi - arrLo) / 3);
+  arrLastM1 = m1; arrLastM2 = m2;
+  arrIter += 1;
+  arrCalls += 2;
+
+  let msg;
+  if (arr[m1] === target) {
+    arrFoundIdx = m1;
+    arrFinished = true;
+    msg = `Iter <span class="pos">${arrIter}</span>: <span class="probe">m1=${m1}</span> (arr[m1]=${arr[m1]}).
+           <span class="ok">arr[m1] == target ${target}</span> &rarr; <span class="ok">found at index ${m1}</span>.`;
+    setInfo(msg);
+    pause();
+    renderArr();
+    return false;
+  }
+  if (arr[m2] === target) {
+    arrFoundIdx = m2;
+    arrFinished = true;
+    msg = `Iter <span class="pos">${arrIter}</span>: <span class="probe">m2=${m2}</span> (arr[m2]=${arr[m2]}).
+           <span class="ok">arr[m2] == target ${target}</span> &rarr; <span class="ok">found at index ${m2}</span>.`;
+    setInfo(msg);
+    pause();
+    renderArr();
+    return false;
+  }
+  if (target < arr[m1]) {
+    msg = `Iter <span class="pos">${arrIter}</span>: <span class="probe">m1=${m1}</span> (=${arr[m1]}), <span class="probe">m2=${m2}</span> (=${arr[m2]}).
+           target ${target} <span class="bad">&lt;</span> arr[m1]=${arr[m1]} &rarr; target lies in the left third.
+           <span class="bad">Discard (m1, hi].</span> Set <span class="pos">hi = m1 - 1 = ${m1 - 1}</span>.`;
+    arrHi = m1 - 1;
+  } else if (target > arr[m2]) {
+    msg = `Iter <span class="pos">${arrIter}</span>: <span class="probe">m1=${m1}</span> (=${arr[m1]}), <span class="probe">m2=${m2}</span> (=${arr[m2]}).
+           target ${target} <span class="bad">&gt;</span> arr[m2]=${arr[m2]} &rarr; target lies in the right third.
+           <span class="bad">Discard [lo, m2).</span> Set <span class="pos">lo = m2 + 1 = ${m2 + 1}</span>.`;
+    arrLo = m2 + 1;
+  } else {
+    msg = `Iter <span class="pos">${arrIter}</span>: <span class="probe">m1=${m1}</span> (=${arr[m1]}), <span class="probe">m2=${m2}</span> (=${arr[m2]}).
+           arr[m1]=${arr[m1]} &lt; target ${target} &lt; arr[m2]=${arr[m2]} &rarr; target lies in the middle third.
+           <span class="bad">Discard both outer thirds.</span> Set <span class="pos">lo = m1+1</span>, <span class="pos">hi = m2-1</span>.`;
+    arrLo = m1 + 1;
+    arrHi = m2 - 1;
+  }
+  setInfo(msg);
+  renderArr();
+  return true;
+}
+
+// ============================================================
+//                   COMMON CONTROLS
+// ============================================================
+function setInfo(html) {
+  document.getElementById('stepInfo').innerHTML = html;
+}
+
+function stepOnce() {
+  if (mode === 'fn') return stepFn();
+  return stepArr();
+}
+
+function render() {
+  if (mode === 'fn') renderFn();
+  else renderArr();
+}
+
+function start() {
+  if (busy || running) return;
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  runLoop();
+}
+
+function runLoop() {
+  if (!running) return;
+  const cont = stepOnce();
+  if (!cont) return;
+  const speed = parseInt(document.getElementById('speedSlider').value, 10);
+  const delay = 1200 - speed * 100;
+  timer = setTimeout(runLoop, delay);
+}
+
+function stepFwd() {
+  if (busy || running) return;
+  stepOnce();
+}
+
+function pause() {
+  running = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  if (mode === 'fn') {
+    fnLo = currentFn.lo; fnHi = currentFn.hi;
+    fnIter = 0; fnCalls = 0;
+    fnHistory = []; fnLastM1 = null; fnLastM2 = null;
+    fnEstX = null; fnEstY = null;
+    setInfo(`Reset. Function: <span class="pos">${currentFn.name}</span> on [${currentFn.lo}, ${currentFn.hi}]. eps=<span class="highlight">${fnEps}</span>.
+             Press <span class="highlight">Start</span> or <span class="highlight">Step</span>.`);
+  } else {
+    arrLo = 0; arrHi = arr.length - 1;
+    arrIter = 0; arrCalls = 0;
+    arrLastM1 = null; arrLastM2 = null;
+    arrFoundIdx = null; arrFinished = false;
+    setInfo(`Reset. Sorted array of length <span class="pos">${arr.length}</span>, target=<span class="highlight">${target}</span>.
+             Press <span class="highlight">Start</span> or <span class="highlight">Step</span>.`);
+  }
+  render();
+}
+
+function loadFnConfig() {
+  const sel = document.getElementById('fnSelect').value;
+  currentFn = FUNCTIONS[sel];
+  const epsRaw = parseFloat(document.getElementById('epsInput').value);
+  if (!isNaN(epsRaw) && epsRaw > 0) fnEps = epsRaw;
+  reset();
+}
+
+function loadArrConfig() {
+  const raw = document.getElementById('arrInput').value;
+  const nums = raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  if (nums.length < 1) return;
+  nums.sort((a, b) => a - b);
+  // dedupe so values remain distinct
+  const dedup = [];
+  for (const n of nums) if (dedup.length === 0 || dedup[dedup.length - 1] !== n) dedup.push(n);
+  arr = dedup;
+  document.getElementById('arrInput').value = arr.join(', ');
+  const t = parseInt(document.getElementById('targetInput').value, 10);
+  if (!isNaN(t)) target = t;
+  reset();
+}
+
+function genRandomArr() {
+  const n = 12 + Math.floor(Math.random() * 6);
+  const set = new Set();
+  while (set.size < n) set.add(Math.floor(Math.random() * 80) + 1);
+  arr = [...set].sort((a, b) => a - b);
+  document.getElementById('arrInput').value = arr.join(', ');
+  target = arr[Math.floor(Math.random() * arr.length)];
+  document.getElementById('targetInput').value = target;
+  reset();
+}
+
+function switchMode(m) {
+  if (m === mode) return;
+  pause();
+  mode = m;
+  document.getElementById('modeFnBtn').classList.toggle('active', mode === 'fn');
+  document.getElementById('modeArrBtn').classList.toggle('active', mode === 'arr');
+  document.getElementById('fnControls').classList.toggle('visible', mode === 'fn');
+  document.getElementById('arrControls').classList.toggle('visible', mode === 'arr');
+  document.getElementById('plot').style.display = (mode === 'fn') ? 'block' : 'none';
+  document.getElementById('barsView').style.display = (mode === 'fn') ? 'none' : 'flex';
+
+  if (mode === 'fn') {
+    document.getElementById('cxTime').innerHTML = 'O(log<sub>3/2</sub>(L/eps))';
+    document.getElementById('cxVsBin').textContent = 'N/A (binary fails)';
+    document.getElementById('widthLbl').textContent = 'Width (hi-lo)';
+    document.getElementById('estLbl').textContent = 'x estimate';
+    document.getElementById('festLbl').textContent = 'f(x) estimate';
+  } else {
+    document.getElementById('cxTime').innerHTML = 'O(log<sub>3</sub> n)';
+    document.getElementById('cxVsBin').textContent = '~1.7x slower';
+    document.getElementById('widthLbl').textContent = 'Range size';
+    document.getElementById('estLbl').textContent = 'Target';
+    document.getElementById('festLbl').textContent = 'Result';
+  }
+
+  reset();
+}
+
+// ============================================================
+//                   INIT
+// ============================================================
+document.getElementById('epsInput').value = fnEps;
+setInfo(`Function: <span class="pos">${currentFn.name}</span> on [${currentFn.lo}, ${currentFn.hi}]. eps=<span class="highlight">${fnEps}</span>.
+         Press <span class="highlight">Start</span> to animate, or <span class="highlight">Step</span> for one iteration.`);
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AVL Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text],input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.95rem}
+input[type=text]{width:280px}
+input[type=number]{width:90px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;width:100%;max-width:1100px;min-height:460px;overflow-x:auto}
+svg{display:block;margin:0 auto}
+.node circle{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .3s}
+.node.path circle{stroke:var(--purple);stroke-width:3}
+.node.unbalanced circle{fill:var(--red);stroke:var(--red)}
+.node.pivot circle{fill:var(--yellow);stroke:var(--yellow)}
+.node text{fill:var(--text);text-anchor:middle;dominant-baseline:central;font-family:monospace;font-size:.95rem;font-weight:700}
+.node.unbalanced text,.node.pivot text{fill:var(--bg)}
+.node .bf{fill:var(--orange);font-size:.7rem;text-anchor:middle;font-family:monospace}
+.node .ht{fill:var(--muted);font-size:.65rem;text-anchor:middle;font-family:monospace}
+.edge{stroke:var(--border);stroke-width:2;fill:none}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:50%;border:2px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>AVL Tree</h1>
+<p class="subtitle">Self-balancing BST (Adelson-Velsky &amp; Landis, 1962). Invariant: |balance factor| ≤ 1 at every node.</p>
+
+<div class="badges">
+<span class="badge best">Search: O(log n) guaranteed</span>
+<span class="badge best">Insert: O(log n)</span>
+<span class="badge space">Height ≤ 1.44 · log₂(n+2)</span>
+</div>
+
+<div class="input-control">
+<input type="number" id="keyIn" placeholder="key" value="30">
+<button onclick="doInsert()">Insert</button>
+<button onclick="doDelete()">Delete</button>
+<button onclick="genRandom()" class="secondary">Random 10 keys</button>
+<button onclick="resetTree()" class="secondary">↺ Reset</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color"></div>Balanced</div>
+<div class="legend-item"><div class="legend-color" style="border-color:var(--purple)"></div>Path</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--red);border-color:var(--red)"></div>Unbalanced (|bf|&gt;1)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow);border-color:var(--yellow)"></div>Rotation pivot</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Nodes</div><div class="stat-value" id="nCount">0</div></div>
+<div><div class="stat-label">Height</div><div class="stat-value" id="hVal">0</div></div>
+<div><div class="stat-label">Rotations</div><div class="stat-value" id="rotCount">0</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+<div><div class="stat-label">Last case</div><div class="stat-value" id="lastCase">-</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Insert keys to grow the tree. Rotations restore the AVL invariant.</div>
+</div>
+
+<p class="footer-note">After every insert/delete, we walk back up and rebalance the first unbalanced ancestor via single (LL or RR) or double (LR or RL) rotation. Each rotation runs in O(1) and decreases the subtree height by 1.</p>
+
+<script>
+let root=null, rotCount=0, idc=0;
+function newNode(k){ return {k,left:null,right:null,h:1,id:++idc}; }
+function H(n){ return n?n.h:0; }
+function BF(n){ return n?H(n.left)-H(n.right):0; }
+function upd(n){ n.h=1+Math.max(H(n.left),H(n.right)); }
+function rotateRight(y){ const x=y.left, t2=x.right; x.right=y; y.left=t2; upd(y); upd(x); rotCount++; return x; }
+function rotateLeft(x){ const y=x.right, t2=y.left; y.left=x; x.right=t2; upd(x); upd(y); rotCount++; return y; }
+let lastCase='-';
+
+function insert(n,k){
+  if(!n) return newNode(k);
+  if(k<n.k) n.left=insert(n.left,k);
+  else if(k>n.k) n.right=insert(n.right,k);
+  else return n;
+  upd(n);
+  const bf=BF(n);
+  if(bf>1 && k<n.left.k){ lastCase='LL'; return rotateRight(n); }
+  if(bf<-1 && k>n.right.k){ lastCase='RR'; return rotateLeft(n); }
+  if(bf>1 && k>n.left.k){ lastCase='LR'; n.left=rotateLeft(n.left); return rotateRight(n); }
+  if(bf<-1 && k<n.right.k){ lastCase='RL'; n.right=rotateRight(n.right); return rotateLeft(n); }
+  return n;
+}
+function minNode(n){ while(n.left) n=n.left; return n; }
+function del(n,k){
+  if(!n) return null;
+  if(k<n.k) n.left=del(n.left,k);
+  else if(k>n.k) n.right=del(n.right,k);
+  else {
+    if(!n.left||!n.right){ n=n.left||n.right; }
+    else { const t=minNode(n.right); n.k=t.k; n.right=del(n.right,t.k); }
+  }
+  if(!n) return null;
+  upd(n);
+  const bf=BF(n);
+  if(bf>1 && BF(n.left)>=0){ lastCase='LL'; return rotateRight(n); }
+  if(bf>1 && BF(n.left)<0){ lastCase='LR'; n.left=rotateLeft(n.left); return rotateRight(n); }
+  if(bf<-1 && BF(n.right)<=0){ lastCase='RR'; return rotateLeft(n); }
+  if(bf<-1 && BF(n.right)>0){ lastCase='RL'; n.right=rotateRight(n.right); return rotateLeft(n); }
+  return n;
+}
+function countN(n){ return n?1+countN(n.left)+countN(n.right):0; }
+
+function layout(n,depth,xMap,col){
+  if(!n) return col;
+  col=layout(n.left,depth+1,xMap,col);
+  xMap.set(n.id,{x:col,d:depth});
+  col++;
+  col=layout(n.right,depth+1,xMap,col);
+  return col;
+}
+function render(highlightPath){
+  const c=document.getElementById('canvas');
+  if(!root){ c.innerHTML='<p style="color:var(--muted);text-align:center;padding-top:120px">Empty tree.</p>'; updStats(); return; }
+  const xMap=new Map();
+  const cols=layout(root,0,xMap,0);
+  const ht=H(root);
+  const W=Math.max(700,cols*70);
+  const Hh=Math.max(420,ht*90);
+  const sx=i=>40+i*(W-80)/Math.max(1,cols-1);
+  const sy=d=>40+d*(Hh-80)/Math.max(1,ht-1);
+
+  let edges='',nodes='';
+  function ed(n){
+    if(!n) return;
+    const p=xMap.get(n.id);
+    if(n.left){ const c2=xMap.get(n.left.id); edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(c2.x)}" y2="${sy(c2.d)}"/>`; ed(n.left); }
+    if(n.right){ const c2=xMap.get(n.right.id); edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(c2.x)}" y2="${sy(c2.d)}"/>`; ed(n.right); }
+  }
+  ed(root);
+  function nd(n){
+    if(!n) return;
+    const p=xMap.get(n.id);
+    const bf=BF(n);
+    let cls='node';
+    if(Math.abs(bf)>1) cls+=' unbalanced';
+    else if(highlightPath && highlightPath.has(n.id)) cls+=' path';
+    nodes+=`<g class="${cls}">
+      <circle cx="${sx(p.x)}" cy="${sy(p.d)}" r="22"/>
+      <text x="${sx(p.x)}" y="${sy(p.d)}">${n.k}</text>
+      <text class="bf" x="${sx(p.x)}" y="${sy(p.d)-30}">bf=${bf}</text>
+      <text class="ht" x="${sx(p.x)}" y="${sy(p.d)+36}">h=${n.h}</text>
+    </g>`;
+    nd(n.left); nd(n.right);
+  }
+  nd(root);
+  c.innerHTML=`<svg width="${W}" height="${Hh+30}">${edges}${nodes}</svg>`;
+  updStats();
+}
+function updStats(){
+  document.getElementById('nCount').textContent=countN(root);
+  document.getElementById('hVal').textContent=H(root);
+  document.getElementById('rotCount').textContent=rotCount;
+  document.getElementById('lastCase').textContent=lastCase;
+}
+function doInsert(){
+  const k=parseInt(document.getElementById('keyIn').value);
+  if(isNaN(k)) return;
+  lastCase='-';
+  const before=rotCount;
+  root=insert(root,k);
+  document.getElementById('lastOp').textContent='insert '+k;
+  document.getElementById('info').innerHTML=`Inserted <span class="highlight">${k}</span>. Rotation case: <span class="ok">${lastCase}</span>. Rotations this op: ${rotCount-before}.`;
+  render(null);
+}
+function doDelete(){
+  const k=parseInt(document.getElementById('keyIn').value);
+  if(isNaN(k)) return;
+  lastCase='-';
+  const before=rotCount;
+  root=del(root,k);
+  document.getElementById('lastOp').textContent='delete '+k;
+  document.getElementById('info').innerHTML=`Deleted <span class="highlight">${k}</span>. Rotation case: <span class="ok">${lastCase}</span>. Rotations this op: ${rotCount-before}.`;
+  render(null);
+}
+function genRandom(){
+  resetTree();
+  const seen=new Set();
+  while(seen.size<10) seen.add(Math.floor(Math.random()*99)+1);
+  for(const k of seen) root=insert(root,k);
+  document.getElementById('lastOp').textContent='random build';
+  document.getElementById('info').innerHTML=`Built AVL from 10 random keys. Height = ${H(root)}, rotations = ${rotCount}.`;
+  render(null);
+}
+function resetTree(){ root=null; rotCount=0; lastCase='-'; document.getElementById('lastOp').textContent='-'; render(null); }
+// initial demo
+['30','20','40','10','25','35','50','5','15','45'].forEach(k=>root=insert(root,parseInt(k)));
+document.getElementById('lastOp').textContent='demo build';
+document.getElementById('info').innerHTML=`Demo tree built from 10 keys. Try inserting <span class="highlight">7</span> to trigger an LL rotation, or deleting 30 to see rebalance.`;
+render(null);
+</script>
+</body>
+</html>

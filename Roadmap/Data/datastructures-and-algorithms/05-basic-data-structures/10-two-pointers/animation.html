@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Two Pointers Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.4rem; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 16px; font-size: 0.82rem; }
+
+  .container { max-width: 1140px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+  .main { display: flex; flex-direction: column; gap: 14px; }
+  .side { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.92rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    width: 280px;
+  }
+  .controls input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    width: 70px;
+  }
+  .controls label { color: var(--muted); font-size: 0.82rem; }
+  .controls select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  button {
+    background: var(--green);
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.83rem;
+    transition: filter 0.2s;
+  }
+  button:hover { filter: brightness(1.15); }
+  button.secondary { background: var(--border); color: var(--text); }
+  button.danger { background: var(--red); }
+  button.accent { background: var(--blue); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .array-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 18px 4px;
+    min-height: 70px;
+    position: relative;
+  }
+  .cell {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1rem;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  .cell .idx {
+    position: absolute;
+    bottom: -18px;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: normal;
+  }
+  .cell .pointer-label {
+    position: absolute;
+    top: -22px;
+    font-size: 0.72rem;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .cell.left-ptr {
+    border-color: var(--blue);
+    background: #0a2540;
+    color: var(--blue);
+  }
+  .cell.left-ptr .pointer-label { color: var(--blue); }
+  .cell.right-ptr {
+    border-color: var(--orange);
+    background: #3a2400;
+    color: var(--orange);
+  }
+  .cell.right-ptr .pointer-label { color: var(--orange); }
+  .cell.both-ptrs {
+    border-color: var(--purple);
+    background: #2a1a4a;
+    color: var(--purple);
+  }
+  .cell.both-ptrs .pointer-label { color: var(--purple); }
+  .cell.slow-ptr {
+    border-color: var(--blue);
+    background: #0a2540;
+    color: var(--blue);
+  }
+  .cell.slow-ptr .pointer-label { color: var(--blue); }
+  .cell.fast-ptr {
+    border-color: var(--yellow);
+    background: #3a2e00;
+    color: var(--yellow);
+  }
+  .cell.fast-ptr .pointer-label { color: var(--yellow); }
+  .cell.match { border-color: var(--green); background: #0d2814; color: var(--green); }
+  .cell.mismatch { border-color: var(--red); background: #2a0a0a; color: var(--red); }
+  .cell.kept { border-color: var(--green); background: #0d2814; color: var(--green); }
+  .cell.discarded { opacity: 0.35; text-decoration: line-through; }
+
+  .info-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    min-height: 60px;
+  }
+  .info-box .info-op { color: var(--purple); font-weight: bold; }
+  .info-box .info-cplx { color: var(--yellow); }
+  .info-box .info-detail { color: var(--muted); display: block; margin-top: 4px; }
+  .info-box .info-result-good { color: var(--green); font-weight: bold; }
+  .info-box .info-result-bad { color: var(--red); font-weight: bold; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+  }
+  .stat .val { font-size: 1.05rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  table.bigo {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  table.bigo th, table.bigo td {
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  table.bigo th { background: var(--bg); color: var(--blue); }
+  table.bigo .good { color: var(--green); }
+  table.bigo .bad { color: var(--red); }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 0.76rem;
+    line-height: 1.55;
+  }
+  .log .log-entry { border-bottom: 1px solid var(--border); padding: 2px 0; }
+  .log .log-entry:last-child { border-bottom: none; }
+  .log .ev-move { color: var(--blue); }
+  .log .ev-match { color: var(--green); }
+  .log .ev-skip { color: var(--yellow); }
+  .log .ev-done { color: var(--purple); font-weight: bold; }
+  .log .ev-info { color: var(--orange); }
+  .log .ev-fail { color: var(--red); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 0.74rem; }
+  .legend-item { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .legend-box {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 2px solid;
+  }
+  .lg-left { border-color: var(--blue); background: #0a2540; }
+  .lg-right { border-color: var(--orange); background: #3a2400; }
+  .lg-both { border-color: var(--purple); background: #2a1a4a; }
+  .lg-fast { border-color: var(--yellow); background: #3a2e00; }
+  .lg-match { border-color: var(--green); background: #0d2814; }
+  .lg-mismatch { border-color: var(--red); background: #2a0a0a; }
+
+  .desc {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .desc strong { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Two Pointers Visualization</h1>
+<p class="subtitle">Step through Two-Sum / Palindrome / Remove Duplicates on an array</p>
+
+<div class="container">
+  <div class="main">
+
+    <div class="panel">
+      <h3>Demo Configuration</h3>
+      <div class="controls">
+        <label>Demo:</label>
+        <select id="demoSelect">
+          <option value="twosum">Two-Sum on Sorted Array (Converging)</option>
+          <option value="palindrome">Palindrome Check (Converging)</option>
+          <option value="dedup">Remove Duplicates (Slow/Fast)</option>
+        </select>
+      </div>
+      <div class="controls" style="margin-top:10px">
+        <label>Input:</label>
+        <input type="text" id="arrInput" value="1, 3, 4, 5, 7, 11">
+        <label id="targetLabel">Target:</label>
+        <input type="number" id="targetInput" value="9">
+        <button class="accent" onclick="loadInput()">Load</button>
+        <button class="secondary" onclick="loadSample()">Sample</button>
+      </div>
+      <div class="desc" id="demoDesc" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Array</h3>
+      <div class="array-row" id="arrayRow"></div>
+      <div class="info-box" id="infoBox">
+        <span class="info-op">Ready.</span> Click <strong>Step</strong> or <strong>Auto-Play</strong> to begin.
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-box lg-left"></div>L pointer</div>
+        <div class="legend-item"><div class="legend-box lg-right"></div>R pointer</div>
+        <div class="legend-item"><div class="legend-box lg-both"></div>L = R</div>
+        <div class="legend-item"><div class="legend-box lg-fast"></div>Fast pointer</div>
+        <div class="legend-item"><div class="legend-box lg-match"></div>Match / kept</div>
+        <div class="legend-item"><div class="legend-box lg-mismatch"></div>Mismatch</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls">
+        <button class="accent" onclick="stepOnce()">Step</button>
+        <button class="accent" id="autoBtn" onclick="toggleAuto()">Auto-Play</button>
+        <button class="secondary" onclick="resetDemo()">Reset</button>
+        <label>Speed:</label>
+        <input type="range" id="speedSlider" min="1" max="10" value="5" style="width:120px">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="logArea"></div>
+    </div>
+
+  </div>
+
+  <div class="side">
+
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statStep">0</div><div class="lbl">Step</div></div>
+        <div class="stat"><div class="val" id="statL">-</div><div class="lbl">Left / Slow</div></div>
+        <div class="stat"><div class="val" id="statR">-</div><div class="lbl">Right / Fast</div></div>
+        <div class="stat"><div class="val" id="statN">0</div><div class="lbl">Array Size</div></div>
+        <div class="stat"><div class="val" id="statComp">0</div><div class="lbl">Comparisons</div></div>
+        <div class="stat"><div class="val" id="statWrites">0</div><div class="lbl">Writes/Swaps</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="bigo">
+        <tr><th>Variant</th><th>Time</th><th>Space</th></tr>
+        <tr><td>Converging</td><td class="good">O(n)</td><td class="good">O(1)</td></tr>
+        <tr><td>Slow/Fast</td><td class="good">O(n)</td><td class="good">O(1)</td></tr>
+        <tr><td>Merge-style</td><td class="good">O(n+m)</td><td class="good">O(1)</td></tr>
+        <tr><td>Brute force pair</td><td class="bad">O(n^2)</td><td class="good">O(1)</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Variant Cheatsheet</h3>
+      <div class="desc" style="font-size:0.78rem">
+        <strong>Converging:</strong> L at 0, R at n-1, move inward.<br>
+        <strong>Slow/Fast:</strong> both at 0; fast scans, slow writes.<br>
+        <strong>Merge:</strong> i on A, j on B; advance smaller side.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ============== STATE ==============
+  let demo = 'twosum';
+  let array = [1, 3, 4, 5, 7, 11];
+  let target = 9;
+
+  let steps = [];          // precomputed list of steps
+  let stepIdx = 0;
+  let autoTimer = null;
+
+  // ============== UI HELPERS ==============
+  function setStat(id, val) { document.getElementById(id).textContent = val; }
+  function getSpeed() {
+    const s = parseInt(document.getElementById('speedSlider').value);
+    return 1100 - s * 100;
+  }
+  function addLog(msg, cls) {
+    const log = document.getElementById('logArea');
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = '<span class="' + cls + '">' + msg + '</span>';
+    log.prepend(div);
+    if (log.children.length > 60) log.removeChild(log.lastChild);
+  }
+  function setInfo(opName, msg, cplx, resultClass) {
+    let html = '<span class="info-op">' + opName + '</span> ' + msg;
+    if (cplx) html += ' <span class="info-cplx">[' + cplx + ']</span>';
+    document.getElementById('infoBox').innerHTML = html;
+  }
+
+  // ============== RENDERING ==============
+  function renderArray(state) {
+    const row = document.getElementById('arrayRow');
+    row.innerHTML = '';
+    const n = state.values.length;
+    for (let i = 0; i < n; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const cls = state.highlights[i];
+      if (cls) cell.classList.add(cls);
+
+      const label = document.createElement('div');
+      label.className = 'pointer-label';
+      const lbl = state.labels[i];
+      if (lbl) label.textContent = lbl;
+      cell.appendChild(label);
+
+      const valSpan = document.createElement('span');
+      valSpan.textContent = state.values[i];
+      cell.appendChild(valSpan);
+
+      const idx = document.createElement('div');
+      idx.className = 'idx';
+      idx.textContent = i;
+      cell.appendChild(idx);
+
+      row.appendChild(cell);
+    }
+  }
+
+  // ============== STEP GENERATORS ==============
+  function buildTwoSumSteps(arr, t) {
+    const out = [];
+    const values = arr.slice();
+    const n = values.length;
+
+    out.push(makeStep(values, { L: 0, R: n - 1 }, {},
+      'init', 'L = 0, R = ' + (n - 1) + ', target = ' + t + '.', 'O(1)', 0, 0));
+
+    let l = 0, r = n - 1, comp = 0;
+    while (l < r) {
+      const sum = values[l] + values[r];
+      comp++;
+      if (sum === t) {
+        out.push(makeStep(values, { L: l, R: r }, { [l]: 'match', [r]: 'match' },
+          'FOUND', 'arr[' + l + '] + arr[' + r + '] = ' + values[l] + ' + ' + values[r] + ' = ' + sum + ' = target.',
+          'O(n)', comp, 0, 'good'));
+        return out;
+      } else if (sum < t) {
+        out.push(makeStep(values, { L: l, R: r }, {},
+          'sum < target', 'arr[' + l + '] + arr[' + r + '] = ' + sum + ' < ' + t + '. Pull L right to grow the sum.',
+          'O(n)', comp, 0));
+        l++;
+      } else {
+        out.push(makeStep(values, { L: l, R: r }, {},
+          'sum > target', 'arr[' + l + '] + arr[' + r + '] = ' + sum + ' > ' + t + '. Pull R left to shrink the sum.',
+          'O(n)', comp, 0));
+        r--;
+      }
+    }
+    out.push(makeStep(values, {}, {},
+      'NOT FOUND', 'L >= R; no valid pair exists in the array.',
+      'O(n)', comp, 0, 'bad'));
+    return out;
+  }
+
+  function buildPalindromeSteps(s) {
+    const out = [];
+    const values = s.split('');
+    const n = values.length;
+    out.push(makeStep(values, { L: 0, R: n - 1 }, {},
+      'init', 'Check if "' + s + '" is a palindrome.', 'O(1)', 0, 0));
+
+    let l = 0, r = n - 1, comp = 0;
+    while (l < r) {
+      comp++;
+      if (values[l] === values[r]) {
+        out.push(makeStep(values, { L: l, R: r }, { [l]: 'match', [r]: 'match' },
+          'match', 'arr[' + l + ']="' + values[l] + '" == arr[' + r + ']="' + values[r] + '". Step both inward.',
+          'O(n)', comp, 0));
+        l++;
+        r--;
+      } else {
+        out.push(makeStep(values, { L: l, R: r }, { [l]: 'mismatch', [r]: 'mismatch' },
+          'mismatch', 'arr[' + l + ']="' + values[l] + '" != arr[' + r + ']="' + values[r] + '". Not a palindrome.',
+          'O(n)', comp, 0, 'bad'));
+        return out;
+      }
+    }
+    out.push(makeStep(values, {}, allMatch(n), 'PALINDROME',
+      'All comparisons matched -> the string is a palindrome.',
+      'O(n)', comp, 0, 'good'));
+    return out;
+  }
+
+  function buildDedupSteps(arr) {
+    const out = [];
+    const values = arr.slice();
+    const n = values.length;
+    if (n === 0) {
+      out.push(makeStep(values, {}, {}, 'EMPTY', 'Empty array — nothing to dedup.', 'O(1)', 0, 0, 'good'));
+      return out;
+    }
+
+    out.push(makeStep(values, { SLOW: 0, FAST: 1 }, { 0: 'kept' },
+      'init', 'slow = 1 (first element kept), fast = 1. Scan forward.',
+      'O(1)', 0, 0));
+
+    let slow = 1, fast = 1, writes = 0, comp = 0;
+
+    // Mark the kept prefix at idx 0
+    while (fast < n) {
+      comp++;
+      if (values[fast] !== values[slow - 1]) {
+        out.push(makeStep(values, { SLOW: slow, FAST: fast },
+          markKept(slow),
+          'new value', 'arr[fast=' + fast + ']=' + values[fast] + ' != arr[slow-1=' + (slow - 1) + ']=' + values[slow - 1] + '. Write at arr[slow=' + slow + '].',
+          'O(n)', comp, writes));
+
+        values[slow] = values[fast];
+        writes++;
+        slow++;
+        out.push(makeStep(values, { SLOW: slow, FAST: fast },
+          markKept(slow),
+          'write', 'Wrote ' + values[fast] + ' to arr[' + (slow - 1) + ']. slow -> ' + slow + '.',
+          'O(n)', comp, writes));
+      } else {
+        out.push(makeStep(values, { SLOW: slow, FAST: fast },
+          markKept(slow),
+          'duplicate', 'arr[fast=' + fast + ']=' + values[fast] + ' == arr[slow-1=' + (slow - 1) + ']=' + values[slow - 1] + '. Skip.',
+          'O(n)', comp, writes));
+      }
+      fast++;
+    }
+
+    // Final state: mark discarded tail
+    const finalHighlights = {};
+    for (let i = 0; i < slow; i++) finalHighlights[i] = 'kept';
+    for (let i = slow; i < n; i++) finalHighlights[i] = 'discarded';
+    out.push(makeStep(values, {}, finalHighlights,
+      'DONE', 'Unique prefix length k = ' + slow + '. arr[0..' + (slow - 1) + '] is the compacted result.',
+      'O(n)', comp, writes, 'good'));
+    return out;
+  }
+
+  function markKept(slow) {
+    const h = {};
+    for (let i = 0; i < slow; i++) h[i] = 'kept';
+    return h;
+  }
+
+  function allMatch(n) {
+    const h = {};
+    for (let i = 0; i < n; i++) h[i] = 'match';
+    return h;
+  }
+
+  function makeStep(values, pointers, extraHighlights, op, msg, cplx, comp, writes, kind) {
+    const n = values.length;
+    const highlights = {};
+    const labels = {};
+
+    // Start with extra highlights as the base layer
+    for (const k of Object.keys(extraHighlights)) {
+      highlights[k] = extraHighlights[k];
+    }
+
+    // Apply pointers on top
+    if (pointers.L !== undefined && pointers.R !== undefined) {
+      if (pointers.L === pointers.R) {
+        highlights[pointers.L] = 'both-ptrs';
+        labels[pointers.L] = 'L=R';
+      } else {
+        if (!highlights[pointers.L]) highlights[pointers.L] = 'left-ptr';
+        if (!highlights[pointers.R]) highlights[pointers.R] = 'right-ptr';
+        labels[pointers.L] = 'L';
+        labels[pointers.R] = 'R';
+      }
+    } else if (pointers.SLOW !== undefined && pointers.FAST !== undefined) {
+      // Slow/fast variant
+      if (pointers.SLOW === pointers.FAST) {
+        highlights[pointers.SLOW] = 'both-ptrs';
+        labels[pointers.SLOW] = 'S=F';
+      } else {
+        if (pointers.FAST < n) {
+          if (!highlights[pointers.FAST]) highlights[pointers.FAST] = 'fast-ptr';
+          labels[pointers.FAST] = 'F';
+        }
+        if (pointers.SLOW < n) {
+          if (!highlights[pointers.SLOW] || highlights[pointers.SLOW] === 'kept') {
+            highlights[pointers.SLOW] = 'slow-ptr';
+          }
+          labels[pointers.SLOW] = 'S';
+        }
+      }
+    }
+
+    return {
+      values: values.slice(),
+      highlights,
+      labels,
+      op,
+      msg,
+      cplx,
+      comp,
+      writes,
+      kind,
+      L: pointers.L !== undefined ? pointers.L : (pointers.SLOW !== undefined ? pointers.SLOW : '-'),
+      R: pointers.R !== undefined ? pointers.R : (pointers.FAST !== undefined ? pointers.FAST : '-')
+    };
+  }
+
+  // ============== DEMO DRIVER ==============
+  function loadDescription() {
+    const d = document.getElementById('demoDesc');
+    const tl = document.getElementById('targetLabel');
+    const ti = document.getElementById('targetInput');
+    if (demo === 'twosum') {
+      d.innerHTML = '<strong>Two-Sum on Sorted Array.</strong> Find indices L &lt; R with arr[L] + arr[R] = target. ' +
+        'L starts at 0, R at n-1. If sum &lt; target, move L right. If sum &gt; target, move R left.';
+      tl.style.display = 'inline';
+      ti.style.display = 'inline';
+    } else if (demo === 'palindrome') {
+      d.innerHTML = '<strong>Palindrome Check.</strong> Compare arr[L] vs arr[R] and step inward. ' +
+        'Any mismatch fails immediately. Pass a string like "racecar" (digits ok too).';
+      tl.style.display = 'none';
+      ti.style.display = 'none';
+    } else {
+      d.innerHTML = '<strong>Remove Duplicates From Sorted Array.</strong> slow/fast variant. ' +
+        'fast scans every position; slow advances and writes only when arr[fast] differs from arr[slow-1].';
+      tl.style.display = 'none';
+      ti.style.display = 'none';
+    }
+  }
+
+  function buildStepsForDemo() {
+    if (demo === 'twosum') {
+      steps = buildTwoSumSteps(array, target);
+    } else if (demo === 'palindrome') {
+      const s = document.getElementById('arrInput').value.replace(/[\s,]+/g, '');
+      steps = buildPalindromeSteps(s || 'racecar');
+    } else {
+      steps = buildDedupSteps(array);
+    }
+    stepIdx = 0;
+  }
+
+  function applyStep(step) {
+    renderArray(step);
+    setInfo(step.op, step.msg, step.cplx, step.kind);
+    setStat('statStep', stepIdx);
+    setStat('statL', step.L);
+    setStat('statR', step.R);
+    setStat('statN', step.values.length);
+    setStat('statComp', step.comp);
+    setStat('statWrites', step.writes);
+
+    let cls = 'ev-move';
+    if (step.op === 'init') cls = 'ev-info';
+    else if (step.op === 'match' || step.op === 'new value' || step.op === 'write') cls = 'ev-match';
+    else if (step.op === 'duplicate' || step.op === 'sum < target' || step.op === 'sum > target') cls = 'ev-skip';
+    else if (step.op === 'FOUND' || step.op === 'PALINDROME' || step.op === 'DONE') cls = 'ev-done';
+    else if (step.op === 'NOT FOUND' || step.op === 'mismatch') cls = 'ev-fail';
+    addLog('[' + stepIdx + '] ' + step.op + ' — ' + step.msg, cls);
+  }
+
+  function stepOnce() {
+    if (steps.length === 0) buildStepsForDemo();
+    if (stepIdx < steps.length) {
+      applyStep(steps[stepIdx]);
+      stepIdx++;
+    } else {
+      addLog('No more steps. Reset to run again.', 'ev-info');
+    }
+  }
+
+  function toggleAuto() {
+    const btn = document.getElementById('autoBtn');
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      btn.textContent = 'Auto-Play';
+      return;
+    }
+    if (steps.length === 0) buildStepsForDemo();
+    btn.textContent = 'Pause';
+    autoTimer = setInterval(() => {
+      if (stepIdx >= steps.length) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        btn.textContent = 'Auto-Play';
+        return;
+      }
+      stepOnce();
+    }, getSpeed());
+  }
+
+  function resetDemo() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    document.getElementById('autoBtn').textContent = 'Auto-Play';
+    document.getElementById('logArea').innerHTML = '';
+    buildStepsForDemo();
+    renderInitial();
+    setStat('statStep', 0);
+    setStat('statComp', 0);
+    setStat('statWrites', 0);
+    setInfo('Ready.', 'Click Step or Auto-Play to begin.', '', null);
+  }
+
+  function renderInitial() {
+    let values;
+    if (demo === 'palindrome') {
+      values = document.getElementById('arrInput').value.replace(/[\s,]+/g, '').split('');
+      if (values.length === 0) values = 'racecar'.split('');
+    } else {
+      values = array.slice();
+    }
+    renderArray({ values, highlights: {}, labels: {} });
+    setStat('statN', values.length);
+    setStat('statL', '-');
+    setStat('statR', '-');
+  }
+
+  function loadInput() {
+    const raw = document.getElementById('arrInput').value.trim();
+    if (demo === 'palindrome') {
+      // Treat as a string
+      renderInitial();
+      resetDemo();
+      return;
+    }
+    const parts = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    if (parts.length > 0) array = parts;
+    target = parseInt(document.getElementById('targetInput').value) || 0;
+    resetDemo();
+  }
+
+  function loadSample() {
+    if (demo === 'twosum') {
+      array = [2, 3, 4, 5, 8, 11, 18];
+      target = 13;
+      document.getElementById('arrInput').value = array.join(', ');
+      document.getElementById('targetInput').value = target;
+    } else if (demo === 'palindrome') {
+      document.getElementById('arrInput').value = 'racecar';
+    } else {
+      array = [1, 1, 2, 2, 2, 3, 4, 4, 5];
+      document.getElementById('arrInput').value = array.join(', ');
+    }
+    resetDemo();
+  }
+
+  // ============== INIT ==============
+  document.getElementById('demoSelect').addEventListener('change', (e) => {
+    demo = e.target.value;
+    loadDescription();
+    if (demo === 'palindrome') {
+      document.getElementById('arrInput').value = 'racecar';
+    } else if (demo === 'twosum') {
+      document.getElementById('arrInput').value = '1, 3, 4, 5, 7, 11';
+      document.getElementById('targetInput').value = '9';
+      array = [1, 3, 4, 5, 7, 11];
+      target = 9;
+    } else {
+      document.getElementById('arrInput').value = '1, 1, 2, 3, 3, 4';
+      array = [1, 1, 2, 3, 3, 4];
+    }
+    resetDemo();
+  });
+
+  loadDescription();
+  resetDemo();
+</script>
+
+</body>
+</html>

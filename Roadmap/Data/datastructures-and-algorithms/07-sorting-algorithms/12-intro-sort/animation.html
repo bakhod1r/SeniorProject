@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intro Sort — Visual Animation</title>
+<style>
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --yellow:  #d29922;
+  --red:     #f85149;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --cyan:    #39d0d8;
+  --orange:  #ffa657;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+h1 { font-size: 1.9rem; color: var(--cyan); text-align: center; margin-bottom: 6px; }
+.subtitle { color: var(--muted); text-align: center; margin-bottom: 14px; font-size: 0.93rem; }
+
+/* Complexity badges */
+.badges {
+  display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap;
+}
+.badge {
+  padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.badge.best   { color: var(--green);  border-color: var(--green); }
+.badge.avg    { color: var(--green);  border-color: var(--green); }
+.badge.worst  { color: var(--green);  border-color: var(--green); }
+.badge.space  { color: var(--blue);   border-color: var(--blue); }
+.badge.unstable { color: var(--red);  border-color: var(--red); }
+
+/* Input + controls */
+.row {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center;
+  margin-bottom: 12px; max-width: 1100px;
+}
+input[type=text] {
+  padding: 8px 12px; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; font-size: 0.9rem; width: 320px;
+}
+input[type=text]:focus { outline: none; border-color: var(--cyan); }
+button {
+  padding: 8px 14px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); border-radius: 6px; cursor: pointer; font-size: 0.88rem;
+  transition: all 0.15s;
+}
+button:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary { background: var(--cyan); color: var(--bg); border-color: var(--cyan); font-weight: 600; }
+button.primary:hover { background: #2bbcc4; }
+.speed { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); }
+.speed input[type=range] { width: 140px; accent-color: var(--cyan); }
+
+/* Stats bar */
+.stats {
+  display: flex; gap: 22px; justify-content: center; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 18px; margin-bottom: 14px; max-width: 1100px; width: 100%;
+}
+.stat { text-align: center; }
+.stat-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.stat-value { color: var(--cyan); font-size: 1.15rem; font-weight: 700; font-family: 'Courier New', monospace; }
+.stat-value.warn { color: var(--yellow); }
+.stat-value.danger { color: var(--red); }
+.stat-value.alg-quick { color: var(--blue); }
+.stat-value.alg-heap { color: var(--red); }
+.stat-value.alg-insert { color: var(--yellow); }
+
+/* Bar visualization */
+.canvas {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 16px 14px; margin-bottom: 14px;
+  width: 100%; max-width: 1100px; min-height: 280px;
+  display: flex; justify-content: center; align-items: flex-end;
+  gap: 3px; overflow-x: auto;
+}
+.bar { display: flex; flex-direction: column; align-items: center; transition: all 0.25s ease; }
+.bar-vis {
+  width: 28px; border-radius: 4px 4px 0 0; transition: all 0.25s ease;
+  background: var(--blue);
+}
+.bar-label {
+  margin-top: 5px; font-size: 0.72rem; color: var(--muted);
+  font-family: 'Courier New', monospace; font-weight: 600;
+}
+/* state classes */
+.bar-vis.default      { background: var(--blue); }
+.bar-vis.pivot        { background: var(--purple); }
+.bar-vis.partition-l  { background: var(--cyan); }
+.bar-vis.partition-r  { background: var(--orange); }
+.bar-vis.heapifying   { background: var(--red); }
+.bar-vis.insertion-mv { background: var(--yellow); }
+.bar-vis.sorted       { background: var(--green); }
+.bar-vis.dimmed       { background: #3a4250; opacity: 0.55; }
+
+/* Info panel */
+.info {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; max-width: 1100px; width: 100%; margin-bottom: 14px;
+}
+.info-title { color: var(--cyan); font-size: 0.95rem; margin-bottom: 6px; }
+.info-text {
+  font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.5; color: var(--text);
+}
+.info-text .hl { color: var(--yellow); font-weight: 600; }
+.info-text .alg-q { color: var(--blue); font-weight: 600; }
+.info-text .alg-h { color: var(--red); font-weight: 600; }
+.info-text .alg-i { color: var(--yellow); font-weight: 600; }
+
+/* Legend */
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+  margin-bottom: 12px; max-width: 1100px;
+}
+.legend-item { display: flex; gap: 6px; align-items: center; font-size: 0.78rem; color: var(--muted); }
+.legend-color { width: 14px; height: 14px; border-radius: 3px; }
+
+/* Big-O table */
+.complexity-table {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; max-width: 1100px; width: 100%; margin-bottom: 14px;
+  font-size: 0.85rem;
+}
+.complexity-table h3 { color: var(--cyan); font-size: 0.95rem; margin-bottom: 8px; }
+.complexity-table table { width: 100%; border-collapse: collapse; }
+.complexity-table th, .complexity-table td {
+  text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border);
+}
+.complexity-table th { color: var(--muted); font-weight: 600; }
+.complexity-table td { font-family: 'Courier New', monospace; }
+.cpx-best { color: var(--green); }
+
+/* Log */
+.log {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 16px; max-width: 1100px; width: 100%;
+  max-height: 180px; overflow-y: auto; font-family: 'Courier New', monospace;
+  font-size: 0.82rem; line-height: 1.5;
+}
+.log h3 { color: var(--cyan); font-size: 0.9rem; margin-bottom: 6px; }
+.log-entry { color: var(--muted); }
+.log-entry .l-q { color: var(--blue); }
+.log-entry .l-h { color: var(--red); }
+.log-entry .l-i { color: var(--yellow); }
+.log-entry .l-p { color: var(--purple); }
+.log-entry .l-s { color: var(--green); }
+</style>
+</head>
+<body>
+
+<h1>Intro Sort</h1>
+<p class="subtitle">Introspective Sort — Quick Sort + Heap Sort + Insertion Sort hybrid (Musser, 1997)</p>
+
+<div class="badges">
+  <span class="badge best">Best O(n log n)</span>
+  <span class="badge avg">Avg O(n log n)</span>
+  <span class="badge worst">Worst O(n log n) (guaranteed)</span>
+  <span class="badge space">Space O(log n)</span>
+  <span class="badge unstable">Unstable</span>
+</div>
+
+<div class="row">
+  <input type="text" id="customInput" placeholder="Numbers: 7, 2, 1, 6, 8, 5, 3, 4, 11, 9, 12, 10">
+  <button onclick="loadCustom()">Load</button>
+  <button onclick="genRandom()">Random</button>
+  <button onclick="genSorted()">Sorted</button>
+  <button onclick="genReverse()">Reverse</button>
+  <button onclick="genKiller()">Killer</button>
+</div>
+
+<div class="row">
+  <button class="primary" id="startBtn" onclick="start()">Start</button>
+  <button id="stepBtn" onclick="stepForward()">Step</button>
+  <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+  <button id="resetBtn" onclick="reset()">Reset</button>
+  <div class="speed">
+    <span>Slow</span>
+    <input type="range" id="speedSlider" min="1" max="10" value="6">
+    <span>Fast</span>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">n</div><div class="stat-value" id="statN">0</div></div>
+  <div class="stat"><div class="stat-label">Depth Limit</div><div class="stat-value" id="statDLimit">0</div></div>
+  <div class="stat"><div class="stat-label">Current Depth</div><div class="stat-value" id="statDepth">0</div></div>
+  <div class="stat"><div class="stat-label">Algorithm</div><div class="stat-value alg-quick" id="statAlg">—</div></div>
+  <div class="stat"><div class="stat-label">Partitions</div><div class="stat-value" id="statPart">0</div></div>
+  <div class="stat"><div class="stat-label">Heap Fallbacks</div><div class="stat-value" id="statHeap">0</div></div>
+  <div class="stat"><div class="stat-label">Insertion Calls</div><div class="stat-value" id="statIns">0</div></div>
+  <div class="stat"><div class="stat-label">Step</div><div class="stat-value" id="statStep">0 / 0</div></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background: var(--blue);"></div>default</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--purple);"></div>pivot</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--cyan);"></div>partition-left</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--orange);"></div>partition-right</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--red);"></div>heapifying</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--yellow);"></div>insertion-moving</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--green);"></div>sorted</div>
+</div>
+
+<div class="canvas" id="canvas"></div>
+
+<div class="info">
+  <div class="info-title">Step Explanation</div>
+  <div class="info-text" id="info">Press <span class="hl">Start</span> to run, or <span class="hl">Step</span> for single-step mode.</div>
+</div>
+
+<div class="complexity-table">
+  <h3>Complexity</h3>
+  <table>
+    <tr><th>Case</th><th>Time</th><th>Space</th><th>Stable</th></tr>
+    <tr><td>Best</td><td class="cpx-best">O(n log n)</td><td>O(log n)</td><td>No</td></tr>
+    <tr><td>Average</td><td class="cpx-best">O(n log n)</td><td>O(log n)</td><td>No</td></tr>
+    <tr><td>Worst</td><td class="cpx-best">O(n log n) — guaranteed by heap fallback</td><td>O(log n)</td><td>No</td></tr>
+  </table>
+</div>
+
+<div class="log">
+  <h3>Operation Log</h3>
+  <div id="logEntries"></div>
+</div>
+
+<script>
+// =====================================================================
+// CONFIGURATION
+// =====================================================================
+const INSERTION_CUTOFF = 6;   // small for visual demo (real-world: 16)
+let array = [7, 2, 1, 6, 8, 5, 3, 4, 11, 9, 12, 10, 14, 13, 15];
+let steps = [];
+let stepIdx = 0;
+let busy = false;
+let timer = null;
+
+const counters = { partitions: 0, heap: 0, insert: 0 };
+
+function speedMs() {
+  const v = +document.getElementById('speedSlider').value;
+  return 1100 - v * 100; // 1000ms slow .. 100ms fast
+}
+
+// =====================================================================
+// STEP RECORDING
+// =====================================================================
+function snap(state) {
+  steps.push({
+    array: [...state.array],
+    highlights: { ...state.highlights },
+    depth: state.depth,
+    algorithm: state.algorithm,
+    counters: { ...counters },
+    info: state.info,
+  });
+}
+
+// =====================================================================
+// INTRO SORT (records each interesting event as a step)
+// =====================================================================
+function generateSteps(input) {
+  steps = [];
+  stepIdx = 0;
+  counters.partitions = 0;
+  counters.heap = 0;
+  counters.insert = 0;
+
+  const a = [...input];
+  const n = a.length;
+  if (n < 2) {
+    const finalH = {};
+    for (let i = 0; i < n; i++) finalH[i] = 'sorted';
+    snap({ array: a, highlights: finalH, depth: 0, algorithm: 'done', info: 'Array of size ≤ 1 — already sorted.' });
+    return;
+  }
+  const depthLimit = 2 * Math.floor(Math.log2(n));
+
+  snap({
+    array: a, highlights: {}, depth: 0, algorithm: 'quick',
+    info: `<span class="alg-q">Quick Sort</span> phase starts. n=${n}, depth limit = 2·⌊log₂(${n})⌋ = <span class="hl">${depthLimit}</span>. Insertion cutoff = ${INSERTION_CUTOFF}.`
+  });
+
+  introsort(a, 0, n - 1, depthLimit, 0);
+
+  // Final all-sorted snapshot
+  const finalH = {};
+  for (let i = 0; i < n; i++) finalH[i] = 'sorted';
+  snap({
+    array: a, highlights: finalH, depth: 0, algorithm: 'done',
+    info: `Sorted. Partitions: ${counters.partitions}, Heap fallbacks: ${counters.heap}, Insertion calls: ${counters.insert}.`
+  });
+}
+
+function dimOutside(lo, hi, n) {
+  const h = {};
+  for (let i = 0; i < n; i++) {
+    if (i < lo || i > hi) h[i] = 'dimmed';
+  }
+  return h;
+}
+
+function introsort(a, lo, hi, depth, currentDepth) {
+  const n = a.length;
+  while (hi - lo > INSERTION_CUTOFF) {
+    if (depth === 0) {
+      // ---- HEAP SORT FALLBACK ----
+      counters.heap++;
+      const h = dimOutside(lo, hi, n);
+      for (let i = lo; i <= hi; i++) h[i] = 'heapifying';
+      snap({
+        array: a, highlights: h, depth: currentDepth, algorithm: 'heap',
+        info: `<span class="alg-h">DEPTH LIMIT HIT</span> at depth ${currentDepth}. Switching to <span class="alg-h">Heap Sort</span> on arr[${lo}..${hi}] (size ${hi - lo + 1}).`
+      });
+      heapSort(a, lo, hi, currentDepth, n);
+      return;
+    }
+    depth--;
+    const p = partition(a, lo, hi, currentDepth, n);
+    counters.partitions++;
+    // recurse right
+    introsort(a, p + 1, hi, depth, currentDepth + 1);
+    // iterate left
+    hi = p - 1;
+  }
+  insertionSort(a, lo, hi, currentDepth, n);
+}
+
+// ----- median of three (positions median at hi-1) -----
+function medianOfThree(a, lo, hi, currentDepth, n) {
+  const mid = lo + ((hi - lo) >> 1);
+  // highlight the three candidates
+  const h = dimOutside(lo, hi, n);
+  h[lo] = 'pivot'; h[mid] = 'pivot'; h[hi] = 'pivot';
+  snap({
+    array: a, highlights: h, depth: currentDepth, algorithm: 'quick',
+    info: `<span class="alg-q">Median-of-three</span> on arr[${lo}]=${a[lo]}, arr[${mid}]=${a[mid]}, arr[${hi}]=${a[hi]}. Choose the median as pivot.`
+  });
+  if (a[mid] < a[lo]) [a[lo], a[mid]] = [a[mid], a[lo]];
+  if (a[hi]  < a[lo]) [a[lo], a[hi]]  = [a[hi], a[lo]];
+  if (a[hi]  < a[mid])[a[mid], a[hi]] = [a[hi], a[mid]];
+  // place pivot at hi-1
+  [a[mid], a[hi - 1]] = [a[hi - 1], a[mid]];
+  const h2 = dimOutside(lo, hi, n);
+  h2[hi - 1] = 'pivot';
+  snap({
+    array: a, highlights: h2, depth: currentDepth, algorithm: 'quick',
+    info: `Pivot chosen: <span class="hl">${a[hi - 1]}</span> at index ${hi - 1}.`
+  });
+}
+
+// ----- partition (Hoare-style with median-of-three sentinel) -----
+function partition(a, lo, hi, currentDepth, n) {
+  medianOfThree(a, lo, hi, currentDepth, n);
+  const pivot = a[hi - 1];
+  let i = lo, j = hi - 1;
+  while (true) {
+    do { i++; } while (i < hi && a[i] < pivot);
+    do { j--; } while (j > lo && a[j] > pivot);
+    if (i >= j) break;
+    [a[i], a[j]] = [a[j], a[i]];
+    const h = dimOutside(lo, hi, n);
+    for (let k = lo; k < i; k++) h[k] = 'partition-l';
+    for (let k = j + 1; k < hi; k++) h[k] = 'partition-r';
+    h[i] = 'partition-l';
+    h[j] = 'partition-r';
+    h[hi - 1] = 'pivot';
+    snap({
+      array: a, highlights: h, depth: currentDepth, algorithm: 'quick',
+      info: `<span class="alg-q">Partition</span>: swapped arr[${i}]=${a[i]} (left ≤ pivot) with arr[${j}]=${a[j]} (right ≥ pivot). Pivot=${pivot}.`
+    });
+  }
+  // restore pivot
+  [a[i], a[hi - 1]] = [a[hi - 1], a[i]];
+  const h = dimOutside(lo, hi, n);
+  for (let k = lo; k < i; k++) h[k] = 'partition-l';
+  for (let k = i + 1; k <= hi; k++) h[k] = 'partition-r';
+  h[i] = 'pivot';
+  snap({
+    array: a, highlights: h, depth: currentDepth, algorithm: 'quick',
+    info: `<span class="alg-q">Partition done</span>. Pivot ${pivot} settled at index ${i}. Recurse left arr[${lo}..${i - 1}] and right arr[${i + 1}..${hi}]. Depth = ${currentDepth + 1}.`
+  });
+  return i;
+}
+
+// ----- insertion sort on arr[lo..hi] -----
+function insertionSort(a, lo, hi, currentDepth, n) {
+  if (hi <= lo) return;
+  counters.insert++;
+  const baseH = dimOutside(lo, hi, n);
+  for (let i = lo; i <= hi; i++) baseH[i] = 'default';
+  snap({
+    array: a, highlights: baseH, depth: currentDepth, algorithm: 'insert',
+    info: `<span class="alg-i">Insertion Sort</span> on arr[${lo}..${hi}] (size ${hi - lo + 1} ≤ cutoff ${INSERTION_CUTOFF}).`
+  });
+  for (let i = lo + 1; i <= hi; i++) {
+    const v = a[i];
+    let j = i - 1;
+    while (j >= lo && a[j] > v) {
+      a[j + 1] = a[j];
+      j--;
+      const h = dimOutside(lo, hi, n);
+      for (let k = lo; k <= i; k++) h[k] = 'insertion-mv';
+      h[j + 1] = 'pivot';
+      snap({
+        array: a, highlights: h, depth: currentDepth, algorithm: 'insert',
+        info: `<span class="alg-i">Insertion</span>: shifting arr[${j + 1}]=${a[j + 1]} right to make room for ${v}.`
+      });
+    }
+    a[j + 1] = v;
+  }
+  // mark this range as sorted in this snapshot
+  const h = dimOutside(lo, hi, n);
+  for (let k = lo; k <= hi; k++) h[k] = 'sorted';
+  snap({
+    array: a, highlights: h, depth: currentDepth, algorithm: 'insert',
+    info: `<span class="alg-i">Insertion Sort</span> finished on arr[${lo}..${hi}].`
+  });
+}
+
+// ----- heap sort on arr[lo..hi] -----
+function heapSort(a, lo, hi, currentDepth, n) {
+  const size = hi - lo + 1;
+  // build max-heap
+  for (let i = Math.floor(size / 2) - 1; i >= 0; i--) {
+    siftDown(a, lo, i, size, currentDepth, n);
+  }
+  const h = dimOutside(lo, hi, n);
+  for (let i = lo; i <= hi; i++) h[i] = 'heapifying';
+  snap({
+    array: a, highlights: h, depth: currentDepth, algorithm: 'heap',
+    info: `<span class="alg-h">Heap built</span> on arr[${lo}..${hi}]. Now extract max repeatedly.`
+  });
+  // extract max
+  for (let end = size - 1; end > 0; end--) {
+    [a[lo], a[lo + end]] = [a[lo + end], a[lo]];
+    const h2 = dimOutside(lo, hi, n);
+    for (let k = lo; k < lo + end; k++) h2[k] = 'heapifying';
+    for (let k = lo + end; k <= hi; k++) h2[k] = 'sorted';
+    snap({
+      array: a, highlights: h2, depth: currentDepth, algorithm: 'heap',
+      info: `<span class="alg-h">Heap extract</span>: swapped max ${a[lo + end]} into sorted region at index ${lo + end}.`
+    });
+    siftDown(a, lo, 0, end, currentDepth, n);
+  }
+  const h3 = dimOutside(lo, hi, n);
+  for (let k = lo; k <= hi; k++) h3[k] = 'sorted';
+  snap({
+    array: a, highlights: h3, depth: currentDepth, algorithm: 'heap',
+    info: `<span class="alg-h">Heap Sort done</span> on arr[${lo}..${hi}].`
+  });
+}
+
+function siftDown(a, base, root, size, currentDepth, n) {
+  while (true) {
+    const left = 2 * root + 1;
+    if (left >= size) return;
+    let largest = left;
+    const right = left + 1;
+    if (right < size && a[base + right] > a[base + left]) largest = right;
+    if (a[base + root] >= a[base + largest]) return;
+    [a[base + root], a[base + largest]] = [a[base + largest], a[base + root]];
+    root = largest;
+  }
+}
+
+// =====================================================================
+// RENDERING
+// =====================================================================
+function render(step) {
+  const canvas = document.getElementById('canvas');
+  if (!step) {
+    canvas.innerHTML = array.map((v, i) => barHtml(v, i, 'default', array)).join('');
+    return;
+  }
+  const arr = step.array;
+  canvas.innerHTML = arr.map((v, i) => {
+    const cls = step.highlights[i] || 'default';
+    return barHtml(v, i, cls, arr);
+  }).join('');
+
+  // stats
+  const n = arr.length;
+  const dLimit = n < 2 ? 0 : 2 * Math.floor(Math.log2(n));
+  document.getElementById('statN').textContent = n;
+  document.getElementById('statDLimit').textContent = dLimit;
+  const dEl = document.getElementById('statDepth');
+  dEl.textContent = step.depth;
+  dEl.classList.remove('warn', 'danger');
+  if (step.depth >= dLimit) dEl.classList.add('danger');
+  else if (step.depth >= dLimit - 2) dEl.classList.add('warn');
+
+  const algEl = document.getElementById('statAlg');
+  algEl.classList.remove('alg-quick', 'alg-heap', 'alg-insert');
+  if (step.algorithm === 'quick') { algEl.textContent = 'Quick Sort'; algEl.classList.add('alg-quick'); }
+  else if (step.algorithm === 'heap') { algEl.textContent = 'Heap Sort'; algEl.classList.add('alg-heap'); }
+  else if (step.algorithm === 'insert') { algEl.textContent = 'Insertion'; algEl.classList.add('alg-insert'); }
+  else { algEl.textContent = 'Done'; }
+
+  document.getElementById('statPart').textContent = step.counters.partitions;
+  document.getElementById('statHeap').textContent = step.counters.heap;
+  document.getElementById('statIns').textContent = step.counters.insert;
+  document.getElementById('statStep').textContent = `${stepIdx} / ${steps.length}`;
+
+  document.getElementById('info').innerHTML = step.info;
+  pushLog(step);
+}
+
+function barHtml(v, i, cls, arr) {
+  const max = Math.max(...arr, 1);
+  const height = Math.max(8, (v / max) * 230);
+  const w = Math.max(14, Math.min(38, (1000 / arr.length) - 4));
+  return `<div class="bar">
+    <div class="bar-vis ${cls}" style="height:${height}px;width:${w}px;"></div>
+    <div class="bar-label">${v}</div>
+  </div>`;
+}
+
+let lastLogged = -1;
+function pushLog(step) {
+  if (stepIdx - 1 === lastLogged) return;
+  lastLogged = stepIdx - 1;
+  const entries = document.getElementById('logEntries');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  const alg = step.algorithm === 'quick' ? '<span class="l-q">[QUICK]</span>' :
+              step.algorithm === 'heap'  ? '<span class="l-h">[HEAP]</span>'  :
+              step.algorithm === 'insert'? '<span class="l-i">[INSERT]</span>':
+              '<span class="l-s">[DONE]</span>';
+  // strip HTML for shorter log
+  const txt = step.info.replace(/<[^>]+>/g, '');
+  div.innerHTML = `${alg} d=${step.depth} — ${txt}`;
+  entries.appendChild(div);
+  entries.parentElement.scrollTop = entries.parentElement.scrollHeight;
+}
+
+// =====================================================================
+// CONTROLS
+// =====================================================================
+function start() {
+  if (busy) return;
+  if (steps.length === 0) generateSteps(array);
+  busy = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  runLoop();
+}
+
+function runLoop() {
+  if (!busy || stepIdx >= steps.length) {
+    pause();
+    return;
+  }
+  render(steps[stepIdx]);
+  stepIdx++;
+  timer = setTimeout(runLoop, speedMs());
+}
+
+function stepForward() {
+  if (busy) return;
+  if (steps.length === 0) generateSteps(array);
+  if (stepIdx < steps.length) {
+    render(steps[stepIdx]);
+    stepIdx++;
+  }
+}
+
+function pause() {
+  busy = false;
+  clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  steps = [];
+  stepIdx = 0;
+  lastLogged = -1;
+  counters.partitions = 0;
+  counters.heap = 0;
+  counters.insert = 0;
+  document.getElementById('logEntries').innerHTML = '';
+  document.getElementById('info').innerHTML =
+    'Press <span class="hl">Start</span> to run, or <span class="hl">Step</span> for single-step mode.';
+  document.getElementById('statN').textContent = array.length;
+  const dLimit = array.length < 2 ? 0 : 2 * Math.floor(Math.log2(array.length));
+  document.getElementById('statDLimit').textContent = dLimit;
+  document.getElementById('statDepth').textContent = '0';
+  document.getElementById('statAlg').textContent = '—';
+  document.getElementById('statAlg').className = 'stat-value';
+  document.getElementById('statPart').textContent = '0';
+  document.getElementById('statHeap').textContent = '0';
+  document.getElementById('statIns').textContent = '0';
+  document.getElementById('statStep').textContent = '0 / 0';
+  render(null);
+}
+
+function loadCustom() {
+  const txt = document.getElementById('customInput').value;
+  const nums = txt.split(',').map(s => parseInt(s.trim())).filter(v => !isNaN(v));
+  if (nums.length > 0) {
+    array = nums.slice(0, 40); // cap visual size
+    reset();
+  }
+}
+
+function genRandom() {
+  const size = 12 + Math.floor(Math.random() * 12); // 12..23
+  array = Array.from({ length: size }, () => 1 + Math.floor(Math.random() * 40));
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+function genSorted() {
+  const size = 18;
+  array = Array.from({ length: size }, (_, i) => (i + 1) * 2);
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+function genReverse() {
+  const size = 18;
+  array = Array.from({ length: size }, (_, i) => (size - i) * 2);
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+// "Killer" input — many duplicates + a few outliers, designed to push depth toward the limit
+function genKiller() {
+  const size = 24;
+  const arr = [];
+  // alternating high/low — bad for median-of-three on small slices
+  for (let i = 0; i < size; i++) {
+    arr.push(i % 2 === 0 ? size - i : i + 1);
+  }
+  array = arr;
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+// =====================================================================
+// INIT
+// =====================================================================
+document.getElementById('customInput').value = array.join(', ');
+reset();
+</script>
+</body>
+</html>

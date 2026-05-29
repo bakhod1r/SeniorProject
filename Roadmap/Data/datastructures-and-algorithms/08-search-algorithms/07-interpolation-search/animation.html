@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interpolation Search — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center;max-width:700px}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.avg{color:var(--blue);border-color:var(--blue)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--purple);border-color:var(--purple)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.dist{border-color:var(--orange);color:var(--orange)}
+button.dist:hover{background:var(--orange);color:var(--bg)}
+button.dist.active{background:var(--orange);color:var(--bg)}
+input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem;width:110px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.canvas-wrap{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:24px;margin-bottom:16px;width:100%;max-width:1100px}
+.svg-container{width:100%;height:280px;display:block}
+.array-row{display:flex;gap:3px;position:relative;padding-top:38px;justify-content:center;flex-wrap:nowrap;overflow-x:auto}
+.cell{min-width:38px;height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:.85rem;
+      font-family:monospace;color:var(--text);transition:all .25s;position:relative;flex-shrink:0}
+.cell .idx{font-size:.58rem;color:var(--muted);position:absolute;bottom:-14px}
+.cell.eliminated{opacity:.22;background:var(--surface)}
+.cell.in-range{border-color:var(--blue);background:rgba(88,166,255,.06)}
+.cell.probe{background:var(--yellow);color:var(--bg);transform:translateY(-3px);border-color:var(--yellow);
+            box-shadow:0 0 0 3px rgba(210,153,34,.25)}
+.cell.found{background:var(--green);color:var(--bg);border-color:var(--green);
+            box-shadow:0 0 0 3px rgba(63,185,80,.3)}
+.cell.notfound{background:var(--red);color:var(--bg);border-color:var(--red)}
+.arrow{position:absolute;top:-24px;font-size:.65rem;font-family:monospace;font-weight:700;
+       transform:translateX(-50%);text-align:center;line-height:1.05}
+.arrow.lo{color:var(--blue)}
+.arrow.hi{color:var(--orange)}
+.arrow.pos{color:var(--yellow)}
+.arrow .ch{font-size:.95rem;display:block}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.step-info .calc{color:var(--purple)}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:760px}
+.dist-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+.dist-label{color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>Interpolation Search</h1>
+<p class="subtitle">O(log log n) average on UNIFORM sorted data: estimate the target's position from the value distribution, not just the midpoint.</p>
+
+<div class="badges">
+<span class="badge best">Best: O(1)</span>
+<span class="badge avg">Avg (uniform): O(log log n)</span>
+<span class="badge worst">Worst: O(n)</span>
+<span class="badge space">Space: O(1)</span>
+</div>
+
+<div class="dist-row">
+<span class="dist-label">Distribution:</span>
+<button class="dist active" onclick="setDist('uniform')" id="distUniform">Uniform</button>
+<button class="dist" onclick="setDist('skewed')" id="distSkewed">Skewed (powers of 2)</button>
+<button class="dist" onclick="setDist('clustered')" id="distClustered">Clustered</button>
+</div>
+
+<div class="input-control">
+<input type="number" id="targetInput" placeholder="target" value="70">
+<button onclick="loadTarget()">Set Target</button>
+<button onclick="randomTarget()" class="secondary">Random target</button>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">▶ Start</button>
+<button id="stepBtn" onclick="stepFwd()">▷ Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>❚❚ Pause</button>
+<button id="resetBtn" onclick="reset()" class="secondary">↺ Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<span style="color:var(--muted);font-size:.8rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="5">
+<span style="color:var(--muted);font-size:.8rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.18);border-color:var(--blue)"></div>In range [lo, hi]</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Interpolated probe</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--surface);opacity:.4"></div>Eliminated</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Found</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>Not found</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Probe</div><div class="stat-value" id="iter">0</div></div>
+<div><div class="stat-label">log log n (target)</div><div class="stat-value" id="boundLL">0</div></div>
+<div><div class="stat-label">log n (binary)</div><div class="stat-value" id="boundL">0</div></div>
+<div><div class="stat-label">Range</div><div class="stat-value" id="range">0</div></div>
+<div><div class="stat-label">Target</div><div class="stat-value" id="targetStat">-</div></div>
+</div>
+
+<div class="canvas-wrap">
+<svg id="plot" class="svg-container" viewBox="0 0 1050 280" preserveAspectRatio="xMidYMid meet"></svg>
+<div class="array-row" id="cells"></div>
+</div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Press <span class="highlight">Start</span> to run interpolation search.</div>
+</div>
+
+<p class="footer-note">Interpolation Search draws an imaginary line from (lo, arr[lo]) to (hi, arr[hi]), reads off where target lies on that line, and probes there. On UNIFORM data it converges in O(log log n) — about 5 probes for a billion elements. On SKEWED data (powers of 2) the prediction is wrong and it can degrade to O(n). Always pair with a binary fallback in production.</p>
+
+<script>
+// ---------- distributions ----------
+function genUniform() {
+    return [10,20,30,40,50,60,70,80,90,100,110,120,130,140,150];
+}
+function genSkewed() {
+    const a = [];
+    for (let i = 0; i < 15; i++) a.push(1 << i);
+    return a;
+}
+function genClustered() {
+    // values concentrated in two bands
+    return [5,7,9,11,13,15,17,80,82,84,86,88,90,140,145];
+}
+
+let dist = 'uniform';
+let array = genUniform();
+let target = 70;
+let steps = [], idx = 0, running = false, timer = null;
+
+function setDist(d) {
+    dist = d;
+    document.querySelectorAll('.dist').forEach(b => b.classList.remove('active'));
+    document.getElementById('dist' + d.charAt(0).toUpperCase() + d.slice(1)).classList.add('active');
+    if (d === 'uniform') array = genUniform();
+    else if (d === 'skewed') array = genSkewed();
+    else array = genClustered();
+    // pick a sensible default target
+    target = array[Math.floor(array.length / 2) + 1];
+    document.getElementById('targetInput').value = target;
+    reset();
+}
+
+// ---------- step generator ----------
+function genSteps(arr, target) {
+    const out = [];
+    let lo = 0, hi = arr.length - 1, it = 0;
+    out.push({type:'init', lo, hi, pos:null, arr:[...arr], it, target});
+    while (lo <= hi && target >= arr[lo] && target <= arr[hi]) {
+        if (arr[lo] === arr[hi]) {
+            if (arr[lo] === target) {
+                out.push({type:'found', lo, hi, pos:lo, arr:[...arr], it, target,
+                          note:`arr[lo]=arr[hi]=${arr[lo]} matches target — found at ${lo}.`});
+                return out;
+            }
+            out.push({type:'notfound', lo, hi, pos:null, arr:[...arr], it, target,
+                      note:'Endpoint equality but value differs from target.'});
+            return out;
+        }
+        it++;
+        const numerator = (target - arr[lo]) * (hi - lo);
+        const denominator = arr[hi] - arr[lo];
+        const pos = lo + Math.floor(numerator / denominator);
+        const ratio = (target - arr[lo]) / (arr[hi] - arr[lo]);
+        out.push({type:'probe', lo, hi, pos, arr:[...arr], it, target,
+                  note:`<span class="calc">pos = ${lo} + ((${target}−${arr[lo]}) × (${hi}−${lo})) / (${arr[hi]}−${arr[lo]}) = ${lo} + ⌊${numerator}/${denominator}⌋ = ${pos}</span>`,
+                  ratio, numerator, denominator});
+        if (arr[pos] === target) {
+            out.push({type:'found', lo, hi, pos, arr:[...arr], it, target,
+                      note:`arr[${pos}] = ${arr[pos]} = target ✓`});
+            return out;
+        } else if (arr[pos] < target) {
+            out.push({type:'go-right', lo, hi, pos, arr:[...arr], it, target,
+                      note:`arr[${pos}] = ${arr[pos]} < target = ${target} → lo = pos+1 = ${pos+1}`});
+            lo = pos + 1;
+        } else {
+            out.push({type:'go-left', lo, hi, pos, arr:[...arr], it, target,
+                      note:`arr[${pos}] = ${arr[pos]} > target = ${target} → hi = pos-1 = ${pos-1}`});
+            hi = pos - 1;
+        }
+    }
+    out.push({type:'notfound', lo, hi, pos:null, arr:[...arr], it, target,
+              note:'Target outside current window or window empty.'});
+    return out;
+}
+
+// ---------- SVG plot (value vs index, with interpolation line) ----------
+function renderPlot(s) {
+    const svg = document.getElementById('plot');
+    const W = 1050, H = 280;
+    const padL = 40, padR = 20, padT = 20, padB = 30;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const arr = s.arr, n = arr.length;
+    const minVal = Math.min(...arr), maxVal = Math.max(...arr);
+    const range = maxVal - minVal || 1;
+    const xAt = i => padL + (i / Math.max(1, n - 1)) * plotW;
+    const yAt = v => padT + plotH - ((v - minVal) / range) * plotH;
+    let html = '';
+    // axes
+    html += `<line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="var(--border)" />`;
+    html += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="var(--border)" />`;
+    // data line
+    let path = '';
+    for (let i = 0; i < n; i++) {
+        path += (i === 0 ? 'M' : 'L') + xAt(i) + ',' + yAt(arr[i]);
+    }
+    html += `<path d="${path}" stroke="var(--muted)" stroke-width="1" fill="none" opacity="0.5"/>`;
+    // dots
+    for (let i = 0; i < n; i++) {
+        let color = 'var(--muted)';
+        if (i < s.lo || i > s.hi) color = 'var(--border)';
+        else if (s.pos !== null && i === s.pos) color = 'var(--yellow)';
+        else color = 'var(--blue)';
+        html += `<circle cx="${xAt(i)}" cy="${yAt(arr[i])}" r="3.5" fill="${color}" />`;
+    }
+    // target horizontal line
+    if (s.target >= minVal && s.target <= maxVal) {
+        html += `<line x1="${padL}" y1="${yAt(s.target)}" x2="${W - padR}" y2="${yAt(s.target)}"
+                 stroke="var(--green)" stroke-dasharray="5,3" stroke-width="1.5"/>`;
+        html += `<text x="${W - padR - 5}" y="${yAt(s.target) - 4}" fill="var(--green)" font-size="11" text-anchor="end">target=${s.target}</text>`;
+    }
+    // interpolation line from (lo, arr[lo]) to (hi, arr[hi]) - the chord
+    if (s.type === 'probe' && s.lo !== s.hi) {
+        html += `<line x1="${xAt(s.lo)}" y1="${yAt(arr[s.lo])}" x2="${xAt(s.hi)}" y2="${yAt(arr[s.hi])}"
+                 stroke="var(--yellow)" stroke-width="2"/>`;
+        // vertical probe indicator
+        if (s.pos !== null) {
+            html += `<line x1="${xAt(s.pos)}" y1="${padT}" x2="${xAt(s.pos)}" y2="${H - padB}"
+                     stroke="var(--yellow)" stroke-dasharray="4,2" stroke-width="1"/>`;
+            html += `<text x="${xAt(s.pos) + 4}" y="${padT + 12}" fill="var(--yellow)" font-size="11">pos=${s.pos}</text>`;
+        }
+    }
+    // axis labels
+    html += `<text x="${padL}" y="${H - padB + 15}" fill="var(--muted)" font-size="10">0</text>`;
+    html += `<text x="${W - padR}" y="${H - padB + 15}" fill="var(--muted)" font-size="10" text-anchor="end">${n-1}</text>`;
+    html += `<text x="${padL - 6}" y="${padT + 6}" fill="var(--muted)" font-size="10" text-anchor="end">${maxVal}</text>`;
+    html += `<text x="${padL - 6}" y="${H - padB}" fill="var(--muted)" font-size="10" text-anchor="end">${minVal}</text>`;
+    svg.innerHTML = html;
+}
+
+// ---------- cells row ----------
+function renderCells(s) {
+    const c = document.getElementById('cells');
+    const arr = s.arr;
+    let html = '';
+    for (let i = 0; i < arr.length; i++) {
+        let cls = '';
+        if (s.type === 'found' && i === s.pos) cls = 'found';
+        else if (s.type === 'notfound') cls = 'eliminated';
+        else if (i < s.lo || i > s.hi) cls = 'eliminated';
+        else if (s.pos !== null && i === s.pos) cls = 'probe';
+        else cls = 'in-range';
+        html += `<div class="cell ${cls}">${arr[i]}<span class="idx">${i}</span></div>`;
+    }
+    c.innerHTML = html;
+}
+
+// ---------- info / stats ----------
+function renderInfo(s) {
+    document.getElementById('iter').textContent = s.it;
+    const n = s.arr.length;
+    document.getElementById('boundLL').textContent = n > 1 ? Math.max(1, Math.ceil(Math.log2(Math.log2(n) + 1))) : 1;
+    document.getElementById('boundL').textContent = Math.ceil(Math.log2(n + 1));
+    document.getElementById('range').textContent = Math.max(0, s.hi - s.lo + 1);
+    document.getElementById('targetStat').textContent = s.target;
+    const info = document.getElementById('info');
+    if (s.type === 'init') {
+        info.innerHTML = `<b>Initialize</b>: lo=0, hi=${s.arr.length - 1}, target=<span class="highlight">${s.target}</span>. Drawing chord from (lo, arr[lo]) to (hi, arr[hi]) to estimate position.`;
+    } else if (s.type === 'probe') {
+        info.innerHTML = `<b>Probe ${s.it}</b>: ${s.note}`;
+    } else if (s.type === 'go-right' || s.type === 'go-left') {
+        info.innerHTML = s.note;
+    } else if (s.type === 'found') {
+        info.innerHTML = `<span class="ok">✓ FOUND</span> target ${s.target} at index ${s.pos} after ${s.it} probe${s.it === 1 ? '' : 's'}. ${s.note}`;
+    } else if (s.type === 'notfound') {
+        info.innerHTML = `<span class="bad">✗ NOT FOUND</span>: target ${s.target} not in array. ${s.note}`;
+    }
+}
+
+function render(s) {
+    renderPlot(s);
+    renderCells(s);
+    renderInfo(s);
+}
+
+// ---------- driver ----------
+function delay() { return 1100 - parseInt(document.getElementById('speedSlider').value) * 100; }
+function start() {
+    if (steps.length === 0) steps = genSteps(array, target);
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    tick();
+}
+function tick() {
+    if (!running || idx >= steps.length) { pause(); return; }
+    render(steps[idx]); idx++;
+    timer = setTimeout(tick, delay());
+}
+function stepFwd() {
+    if (steps.length === 0) steps = genSteps(array, target);
+    if (idx < steps.length) { render(steps[idx]); idx++; }
+}
+function pause() {
+    running = false; clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+}
+function reset() {
+    pause(); steps = []; idx = 0;
+    const initState = {type:'init', lo:0, hi:array.length - 1, pos:null, arr:[...array], it:0, target};
+    render(initState);
+    document.getElementById('info').innerHTML = 'Press <span class="highlight">Start</span> to run interpolation search.';
+}
+function loadTarget() {
+    const t = parseInt(document.getElementById('targetInput').value);
+    if (!isNaN(t)) target = t;
+    reset();
+}
+function randomTarget() {
+    if (Math.random() < 0.7) {
+        target = array[Math.floor(Math.random() * array.length)];
+    } else {
+        const minV = array[0], maxV = array[array.length - 1];
+        target = minV + Math.floor(Math.random() * (maxV - minV + 1));
+    }
+    document.getElementById('targetInput').value = target;
+    reset();
+}
+reset();
+</script>
+</body>
+</html>

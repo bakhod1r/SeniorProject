@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Binary Search Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;max-width:780px}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:7px 14px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.9rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.warn{border-color:var(--red);color:var(--red)}
+button.warn:hover{background:var(--red);color:var(--bg)}
+input[type=text],input[type=number]{padding:7px 12px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.9rem;font-family:monospace}
+input[type=text]{width:300px}
+input[type=number]{width:80px}
+input[type=range]{width:140px;accent-color:var(--blue)}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:18px;margin-bottom:14px;width:100%;max-width:1100px;
+       min-height:340px;overflow:auto;position:relative}
+svg{display:block;margin:0 auto}
+.node circle{transition:fill .25s,stroke .25s,r .2s}
+.node-default{fill:var(--bg);stroke:var(--border);stroke-width:2}
+.node-visited{fill:rgba(88,166,255,.15);stroke:var(--blue);stroke-width:2}
+.node-current{fill:var(--yellow);stroke:var(--yellow);stroke-width:3}
+.node-goleft{fill:var(--bg);stroke:var(--blue);stroke-width:3}
+.node-goright{fill:var(--bg);stroke:var(--orange);stroke-width:3}
+.node-found{fill:var(--green);stroke:var(--green);stroke-width:3}
+.node-todelete{fill:var(--red);stroke:var(--red);stroke-width:3}
+.node-successor{fill:var(--purple);stroke:var(--purple);stroke-width:3}
+.node-new{fill:var(--green);stroke:var(--green);stroke-width:3}
+.edge{stroke:var(--border);stroke-width:1.5;fill:none;transition:stroke .25s}
+.edge.path{stroke:var(--blue);stroke-width:2.5}
+.node-label{font-family:monospace;font-size:14px;fill:var(--text);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.node-label.dark{fill:var(--bg);font-weight:700}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:14px 18px;width:100%;max-width:1100px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);margin-bottom:6px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6;min-height:24px}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.step-info .succ{color:var(--purple);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:10px 18px;display:flex;gap:22px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.05rem;font-weight:700;font-family:monospace}
+.stat-value.bal-yes{color:var(--green)}
+.stat-value.bal-no{color:var(--red)}
+.inorder-box{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:10px 18px;width:100%;max-width:1100px;font-family:monospace;font-size:.92rem;
+       color:var(--text);margin-bottom:12px;overflow-x:auto;white-space:nowrap}
+.inorder-box .lbl{color:var(--muted);margin-right:8px}
+.legend{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--muted)}
+.legend-dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:6px;text-align:center;max-width:760px}
+</style>
+</head>
+<body>
+<h1>Binary Search Tree</h1>
+<p class="subtitle">BST invariant: left subtree &lt; node &lt; right subtree, recursively. Insertion order determines shape — sorted input degenerates to height n.</p>
+
+<div class="badges">
+<span class="badge best">Avg: O(log n)</span>
+<span class="badge worst">Worst: O(n) (skewed)</span>
+<span class="badge space">Space: O(n)</span>
+<span class="badge best">Inorder = sorted</span>
+</div>
+
+<div class="input-row">
+<input type="text" id="bulkInput" placeholder="Comma values to insert: 5,3,8,1,4,7,9" value="5,3,8,1,4,7,9">
+<button onclick="bulkInsert()">Insert All</button>
+<button onclick="loadDegenerate()" class="secondary">Load 1..7 (skew)</button>
+</div>
+
+<div class="input-row">
+<input type="number" id="opVal" placeholder="value" value="6">
+<button onclick="opInsert()">Insert</button>
+<button onclick="opSearch()">Search</button>
+<button onclick="opDelete()" class="warn">Delete</button>
+<button onclick="reset()" class="secondary">Reset</button>
+</div>
+
+<div class="input-row">
+<span style="color:var(--muted);font-size:.78rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="6">
+<span style="color:var(--muted);font-size:.78rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:var(--yellow);border-color:var(--yellow)"></div>comparing</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--bg);border-color:var(--blue)"></div>going left</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--bg);border-color:var(--orange)"></div>going right</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--green);border-color:var(--green)"></div>found / inserted</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--red);border-color:var(--red)"></div>to delete</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--purple);border-color:var(--purple)"></div>inorder successor</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Nodes</div><div class="stat-value" id="statN">0</div></div>
+<div><div class="stat-label">Height</div><div class="stat-value" id="statH">-1</div></div>
+<div><div class="stat-label">log₂(n+1)</div><div class="stat-value" id="statLog">0</div></div>
+<div><div class="stat-label">Balanced?</div><div class="stat-value" id="statBal">-</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="statOp">-</div></div>
+</div>
+
+<div class="canvas-container" id="canvas">
+  <svg id="svg" width="1050" height="320"></svg>
+</div>
+
+<div class="inorder-box"><span class="lbl">inorder:</span><span id="inorderOut">(empty)</span></div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Insert values above to start. Try <span class="highlight">5,3,8,1,4,7,9</span> for the walkthrough tree, then <span class="highlight">Search 7</span>, then <span class="highlight">Delete 5</span>.</div>
+</div>
+
+<p class="footer-note">Each insertion follows the search path from the root and attaches the new node as a leaf. Deletion's three cases (no child, one child, two children) are animated. The two-children case highlights the inorder successor in purple before the value swap.</p>
+
+<script>
+// --- BST core ---
+let root=null;
+
+function makeNode(key){ return {key, left:null, right:null}; }
+
+function insertRec(n, key){
+  if(n===null) return makeNode(key);
+  if(key < n.key) n.left  = insertRec(n.left, key);
+  else if(key > n.key) n.right = insertRec(n.right, key);
+  return n;
+}
+function inorder(n, out){
+  if(n===null) return;
+  inorder(n.left, out);
+  out.push(n.key);
+  inorder(n.right, out);
+}
+function heightOf(n){
+  if(n===null) return -1;
+  return 1 + Math.max(heightOf(n.left), heightOf(n.right));
+}
+function sizeOf(n){
+  if(n===null) return 0;
+  return 1 + sizeOf(n.left) + sizeOf(n.right);
+}
+
+// --- Layout: inorder index gives x; depth gives y ---
+function layout(n){
+  // assign in-order indices
+  const pos = new Map();
+  let idx = 0;
+  function assignX(node, depth){
+    if(node===null) return;
+    assignX(node.left, depth+1);
+    pos.set(node, {ix: idx++, depth});
+    assignX(node.right, depth+1);
+  }
+  assignX(n, 0);
+  return pos;
+}
+
+// --- Rendering ---
+const NODE_R = 20;
+const X_STEP = 46;
+const Y_STEP = 70;
+const PAD_X  = 30;
+const PAD_Y  = 30;
+
+function highlightFor(node, ctx){
+  // ctx = { current, goleft, goright, found, todelete, successor, visited:Set, newNode }
+  if(!ctx) return 'node-default';
+  if(ctx.newNode===node)    return 'node-new';
+  if(ctx.todelete===node)   return 'node-todelete';
+  if(ctx.successor===node)  return 'node-successor';
+  if(ctx.found===node)      return 'node-found';
+  if(ctx.current===node){
+    if(ctx.dir==='left')  return 'node-goleft';
+    if(ctx.dir==='right') return 'node-goright';
+    return 'node-current';
+  }
+  if(ctx.visited && ctx.visited.has(node)) return 'node-visited';
+  return 'node-default';
+}
+
+function render(ctx){
+  const svg = document.getElementById('svg');
+  svg.innerHTML = '';
+  if(root===null){
+    document.getElementById('inorderOut').textContent = '(empty)';
+    document.getElementById('statN').textContent = '0';
+    document.getElementById('statH').textContent = '-1';
+    document.getElementById('statLog').textContent = '0';
+    document.getElementById('statBal').textContent = '-';
+    document.getElementById('statBal').className = 'stat-value';
+    svg.setAttribute('width', 600);
+    svg.setAttribute('height', 200);
+    return;
+  }
+  const pos = layout(root);
+  // compute size
+  let maxIx=0, maxDepth=0;
+  for(const p of pos.values()){
+    if(p.ix > maxIx) maxIx = p.ix;
+    if(p.depth > maxDepth) maxDepth = p.depth;
+  }
+  const width  = (maxIx+1) * X_STEP + 2*PAD_X;
+  const height = (maxDepth+1) * Y_STEP + 2*PAD_Y;
+  svg.setAttribute('width',  Math.max(600, width));
+  svg.setAttribute('height', Math.max(200, height));
+
+  function xy(node){
+    const p = pos.get(node);
+    return { x: PAD_X + p.ix * X_STEP, y: PAD_Y + p.depth * Y_STEP };
+  }
+  // edges first
+  function drawEdges(node){
+    if(node===null) return;
+    const {x:xn, y:yn} = xy(node);
+    if(node.left){
+      const {x, y} = xy(node.left);
+      const onPath = ctx && ctx.pathEdges && ctx.pathEdges.has(node.left);
+      svg.insertAdjacentHTML('beforeend',
+        `<line class="edge ${onPath?'path':''}" x1="${xn}" y1="${yn}" x2="${x}" y2="${y}"/>`);
+      drawEdges(node.left);
+    }
+    if(node.right){
+      const {x, y} = xy(node.right);
+      const onPath = ctx && ctx.pathEdges && ctx.pathEdges.has(node.right);
+      svg.insertAdjacentHTML('beforeend',
+        `<line class="edge ${onPath?'path':''}" x1="${xn}" y1="${yn}" x2="${x}" y2="${y}"/>`);
+      drawEdges(node.right);
+    }
+  }
+  drawEdges(root);
+
+  // nodes
+  function drawNodes(node){
+    if(node===null) return;
+    const {x, y} = xy(node);
+    const cls = highlightFor(node, ctx);
+    const dark = (cls==='node-current'||cls==='node-found'||cls==='node-todelete'
+                  ||cls==='node-successor'||cls==='node-new');
+    svg.insertAdjacentHTML('beforeend',
+      `<g class="node">
+         <circle class="${cls}" cx="${x}" cy="${y}" r="${NODE_R}"/>
+         <text class="node-label ${dark?'dark':''}" x="${x}" y="${y}">${node.key}</text>
+       </g>`);
+    drawNodes(node.left); drawNodes(node.right);
+  }
+  drawNodes(root);
+
+  // stats
+  const n = sizeOf(root);
+  const h = heightOf(root);
+  const logBound = Math.ceil(Math.log2(n+1));
+  document.getElementById('statN').textContent = n;
+  document.getElementById('statH').textContent = h;
+  document.getElementById('statLog').textContent = logBound;
+  // informal "balanced": h <= 2 * log2(n+1)
+  const balanced = h <= 2 * logBound;
+  const balEl = document.getElementById('statBal');
+  balEl.textContent = balanced ? 'yes' : 'no';
+  balEl.className = 'stat-value ' + (balanced ? 'bal-yes' : 'bal-no');
+
+  // inorder
+  const order = [];
+  inorder(root, order);
+  document.getElementById('inorderOut').textContent = order.length ? order.join(', ') : '(empty)';
+}
+
+// --- Animation engine ---
+let animTimer=null;
+function delay(){ return 1100 - parseInt(document.getElementById('speedSlider').value)*100; }
+function sleep(ms){ return new Promise(r => animTimer = setTimeout(r, ms)); }
+let busy=false;
+function setBusy(b){ busy=b; }
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function setLastOp(s){ document.getElementById('statOp').textContent = s; }
+
+// --- Insert with animation ---
+async function animateInsert(key){
+  if(busy) return;
+  setBusy(true);
+  setLastOp(`insert ${key}`);
+  if(root===null){
+    root = makeNode(key);
+    setInfo(`Tree empty → make <span class="ok">${key}</span> the new root.`);
+    render({newNode: root});
+    await sleep(delay());
+    render(null);
+    setBusy(false);
+    return;
+  }
+  const visited = new Set();
+  const pathEdges = new Set();
+  let n = root, parent = null, dir = null;
+  while(n !== null){
+    visited.add(n);
+    render({current:n, visited, pathEdges});
+    setInfo(`At node <span class="highlight">${n.key}</span>: compare ${key} vs ${n.key}.`);
+    await sleep(delay());
+    if(key === n.key){
+      setInfo(`<span class="bad">${key} already exists</span> — duplicate ignored.`);
+      render({found:n, visited, pathEdges});
+      await sleep(delay());
+      render(null);
+      setBusy(false);
+      return;
+    }
+    if(key < n.key){
+      render({current:n, dir:'left', visited, pathEdges});
+      setInfo(`${key} &lt; ${n.key} → go <span style="color:var(--blue)">left</span>.`);
+      await sleep(delay());
+      parent = n; dir = 'left';
+      if(n.left) pathEdges.add(n.left);
+      n = n.left;
+    } else {
+      render({current:n, dir:'right', visited, pathEdges});
+      setInfo(`${key} &gt; ${n.key} → go <span style="color:var(--orange)">right</span>.`);
+      await sleep(delay());
+      parent = n; dir = 'right';
+      if(n.right) pathEdges.add(n.right);
+      n = n.right;
+    }
+  }
+  // attach
+  const newNode = makeNode(key);
+  if(dir === 'left') parent.left = newNode; else parent.right = newNode;
+  pathEdges.add(newNode);
+  setInfo(`Reached <span class="highlight">empty ${dir}</span> of ${parent.key} → attach new node <span class="ok">${key}</span>.`);
+  render({newNode, visited, pathEdges});
+  await sleep(delay());
+  render(null);
+  setBusy(false);
+}
+
+// --- Search with animation ---
+async function animateSearch(key){
+  if(busy) return;
+  setBusy(true);
+  setLastOp(`search ${key}`);
+  if(root===null){ setInfo(`<span class="bad">Tree is empty.</span>`); setBusy(false); return; }
+  const visited = new Set();
+  const pathEdges = new Set();
+  let n = root;
+  while(n !== null){
+    visited.add(n);
+    render({current:n, visited, pathEdges});
+    setInfo(`At <span class="highlight">${n.key}</span>: compare ${key} vs ${n.key}.`);
+    await sleep(delay());
+    if(key === n.key){
+      render({found:n, visited, pathEdges});
+      setInfo(`<span class="ok">FOUND</span> ${key} after ${visited.size} comparisons.`);
+      await sleep(delay()*1.4);
+      render(null); setBusy(false); return;
+    }
+    if(key < n.key){
+      render({current:n, dir:'left', visited, pathEdges});
+      setInfo(`${key} &lt; ${n.key} → go <span style="color:var(--blue)">left</span>.`);
+      await sleep(delay());
+      if(n.left) pathEdges.add(n.left);
+      n = n.left;
+    } else {
+      render({current:n, dir:'right', visited, pathEdges});
+      setInfo(`${key} &gt; ${n.key} → go <span style="color:var(--orange)">right</span>.`);
+      await sleep(delay());
+      if(n.right) pathEdges.add(n.right);
+      n = n.right;
+    }
+  }
+  setInfo(`<span class="bad">NOT FOUND</span>: ${key} is not in the tree. ${visited.size} comparisons.`);
+  render({visited, pathEdges});
+  await sleep(delay()*1.4);
+  render(null); setBusy(false);
+}
+
+// --- Delete with animation ---
+async function animateDelete(key){
+  if(busy) return;
+  setBusy(true);
+  setLastOp(`delete ${key}`);
+  if(root===null){ setInfo(`<span class="bad">Tree is empty.</span>`); setBusy(false); return; }
+  // 1. Find the node
+  const visited = new Set();
+  const pathEdges = new Set();
+  let n = root, parent = null, dir = null;
+  while(n !== null && n.key !== key){
+    visited.add(n);
+    render({current:n, visited, pathEdges});
+    setInfo(`At <span class="highlight">${n.key}</span>: searching for ${key}.`);
+    await sleep(delay());
+    parent = n;
+    if(key < n.key){ dir='left';  if(n.left)  pathEdges.add(n.left);  n = n.left;  }
+    else            { dir='right'; if(n.right) pathEdges.add(n.right); n = n.right; }
+  }
+  if(n === null){
+    setInfo(`<span class="bad">${key} not present</span> — nothing to delete.`);
+    render({visited, pathEdges});
+    await sleep(delay()*1.2);
+    render(null); setBusy(false); return;
+  }
+  visited.add(n);
+  render({todelete:n, visited, pathEdges});
+  setInfo(`Found <span class="bad">${key}</span> — identifying deletion case.`);
+  await sleep(delay()*1.2);
+
+  // 2. Three cases
+  if(n.left === null && n.right === null){
+    // Case A: leaf
+    setInfo(`<span class="bad">Case A — leaf</span>: just detach.`);
+    await sleep(delay());
+    if(parent === null) root = null;
+    else if(dir === 'left') parent.left = null;
+    else parent.right = null;
+  } else if(n.left === null || n.right === null){
+    // Case B: one child
+    const child = n.left !== null ? n.left : n.right;
+    setInfo(`<span class="bad">Case B — one child</span>: splice ${n.key} out, link parent to ${child.key}.`);
+    await sleep(delay());
+    if(parent === null) root = child;
+    else if(dir === 'left') parent.left = child;
+    else parent.right = child;
+  } else {
+    // Case C: two children — inorder successor
+    setInfo(`<span class="bad">Case C — two children</span>: find inorder successor (leftmost of right subtree).`);
+    await sleep(delay());
+    let succParent = n, succ = n.right;
+    const succVisited = new Set(visited);
+    while(succ.left !== null){
+      succVisited.add(succ);
+      render({todelete:n, current:succ, visited:succVisited, pathEdges});
+      await sleep(delay());
+      succParent = succ;
+      succ = succ.left;
+    }
+    succVisited.add(succ);
+    render({todelete:n, successor:succ, visited:succVisited, pathEdges});
+    setInfo(`Inorder successor is <span class="succ">${succ.key}</span> — copy its key into the deleted slot.`);
+    await sleep(delay()*1.4);
+    n.key = succ.key;
+    render({successor:n, visited:succVisited, pathEdges});
+    setInfo(`Copied <span class="succ">${succ.key}</span> into the slot; now delete the successor (which has at most a right child).`);
+    await sleep(delay()*1.2);
+    if(succParent.left === succ) succParent.left = succ.right;
+    else                          succParent.right = succ.right;
+  }
+  render(null);
+  setInfo(`<span class="ok">DONE</span> — ${key} removed. Inorder still sorted.`);
+  setBusy(false);
+}
+
+// --- UI hooks ---
+async function bulkInsert(){
+  const raw = document.getElementById('bulkInput').value;
+  const vals = raw.split(/[, ]+/).map(s=>parseInt(s.trim())).filter(v=>!isNaN(v));
+  if(vals.length===0) return;
+  for(const v of vals){
+    await animateInsert(v);
+    if(busy) await sleep(40);
+  }
+}
+async function opInsert(){
+  const v = parseInt(document.getElementById('opVal').value);
+  if(isNaN(v)) return;
+  await animateInsert(v);
+}
+async function opSearch(){
+  const v = parseInt(document.getElementById('opVal').value);
+  if(isNaN(v)) return;
+  await animateSearch(v);
+}
+async function opDelete(){
+  const v = parseInt(document.getElementById('opVal').value);
+  if(isNaN(v)) return;
+  await animateDelete(v);
+}
+function loadDegenerate(){
+  if(busy) return;
+  root = null;
+  document.getElementById('bulkInput').value = '1,2,3,4,5,6,7';
+  setInfo(`Click <span class="highlight">Insert All</span> to watch sorted input create a right-spine "BST" of height 6.`);
+  render(null);
+  setLastOp('reset (skew demo)');
+}
+function reset(){
+  if(busy){ clearTimeout(animTimer); setBusy(false); }
+  root = null;
+  setInfo(`Tree reset. Insert values to start.`);
+  setLastOp('reset');
+  render(null);
+}
+
+// init
+render(null);
+</script>
+</body>
+</html>

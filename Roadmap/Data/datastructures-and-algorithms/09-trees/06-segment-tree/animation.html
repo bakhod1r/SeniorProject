@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Segment Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.active{background:var(--blue);color:var(--bg)}
+input[type=text],input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.95rem}
+input[type=text]{width:340px}
+input[type=number]{width:80px}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:1180px;min-height:460px;overflow:auto;margin-bottom:16px}
+svg{display:block;margin:0 auto}
+.node rect{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .25s}
+.node.full rect{fill:var(--green);stroke:var(--green)}
+.node.partial rect{fill:var(--yellow);stroke:var(--yellow)}
+.node.outside rect{fill:var(--surface);stroke:var(--border);opacity:.4}
+.node.updated rect{fill:var(--purple);stroke:var(--purple)}
+.node text{fill:var(--text);text-anchor:middle;font-family:monospace;font-weight:700}
+.node.full text,.node.partial text,.node.updated text{fill:var(--bg)}
+.node .val{font-size:1rem;dominant-baseline:central}
+.node .rng{font-size:.65rem;fill:var(--muted)}
+.node.full .rng,.node.partial .rng,.node.updated .rng{fill:var(--bg)}
+.edge{stroke:var(--border);stroke-width:1.5;fill:none}
+.info-panel,.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px;width:100%;max-width:1180px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.stats{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:12px 20px}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.array-strip{display:flex;gap:4px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+.cell{min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;font-family:monospace;font-size:.85rem;position:relative}
+.cell.in-q{border-color:var(--yellow);background:rgba(210,153,34,.15)}
+.cell .idx{position:absolute;bottom:-16px;font-size:.6rem;color:var(--muted)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>Segment Tree</h1>
+<p class="subtitle">Range queries + point updates in O(log n). The trichotomy: fully outside → skip, fully inside → use aggregate, partial → recurse both children.</p>
+
+<div class="badges">
+<span class="badge best">Build: O(n)</span>
+<span class="badge best">Query: O(log n)</span>
+<span class="badge best">Update: O(log n)</span>
+<span class="badge space">Memory: 4n</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="arrIn" placeholder="Array: 2,1,5,3,4,6,8,7" value="2,1,5,3,4,6,8,7">
+<button onclick="loadArr()">Load &amp; Build</button>
+</div>
+
+<div class="input-control">
+<span style="color:var(--muted);font-size:.85rem">Query:</span>
+<input type="number" id="qL" value="1" style="width:60px">
+<input type="number" id="qR" value="5" style="width:60px">
+<button onclick="doQuery()">Range Sum</button>
+<span style="color:var(--muted);font-size:.85rem;margin-left:14px">Update:</span>
+<input type="number" id="uI" value="3" style="width:60px">
+<input type="number" id="uV" value="10" style="width:60px">
+<button onclick="doUpdate()">Point Update</button>
+<button onclick="resetVis()" class="secondary">↺ Clear</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg)"></div>Idle</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Partial overlap (recurse)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Fully inside (use value)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--surface);opacity:.4"></div>Outside (skip)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Updated path</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">n</div><div class="stat-value" id="nVal">0</div></div>
+<div><div class="stat-label">Tree size</div><div class="stat-value" id="tSize">0</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+<div><div class="stat-label">Nodes visited</div><div class="stat-value" id="nVisited">0</div></div>
+<div><div class="stat-label">Result</div><div class="stat-value" id="resultVal">-</div></div>
+</div>
+
+<div class="array-strip" id="strip"></div>
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Load an array, then query a range or update a point.</div>
+</div>
+
+<p class="footer-note">Recursive segment tree on n elements uses tree of size 4n (safe upper bound) and visits O(log n) nodes per query. Lazy propagation extends to range updates. Variants: iterative bottom-up, 2D, persistent, merge-sort tree.</p>
+
+<script>
+let arr=[2,1,5,3,4,6,8,7];
+let tree=[], n=0;
+let nodeCls=new Map(), qLow=-1, qHigh=-1, visited=0;
+
+function build(node,lo,hi){
+  if(lo===hi){ tree[node]=arr[lo]; return; }
+  const mid=(lo+hi)>>1;
+  build(2*node,lo,mid); build(2*node+1,mid+1,hi);
+  tree[node]=tree[2*node]+tree[2*node+1];
+}
+function query(node,lo,hi,ql,qr){
+  visited++;
+  if(qr<lo||hi<ql){ nodeCls.set(node,'outside'); return 0; }
+  if(ql<=lo&&hi<=qr){ nodeCls.set(node,'full'); return tree[node]; }
+  nodeCls.set(node,'partial');
+  const mid=(lo+hi)>>1;
+  return query(2*node,lo,mid,ql,qr)+query(2*node+1,mid+1,hi,ql,qr);
+}
+function update(node,lo,hi,idx,val){
+  visited++;
+  nodeCls.set(node,'updated');
+  if(lo===hi){ tree[node]=val; arr[lo]=val; return; }
+  const mid=(lo+hi)>>1;
+  if(idx<=mid) update(2*node,lo,mid,idx,val);
+  else update(2*node+1,mid+1,hi,idx,val);
+  tree[node]=tree[2*node]+tree[2*node+1];
+}
+
+function rebuild(){
+  n=arr.length;
+  tree=new Array(4*n).fill(0);
+  if(n>0) build(1,0,n-1);
+  document.getElementById('nVal').textContent=n;
+  document.getElementById('tSize').textContent=tree.length;
+  nodeCls=new Map(); visited=0; qLow=-1; qHigh=-1;
+  document.getElementById('nVisited').textContent='0';
+  document.getElementById('resultVal').textContent='-';
+  render();
+}
+function loadArr(){
+  const s=document.getElementById('arrIn').value;
+  const nums=s.split(/[, ]+/).map(x=>parseInt(x)).filter(x=>!isNaN(x));
+  if(nums.length>0){ arr=nums; rebuild(); }
+}
+
+function nodeRanges(node,lo,hi,out){
+  if(node>=tree.length||lo>hi) return;
+  out.set(node,{lo,hi});
+  if(lo===hi) return;
+  const mid=(lo+hi)>>1;
+  nodeRanges(2*node,lo,mid,out);
+  nodeRanges(2*node+1,mid+1,hi,out);
+}
+function maxDepth(node,depth){
+  if(node>=tree.length||tree[node]===undefined) return depth-1;
+  return Math.max(maxDepth(2*node,depth+1),maxDepth(2*node+1,depth+1),depth);
+}
+
+function render(){
+  const c=document.getElementById('canvas');
+  const strip=document.getElementById('strip');
+  if(n===0){ c.innerHTML='<p style="color:var(--muted);text-align:center;padding-top:120px">Empty.</p>'; strip.innerHTML=''; return; }
+  // strip
+  strip.innerHTML=arr.map((v,i)=>{
+    const inQ = (qLow!==-1 && i>=qLow && i<=qHigh);
+    return `<div class="cell ${inQ?'in-q':''}">${v}<span class="idx">${i}</span></div>`;
+  }).join('');
+  // tree
+  const ranges=new Map();
+  nodeRanges(1,0,n-1,ranges);
+  const depth=maxDepth(1,0);
+  const nodesArr=[...ranges.keys()].sort((a,b)=>a-b);
+  // assign x by inorder of node tree
+  const xMap=new Map();
+  let col=0;
+  function walk(node,d){
+    if(!ranges.has(node)) return;
+    const rg=ranges.get(node);
+    if(rg.lo===rg.hi){ xMap.set(node,{x:col,d}); col++; return; }
+    walk(2*node,d+1);
+    walk(2*node+1,d+1);
+    const lx=xMap.get(2*node).x, rx=xMap.get(2*node+1).x;
+    xMap.set(node,{x:(lx+rx)/2,d});
+  }
+  walk(1,0);
+  const totalCols=col;
+  const W=Math.max(800,totalCols*60), Hh=Math.max(400,(depth+1)*80);
+  const sx=i=>50+i*(W-100)/Math.max(1,totalCols-1);
+  const sy=d=>40+d*(Hh-80)/Math.max(1,depth);
+  let edges='',nodes='';
+  for(const [node,p] of xMap){
+    const rg=ranges.get(node);
+    if(rg.lo!==rg.hi){
+      const lp=xMap.get(2*node), rp=xMap.get(2*node+1);
+      if(lp) edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(lp.x)}" y2="${sy(lp.d)}"/>`;
+      if(rp) edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(rp.x)}" y2="${sy(rp.d)}"/>`;
+    }
+  }
+  for(const [node,p] of xMap){
+    const rg=ranges.get(node);
+    const cls=nodeCls.get(node)||'';
+    nodes+=`<g class="node ${cls}">
+      <rect x="${sx(p.x)-26}" y="${sy(p.d)-18}" width="52" height="36" rx="4"/>
+      <text class="val" x="${sx(p.x)}" y="${sy(p.d)-2}">${tree[node]}</text>
+      <text class="rng" x="${sx(p.x)}" y="${sy(p.d)+12}">[${rg.lo},${rg.hi}]</text>
+    </g>`;
+  }
+  c.innerHTML=`<svg width="${W}" height="${Hh+30}">${edges}${nodes}</svg>`;
+}
+function doQuery(){
+  const l=parseInt(document.getElementById('qL').value), r=parseInt(document.getElementById('qR').value);
+  if(isNaN(l)||isNaN(r)||l<0||r>=n||l>r){ document.getElementById('info').innerHTML='<span style="color:var(--red)">Invalid range.</span>'; return; }
+  nodeCls=new Map(); visited=0; qLow=l; qHigh=r;
+  const res=query(1,0,n-1,l,r);
+  document.getElementById('lastOp').textContent=`query [${l},${r}]`;
+  document.getElementById('nVisited').textContent=visited;
+  document.getElementById('resultVal').textContent=res;
+  document.getElementById('info').innerHTML=`<span class="ok">Sum over [${l},${r}] = ${res}</span>. Visited ${visited} nodes (theoretical bound ≤ 4⌈log₂ n⌉).`;
+  render();
+}
+function doUpdate(){
+  const i=parseInt(document.getElementById('uI').value), v=parseInt(document.getElementById('uV').value);
+  if(isNaN(i)||isNaN(v)||i<0||i>=n){ document.getElementById('info').innerHTML='<span style="color:var(--red)">Invalid index.</span>'; return; }
+  nodeCls=new Map(); visited=0; qLow=-1; qHigh=-1;
+  update(1,0,n-1,i,v);
+  document.getElementById('lastOp').textContent=`update arr[${i}]=${v}`;
+  document.getElementById('nVisited').textContent=visited;
+  document.getElementById('resultVal').textContent=v;
+  document.getElementById('info').innerHTML=`Updated <span class="highlight">arr[${i}] = ${v}</span>. The O(log n) path from root to leaf is recolored.`;
+  render();
+}
+function resetVis(){ nodeCls=new Map(); visited=0; qLow=-1; qHigh=-1; document.getElementById('nVisited').textContent='0'; document.getElementById('resultVal').textContent='-'; document.getElementById('info').innerHTML='Cleared.'; render(); }
+rebuild();
+</script>
+</body>
+</html>

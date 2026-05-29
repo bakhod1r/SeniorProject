@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Binary Search on Answer — Visual Animation</title>
+<style>
+:root {
+  --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff;
+  --purple:#bc8cff; --orange:#ffa657;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  padding: 20px;
+}
+h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 4px; text-align: center; }
+.subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; font-size: .9rem; }
+.badges {
+  display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; justify-content: center;
+}
+.badge {
+  padding: 4px 10px; border-radius: 12px; font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.badge.best { color: var(--green); border-color: var(--green); }
+.badge.worst { color: var(--red); border-color: var(--red); }
+.badge.space { color: var(--blue); border-color: var(--blue); }
+.controls, .input-control {
+  display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center;
+  align-items: center;
+}
+button {
+  padding: 8px 16px; border: 2px solid var(--blue); background: transparent;
+  color: var(--blue); border-radius: 6px; cursor: pointer; font-size: .9rem;
+  transition: all .2s;
+}
+button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+button.secondary { border-color: var(--border); color: var(--muted); }
+button.secondary:hover:not(:disabled) { background: var(--border); color: var(--text); }
+select, input[type=text], input[type=number] {
+  padding: 8px 12px; border: 2px solid var(--border); background: var(--surface);
+  color: var(--text); border-radius: 6px; font-size: .9rem;
+}
+select { min-width: 220px; }
+input[type=text] { width: 220px; }
+input[type=number] { width: 80px; }
+input[type=range] { width: 160px; accent-color: var(--blue); }
+.problem-label { color: var(--muted); font-size: .85rem; }
+.canvas-container {
+  background: var(--surface); border: 2px solid var(--border); border-radius: 12px;
+  padding: 32px 22px 24px; margin-bottom: 14px; width: 100%; max-width: 1100px;
+  min-height: 220px; overflow-x: auto;
+}
+.range-bar {
+  position: relative; height: 64px; margin: 28px 6px 36px;
+  border-radius: 8px; background: var(--bg); border: 1px solid var(--border);
+  overflow: visible;
+}
+.range-segment {
+  position: absolute; top: 0; bottom: 0;
+  border-radius: 4px; transition: all .35s ease;
+}
+.range-segment.feasible {
+  background: linear-gradient(180deg, rgba(63,185,80,.35), rgba(63,185,80,.18));
+  border: 1px solid var(--green);
+}
+.range-segment.infeasible {
+  background: linear-gradient(180deg, rgba(248,81,73,.35), rgba(248,81,73,.18));
+  border: 1px solid var(--red);
+}
+.range-segment.unknown {
+  background: linear-gradient(180deg, rgba(88,166,255,.22), rgba(88,166,255,.1));
+  border: 1px solid var(--blue);
+}
+.tick-row {
+  display: flex; justify-content: space-between; font-family: monospace;
+  font-size: .72rem; color: var(--muted); margin-top: -28px; padding: 0 4px;
+}
+.marker {
+  position: absolute; font-family: monospace; font-size: .72rem; font-weight: 700;
+  transform: translateX(-50%); text-align: center; line-height: 1.1;
+  pointer-events: none;
+}
+.marker.lo  { color: var(--blue); top: -26px; }
+.marker.hi  { color: var(--orange); top: -26px; }
+.marker.mid { color: var(--yellow); bottom: -28px; }
+.marker .ch { font-size: 1rem; display: block; }
+.predicate-result {
+  position: absolute; transform: translate(-50%, -50%); top: 50%;
+  font-size: 1.2rem; font-weight: 700; padding: 4px 10px; border-radius: 6px;
+  transition: opacity .35s;
+}
+.predicate-result.feasible { background: var(--green); color: var(--bg); }
+.predicate-result.infeasible { background: var(--red); color: var(--bg); }
+.info-panel {
+  background: var(--surface); border: 2px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; width: 100%; max-width: 1100px; margin-bottom: 14px;
+}
+.info-panel h3 { color: var(--blue); margin-bottom: 6px; font-size: 1rem; }
+.step-info { font-family: monospace; font-size: .88rem; line-height: 1.55; }
+.step-info .hl { color: var(--yellow); font-weight: 600; }
+.step-info .ok { color: var(--green); font-weight: 600; }
+.step-info .bad { color: var(--red); font-weight: 600; }
+.stats {
+  background: var(--surface); border: 2px solid var(--border); border-radius: 12px;
+  padding: 10px 18px; display: flex; gap: 22px; margin-bottom: 14px;
+  flex-wrap: wrap; justify-content: center;
+}
+.stat-label { color: var(--muted); font-size: .68rem; text-transform: uppercase; }
+.stat-value { color: var(--blue); font-size: 1.05rem; font-weight: 700; font-family: monospace; }
+.legend {
+  display: flex; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted);
+}
+.legend-color {
+  width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border);
+}
+.problem-desc {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 14px; max-width: 1100px; width: 100%;
+  font-size: .82rem; color: var(--muted); line-height: 1.5;
+}
+.problem-desc strong { color: var(--text); }
+.footer-note {
+  color: var(--muted); font-size: .76rem; margin-top: 8px;
+  text-align: center; max-width: 760px;
+}
+</style>
+</head>
+<body>
+
+<h1>Binary Search on Answer</h1>
+<p class="subtitle">Parametric Search: bisect the ANSWER range using a monotonic predicate.</p>
+
+<div class="badges">
+  <span class="badge best">Time: O(F · log A)</span>
+  <span class="badge worst">Predicate: O(F) per call</span>
+  <span class="badge space">Space: O(1)</span>
+  <span class="badge best">Monotonic predicate</span>
+</div>
+
+<div class="input-control">
+  <span class="problem-label">Problem:</span>
+  <select id="problemSel" onchange="onProblemChange()">
+    <option value="koko">Koko Eating Bananas (min speed)</option>
+    <option value="ship">Capacity to Ship in D Days (min cap)</option>
+    <option value="cows">Aggressive Cows (max min-distance)</option>
+  </select>
+  <button onclick="genRandom()" class="secondary">Random input</button>
+</div>
+
+<div class="input-control">
+  <input type="text" id="inputData" placeholder="comma-separated values">
+  <input type="number" id="inputBudget" placeholder="budget">
+  <button onclick="loadInput()">Load</button>
+</div>
+
+<div class="controls">
+  <button id="startBtn" onclick="start()">▶ Start</button>
+  <button id="stepBtn"  onclick="stepFwd()">▷ Step</button>
+  <button id="pauseBtn" onclick="pause()" disabled>❚❚ Pause</button>
+  <button id="resetBtn" onclick="reset()" class="secondary">↺ Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+  <span style="color:var(--muted);font-size:.78rem">slow</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span style="color:var(--muted);font-size:.78rem">fast</span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.3);border-color:var(--blue)"></div>Unknown [lo, hi]</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.35);border-color:var(--green)"></div>Feasible region</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.35);border-color:var(--red)"></div>Infeasible region</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>mid (tested)</div>
+</div>
+
+<div class="stats">
+  <div><div class="stat-label">Iteration</div><div class="stat-value" id="iter">0</div></div>
+  <div><div class="stat-label">Predicate calls</div><div class="stat-value" id="preds">0</div></div>
+  <div><div class="stat-label">log₂(A) bound</div><div class="stat-value" id="bound">0</div></div>
+  <div><div class="stat-label">Bracket size</div><div class="stat-value" id="bracket">0</div></div>
+  <div><div class="stat-label">Answer so far</div><div class="stat-value" id="answer">—</div></div>
+</div>
+
+<div class="problem-desc" id="problemDesc"></div>
+
+<div class="canvas-container" id="canvas">
+  <div class="range-bar" id="rangeBar"></div>
+  <div class="tick-row" id="tickRow"></div>
+</div>
+
+<div class="info-panel">
+  <h3>Algorithm Trace</h3>
+  <div class="step-info" id="info">Press <span class="hl">Start</span> to run parametric search.</div>
+</div>
+
+<p class="footer-note">
+  Parametric search needs a monotonic predicate (FFF…TTT or TTT…FFF over the answer range).
+  Each iteration halves the bracket. Total predicate calls: ⌈log₂(A+1)⌉.
+  Optimal by the decision-tree lower bound.
+</p>
+
+<script>
+// ============ Problem catalogue ============
+const PROBLEMS = {
+  koko: {
+    name: "Koko Eating Bananas",
+    desc: "Given <strong>piles</strong> of bananas and <strong>h</strong> hours, find the smallest <strong>k</strong> (bananas/hour) such that <strong>Σ ⌈pile/k⌉ ≤ h</strong>. Predicate is monotonic non-decreasing in k.",
+    defaults: { input: "3,6,7,11", budget: 8 },
+    inputLabel: "piles", budgetLabel: "h (hours)",
+    direction: "min", // min-feasible
+    bracketFn: (arr, budget) => [1, Math.max(...arr)],
+    predicate: (arr, budget, k) => {
+      let hours = 0;
+      for (const p of arr) {
+        hours += Math.ceil(p / k);
+        if (hours > budget) return false;
+      }
+      return true;
+    },
+    predicateLabel: (k) => `canFinish(k=${k}) = (Σ⌈p/${k}⌉ ≤ h)`,
+  },
+  ship: {
+    name: "Capacity to Ship in D Days",
+    desc: "Given <strong>weights</strong> in order and <strong>D</strong> days, find smallest truck <strong>capacity C</strong> such that greedy chunking ships everything in ≤ D days. Predicate monotonic non-decreasing in C.",
+    defaults: { input: "1,2,3,4,5,6,7,8,9,10", budget: 5 },
+    inputLabel: "weights", budgetLabel: "D (days)",
+    direction: "min",
+    bracketFn: (arr, budget) => [Math.max(...arr), arr.reduce((a,b)=>a+b,0)],
+    predicate: (arr, budget, cap) => {
+      let d = 1, used = 0;
+      for (const w of arr) {
+        if (used + w > cap) { d++; used = w; if (d > budget) return false; }
+        else used += w;
+      }
+      return true;
+    },
+    predicateLabel: (c) => `canShip(cap=${c}) ≤ D days?`,
+  },
+  cows: {
+    name: "Aggressive Cows (max-feasible)",
+    desc: "Place <strong>k cows</strong> in stalls at positions to <strong>maximise</strong> the minimum pairwise distance. Predicate: canPlace(d) is monotonic TTT…FFF in d.",
+    defaults: { input: "1,2,4,8,9", budget: 3 },
+    inputLabel: "positions", budgetLabel: "k (cows)",
+    direction: "max",
+    bracketFn: (arr, budget) => {
+      const sorted = [...arr].sort((a,b)=>a-b);
+      return [1, sorted[sorted.length-1] - sorted[0]];
+    },
+    predicate: (arr, budget, d) => {
+      const sorted = [...arr].sort((a,b)=>a-b);
+      let last = sorted[0], placed = 1;
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] - last >= d) {
+          placed++; last = sorted[i];
+          if (placed >= budget) return true;
+        }
+      }
+      return placed >= budget;
+    },
+    predicateLabel: (d) => `canPlace(d=${d}) cows ≥ k?`,
+  },
+};
+
+// ============ State ============
+let currentProblem = "koko";
+let inputArr = [];
+let budgetVal = 0;
+let steps = [];
+let idx = 0;
+let running = false;
+let timer = null;
+
+// ============ Step generation ============
+function generateSteps() {
+  const P = PROBLEMS[currentProblem];
+  let [lo, hi] = P.bracketFn(inputArr, budgetVal);
+  const lo0 = lo, hi0 = hi;
+  const out = [];
+  out.push({ type: "init", lo, hi, mid: null, predResult: null, lo0, hi0, iter: 0, preds: 0 });
+
+  let iter = 0, preds = 0;
+
+  if (P.direction === "min") {
+    while (lo < hi) {
+      iter++;
+      const mid = lo + Math.floor((hi - lo) / 2);
+      preds++;
+      const feasible = P.predicate(inputArr, budgetVal, mid);
+      out.push({
+        type: "probe", lo, hi, mid, predResult: feasible, lo0, hi0, iter, preds,
+        label: P.predicateLabel(mid)
+      });
+      if (feasible) hi = mid;
+      else lo = mid + 1;
+      out.push({
+        type: "shrink", lo, hi, mid, predResult: feasible, lo0, hi0, iter, preds,
+        label: feasible ? `feasible → hi = mid = ${mid}` : `infeasible → lo = mid + 1 = ${mid+1}`
+      });
+    }
+  } else { // max-feasible
+    while (lo < hi) {
+      iter++;
+      const mid = lo + Math.floor((hi - lo + 1) / 2);
+      preds++;
+      const feasible = P.predicate(inputArr, budgetVal, mid);
+      out.push({
+        type: "probe", lo, hi, mid, predResult: feasible, lo0, hi0, iter, preds,
+        label: P.predicateLabel(mid)
+      });
+      if (feasible) lo = mid;
+      else hi = mid - 1;
+      out.push({
+        type: "shrink", lo, hi, mid, predResult: feasible, lo0, hi0, iter, preds,
+        label: feasible ? `feasible → lo = mid = ${mid}` : `infeasible → hi = mid - 1 = ${mid-1}`
+      });
+    }
+  }
+  out.push({ type: "done", lo, hi, mid: null, predResult: null, lo0, hi0, iter, preds, answer: lo });
+  return out;
+}
+
+// ============ Rendering ============
+function posPct(v, lo0, hi0) {
+  const span = hi0 - lo0;
+  if (span <= 0) return 50;
+  return ((v - lo0) / span) * 100;
+}
+
+function render(s) {
+  const P = PROBLEMS[currentProblem];
+  const bar = document.getElementById("rangeBar");
+  const tickRow = document.getElementById("tickRow");
+  const span = s.hi0 - s.lo0 || 1;
+
+  let html = "";
+
+  // Direction matters for colouring shrunk regions
+  if (P.direction === "min") {
+    // Infeasible: [lo0, lo)   Unknown: [lo, hi]   Feasible: (hi, hi0]
+    const infLeft = posPct(s.lo0, s.lo0, s.hi0);
+    const infRight = posPct(s.lo, s.lo0, s.hi0);
+    if (infRight > infLeft) {
+      html += `<div class="range-segment infeasible" style="left:${infLeft}%;width:${infRight-infLeft}%"></div>`;
+    }
+    const ukLeft = posPct(s.lo, s.lo0, s.hi0);
+    const ukRight = posPct(s.hi, s.lo0, s.hi0);
+    if (ukRight > ukLeft) {
+      html += `<div class="range-segment unknown" style="left:${ukLeft}%;width:${ukRight-ukLeft}%"></div>`;
+    } else {
+      // converged: lo == hi
+      html += `<div class="range-segment unknown" style="left:${ukLeft - 0.5}%;width:1%"></div>`;
+    }
+    const fLeft = posPct(s.hi, s.lo0, s.hi0);
+    const fRight = posPct(s.hi0, s.lo0, s.hi0);
+    if (fRight > fLeft) {
+      html += `<div class="range-segment feasible" style="left:${fLeft}%;width:${fRight-fLeft}%"></div>`;
+    }
+  } else {
+    // max-feasible: Feasible left, Infeasible right
+    const fLeft = posPct(s.lo0, s.lo0, s.hi0);
+    const fRight = posPct(s.lo, s.lo0, s.hi0);
+    if (fRight > fLeft) {
+      html += `<div class="range-segment feasible" style="left:${fLeft}%;width:${fRight-fLeft}%"></div>`;
+    }
+    const ukLeft = posPct(s.lo, s.lo0, s.hi0);
+    const ukRight = posPct(s.hi, s.lo0, s.hi0);
+    if (ukRight > ukLeft) {
+      html += `<div class="range-segment unknown" style="left:${ukLeft}%;width:${ukRight-ukLeft}%"></div>`;
+    } else {
+      html += `<div class="range-segment unknown" style="left:${ukLeft - 0.5}%;width:1%"></div>`;
+    }
+    const iLeft = posPct(s.hi, s.lo0, s.hi0);
+    const iRight = posPct(s.hi0, s.lo0, s.hi0);
+    if (iRight > iLeft) {
+      html += `<div class="range-segment infeasible" style="left:${iLeft}%;width:${iRight-iLeft}%"></div>`;
+    }
+  }
+
+  // markers
+  const loPct = posPct(s.lo, s.lo0, s.hi0);
+  const hiPct = posPct(s.hi, s.lo0, s.hi0);
+  html += `<div class="marker lo" style="left:${loPct}%"><span class="ch">▼</span>lo=${s.lo}</div>`;
+  html += `<div class="marker hi" style="left:${hiPct}%"><span class="ch">▼</span>hi=${s.hi}</div>`;
+
+  if (s.mid !== null && s.type === "probe") {
+    const midPct = posPct(s.mid, s.lo0, s.hi0);
+    html += `<div class="marker mid" style="left:${midPct}%"><span class="ch">●</span>mid=${s.mid}</div>`;
+    const cls = s.predResult ? "feasible" : "infeasible";
+    const lbl = s.predResult ? "TRUE" : "FALSE";
+    html += `<div class="predicate-result ${cls}" style="left:${midPct}%">${lbl}</div>`;
+  }
+
+  bar.innerHTML = html;
+
+  // ticks
+  tickRow.innerHTML = `<span>${s.lo0}</span><span>${Math.round((s.lo0+s.hi0)/2)}</span><span>${s.hi0}</span>`;
+
+  // stats
+  document.getElementById("iter").textContent = s.iter;
+  document.getElementById("preds").textContent = s.preds;
+  document.getElementById("bound").textContent = Math.ceil(Math.log2((s.hi0 - s.lo0) + 1));
+  document.getElementById("bracket").textContent = Math.max(0, s.hi - s.lo + 1);
+  document.getElementById("answer").textContent = (s.type === "done") ? s.answer : (s.lo === s.hi ? s.lo : "—");
+
+  // info
+  const info = document.getElementById("info");
+  if (s.type === "init") {
+    info.innerHTML = `<b>Initialise</b>: lo=${s.lo}, hi=${s.hi}. Answer space size = ${s.hi - s.lo + 1}. Bound ≤ ${Math.ceil(Math.log2((s.hi0 - s.lo0) + 1))} predicate calls.`;
+  } else if (s.type === "probe") {
+    info.innerHTML = `<b>Iter ${s.iter}</b>: mid = lo + (hi-lo)/${P.direction === "min" ? "2" : "2 (round up)"} = <span class="hl">${s.mid}</span>. Evaluate ${s.label}: <span class="${s.predResult ? "ok":"bad"}">${s.predResult ? "TRUE (feasible)" : "FALSE (infeasible)"}</span>.`;
+  } else if (s.type === "shrink") {
+    info.innerHTML = `Iter ${s.iter}: ${s.label}. New bracket [${s.lo}, ${s.hi}] (size ${s.hi - s.lo + 1}).`;
+  } else if (s.type === "done") {
+    info.innerHTML = `<span class="ok">✓ DONE</span>: converged at <span class="hl">answer = ${s.answer}</span> after ${s.iter} iterations / ${s.preds} predicate calls.`;
+  }
+}
+
+// ============ Controls ============
+function delay() {
+  return 1100 - parseInt(document.getElementById("speedSlider").value) * 100;
+}
+function start() {
+  if (steps.length === 0) steps = generateSteps();
+  running = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("pauseBtn").disabled = false;
+  tick();
+}
+function tick() {
+  if (!running || idx >= steps.length) { pause(); return; }
+  render(steps[idx]); idx++;
+  timer = setTimeout(tick, delay());
+}
+function stepFwd() {
+  if (steps.length === 0) steps = generateSteps();
+  if (idx < steps.length) { render(steps[idx]); idx++; }
+}
+function pause() {
+  running = false; clearTimeout(timer);
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("pauseBtn").disabled = true;
+}
+function reset() {
+  pause(); steps = []; idx = 0;
+  document.getElementById("iter").textContent = "0";
+  document.getElementById("preds").textContent = "0";
+  document.getElementById("bracket").textContent = "0";
+  document.getElementById("answer").textContent = "—";
+  document.getElementById("info").innerHTML = 'Press <span class="hl">Start</span> to run parametric search.';
+  // render initial state
+  const P = PROBLEMS[currentProblem];
+  const [lo, hi] = P.bracketFn(inputArr, budgetVal);
+  render({ type: "init", lo, hi, mid: null, predResult: null, lo0: lo, hi0: hi, iter: 0, preds: 0 });
+}
+function loadInput() {
+  const raw = document.getElementById("inputData").value;
+  const nums = raw.split(/[, ]+/).map(s => parseInt(s.trim(), 10)).filter(n => !Number.isNaN(n));
+  const bg = parseInt(document.getElementById("inputBudget").value, 10);
+  if (nums.length > 0 && !Number.isNaN(bg)) {
+    inputArr = nums;
+    budgetVal = bg;
+    reset();
+  }
+}
+function genRandom() {
+  const size = 5 + Math.floor(Math.random() * 6);
+  let arr = [];
+  if (currentProblem === "cows") {
+    const set = new Set();
+    while (set.size < size) set.add(Math.floor(Math.random() * 40) + 1);
+    arr = [...set].sort((a,b)=>a-b);
+  } else {
+    for (let i = 0; i < size; i++) arr.push(Math.floor(Math.random() * 20) + 1);
+  }
+  inputArr = arr;
+  budgetVal = (currentProblem === "cows")
+    ? Math.max(2, Math.min(Math.floor(size / 2) + 1, size))
+    : size + Math.floor(Math.random() * size);
+  document.getElementById("inputData").value = arr.join(",");
+  document.getElementById("inputBudget").value = budgetVal;
+  reset();
+}
+function onProblemChange() {
+  currentProblem = document.getElementById("problemSel").value;
+  const P = PROBLEMS[currentProblem];
+  document.getElementById("inputData").placeholder = P.inputLabel;
+  document.getElementById("inputBudget").placeholder = P.budgetLabel;
+  document.getElementById("inputData").value = P.defaults.input;
+  document.getElementById("inputBudget").value = P.defaults.budget;
+  document.getElementById("problemDesc").innerHTML = `<strong>${P.name}</strong> — ${P.desc}`;
+  inputArr = P.defaults.input.split(",").map(s => parseInt(s.trim(), 10));
+  budgetVal = P.defaults.budget;
+  reset();
+}
+
+// ============ Init ============
+onProblemChange();
+</script>
+</body>
+</html>

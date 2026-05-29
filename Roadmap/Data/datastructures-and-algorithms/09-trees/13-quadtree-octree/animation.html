@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quadtree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.9rem;color:var(--blue);margin-bottom:4px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:14px;text-align:center;font-size:.9rem}
+.badges{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:7px 14px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.88rem;font-weight:600}
+button:hover{background:var(--blue);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.danger{border-color:var(--red);color:var(--red)}
+button.danger:hover{background:var(--red);color:var(--bg)}
+button.active{background:var(--blue);color:var(--bg)}
+label{color:var(--muted);font-size:.82rem;display:flex;align-items:center;gap:6px}
+input[type=number]{padding:5px 10px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.85rem;width:65px}
+canvas{background:#0a0e14;border:2px solid var(--border);border-radius:10px;display:block;cursor:crosshair}
+.canvas-wrap{position:relative;margin-bottom:14px}
+.mode-hint{position:absolute;top:8px;left:12px;font-size:.76rem;color:var(--muted);
+       background:rgba(13,17,23,.78);padding:4px 9px;border-radius:5px;pointer-events:none}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:10px;
+       padding:10px 18px;display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin-bottom:12px}
+.stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+.stat-value{color:var(--blue);font-size:1.05rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.76rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.74rem;margin-top:6px;text-align:center;max-width:780px;line-height:1.45}
+</style>
+</head>
+<body>
+<h1>Quadtree</h1>
+<p class="subtitle">Click to add points. Drag to issue a range query. Tree subdivides when a bucket overflows.</p>
+
+<div class="badges">
+<span class="badge best">Avg: O(log n + k)</span>
+<span class="badge worst">Worst: O(n)</span>
+<span class="badge space">Space: O(n)</span>
+<span class="badge best">PR-Quadtree</span>
+</div>
+
+<div class="controls">
+<button id="modePoint" class="active" onclick="setMode('point')">Add points</button>
+<button id="modeQuery" onclick="setMode('query')">Range query</button>
+<button onclick="seedRandom(30)" class="secondary">+30 random</button>
+<button onclick="seedRandom(150)" class="secondary">+150 random</button>
+<button onclick="clearAll()" class="danger">Clear</button>
+<label>capacity <input type="number" id="capacity" value="4" min="1" max="32" onchange="rebuild()"></label>
+<label>max depth <input type="number" id="maxDepth" value="8" min="1" max="14" onchange="rebuild()"></label>
+</div>
+
+<div class="legend">
+<span class="legend-item"><span class="legend-color" style="background:var(--blue)"></span>point</span>
+<span class="legend-item"><span class="legend-color" style="background:var(--green)"></span>in query</span>
+<span class="legend-item"><span class="legend-color" style="background:var(--yellow);opacity:.5"></span>visited node</span>
+<span class="legend-item"><span class="legend-color" style="background:var(--border)"></span>pruned subtree</span>
+<span class="legend-item"><span class="legend-color" style="background:transparent;border:1px solid var(--red)"></span>query rect</span>
+</div>
+
+<div class="canvas-wrap">
+<canvas id="cv" width="900" height="560"></canvas>
+<div class="mode-hint" id="hint">Click to add a point</div>
+</div>
+
+<div class="stats">
+<div class="stat"><span class="stat-label">Points</span><span class="stat-value" id="sCount">0</span></div>
+<div class="stat"><span class="stat-label">Depth</span><span class="stat-value" id="sDepth">0</span></div>
+<div class="stat"><span class="stat-label">Leaves</span><span class="stat-value" id="sLeaves">0</span></div>
+<div class="stat"><span class="stat-label">Nodes</span><span class="stat-value" id="sNodes">0</span></div>
+<div class="stat"><span class="stat-label">In query</span><span class="stat-value" id="sQuery">0</span></div>
+<div class="stat"><span class="stat-label">Nodes visited</span><span class="stat-value" id="sVisited">0</span></div>
+</div>
+
+<p class="footer-note">Quadtree partitions 2D space into 4 quadrants (NE, NW, SE, SW) recursively. When a leaf's bucket overflows its capacity, it subdivides into 4 children. Range queries prune any subtree whose bbox does not intersect the query rectangle — that pruning is the source of the speedup over linear scans. Try clicking many points in one region to see clustered subdivision.</p>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+let CAPACITY = 4;
+let MAX_DEPTH = 8;
+
+class Bbox {
+    constructor(cx, cy, hw, hh) { this.cx = cx; this.cy = cy; this.hw = hw; this.hh = hh; }
+    contains(p) {
+        return Math.abs(p.x - this.cx) <= this.hw && Math.abs(p.y - this.cy) <= this.hh;
+    }
+    intersects(o) {
+        return !(this.cx + this.hw < o.cx - o.hw || this.cx - this.hw > o.cx + o.hw ||
+                 this.cy + this.hh < o.cy - o.hh || this.cy - this.hh > o.cy + o.hh);
+    }
+}
+
+class Quadtree {
+    constructor(boundary, depth = 0) {
+        this.boundary = boundary;
+        this.depth = depth;
+        this.points = [];
+        this.divided = false;
+        this.NE = this.NW = this.SE = this.SW = null;
+    }
+    insert(p) {
+        if (!this.boundary.contains(p)) return false;
+        if (!this.divided) {
+            if (this.points.length < CAPACITY || this.depth >= MAX_DEPTH) {
+                this.points.push(p);
+                return true;
+            }
+            this.subdivide();
+        }
+        return this.NE.insert(p) || this.NW.insert(p) || this.SE.insert(p) || this.SW.insert(p);
+    }
+    subdivide() {
+        const b = this.boundary;
+        const h = b.hw / 2, v = b.hh / 2, d = this.depth + 1;
+        this.NE = new Quadtree(new Bbox(b.cx + h, b.cy - v, h, v), d);
+        this.NW = new Quadtree(new Bbox(b.cx - h, b.cy - v, h, v), d);
+        this.SE = new Quadtree(new Bbox(b.cx + h, b.cy + v, h, v), d);
+        this.SW = new Quadtree(new Bbox(b.cx - h, b.cy + v, h, v), d);
+        this.divided = true;
+        const old = this.points; this.points = [];
+        for (const p of old) {
+            this.NE.insert(p) || this.NW.insert(p) || this.SE.insert(p) || this.SW.insert(p);
+        }
+    }
+    queryRange(rect, found, visited, pruned) {
+        if (!this.boundary.intersects(rect)) {
+            pruned.push(this);
+            return;
+        }
+        visited.push(this);
+        for (const p of this.points) if (rect.contains(p)) found.push(p);
+        if (this.divided) {
+            this.NE.queryRange(rect, found, visited, pruned);
+            this.NW.queryRange(rect, found, visited, pruned);
+            this.SE.queryRange(rect, found, visited, pruned);
+            this.SW.queryRange(rect, found, visited, pruned);
+        }
+    }
+    stats(s) {
+        s.nodes++;
+        s.depth = Math.max(s.depth, this.depth);
+        if (!this.divided) s.leaves++;
+        else {
+            this.NE.stats(s); this.NW.stats(s);
+            this.SE.stats(s); this.SW.stats(s);
+        }
+    }
+}
+
+let allPoints = [];
+let qt = new Quadtree(new Bbox(W / 2, H / 2, W / 2, H / 2));
+let mode = 'point';   // 'point' | 'query'
+let querying = false;
+let queryStart = null;
+let queryRect = null;
+let lastFound = [];
+let lastVisited = [];
+let lastPruned = [];
+
+function setMode(m) {
+    mode = m;
+    document.getElementById('modePoint').classList.toggle('active', m === 'point');
+    document.getElementById('modeQuery').classList.toggle('active', m === 'query');
+    document.getElementById('hint').textContent =
+        m === 'point' ? 'Click to add a point' : 'Drag to select a query rectangle';
+    cv.style.cursor = m === 'point' ? 'crosshair' : 'cell';
+    if (m === 'point') {
+        queryRect = null; lastFound = []; lastVisited = []; lastPruned = [];
+        draw();
+    }
+}
+
+function rebuild() {
+    CAPACITY = Math.max(1, parseInt(document.getElementById('capacity').value) || 4);
+    MAX_DEPTH = Math.max(1, parseInt(document.getElementById('maxDepth').value) || 8);
+    qt = new Quadtree(new Bbox(W / 2, H / 2, W / 2, H / 2));
+    for (const p of allPoints) qt.insert(p);
+    if (queryRect) runQuery();
+    draw();
+}
+
+function clearAll() {
+    allPoints = [];
+    qt = new Quadtree(new Bbox(W / 2, H / 2, W / 2, H / 2));
+    queryRect = null; lastFound = []; lastVisited = []; lastPruned = [];
+    draw();
+}
+
+function seedRandom(n) {
+    for (let i = 0; i < n; i++) {
+        const p = { x: 20 + Math.random() * (W - 40), y: 20 + Math.random() * (H - 40) };
+        allPoints.push(p);
+        qt.insert(p);
+    }
+    if (queryRect) runQuery();
+    draw();
+}
+
+function runQuery() {
+    lastFound = []; lastVisited = []; lastPruned = [];
+    qt.queryRange(queryRect, lastFound, lastVisited, lastPruned);
+}
+
+cv.addEventListener('mousedown', e => {
+    const r = cv.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (mode === 'point') {
+        const p = { x, y };
+        allPoints.push(p);
+        qt.insert(p);
+        if (queryRect) runQuery();
+        draw();
+    } else {
+        querying = true;
+        queryStart = { x, y };
+        queryRect = null;
+        lastFound = []; lastVisited = []; lastPruned = [];
+    }
+});
+
+cv.addEventListener('mousemove', e => {
+    if (mode === 'query' && querying && queryStart) {
+        const r = cv.getBoundingClientRect();
+        const x = e.clientX - r.left, y = e.clientY - r.top;
+        const xmin = Math.min(queryStart.x, x), xmax = Math.max(queryStart.x, x);
+        const ymin = Math.min(queryStart.y, y), ymax = Math.max(queryStart.y, y);
+        queryRect = new Bbox((xmin + xmax) / 2, (ymin + ymax) / 2,
+                             (xmax - xmin) / 2, (ymax - ymin) / 2);
+        runQuery();
+        draw();
+    }
+});
+
+cv.addEventListener('mouseup', () => {
+    if (mode === 'query') querying = false;
+});
+
+function drawNode(node, isVisited, isPruned, foundSet) {
+    const b = node.boundary;
+    const x = b.cx - b.hw, y = b.cy - b.hh;
+    const w = b.hw * 2, h = b.hh * 2;
+    if (isPruned) {
+        ctx.fillStyle = 'rgba(48,54,61,0.18)';
+        ctx.fillRect(x, y, w, h);
+    } else if (isVisited) {
+        ctx.fillStyle = 'rgba(210,153,34,0.10)';
+        ctx.fillRect(x, y, w, h);
+    }
+    ctx.strokeStyle = isPruned ? 'rgba(80,90,100,0.35)'
+                   : isVisited ? 'rgba(210,153,34,0.65)'
+                   : 'rgba(88,166,255,0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+    if (node.divided) {
+        drawNode(node.NE, isVisited && checkVisit(node.NE), isPruned || checkPrune(node.NE), foundSet);
+        drawNode(node.NW, isVisited && checkVisit(node.NW), isPruned || checkPrune(node.NW), foundSet);
+        drawNode(node.SE, isVisited && checkVisit(node.SE), isPruned || checkPrune(node.SE), foundSet);
+        drawNode(node.SW, isVisited && checkVisit(node.SW), isPruned || checkPrune(node.SW), foundSet);
+    }
+}
+
+let visitedSet = new Set();
+let prunedSet = new Set();
+function checkVisit(n) { return visitedSet.has(n); }
+function checkPrune(n) { return prunedSet.has(n); }
+
+function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    visitedSet = new Set(lastVisited);
+    prunedSet = new Set(lastPruned);
+
+    // Draw all node boundaries with coloring based on visit/prune state.
+    drawTree(qt);
+
+    // Query rect overlay
+    if (queryRect) {
+        ctx.strokeStyle = 'rgba(248,81,73,0.95)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(queryRect.cx - queryRect.hw, queryRect.cy - queryRect.hh,
+                       queryRect.hw * 2, queryRect.hh * 2);
+        ctx.setLineDash([]);
+    }
+
+    // Points
+    const foundIds = new Set(lastFound);
+    for (const p of allPoints) {
+        const inQuery = foundIds.has(p);
+        ctx.fillStyle = inQuery ? '#3fb950' : '#58a6ff';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, inQuery ? 4.5 : 3, 0, Math.PI * 2);
+        ctx.fill();
+        if (inQuery) {
+            ctx.strokeStyle = 'rgba(63,185,80,0.55)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+
+    // Stats
+    const s = { nodes: 0, depth: 0, leaves: 0 };
+    qt.stats(s);
+    document.getElementById('sCount').textContent = allPoints.length;
+    document.getElementById('sDepth').textContent = s.depth;
+    document.getElementById('sLeaves').textContent = s.leaves;
+    document.getElementById('sNodes').textContent = s.nodes;
+    document.getElementById('sQuery').textContent = lastFound.length;
+    document.getElementById('sVisited').textContent = lastVisited.length;
+}
+
+function drawTree(node) {
+    const b = node.boundary;
+    const x = b.cx - b.hw, y = b.cy - b.hh;
+    const w = b.hw * 2, h = b.hh * 2;
+
+    let fill = null, stroke = 'rgba(88,166,255,0.32)';
+
+    if (queryRect) {
+        if (prunedSet.has(node)) {
+            fill = 'rgba(48,54,61,0.22)';
+            stroke = 'rgba(80,90,100,0.30)';
+        } else if (visitedSet.has(node)) {
+            fill = 'rgba(210,153,34,0.10)';
+            stroke = 'rgba(210,153,34,0.75)';
+        }
+    }
+    if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fillRect(x, y, w, h);
+    }
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = node.depth === 0 ? 2 : 1;
+    ctx.strokeRect(x, y, w, h);
+    if (node.divided) {
+        drawTree(node.NE);
+        drawTree(node.NW);
+        drawTree(node.SE);
+        drawTree(node.SW);
+    }
+}
+
+draw();
+</script>
+</body>
+</html>

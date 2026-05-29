@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shell Sort — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+        --pink:#f778ba;--teal:#39c5cf; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;max-width:700px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.unstable{color:var(--orange);border-color:var(--orange)}
+.controls,.input-control,.config{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+input[type=text],select{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.92rem}
+input[type=text]{width:280px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.config label{color:var(--muted);font-size:.85rem;margin-right:4px}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:24px;margin-bottom:16px;width:100%;max-width:1000px;min-height:160px;overflow-x:auto}
+.cells{display:flex;gap:4px;justify-content:center;flex-wrap:nowrap}
+.cell{min-width:42px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:var(--bg);border:2px solid var(--border);border-radius:6px;font-size:.95rem;
+      font-family:monospace;color:var(--text);transition:all .25s;position:relative}
+.cell .idx{position:absolute;bottom:-18px;font-size:.7rem;color:var(--muted)}
+.cell.compare{background:var(--red);color:var(--bg);border-color:var(--red);transform:translateY(-4px)}
+.cell.shift{background:var(--yellow);color:var(--bg);border-color:var(--yellow)}
+.cell.insert{background:var(--green);color:var(--bg);border-color:var(--green)}
+.cell.subseq-0{border-color:var(--blue)}
+.cell.subseq-1{border-color:var(--purple)}
+.cell.subseq-2{border-color:var(--pink)}
+.cell.subseq-3{border-color:var(--orange)}
+.cell.subseq-4{border-color:var(--teal)}
+.cell.subseq-5{border-color:var(--green)}
+.cell.subseq-6{border-color:var(--yellow)}
+.cell.subseq-7{border-color:var(--red)}
+.cell.sorted{background:rgba(63,185,80,.18)}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:14px 18px;width:100%;max-width:1000px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);margin-bottom:6px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.88rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .key{color:var(--blue)}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:10px 18px;display:flex;gap:24px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;max-width:900px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px}
+.legend-color.border-only{background:transparent;border:2px solid}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:700px}
+.gap-banner{display:inline-block;padding:4px 12px;background:var(--bg);border:2px solid var(--blue);
+       border-radius:6px;color:var(--blue);font-family:monospace;font-weight:700}
+</style>
+</head>
+<body>
+<h1>Shell Sort</h1>
+<p class="subtitle">Insertion sort with a shrinking gap. Each color outlines a stride-g subsequence; the final g=1 pass cleans up a near-sorted array.</p>
+
+<div class="badges">
+<span class="badge best">Best: O(n log n)</span>
+<span class="badge worst">Avg: O(n^4/3 – n^3/2)</span>
+<span class="badge space">Space: O(1)</span>
+<span class="badge unstable">Not Stable</span>
+</div>
+
+<div class="config">
+<label for="seqSel">Gap sequence:</label>
+<select id="seqSel">
+<option value="ciura" selected>Ciura (1, 4, 10, 23, 57, 132, 301, 701)</option>
+<option value="knuth">Knuth (3k+1 → 1, 4, 13, 40, ...)</option>
+<option value="shell">Shell (n/2, n/4, ..., 1)</option>
+<option value="hibbard">Hibbard (2^k-1 → 1, 3, 7, 15, ...)</option>
+</select>
+</div>
+
+<div class="input-control">
+<input type="text" id="customInput" placeholder="Enter numbers: 9,8,7,6,5,4,3,2,1,0">
+<button onclick="loadInput()">Load</button>
+<button onclick="genRandom()" class="secondary">Random</button>
+<button onclick="genReverse()" class="secondary">Reverse</button>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">Start</button>
+<button id="stepBtn" onclick="stepFwd()">Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+<button id="resetBtn" onclick="reset()" class="secondary">Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+<span style="color:var(--muted);font-size:.78rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="6">
+<span style="color:var(--muted);font-size:.78rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>Compare</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Shift</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Insert</div>
+<div class="legend-item"><div class="legend-color border-only" style="border-color:var(--blue)"></div>Subseq 0</div>
+<div class="legend-item"><div class="legend-color border-only" style="border-color:var(--purple)"></div>Subseq 1</div>
+<div class="legend-item"><div class="legend-color border-only" style="border-color:var(--pink)"></div>Subseq 2</div>
+<div class="legend-item"><div class="legend-color border-only" style="border-color:var(--orange)"></div>Subseq 3</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Step</div><div class="stat-value"><span id="curStep">0</span>/<span id="totSteps">0</span></div></div>
+<div><div class="stat-label">Pass</div><div class="stat-value" id="pass">0</div></div>
+<div><div class="stat-label">Gap</div><div class="stat-value gap-banner" id="gap">—</div></div>
+<div><div class="stat-label">Compares</div><div class="stat-value" id="comps">0</div></div>
+<div><div class="stat-label">Shifts</div><div class="stat-value" id="shifts">0</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Press <span class="highlight">Start</span> to run animation, or <span class="highlight">Step</span> to advance one step at a time.</div>
+</div>
+
+<p class="footer-note">Shell Sort is in-place, non-recursive, unstable. Speed depends entirely on the chosen gap sequence. Ciura is fastest in practice; Pratt is best provable; Shell n/2 is worst.</p>
+
+<script>
+let array = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+let steps = [];
+let idx = 0;
+let running = false;
+let timer = null;
+
+const SEQUENCES = {
+  shell: (n) => {
+    const out = [];
+    let g = Math.floor(n / 2);
+    while (g > 0) { out.push(g); g = Math.floor(g / 2); }
+    return out;
+  },
+  knuth: (n) => {
+    const out = [];
+    let g = 1;
+    while (g < n) { out.unshift(g); g = 3 * g + 1; }
+    return out;
+  },
+  hibbard: (n) => {
+    const out = [];
+    let k = 1;
+    while ((1 << k) - 1 < n) { out.unshift((1 << k) - 1); k++; }
+    return out;
+  },
+  ciura: (n) => {
+    const base = [701, 301, 132, 57, 23, 10, 4, 1];
+    const out = [];
+    let g = base[0];
+    while (g < n) { out.push(g); g = Math.floor(g * 2.25); }
+    out.reverse();
+    return out.concat(base);
+  }
+};
+
+function genSteps(arr, seqName) {
+  const out = [];
+  const a = arr.slice();
+  let compares = 0;
+  let shifts = 0;
+  let passNum = 0;
+  const gaps = SEQUENCES[seqName](a.length);
+
+  for (const gap of gaps) {
+    if (gap >= a.length) continue;
+    passNum++;
+    out.push({
+      type: 'pass-start',
+      arr: a.slice(),
+      gap: gap,
+      passNum: passNum,
+      compares: compares,
+      shifts: shifts,
+      message: `Pass ${passNum}: gap = ${gap}. Insertion-sort every stride-${gap} subsequence.`
+    });
+
+    for (let i = gap; i < a.length; i++) {
+      const x = a[i];
+      let j = i;
+      out.push({
+        type: 'pick',
+        arr: a.slice(),
+        gap: gap,
+        passNum: passNum,
+        i: i,
+        j: j,
+        x: x,
+        compares: compares,
+        shifts: shifts,
+        message: `Pick x = a[${i}] = ${x}. Walk back in stride-${gap} subsequence.`
+      });
+
+      while (j >= gap) {
+        compares++;
+        out.push({
+          type: 'compare',
+          arr: a.slice(),
+          gap: gap,
+          passNum: passNum,
+          i: i,
+          j: j,
+          jPrev: j - gap,
+          x: x,
+          compares: compares,
+          shifts: shifts,
+          message: `Compare a[${j - gap}] = ${a[j - gap]} with x = ${x}.`
+        });
+        if (a[j - gap] > x) {
+          a[j] = a[j - gap];
+          shifts++;
+          out.push({
+            type: 'shift',
+            arr: a.slice(),
+            gap: gap,
+            passNum: passNum,
+            i: i,
+            j: j,
+            jPrev: j - gap,
+            x: x,
+            compares: compares,
+            shifts: shifts,
+            message: `a[${j - gap}] = ${a[j - gap]} > ${x}, shift right by ${gap}.`
+          });
+          j -= gap;
+        } else {
+          break;
+        }
+      }
+      a[j] = x;
+      out.push({
+        type: 'insert',
+        arr: a.slice(),
+        gap: gap,
+        passNum: passNum,
+        i: i,
+        j: j,
+        x: x,
+        compares: compares,
+        shifts: shifts,
+        message: `Insert x = ${x} at position ${j}.`
+      });
+    }
+
+    out.push({
+      type: 'pass-end',
+      arr: a.slice(),
+      gap: gap,
+      passNum: passNum,
+      compares: compares,
+      shifts: shifts,
+      message: `Array is now ${gap}-sorted.`
+    });
+  }
+
+  out.push({
+    type: 'done',
+    arr: a.slice(),
+    gap: 1,
+    passNum: passNum,
+    compares: compares,
+    shifts: shifts,
+    message: `Sorted in ${passNum} passes, ${compares} comparisons, ${shifts} shifts.`
+  });
+  return out;
+}
+
+function renderCells(arr, options) {
+  options = options || {};
+  const gap = options.gap;
+  const highlights = options.highlights || {};
+  const showSubseq = options.showSubseq !== false && gap;
+
+  return '<div class="cells">' + arr.map((v, i) => {
+    const classes = ['cell'];
+    if (highlights[i]) classes.push(highlights[i]);
+    if (showSubseq && gap) {
+      const sub = i % gap;
+      classes.push('subseq-' + (sub % 8));
+    }
+    return `<div class="${classes.join(' ')}"><span>${v}</span><span class="idx">${i}</span></div>`;
+  }).join('') + '</div>';
+}
+
+function render(s) {
+  const c = document.getElementById('canvas');
+  const highlights = {};
+
+  if (s.type === 'compare') {
+    highlights[s.j] = 'compare';
+    highlights[s.jPrev] = 'compare';
+  } else if (s.type === 'shift') {
+    highlights[s.j] = 'shift';
+    highlights[s.jPrev] = 'shift';
+  } else if (s.type === 'insert') {
+    highlights[s.j] = 'insert';
+  } else if (s.type === 'pick') {
+    highlights[s.i] = 'compare';
+  } else if (s.type === 'done') {
+    for (let k = 0; k < s.arr.length; k++) highlights[k] = 'insert';
+  }
+
+  c.innerHTML = renderCells(s.arr, { gap: s.gap, highlights: highlights });
+  document.getElementById('curStep').textContent = idx + 1;
+  document.getElementById('pass').textContent = s.passNum;
+  document.getElementById('gap').textContent = s.gap;
+  document.getElementById('comps').textContent = s.compares;
+  document.getElementById('shifts').textContent = s.shifts;
+  document.getElementById('info').innerHTML = s.message;
+}
+
+function delay() {
+  return 1100 - parseInt(document.getElementById('speedSlider').value) * 100;
+}
+
+function start() {
+  if (steps.length === 0) {
+    const seqName = document.getElementById('seqSel').value;
+    steps = genSteps(array, seqName);
+    document.getElementById('totSteps').textContent = steps.length;
+  }
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+
+function tick() {
+  if (!running || idx >= steps.length) {
+    pause();
+    return;
+  }
+  render(steps[idx]);
+  idx++;
+  timer = setTimeout(tick, delay());
+}
+
+function stepFwd() {
+  if (steps.length === 0) {
+    const seqName = document.getElementById('seqSel').value;
+    steps = genSteps(array, seqName);
+    document.getElementById('totSteps').textContent = steps.length;
+  }
+  if (idx < steps.length) {
+    render(steps[idx]);
+    idx++;
+  }
+}
+
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  steps = [];
+  idx = 0;
+  ['curStep', 'totSteps', 'pass', 'comps', 'shifts'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('gap').textContent = '—';
+  document.getElementById('info').innerHTML = 'Press <span class="highlight">Start</span> to run animation, or <span class="highlight">Step</span> to advance one step at a time.';
+  renderInit();
+}
+
+function loadInput() {
+  const raw = document.getElementById('customInput').value;
+  const nums = raw.split(/[, ]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  if (nums.length > 1) {
+    array = nums;
+    reset();
+  }
+}
+
+function genRandom() {
+  const size = 8 + Math.floor(Math.random() * 5);
+  array = Array.from({ length: size }, () => Math.floor(Math.random() * 90) + 1);
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+function genReverse() {
+  const size = 10;
+  array = Array.from({ length: size }, (_, i) => size - i);
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+function renderInit() {
+  document.getElementById('canvas').innerHTML = renderCells(array, { gap: null, showSubseq: false });
+}
+
+document.getElementById('customInput').value = array.join(', ');
+document.getElementById('seqSel').addEventListener('change', reset);
+renderInit();
+</script>
+</body>
+</html>

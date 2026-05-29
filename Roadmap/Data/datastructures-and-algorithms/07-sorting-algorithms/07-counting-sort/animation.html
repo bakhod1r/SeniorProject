@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Counting Sort — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;
+        --purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;max-width:780px}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.special{color:var(--purple);border-color:var(--purple)}
+.input-control,.controls{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem;
+       font-family:inherit;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+input[type=text]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem;width:300px;font-family:inherit}
+input[type=text]:focus{outline:none;border-color:var(--blue)}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.speed{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.speed span{color:var(--muted);font-size:.8rem}
+
+.canvas-container{background:var(--surface);border:2px solid var(--border);
+       border-radius:12px;padding:24px;margin-bottom:16px;width:100%;
+       max-width:1000px;min-height:420px;overflow-x:auto}
+
+/* phase rows: each labelled, with arrays of cells */
+.phase-row{margin-bottom:18px}
+.phase-row:last-child{margin-bottom:0}
+.phase-label{color:var(--muted);font-size:.78rem;text-transform:uppercase;
+       letter-spacing:1.2px;margin-bottom:6px;font-weight:600}
+.phase-label.active{color:var(--yellow)}
+.phase-cells{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+.cell-group{display:flex;flex-direction:column;align-items:center}
+.cell{min-width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+      background:var(--bg);border:1px solid var(--border);border-radius:5px;
+      font-size:.9rem;font-family:'Courier New',monospace;color:var(--text);
+      transition:all .25s;font-weight:600}
+.cell-idx{font-size:.65rem;color:var(--muted);margin-top:3px;font-family:'Courier New',monospace}
+.cell-key{font-size:.7rem;color:var(--purple);margin-bottom:3px;font-family:'Courier New',monospace}
+
+/* state colours */
+.cell.scanning{background:var(--yellow);color:var(--bg);transform:translateY(-3px);border-color:var(--yellow)}
+.cell.incremented{background:var(--green);color:var(--bg);border-color:var(--green)}
+.cell.prefix{background:var(--orange);color:var(--bg);border-color:var(--orange)}
+.cell.placing{background:var(--blue);color:var(--bg);transform:scale(1.1);border-color:var(--blue)}
+.cell.placed{background:var(--green);color:var(--bg);border-color:var(--green)}
+.cell.muted{opacity:.35}
+.cell.empty{background:transparent;color:var(--muted);border-style:dashed}
+.cell.tie{background:var(--purple);color:var(--bg);border-color:var(--purple)}
+
+.cursor{font-size:1rem;color:var(--blue);margin-top:3px;font-weight:700;animation:bob .8s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+
+.info-panel{background:var(--surface);border:2px solid var(--border);
+       border-radius:12px;padding:16px 20px;width:100%;max-width:1000px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:'Courier New',monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .note{color:var(--muted);font-style:italic;font-size:.85rem}
+
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;
+       justify-content:center}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:1px}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:'Courier New',monospace}
+.stat-value.zero{color:var(--green)}
+
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px}
+
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;
+       max-width:780px;line-height:1.5}
+.footer-note code{background:var(--surface);padding:2px 6px;border-radius:3px;
+       border:1px solid var(--border);font-family:'Courier New',monospace;color:var(--text)}
+</style>
+</head>
+<body>
+<h1>Counting Sort</h1>
+<p class="subtitle">Non-comparison sort in <b>O(n + k)</b> time. Tally values, prefix-sum to positions, scatter right-to-left for stability.</p>
+
+<div class="badges">
+<span class="badge best">Best: O(n + k)</span>
+<span class="badge worst">Worst: O(n + k)</span>
+<span class="badge space">Space: O(n + k)</span>
+<span class="badge best">Stable</span>
+<span class="badge special">0 Comparisons</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="customInput" placeholder="Enter ints in [0,9]: 4,2,2,8,3,3,1">
+<button onclick="loadInput()">Load</button>
+<button onclick="genRandom()" class="secondary">Random</button>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">Start</button>
+<button id="stepBtn" onclick="stepFwd()">Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+<button id="resetBtn" onclick="reset()" class="secondary">Reset</button>
+</div>
+
+<div class="speed">
+<span>slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="5">
+<span>fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Scanning</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Incremented/Placed</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>Prefix Sum</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>Placing</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Stability Tie</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Step</div><div class="stat-value"><span id="curStep">0</span>/<span id="totSteps">0</span></div></div>
+<div><div class="stat-label">Phase</div><div class="stat-value" id="phaseStat">-</div></div>
+<div><div class="stat-label">Comparisons</div><div class="stat-value zero" id="comps">0</div></div>
+<div><div class="stat-label">Reads</div><div class="stat-value" id="reads">0</div></div>
+<div><div class="stat-label">Writes</div><div class="stat-value" id="writes">0</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Press <span class="highlight">Start</span> to run animation, or <span class="highlight">Step</span> to advance one step at a time.</div>
+</div>
+
+<p class="footer-note">
+<b>Counting Sort.</b> Works only on small bounded integer keys (<code>k = O(n)</code>). The right-to-left placement in Phase 3 is required for <b>stability</b> — equal keys keep their input order. This stability is what makes Counting Sort a usable inner pass for <b>Radix Sort</b>. No element is ever compared to another; values are used directly as array indices.
+</p>
+
+<script>
+let array = [4, 2, 2, 8, 3, 3, 1];
+let k = 9;
+let steps = [];
+let idx = 0;
+let running = false;
+let timer = null;
+
+// ====== Step generation ======
+// Each step is one of:
+//  { phase: 'init', input: [...], count: [...], output: null }
+//  { phase: 'tally', input: [...], count: [...], i: <int>, reads, writes }
+//  { phase: 'prefix', input: [...], count: [...], v: <int>, reads, writes }
+//  { phase: 'place',  input: [...], count: [...], output: [...], i: <int>,
+//                     justWrotePos: <int|null>, tieGroup: [list of input indices], reads, writes }
+//  { phase: 'done',   ... }
+
+function genSteps(arr, K) {
+  const out = [];
+  let reads = 0, writes = 0;
+
+  // Initial frame
+  const count0 = new Array(K).fill(0);
+  out.push({
+    phase: 'init', input: [...arr], count: [...count0], output: null,
+    msg: `Input: [${arr.join(', ')}] &nbsp; Range: <span class="highlight">k = ${K}</span>`,
+    note: 'Click Start to begin Phase 1 — Tally.',
+    reads: 0, writes: 0
+  });
+
+  // Phase 1: tally
+  const count = new Array(K).fill(0);
+  for (let i = 0; i < arr.length; i++) {
+    const v = arr[i];
+    reads++;
+    // Scanning step
+    out.push({
+      phase: 'tally', input: [...arr], count: [...count], i,
+      sub: 'scan',
+      msg: `<b>Phase 1 (Tally)</b>: read input[${i}] = <span class="highlight">${v}</span>`,
+      note: `About to increment count[${v}]`,
+      reads, writes
+    });
+    count[v]++;
+    writes++;
+    // Increment step
+    out.push({
+      phase: 'tally', input: [...arr], count: [...count], i,
+      sub: 'inc',
+      msg: `<b>Phase 1 (Tally)</b>: count[<span class="highlight">${v}</span>] becomes ${count[v]}`,
+      note: `${arr.length - i - 1} input elements remaining`,
+      reads, writes
+    });
+  }
+
+  // Phase 2: prefix sum
+  for (let v = 1; v < K; v++) {
+    reads += 2;
+    out.push({
+      phase: 'prefix', input: [...arr], count: [...count], v,
+      sub: 'read',
+      msg: `<b>Phase 2 (Prefix Sum)</b>: read count[${v}]=${count[v]} + count[${v - 1}]=${count[v - 1]}`,
+      note: 'After this loop, count[v] will hold the position-past-last for value v.',
+      reads, writes
+    });
+    count[v] += count[v - 1];
+    writes++;
+    out.push({
+      phase: 'prefix', input: [...arr], count: [...count], v,
+      sub: 'write',
+      msg: `<b>Phase 2 (Prefix Sum)</b>: count[${v}] = <span class="highlight">${count[v]}</span>`,
+      note: `Now count[${v}] = number of input elements ≤ ${v}`,
+      reads, writes
+    });
+  }
+
+  // Phase 3: placement (right-to-left)
+  const output = new Array(arr.length).fill(null);
+  // Precompute, for each input index, which input index also has the same value to its LEFT — used for tie highlight.
+  const tieMap = {};
+  for (let i = 0; i < arr.length; i++) {
+    if (tieMap[arr[i]] === undefined) tieMap[arr[i]] = [];
+    tieMap[arr[i]].push(i);
+  }
+
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const v = arr[i];
+    reads += 2;
+    out.push({
+      phase: 'place', input: [...arr], count: [...count], output: [...output], i,
+      sub: 'read', justWrotePos: null,
+      tieGroup: tieMap[v] && tieMap[v].length > 1 ? [...tieMap[v]] : [],
+      msg: `<b>Phase 3 (Place)</b>: scan input[${i}] = <span class="highlight">${v}</span> (right→left)`,
+      note: `count[${v}] = ${count[v]}; will decrement, then write to output[${count[v] - 1}]`,
+      reads, writes
+    });
+    count[v]--;
+    writes++;
+    output[count[v]] = v;
+    writes++;
+    out.push({
+      phase: 'place', input: [...arr], count: [...count], output: [...output], i,
+      sub: 'write', justWrotePos: count[v],
+      tieGroup: tieMap[v] && tieMap[v].length > 1 ? [...tieMap[v]] : [],
+      msg: `<b>Phase 3 (Place)</b>: output[<span class="highlight">${count[v]}</span>] = ${v}`,
+      note: tieMap[v] && tieMap[v].length > 1
+        ? `Tie: value ${v} appears at input indices [${tieMap[v].join(', ')}]. Right-to-left placement preserves their order.`
+        : `Value ${v} placed; ${i} input elements remaining`,
+      reads, writes
+    });
+  }
+
+  // Done
+  out.push({
+    phase: 'done', input: [...arr], count: [...count], output: [...output],
+    msg: `<b>Sorted</b>: [${output.join(', ')}] &nbsp; <span class="note">(0 comparisons, ${reads} reads, ${writes} writes)</span>`,
+    note: 'Sort complete. Counting Sort never compared two input keys.',
+    reads, writes
+  });
+
+  return out;
+}
+
+// ====== Rendering ======
+function renderCells(values, opts) {
+  // opts = { highlightIdx, highlightClass, labels (array of strings for top labels), groupClass, tieIndices }
+  const o = opts || {};
+  return `<div class="phase-cells">${values.map((v, i) => {
+    let cls = '';
+    if (o.highlights && o.highlights[i]) cls = o.highlights[i];
+    if (o.tieIndices && o.tieIndices.indexOf(i) !== -1 && !cls) cls = 'tie';
+    const topLabel = o.topLabels ? `<div class="cell-key">${o.topLabels[i]}</div>` : '';
+    const botLabel = o.botLabels ? `<div class="cell-idx">${o.botLabels[i]}</div>` : '';
+    const display = v === null ? '·' : v;
+    const empty = v === null ? ' empty' : '';
+    return `<div class="cell-group">${topLabel}<div class="cell ${cls}${empty}">${display}</div>${botLabel}</div>`;
+  }).join('')}</div>`;
+}
+
+function buildIdxLabels(n) {
+  return Array.from({length: n}, (_, i) => `[${i}]`);
+}
+
+function buildKeyLabels(K) {
+  return Array.from({length: K}, (_, i) => `${i}`);
+}
+
+function render(s) {
+  const c = document.getElementById('canvas');
+  let html = '';
+  const n = s.input.length;
+  const idxLabels = buildIdxLabels(n);
+  const keyLabels = buildKeyLabels(s.count.length);
+
+  // Input row
+  const inputHighlights = {};
+  let phaseLabel1 = 'Input array';
+  let phaseLabel2 = 'Count array';
+  let phaseLabel3 = 'Output array';
+  let activePhase = '';
+
+  if (s.phase === 'tally') {
+    activePhase = 'tally';
+    inputHighlights[s.i] = 'scanning';
+    phaseLabel1 = 'Input array (scanning)';
+  } else if (s.phase === 'place') {
+    activePhase = 'place';
+    if (s.sub === 'read') inputHighlights[s.i] = 'scanning';
+    else inputHighlights[s.i] = 'incremented';
+    // Tie highlight (other equal-key input indices)
+    if (s.tieGroup && s.tieGroup.length > 1) {
+      for (const ti of s.tieGroup) if (ti !== s.i && !inputHighlights[ti]) inputHighlights[ti] = 'tie';
+    }
+    // Mute already-placed input cells (to the right of i)
+    for (let j = s.i + 1; j < n; j++) if (!inputHighlights[j]) inputHighlights[j] = 'muted';
+    phaseLabel1 = 'Input array (placement walks right→left)';
+  }
+
+  html += `<div class="phase-row">
+    <div class="phase-label ${activePhase === 'tally' || activePhase === 'place' ? 'active' : ''}">${phaseLabel1}</div>
+    ${renderCells(s.input, { highlights: inputHighlights, botLabels: idxLabels })}
+  </div>`;
+
+  // Count row
+  const countHighlights = {};
+  if (s.phase === 'tally' && s.sub === 'inc') countHighlights[s.input[s.i]] = 'incremented';
+  if (s.phase === 'tally' && s.sub === 'scan') countHighlights[s.input[s.i]] = 'scanning';
+  if (s.phase === 'prefix') {
+    if (s.sub === 'read') {
+      countHighlights[s.v - 1] = 'scanning';
+      countHighlights[s.v] = 'scanning';
+    } else {
+      countHighlights[s.v] = 'prefix';
+      // Mark all already-prefix-summed cells (< v) as prefix as well, lightly
+      for (let u = 0; u < s.v; u++) if (!countHighlights[u]) countHighlights[u] = 'prefix';
+    }
+  }
+  if (s.phase === 'place') {
+    const v = s.input[s.i];
+    if (s.sub === 'read') countHighlights[v] = 'scanning';
+    else countHighlights[v] = 'incremented';
+  }
+  if (s.phase === 'done') {
+    // mark all as prefix-sum colour
+    for (let u = 0; u < s.count.length; u++) countHighlights[u] = 'muted';
+  }
+
+  let phaseLabel2Active = s.phase === 'tally' || s.phase === 'prefix' || s.phase === 'place' ? 'active' : '';
+  if (s.phase === 'tally') phaseLabel2 = 'Count array (tallying)';
+  else if (s.phase === 'prefix') phaseLabel2 = 'Count array (prefix sum → positions)';
+  else if (s.phase === 'place') phaseLabel2 = 'Count array (cursor: pre-decremented positions)';
+
+  html += `<div class="phase-row">
+    <div class="phase-label ${phaseLabel2Active}">${phaseLabel2}</div>
+    ${renderCells(s.count, { highlights: countHighlights, topLabels: keyLabels, botLabels: keyLabels.map(x => `v=${x}`) })}
+  </div>`;
+
+  // Output row (only after Phase 3 starts)
+  if (s.phase === 'place' || s.phase === 'done') {
+    const outputHighlights = {};
+    if (s.justWrotePos !== null && s.justWrotePos !== undefined) {
+      outputHighlights[s.justWrotePos] = 'placing';
+    }
+    // Mark filled slots green (except the just-placed one)
+    for (let j = 0; j < n; j++) {
+      if (s.output[j] !== null && !outputHighlights[j]) outputHighlights[j] = 'placed';
+    }
+    let phaseLabel3Active = s.phase === 'place' || s.phase === 'done' ? 'active' : '';
+    if (s.phase === 'place') phaseLabel3 = 'Output array (filling right→left within each value)';
+    else phaseLabel3 = 'Output array (sorted)';
+    html += `<div class="phase-row">
+      <div class="phase-label ${phaseLabel3Active}">${phaseLabel3}</div>
+      ${renderCells(s.output, { highlights: outputHighlights, botLabels: idxLabels })}
+    </div>`;
+  } else {
+    // Empty placeholder
+    const emptyOutput = new Array(n).fill(null);
+    html += `<div class="phase-row">
+      <div class="phase-label">Output array (allocated, not yet written)</div>
+      ${renderCells(emptyOutput, { botLabels: idxLabels })}
+    </div>`;
+  }
+
+  c.innerHTML = html;
+  document.getElementById('curStep').textContent = idx + 1;
+  document.getElementById('reads').textContent = s.reads;
+  document.getElementById('writes').textContent = s.writes;
+  document.getElementById('phaseStat').textContent =
+    s.phase === 'init' ? 'init' :
+    s.phase === 'tally' ? '1·tally' :
+    s.phase === 'prefix' ? '2·prefix' :
+    s.phase === 'place' ? '3·place' : 'done';
+  document.getElementById('info').innerHTML =
+    `${s.msg}<br><span class="note">${s.note || ''}</span>`;
+}
+
+// ====== Controls ======
+function delay() { return 1100 - parseInt(document.getElementById('speedSlider').value) * 100; }
+
+function start() {
+  if (steps.length === 0) {
+    steps = genSteps(array, k);
+    document.getElementById('totSteps').textContent = steps.length;
+  }
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+
+function tick() {
+  if (!running || idx >= steps.length) { pause(); return; }
+  render(steps[idx]);
+  idx++;
+  timer = setTimeout(tick, delay());
+}
+
+function stepFwd() {
+  if (steps.length === 0) {
+    steps = genSteps(array, k);
+    document.getElementById('totSteps').textContent = steps.length;
+  }
+  if (idx < steps.length) { render(steps[idx]); idx++; }
+}
+
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  steps = [];
+  idx = 0;
+  document.getElementById('curStep').textContent = '0';
+  document.getElementById('totSteps').textContent = '0';
+  document.getElementById('phaseStat').textContent = '-';
+  document.getElementById('reads').textContent = '0';
+  document.getElementById('writes').textContent = '0';
+  document.getElementById('info').innerHTML =
+    'Press <span class="highlight">Start</span> to run animation, or <span class="highlight">Step</span> to advance one step at a time.';
+  renderInit();
+}
+
+function loadInput() {
+  const raw = document.getElementById('customInput').value;
+  const nums = raw.split(/[,\s]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  if (nums.length > 0) {
+    array = nums;
+    // Auto-detect k from max+1, but min 9 so the visual is balanced
+    const mx = Math.max(...nums);
+    k = Math.max(mx + 1, 9);
+    if (nums.some(v => v < 0)) {
+      // negative values not supported by this visualisation
+      alert('Negative values are not supported in this animation. Use non-negative ints in [0, ~12].');
+      return;
+    }
+    if (k > 13) {
+      alert('For visualisation clarity, please keep values ≤ 12. Use the offset variant in code for general ranges.');
+      return;
+    }
+    if (nums.length > 14) {
+      alert('Please keep input ≤ 14 elements for clarity.');
+      return;
+    }
+    reset();
+  }
+}
+
+function genRandom() {
+  const size = 6 + Math.floor(Math.random() * 5); // 6-10 elements
+  k = 9;
+  array = Array.from({ length: size }, () => Math.floor(Math.random() * k));
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+function renderInit() {
+  const n = array.length;
+  const count0 = new Array(k).fill(0);
+  const out0 = new Array(n).fill(null);
+  const idxLabels = buildIdxLabels(n);
+  const keyLabels = buildKeyLabels(k);
+
+  let html = '';
+  html += `<div class="phase-row">
+    <div class="phase-label">Input array</div>
+    ${renderCells(array, { botLabels: idxLabels })}
+  </div>`;
+  html += `<div class="phase-row">
+    <div class="phase-label">Count array (all zeros)</div>
+    ${renderCells(count0, { topLabels: keyLabels, botLabels: keyLabels.map(x => `v=${x}`) })}
+  </div>`;
+  html += `<div class="phase-row">
+    <div class="phase-label">Output array (allocated, empty)</div>
+    ${renderCells(out0, { botLabels: idxLabels })}
+  </div>`;
+  document.getElementById('canvas').innerHTML = html;
+}
+
+// ====== Init ======
+document.getElementById('customInput').value = array.join(', ');
+renderInit();
+</script>
+</body>
+</html>

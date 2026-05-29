@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set ADT Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); margin-bottom: 6px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 20px; font-size: 0.85rem; }
+
+  .container {
+    max-width: 1180px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 320px; gap: 20px;
+  }
+  .main-area { display: flex; flex-direction: column; gap: 16px; }
+  .side-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px;
+  }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.95rem; }
+  .panel h4 { color: var(--purple); margin-bottom: 8px; font-size: 0.85rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="text"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 4px; width: 100px; font-family: inherit;
+  }
+  .controls label { color: var(--muted); font-size: 0.85rem; }
+
+  button {
+    background: var(--green); color: #fff; border: none;
+    padding: 6px 14px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; transition: background 0.2s;
+  }
+  button:hover { background: #2ea043; }
+  button.danger { background: var(--red); }
+  button.danger:hover { background: #da3633; }
+  button.secondary { background: var(--border); color: var(--text); }
+  button.secondary:hover { background: #484f58; }
+  button.alg { background: var(--purple); }
+  button.alg:hover { background: #a371e9; }
+  button.alg.diff { background: var(--orange); }
+  button.alg.diff:hover { background: #e68a3a; }
+
+  .set-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 6px;
+  }
+  .set-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 120px;
+  }
+  .set-box.A { border-color: var(--blue); }
+  .set-box.B { border-color: var(--orange); }
+  .set-box.R { border-color: var(--purple); grid-column: 1 / -1; }
+  .set-title { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; display:flex; justify-content: space-between; }
+  .set-title .name { color: var(--text); font-weight: bold; font-size: 0.95rem; }
+  .set-items {
+    display: flex; flex-wrap: wrap; gap: 6px; min-height: 36px;
+    align-items: flex-start; align-content: flex-start;
+  }
+  .pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    color: var(--text);
+    transition: all 0.3s ease;
+  }
+  .pill.A { border-color: var(--blue); color: var(--blue); }
+  .pill.B { border-color: var(--orange); color: var(--orange); }
+  .pill.R { border-color: var(--purple); color: var(--purple); }
+  .pill.added { background: var(--green); color: #0d1117; border-color: var(--green); animation: pop 0.5s ease-out; }
+  .pill.searching { background: var(--yellow); color: #0d1117; border-color: var(--yellow); animation: pulse 0.6s ease-in-out 2; }
+  .pill.removing { background: var(--red); color: #fff; border-color: var(--red); opacity: 0.4; }
+  .pill.found { background: var(--green); color: #0d1117; border-color: var(--green); animation: pulse 0.6s ease-in-out 2; }
+
+  @keyframes pop {
+    0% { transform: scale(0.6); opacity: 0; }
+    60% { transform: scale(1.15); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+  }
+
+  .empty-text { color: var(--muted); font-style: italic; font-size: 0.8rem; }
+
+  .target-switch {
+    display: inline-flex; gap: 4px; align-items: center;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 3px;
+  }
+  .target-switch button {
+    padding: 3px 10px; font-size: 0.78rem;
+    background: transparent; color: var(--muted);
+  }
+  .target-switch button.active.A { background: var(--blue); color: #0d1117; }
+  .target-switch button.active.B { background: var(--orange); color: #0d1117; }
+
+  .info-panel {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px;
+    font-size: 0.85rem; min-height: 56px;
+  }
+  .info-panel .op-name { color: var(--purple); font-weight: bold; }
+  .info-panel .complexity { color: var(--yellow); font-weight: bold; }
+  .info-panel .detail { color: var(--muted); margin-top: 4px; font-size: 0.78rem; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px; text-align: center;
+  }
+  .stat .val { font-size: 1.2rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  .complexity-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .complexity-table th, .complexity-table td {
+    padding: 4px 6px; border: 1px solid var(--border); text-align: center;
+  }
+  .complexity-table th { background: var(--bg); color: var(--blue); }
+  .complexity-table .best { color: var(--green); }
+  .complexity-table .warn { color: var(--yellow); }
+
+  .log-area {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px;
+    max-height: 200px; overflow-y: auto;
+    font-size: 0.78rem; line-height: 1.5;
+  }
+  .log-area .log-entry { border-bottom: 1px solid var(--border); padding: 2px 0; }
+  .log-entry .op-add { color: var(--green); }
+  .log-entry .op-remove { color: var(--red); }
+  .log-entry .op-contains { color: var(--blue); }
+  .log-entry .op-algebra { color: var(--purple); }
+  .log-entry .op-info { color: var(--orange); }
+  .log-area::-webkit-scrollbar { width: 8px; }
+  .log-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Set ADT Visualization</h1>
+<p class="subtitle">Two sets A and B with membership ops + set-algebra (Union, Intersect, Difference, Symmetric)</p>
+
+<div class="container">
+  <div class="main-area">
+
+    <div class="panel">
+      <h3>Element Operations</h3>
+      <div class="controls">
+        <label>Value:</label>
+        <input type="text" id="valInput" placeholder="e.g. 7" maxlength="8">
+        <span style="color: var(--muted); font-size: 0.78rem;">Target:</span>
+        <div class="target-switch">
+          <button id="tgtA" class="active A" onclick="setTarget('A')">A</button>
+          <button id="tgtB" class="B" onclick="setTarget('B')">B</button>
+        </div>
+        <button onclick="doAdd()">Add</button>
+        <button class="secondary" onclick="doContains()">Contains</button>
+        <button class="danger" onclick="doRemove()">Remove</button>
+        <button class="secondary" onclick="doClear()">Clear Target</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Set Algebra (result goes into R)</h3>
+      <div class="controls">
+        <button class="alg" onclick="doUnion()">A &cup; B (Union)</button>
+        <button class="alg" onclick="doIntersect()">A &cap; B (Intersect)</button>
+        <button class="alg diff" onclick="doDifference()">A \ B (Difference)</button>
+        <button class="alg diff" onclick="doSymDiff()">A &triangle; B (Sym Diff)</button>
+        <button class="secondary" onclick="doSubset()">A &sube; B ?</button>
+        <button class="secondary" onclick="doDisjoint()">Disjoint ?</button>
+        <button class="secondary" onclick="doReset()">Reset All</button>
+        <button class="secondary" onclick="loadSample()">Sample Data</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Sets</h3>
+      <div class="set-grid">
+        <div class="set-box A">
+          <div class="set-title"><span class="name" style="color: var(--blue);">Set A</span><span id="sizeA">|A| = 0</span></div>
+          <div class="set-items" id="setA"></div>
+        </div>
+        <div class="set-box B">
+          <div class="set-title"><span class="name" style="color: var(--orange);">Set B</span><span id="sizeB">|B| = 0</span></div>
+          <div class="set-items" id="setB"></div>
+        </div>
+        <div class="set-box R">
+          <div class="set-title"><span class="name" style="color: var(--purple);">Result Set R</span><span id="sizeR">|R| = 0</span></div>
+          <div class="set-items" id="setR"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Last Operation</h3>
+      <div class="info-panel" id="infoPanel">
+        <span class="op-name">ready</span>
+        &mdash; pick a target (A or B), enter a value, and click Add / Contains / Remove.
+        <div class="detail">Set algebra buttons produce the Result Set R below.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statA">0</div><div class="lbl">|A|</div></div>
+        <div class="stat"><div class="val" id="statB">0</div><div class="lbl">|B|</div></div>
+        <div class="stat"><div class="val" id="statR">0</div><div class="lbl">|R|</div></div>
+        <div class="stat"><div class="val" id="statOps">0</div><div class="lbl">Ops</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="complexity-table">
+        <tr><th>Operation</th><th>HashSet</th><th>TreeSet</th></tr>
+        <tr><td>add</td><td class="best">O(1)</td><td class="warn">O(log n)</td></tr>
+        <tr><td>remove</td><td class="best">O(1)</td><td class="warn">O(log n)</td></tr>
+        <tr><td>contains</td><td class="best">O(1)</td><td class="warn">O(log n)</td></tr>
+        <tr><td>A &cup; B</td><td class="warn">O(|A|+|B|)</td><td class="warn">O(|A|+|B|)</td></tr>
+        <tr><td>A &cap; B</td><td class="warn">O(min)</td><td class="warn">O(|A|+|B|)</td></tr>
+        <tr><td>A \ B</td><td class="warn">O(|A|)</td><td class="warn">O(|A|+|B|)</td></tr>
+        <tr><td>A &triangle; B</td><td class="warn">O(|A|+|B|)</td><td class="warn">O(|A|+|B|)</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Legend</h3>
+      <div style="font-size: 0.78rem; line-height: 1.7;">
+        <div><span class="pill A" style="padding: 2px 8px; font-size: 0.7rem;">x</span> &mdash; in A</div>
+        <div><span class="pill B" style="padding: 2px 8px; font-size: 0.7rem;">x</span> &mdash; in B</div>
+        <div><span class="pill R" style="padding: 2px 8px; font-size: 0.7rem;">x</span> &mdash; in R</div>
+        <div><span class="pill added" style="padding: 2px 8px; font-size: 0.7rem;">x</span> &mdash; just added</div>
+        <div><span class="pill found" style="padding: 2px 8px; font-size: 0.7rem;">x</span> &mdash; found by contains</div>
+        <div><span class="pill removing" style="padding: 2px 8px; font-size: 0.7rem;">x</span> &mdash; being removed</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== STATE =====
+  const A = new Set();
+  const B = new Set();
+  let R = new Set();
+  let target = 'A';
+  let opCount = 0;
+
+  // ===== HELPERS =====
+  function setTarget(t) {
+    target = t;
+    document.getElementById('tgtA').classList.toggle('active', t === 'A');
+    document.getElementById('tgtB').classList.toggle('active', t === 'B');
+  }
+
+  function getSet(name) {
+    if (name === 'A') return A;
+    if (name === 'B') return B;
+    return R;
+  }
+
+  function log(html, cls) {
+    const area = document.getElementById('logArea');
+    const e = document.createElement('div');
+    e.className = 'log-entry';
+    e.innerHTML = `<span class="${cls}">${html}</span>`;
+    area.insertBefore(e, area.firstChild);
+    while (area.children.length > 60) area.removeChild(area.lastChild);
+  }
+
+  function setInfo(op, msg, complexity, detail) {
+    document.getElementById('infoPanel').innerHTML =
+      `<span class="op-name">${op}</span> &mdash; ${msg} &nbsp;&nbsp; <span class="complexity">${complexity}</span>` +
+      (detail ? `<div class="detail">${detail}</div>` : '');
+  }
+
+  function render(highlight) {
+    renderSet('A', A, document.getElementById('setA'), highlight);
+    renderSet('B', B, document.getElementById('setB'), highlight);
+    renderSet('R', R, document.getElementById('setR'), highlight);
+
+    document.getElementById('statA').textContent = A.size;
+    document.getElementById('statB').textContent = B.size;
+    document.getElementById('statR').textContent = R.size;
+    document.getElementById('statOps').textContent = opCount;
+    document.getElementById('sizeA').textContent = `|A| = ${A.size}`;
+    document.getElementById('sizeB').textContent = `|B| = ${B.size}`;
+    document.getElementById('sizeR').textContent = `|R| = ${R.size}`;
+  }
+
+  function renderSet(name, s, container, highlight) {
+    container.innerHTML = '';
+    if (s.size === 0) {
+      const e = document.createElement('span');
+      e.className = 'empty-text';
+      e.textContent = '∅ empty';
+      container.appendChild(e);
+      return;
+    }
+    const items = [...s].sort((a, b) => {
+      const na = parseFloat(a), nb = parseFloat(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return String(a).localeCompare(String(b));
+    });
+    items.forEach(v => {
+      const e = document.createElement('span');
+      e.className = 'pill ' + name;
+      const key = name + ':' + v;
+      if (highlight && highlight[key]) {
+        e.classList.add(highlight[key]);
+      }
+      e.textContent = v;
+      container.appendChild(e);
+    });
+  }
+
+  // ===== OPERATIONS =====
+  function parseValue() {
+    const v = document.getElementById('valInput').value.trim();
+    if (!v) {
+      setInfo('warn', 'enter a value first.', '', '');
+      return null;
+    }
+    return v;
+  }
+
+  function doAdd() {
+    const v = parseValue();
+    if (v === null) return;
+    const s = getSet(target);
+    const had = s.has(v);
+    s.add(v);
+    opCount++;
+    render({ [target + ':' + v]: had ? 'searching' : 'added' });
+    if (had) {
+      setInfo(`Add(${target}, ${v})`, `no-op: ${v} was already in ${target}.`, 'O(1)', 'Sets are idempotent under add.');
+      log(`Add(${target}, ${v}) &mdash; already present, |${target}|=${s.size}`, 'op-info');
+    } else {
+      setInfo(`Add(${target}, ${v})`, `inserted ${v} into ${target}. |${target}| is now ${s.size}.`, 'O(1)', 'Hash to bucket, append if absent.');
+      log(`Add(${target}, ${v}) &mdash; |${target}|=${s.size}`, 'op-add');
+    }
+  }
+
+  function doContains() {
+    const v = parseValue();
+    if (v === null) return;
+    const s = getSet(target);
+    const hit = s.has(v);
+    opCount++;
+    render({ [target + ':' + v]: hit ? 'found' : null });
+    if (hit) {
+      setInfo(`Contains(${target}, ${v})`, `<span style="color: var(--green);">true</span> &mdash; ${v} is in ${target}.`, 'O(1)', 'One hash, one bucket probe.');
+      log(`Contains(${target}, ${v}) &rarr; true`, 'op-contains');
+    } else {
+      setInfo(`Contains(${target}, ${v})`, `<span style="color: var(--red);">false</span> &mdash; ${v} is not in ${target}.`, 'O(1)', 'Bucket empty or chain miss.');
+      log(`Contains(${target}, ${v}) &rarr; false`, 'op-contains');
+    }
+  }
+
+  function doRemove() {
+    const v = parseValue();
+    if (v === null) return;
+    const s = getSet(target);
+    if (!s.has(v)) {
+      opCount++;
+      render({});
+      setInfo(`Remove(${target}, ${v})`, `no-op: ${v} was not in ${target}.`, 'O(1)', 'Remove of absent element is a no-op.');
+      log(`Remove(${target}, ${v}) &mdash; absent, no change`, 'op-info');
+      return;
+    }
+    // Animate removal.
+    render({ [target + ':' + v]: 'removing' });
+    setTimeout(() => {
+      s.delete(v);
+      opCount++;
+      render({});
+      setInfo(`Remove(${target}, ${v})`, `removed ${v} from ${target}. |${target}| is now ${s.size}.`, 'O(1)', 'Locate by hash, unlink from chain.');
+      log(`Remove(${target}, ${v}) &mdash; |${target}|=${s.size}`, 'op-remove');
+    }, 400);
+  }
+
+  function doClear() {
+    const s = getSet(target);
+    const before = s.size;
+    s.clear();
+    opCount++;
+    render({});
+    setInfo(`Clear(${target})`, `removed all ${before} elements from ${target}.`, 'O(n)', 'Drops every bucket.');
+    log(`Clear(${target}) &mdash; ${before} elements removed`, 'op-remove');
+  }
+
+  function doUnion() {
+    R = new Set([...A, ...B]);
+    opCount++;
+    render({});
+    setInfo('A &cup; B', `union has ${R.size} distinct elements.`, 'O(|A| + |B|)', 'Insert every element of both into R.');
+    log(`Union &rarr; |R|=${R.size}`, 'op-algebra');
+  }
+
+  function doIntersect() {
+    // Iterate smaller set, probe larger.
+    const [small, large] = A.size <= B.size ? [A, B] : [B, A];
+    R = new Set();
+    for (const x of small) if (large.has(x)) R.add(x);
+    opCount++;
+    render({});
+    setInfo('A &cap; B', `intersection has ${R.size} elements (iterated the smaller of A/B).`, 'O(min(|A|, |B|))', 'Iterate-smaller-probe-larger pattern.');
+    log(`Intersect &rarr; |R|=${R.size}`, 'op-algebra');
+  }
+
+  function doDifference() {
+    R = new Set();
+    for (const x of A) if (!B.has(x)) R.add(x);
+    opCount++;
+    render({});
+    setInfo('A \\ B', `difference has ${R.size} elements present in A but not B.`, 'O(|A|)', 'Walk A, exclude anything in B.');
+    log(`Difference A\\B &rarr; |R|=${R.size}`, 'op-algebra');
+  }
+
+  function doSymDiff() {
+    R = new Set();
+    for (const x of A) if (!B.has(x)) R.add(x);
+    for (const x of B) if (!A.has(x)) R.add(x);
+    opCount++;
+    render({});
+    setInfo('A &triangle; B', `symmetric difference has ${R.size} elements present in exactly one set.`, 'O(|A| + |B|)', '(A \\ B) &cup; (B \\ A).');
+    log(`Symmetric Difference &rarr; |R|=${R.size}`, 'op-algebra');
+  }
+
+  function doSubset() {
+    let ok = true;
+    for (const x of A) if (!B.has(x)) { ok = false; break; }
+    opCount++;
+    render({});
+    if (ok) {
+      setInfo('A &sube; B ?', `<span style="color: var(--green);">true</span> &mdash; every element of A is in B.`, 'O(|A|)', 'Short-circuit on first miss.');
+    } else {
+      setInfo('A &sube; B ?', `<span style="color: var(--red);">false</span> &mdash; A has at least one element not in B.`, 'O(|A|)', 'Short-circuit on first miss.');
+    }
+    log(`isSubset(A, B) &rarr; ${ok}`, 'op-algebra');
+  }
+
+  function doDisjoint() {
+    const [small, large] = A.size <= B.size ? [A, B] : [B, A];
+    let ok = true;
+    for (const x of small) if (large.has(x)) { ok = false; break; }
+    opCount++;
+    render({});
+    if (ok) {
+      setInfo('Disjoint ?', `<span style="color: var(--green);">true</span> &mdash; A and B share no elements.`, 'O(min(|A|, |B|))', 'Iterate smaller, probe larger.');
+    } else {
+      setInfo('Disjoint ?', `<span style="color: var(--red);">false</span> &mdash; A and B share at least one element.`, 'O(min(|A|, |B|))', 'Iterate smaller, probe larger.');
+    }
+    log(`isDisjoint(A, B) &rarr; ${ok}`, 'op-algebra');
+  }
+
+  function doReset() {
+    A.clear(); B.clear(); R = new Set();
+    opCount = 0;
+    document.getElementById('logArea').innerHTML = '';
+    render({});
+    setInfo('reset', 'all sets cleared.', '', '');
+  }
+
+  function loadSample() {
+    A.clear(); B.clear(); R = new Set();
+    [1, 2, 3, 4, 5, 7].forEach(x => A.add(String(x)));
+    [3, 4, 5, 6, 8, 9].forEach(x => B.add(String(x)));
+    opCount++;
+    render({});
+    setInfo('sample loaded', `A = {1,2,3,4,5,7}, B = {3,4,5,6,8,9}. Try Union / Intersect / Difference.`, '', '');
+    log('Loaded sample data', 'op-info');
+  }
+
+  // ===== INIT =====
+  render({});
+</script>
+
+</body>
+</html>

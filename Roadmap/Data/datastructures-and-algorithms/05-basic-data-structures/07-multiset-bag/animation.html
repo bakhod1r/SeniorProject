@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multiset / Bag Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); margin-bottom: 8px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 20px; font-size: 0.85rem; }
+
+  .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+  .main-area { display: flex; flex-direction: column; gap: 16px; }
+  .side-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.95rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="text"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; width: 140px; font-family: inherit; }
+  .controls input[type="number"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; width: 64px; font-family: inherit; }
+  .controls label { color: var(--muted); font-size: 0.85rem; }
+  button { background: var(--green); color: var(--bg); border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: filter 0.15s; font-weight: bold; }
+  button:hover { filter: brightness(1.15); }
+  button.danger { background: var(--red); color: var(--bg); }
+  button.warn { background: var(--yellow); color: var(--bg); }
+  button.accent { background: var(--blue); color: var(--bg); }
+  button.purple { background: var(--purple); color: var(--bg); }
+  button.secondary { background: var(--border); color: var(--text); font-weight: normal; }
+
+  .info-display { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-top: 10px; min-height: 36px; font-size: 0.85rem; line-height: 1.5; }
+  .info-step { color: var(--orange); }
+  .info-result { color: var(--green); font-weight: bold; }
+  .info-miss { color: var(--red); font-weight: bold; }
+  .info-formula { color: var(--purple); }
+
+  .chart-container { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 20px 16px 8px 16px; min-height: 280px; display: flex; align-items: flex-end; justify-content: flex-start; gap: 10px; overflow-x: auto; }
+  .chart-empty { color: var(--muted); font-style: italic; align-self: center; margin: auto; }
+
+  .bar-col { display: flex; flex-direction: column; align-items: center; min-width: 50px; gap: 4px; }
+  .bar-count { color: var(--text); font-size: 0.78rem; font-weight: bold; margin-bottom: 2px; }
+  .bar-shape { width: 36px; background: var(--blue); border-radius: 5px 5px 0 0; transition: height 0.35s ease, background 0.2s; position: relative; min-height: 6px; }
+  .bar-label { color: var(--muted); font-size: 0.8rem; margin-top: 2px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+
+  .bar-shape.adding { background: var(--green); animation: pulse 0.5s ease-in-out; }
+  .bar-shape.removing { background: var(--red); animation: pulse 0.5s ease-in-out; }
+  .bar-shape.querying { background: var(--orange); animation: pulse 0.5s ease-in-out 2; }
+  .bar-shape.top { background: var(--purple); }
+
+  @keyframes pulse { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.08); } }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; text-align: center; }
+  .stat .val { font-size: 1.25rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  .complexity-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .complexity-table th, .complexity-table td { padding: 5px 6px; border: 1px solid var(--border); text-align: center; }
+  .complexity-table th { background: var(--surface); color: var(--blue); }
+  .complexity-table td.good { color: var(--green); }
+  .complexity-table td.bad { color: var(--red); }
+  .complexity-table td.warn { color: var(--yellow); }
+
+  .log-area { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; max-height: 180px; overflow-y: auto; font-size: 0.78rem; line-height: 1.5; }
+  .log-entry { border-bottom: 1px solid var(--surface); padding: 2px 0; }
+  .log-entry .op-add { color: var(--green); }
+  .log-entry .op-remove { color: var(--red); }
+  .log-entry .op-query { color: var(--orange); }
+  .log-entry .op-top { color: var(--purple); }
+  .log-entry .op-info { color: var(--blue); }
+</style>
+</head>
+<body>
+
+<h1>Multiset / Bag Visualization</h1>
+<p class="subtitle">Element &rarr; Count | Add / Remove / Count / Most-Common</p>
+
+<div class="container">
+  <div class="main-area">
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls">
+        <label>Element:</label>
+        <input type="text" id="elemInput" placeholder="apple" maxlength="14">
+        <label>k:</label>
+        <input type="number" id="kInput" value="1" min="1" max="99">
+        <button onclick="doAdd()">Add</button>
+        <button class="danger" onclick="doRemove()">Remove</button>
+        <button class="warn" onclick="doRemoveAll()">RemoveAll</button>
+        <button class="accent" onclick="doCount()">Count</button>
+        <button class="purple" onclick="doMostCommon()">Most-Common</button>
+        <button class="secondary" onclick="doReset()">Reset</button>
+      </div>
+      <div class="info-display" id="infoDisplay">Enter an element and click an operation.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Multiset (each bar = element &times; its count)</h3>
+      <div class="chart-container" id="chart">
+        <div class="chart-empty">multiset is empty &mdash; add an element</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statDistinct">0</div><div class="lbl">Distinct</div></div>
+        <div class="stat"><div class="val" id="statTotal">0</div><div class="lbl">Total (with dups)</div></div>
+        <div class="stat"><div class="val" id="statMax">&mdash;</div><div class="lbl">Mode</div></div>
+        <div class="stat"><div class="val" id="statMaxCount">0</div><div class="lbl">Max Count</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="complexity-table">
+        <tr><th>Operation</th><th>Avg</th><th>Worst</th></tr>
+        <tr><td>add(x)</td><td class="good">O(1)</td><td class="bad">O(n)</td></tr>
+        <tr><td>remove(x)</td><td class="good">O(1)</td><td class="bad">O(n)</td></tr>
+        <tr><td>count(x)</td><td class="good">O(1)</td><td class="bad">O(n)</td></tr>
+        <tr><td>size()</td><td class="good">O(1)</td><td class="good">O(1)</td></tr>
+        <tr><td>distinct()</td><td class="good">O(1)</td><td class="good">O(1)</td></tr>
+        <tr><td>mostCommon(k)</td><td class="warn">O(n log k)</td><td class="warn">O(n log k)</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Quick Fill</h3>
+      <button class="secondary" onclick="fillFruits()" style="width:100%;margin-bottom:6px">Load Fruit Bag</button>
+      <button class="secondary" onclick="fillWords()" style="width:100%;margin-bottom:6px">Load Word Frequency</button>
+      <button class="secondary" onclick="fillRandom()" style="width:100%">Insert 20 Random</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== STATE =====
+  // Multiset implemented as map[string] -> int. We also cache `total`.
+  const counts = new Map();
+  let total = 0;
+  let pendingHighlight = null; // { key, cls }
+
+  // ===== HELPERS =====
+  function distinct() { return counts.size; }
+
+  function setInfo(html) {
+    document.getElementById('infoDisplay').innerHTML = html;
+  }
+
+  function addLog(msg, cls) {
+    const area = document.getElementById('logArea');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = '<span class="' + cls + '">' + msg + '</span>';
+    area.prepend(entry);
+    while (area.children.length > 60) area.removeChild(area.lastChild);
+  }
+
+  function render(highlight) {
+    pendingHighlight = highlight || null;
+    const chart = document.getElementById('chart');
+    if (counts.size === 0) {
+      chart.innerHTML = '<div class="chart-empty">multiset is empty &mdash; add an element</div>';
+    } else {
+      // Sort by count desc for readable display
+      const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+      const maxCount = entries[0][1];
+      chart.innerHTML = entries.map(([k, v]) => {
+        const heightPx = Math.max(6, (v / maxCount) * 220);
+        let cls = '';
+        if (highlight && highlight.key === k) cls = highlight.cls;
+        else if (highlight && highlight.topKeys && highlight.topKeys.includes(k)) cls = 'top';
+        return '<div class="bar-col">' +
+                 '<div class="bar-count">' + v + '</div>' +
+                 '<div class="bar-shape ' + cls + '" style="height:' + heightPx + 'px"></div>' +
+                 '<div class="bar-label" title="' + k + '">' + k + '</div>' +
+               '</div>';
+      }).join('');
+    }
+
+    // Stats
+    document.getElementById('statDistinct').textContent = distinct();
+    document.getElementById('statTotal').textContent = total;
+    if (counts.size > 0) {
+      const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+      document.getElementById('statMax').textContent = entries[0][0];
+      document.getElementById('statMaxCount').textContent = entries[0][1];
+    } else {
+      document.getElementById('statMax').textContent = '—';
+      document.getElementById('statMaxCount').textContent = 0;
+    }
+
+    if (highlight) {
+      setTimeout(() => render(), 700);
+    }
+  }
+
+  // ===== OPERATIONS =====
+  function readElem() {
+    return document.getElementById('elemInput').value.trim();
+  }
+  function readK() {
+    const v = parseInt(document.getElementById('kInput').value);
+    return (isNaN(v) || v < 1) ? 1 : v;
+  }
+
+  function doAdd() {
+    const x = readElem();
+    if (!x) { setInfo('<span class="info-miss">empty element &mdash; type something first.</span>'); return; }
+    const k = readK();
+    const prev = counts.get(x) || 0;
+    counts.set(x, prev + k);
+    total += k;
+    setInfo('<span class="info-step">add("' + x + '", ' + k + ')</span> &rarr; ' +
+            '<span class="info-formula">count[' + x + ']</span> = ' + prev + ' + ' + k + ' = ' +
+            '<span class="info-result">' + (prev + k) + '</span>');
+    addLog('ADD &nbsp;"' + x + '" &nbsp;+' + k + ' &rarr; count=' + (prev + k), 'op-add');
+    render({ key: x, cls: 'adding' });
+  }
+
+  function doRemove() {
+    const x = readElem();
+    if (!x) { setInfo('<span class="info-miss">empty element.</span>'); return; }
+    const k = readK();
+    const prev = counts.get(x) || 0;
+    if (prev === 0) {
+      setInfo('<span class="info-step">remove("' + x + '")</span> &rarr; ' +
+              '<span class="info-miss">no-op (count was already 0)</span>');
+      addLog('REM &nbsp;"' + x + '" &rarr; no-op (count=0)', 'op-remove');
+      render();
+      return;
+    }
+    const take = Math.min(prev, k);
+    const next = prev - take;
+    if (next === 0) {
+      counts.delete(x);  // critical: prune zero-count keys
+    } else {
+      counts.set(x, next);
+    }
+    total -= take;
+    setInfo('<span class="info-step">remove("' + x + '", ' + k + ')</span> &rarr; ' +
+            'count[' + x + '] = ' + prev + ' &minus; ' + take + ' = ' +
+            '<span class="info-result">' + next + '</span>' +
+            (next === 0 ? ' &nbsp;<span class="info-formula">(key deleted &mdash; avoid memory leak)</span>' : ''));
+    addLog('REM &nbsp;"' + x + '" &nbsp;&minus;' + take + ' &rarr; count=' + next, 'op-remove');
+    render(next > 0 ? { key: x, cls: 'removing' } : null);
+  }
+
+  function doRemoveAll() {
+    const x = readElem();
+    if (!x) { setInfo('<span class="info-miss">empty element.</span>'); return; }
+    const prev = counts.get(x) || 0;
+    if (prev === 0) {
+      setInfo('<span class="info-step">removeAll("' + x + '")</span> &rarr; <span class="info-miss">not present</span>');
+      addLog('REMALL "' + x + '" &rarr; absent', 'op-remove');
+      return;
+    }
+    counts.delete(x);
+    total -= prev;
+    setInfo('<span class="info-step">removeAll("' + x + '")</span> &rarr; ' +
+            'removed <span class="info-result">' + prev + '</span> occurrences. Key deleted.');
+    addLog('REMALL "' + x + '" &nbsp;&minus;' + prev + ' &rarr; key deleted', 'op-remove');
+    render();
+  }
+
+  function doCount() {
+    const x = readElem();
+    if (!x) { setInfo('<span class="info-miss">empty element.</span>'); return; }
+    const c = counts.get(x) || 0;
+    setInfo('<span class="info-step">count("' + x + '")</span> = ' +
+            (c > 0 ? '<span class="info-result">' + c + '</span>'
+                   : '<span class="info-miss">0 (not present)</span>'));
+    addLog('CNT &nbsp;"' + x + '" &rarr; ' + c, 'op-query');
+    render(c > 0 ? { key: x, cls: 'querying' } : null);
+  }
+
+  function doMostCommon() {
+    const k = readK();
+    if (counts.size === 0) {
+      setInfo('<span class="info-miss">empty multiset</span>');
+      addLog('TOPK &rarr; empty', 'op-top');
+      return;
+    }
+    const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, k);
+    const topKeys = entries.map(e => e[0]);
+    setInfo('<span class="info-step">mostCommon(' + k + ')</span> = ' +
+            entries.map(e => '<span class="info-result">' + e[0] + ':' + e[1] + '</span>').join(', '));
+    addLog('TOPK ' + k + ' &rarr; ' + entries.map(e => e[0] + ':' + e[1]).join(', '), 'op-top');
+    render({ topKeys: topKeys });
+  }
+
+  function doReset() {
+    counts.clear();
+    total = 0;
+    document.getElementById('logArea').innerHTML = '';
+    setInfo('Multiset reset.');
+    addLog('Reset.', 'op-info');
+    render();
+  }
+
+  function fillFruits() {
+    counts.clear();
+    total = 0;
+    const data = [['apple', 5], ['banana', 3], ['cherry', 2], ['date', 1], ['fig', 4]];
+    for (const [k, v] of data) { counts.set(k, v); total += v; }
+    addLog('Loaded fruit bag (5 distinct, 15 total).', 'op-info');
+    setInfo('Loaded fruit-bag sample.');
+    render();
+  }
+
+  function fillWords() {
+    counts.clear();
+    total = 0;
+    const data = [['the', 12], ['of', 9], ['and', 8], ['to', 7], ['a', 6], ['in', 5], ['that', 3]];
+    for (const [k, v] of data) { counts.set(k, v); total += v; }
+    addLog('Loaded word frequency sample.', 'op-info');
+    setInfo('Loaded word-frequency sample.');
+    render();
+  }
+
+  function fillRandom() {
+    const pool = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel'];
+    for (let i = 0; i < 20; i++) {
+      const x = pool[Math.floor(Math.random() * pool.length)];
+      counts.set(x, (counts.get(x) || 0) + 1);
+      total++;
+    }
+    addLog('Inserted 20 random elements over 8-word alphabet.', 'op-info');
+    setInfo('Inserted 20 random elements.');
+    render();
+  }
+
+  // ===== INIT =====
+  render();
+</script>
+
+</body>
+</html>

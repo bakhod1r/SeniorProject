@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map / Dictionary ADT — Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.4rem; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 18px; font-size: 0.85rem; }
+  .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+  @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+  .main { display: flex; flex-direction: column; gap: 14px; }
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.9rem; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  /* badges */
+  .badges { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .badge { padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: bold; border: 1px solid; }
+  .badge.green  { color: var(--green);  border-color: var(--green); }
+  .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+  .badge.blue   { color: var(--blue);   border-color: var(--blue); }
+  .badge.purple { color: var(--purple); border-color: var(--purple); }
+
+  /* controls */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls label { color: var(--muted); font-size: 0.8rem; }
+  .controls input[type="text"],
+  .controls input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 4px; font-family: inherit; font-size: 0.85rem;
+  }
+  .controls input[type="text"] { width: 120px; }
+  .controls input[type="number"] { width: 80px; }
+  .controls input:focus { outline: none; border-color: var(--blue); }
+  button {
+    background: var(--border); color: var(--text); border: none;
+    padding: 6px 14px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; transition: background 0.15s;
+  }
+  button:hover { background: #484f58; }
+  button.primary { background: var(--green); color: #051d10; font-weight: bold; }
+  button.primary:hover { background: #2ea043; }
+  button.danger { background: var(--red); color: #200; font-weight: bold; }
+  button.danger:hover { background: #c93632; }
+  button.info { background: var(--blue); color: #001; font-weight: bold; }
+  button.info:hover { background: #4895eb; }
+
+  /* variant tabs */
+  .variants { display: flex; gap: 6px; margin-bottom: 10px; }
+  .variant-tab {
+    flex: 1; padding: 8px; background: var(--bg); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 4px; cursor: pointer;
+    text-align: center; font-size: 0.78rem; transition: all 0.15s;
+  }
+  .variant-tab.active { background: var(--blue); color: #001; border-color: var(--blue); font-weight: bold; }
+  .variant-tab:hover:not(.active) { color: var(--text); border-color: var(--blue); }
+
+  /* entry cells */
+  .entries-area {
+    min-height: 200px; padding: 14px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start;
+  }
+  .entries-area.empty::after {
+    content: 'empty map — insert a key to begin';
+    color: var(--muted); font-size: 0.85rem; align-self: center;
+    width: 100%; text-align: center;
+  }
+  .entry {
+    display: flex; flex-direction: column; min-width: 110px;
+    border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    background: var(--surface); transition: all 0.25s ease;
+  }
+  .entry .key {
+    background: #1a2433; color: var(--blue); padding: 6px 10px;
+    font-size: 0.8rem; border-bottom: 1px dashed var(--border);
+    font-weight: bold; text-align: center;
+  }
+  .entry .val { padding: 8px 10px; color: var(--text); font-size: 0.9rem; text-align: center; }
+  .entry .meta { padding: 2px 6px; font-size: 0.65rem; color: var(--muted); text-align: center; border-top: 1px dashed var(--border); }
+  .entry.active   { border-color: var(--blue);   box-shadow: 0 0 0 2px rgba(88,166,255,0.3); transform: translateY(-2px); }
+  .entry.inserted { border-color: var(--green);  box-shadow: 0 0 0 2px rgba(63,185,80,0.3); }
+  .entry.deleting { border-color: var(--red);    box-shadow: 0 0 0 2px rgba(248,81,73,0.4); opacity: 0.4; transform: scale(0.95); }
+  .entry.scanning { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(210,153,34,0.3); }
+  .entry.found    { border-color: var(--green);  box-shadow: 0 0 0 2px rgba(63,185,80,0.5); transform: translateY(-2px); }
+
+  /* info panel */
+  .info-box {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.82rem; line-height: 1.55; min-height: 50px;
+  }
+  .info-op { color: var(--orange); font-weight: bold; }
+  .info-cplx { float: right; color: var(--purple); font-size: 0.75rem; }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; text-align: center; }
+  .stat .val { font-size: 1.2rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.7rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* complexity table */
+  table.cplx { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+  table.cplx th, table.cplx td { padding: 4px 6px; border: 1px solid var(--border); text-align: center; }
+  table.cplx th { background: var(--bg); color: var(--blue); font-weight: bold; }
+  table.cplx .o1   { color: var(--green); }
+  table.cplx .ologn { color: var(--yellow); }
+  table.cplx .on   { color: var(--red); }
+
+  /* log */
+  .log { background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+         padding: 8px; max-height: 180px; overflow-y: auto; font-size: 0.74rem; line-height: 1.5; }
+  .log-entry { padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .log-entry:last-child { border-bottom: none; }
+  .op-put    { color: var(--green); }
+  .op-get    { color: var(--blue); }
+  .op-del    { color: var(--red); }
+  .op-miss   { color: var(--yellow); }
+  .op-info   { color: var(--orange); }
+
+  .iteration {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px; font-size: 0.78rem; color: var(--text);
+    word-break: break-all; line-height: 1.5;
+  }
+  .iteration .arrow { color: var(--muted); margin: 0 4px; }
+</style>
+</head>
+<body>
+
+<h1>Map / Dictionary (Associative Array ADT)</h1>
+<p class="subtitle">Interactive Visualization — Put / Get / Remove with Ordering Variants</p>
+
+<div class="badges">
+  <span class="badge green">avg O(1)</span>
+  <span class="badge yellow">O(log n) tree</span>
+  <span class="badge blue">key -> value</span>
+  <span class="badge purple">3 ordering variants</span>
+</div>
+
+<div class="container">
+  <div class="main">
+
+    <div class="panel">
+      <h3>Map Variant</h3>
+      <div class="variants">
+        <div class="variant-tab active" data-variant="unordered" onclick="setVariant('unordered')">Unordered (HashMap)</div>
+        <div class="variant-tab" data-variant="sorted" onclick="setVariant('sorted')">Sorted (TreeMap)</div>
+        <div class="variant-tab" data-variant="insertion" onclick="setVariant('insertion')">Insertion-Ordered</div>
+      </div>
+      <div class="info-box" id="variantDesc">
+        Unordered map: hash-backed, average O(1) get/put/remove; iteration order is arbitrary.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operations</h3>
+      <div class="controls">
+        <label>Key:</label>
+        <input type="text" id="keyInput" placeholder="alice" maxlength="20">
+        <label>Value:</label>
+        <input type="number" id="valInput" placeholder="42">
+        <button class="primary" onclick="doPut()">put(k, v)</button>
+        <button class="info"    onclick="doGet()">get(k)</button>
+        <button class="danger"  onclick="doRemove()">remove(k)</button>
+      </div>
+      <div style="margin-top: 10px;" class="controls">
+        <button onclick="doContains()">containsKey(k)</button>
+        <button onclick="loadSample()">Load Sample</button>
+        <button onclick="loadRandom()">Random 6</button>
+        <button class="danger" onclick="doClear()">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Entries (<span id="entriesCount">0</span>)</h3>
+      <div class="entries-area empty" id="entriesArea"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Iteration Order (<span id="iterOrder">arbitrary</span>)</h3>
+      <div class="iteration" id="iteration">empty</div>
+    </div>
+
+    <div class="panel">
+      <h3>Last Operation</h3>
+      <div class="info-box" id="lastOp">
+        <span class="info-cplx">—</span>
+        Choose a variant and run <span class="info-op">put</span>, <span class="info-op">get</span>, or <span class="info-op">remove</span>.
+      </div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h3>Stats</h3>
+      <div class="stats">
+        <div class="stat"><div class="val" id="statSize">0</div><div class="lbl">size</div></div>
+        <div class="stat"><div class="val" id="statPuts">0</div><div class="lbl">puts</div></div>
+        <div class="stat"><div class="val" id="statGets">0</div><div class="lbl">gets</div></div>
+        <div class="stat"><div class="val" id="statHits">0</div><div class="lbl">hits</div></div>
+        <div class="stat"><div class="val" id="statMisses">0</div><div class="lbl">misses</div></div>
+        <div class="stat"><div class="val" id="statRemoves">0</div><div class="lbl">removes</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O per variant</h3>
+      <table class="cplx">
+        <tr><th>Op</th><th>Hash</th><th>Tree</th><th>Linked</th></tr>
+        <tr><td>get</td><td class="o1">O(1)*</td><td class="ologn">O(log n)</td><td class="o1">O(1)*</td></tr>
+        <tr><td>put</td><td class="o1">O(1)*</td><td class="ologn">O(log n)</td><td class="o1">O(1)*</td></tr>
+        <tr><td>remove</td><td class="o1">O(1)*</td><td class="ologn">O(log n)</td><td class="o1">O(1)*</td></tr>
+        <tr><td>iterate</td><td class="on">O(n)</td><td class="on">O(n)</td><td class="on">O(n)</td></tr>
+        <tr><td>firstKey</td><td>—</td><td class="ologn">O(log n)</td><td class="o1">O(1)</td></tr>
+        <tr><td>floorKey</td><td>—</td><td class="ologn">O(log n)</td><td>—</td></tr>
+      </table>
+      <p style="margin-top:6px; font-size: 0.7rem; color: var(--muted);">* O(1) average; O(n) worst case under adversarial hashing.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Variant Summary</h3>
+      <p style="font-size: 0.78rem; color: var(--text); line-height: 1.5;">
+        <strong style="color: var(--green);">Hash:</strong> fastest, undefined order.<br>
+        <strong style="color: var(--yellow);">Tree:</strong> O(log n), keys sorted, range queries.<br>
+        <strong style="color: var(--blue);">Linked:</strong> hash + insertion order, basis of LRU.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+let variant = 'unordered';                   // 'unordered' | 'sorted' | 'insertion'
+let entries = [];                            // [{key, value, insertedAt}]
+let nextInsertId = 0;
+let busy = false;
+
+let stats = { puts: 0, gets: 0, hits: 0, misses: 0, removes: 0 };
+
+// ===== UTIL =====
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function findIndex(key) {
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].key === key) return i;
+  }
+  return -1;
+}
+
+// Compute the ordered view (display order) per variant.
+function orderedView() {
+  let copy = entries.slice();
+  if (variant === 'sorted') {
+    copy.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  } else if (variant === 'insertion') {
+    copy.sort((a, b) => a.insertedAt - b.insertedAt);
+  } else {
+    // 'unordered': simulate hash-bucket scatter via a pseudo-hash on the key string
+    copy.sort((a, b) => hashHint(a.key) - hashHint(b.key));
+  }
+  return copy;
+}
+
+function hashHint(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+
+// ===== RENDER =====
+function render(highlight) {
+  const area = document.getElementById('entriesArea');
+  const view = orderedView();
+
+  if (view.length === 0) {
+    area.classList.add('empty');
+    area.innerHTML = '';
+  } else {
+    area.classList.remove('empty');
+    area.innerHTML = view.map((e, i) => {
+      const cls = (highlight && highlight.key === e.key) ? ' ' + highlight.state : '';
+      const meta = (variant === 'insertion') ? `#${e.insertedAt}` :
+                   (variant === 'sorted')    ? '' :
+                   `h=${(hashHint(e.key) % 1000).toString().padStart(3,'0')}`;
+      return `<div class="entry${cls}">
+        <div class="key">${escapeHtml(e.key)}</div>
+        <div class="val">${escapeHtml(String(e.value))}</div>
+        ${meta ? `<div class="meta">${meta}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('entriesCount').textContent = entries.length;
+  document.getElementById('statSize').textContent = entries.length;
+  renderIteration();
+}
+
+function renderIteration() {
+  const view = orderedView();
+  const el = document.getElementById('iteration');
+  if (view.length === 0) { el.textContent = 'empty'; return; }
+  el.innerHTML = view.map(e =>
+    `<span style="color:var(--blue)">${escapeHtml(e.key)}</span>:` +
+    `<span style="color:var(--text)">${escapeHtml(String(e.value))}</span>`
+  ).join('<span class="arrow">,</span> ');
+
+  const labels = { unordered: 'arbitrary', sorted: 'sorted by key', insertion: 'insertion order' };
+  document.getElementById('iterOrder').textContent = labels[variant];
+}
+
+function renderStats() {
+  document.getElementById('statPuts').textContent = stats.puts;
+  document.getElementById('statGets').textContent = stats.gets;
+  document.getElementById('statHits').textContent = stats.hits;
+  document.getElementById('statMisses').textContent = stats.misses;
+  document.getElementById('statRemoves').textContent = stats.removes;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function setInfo(op, msg, cplx) {
+  document.getElementById('lastOp').innerHTML =
+    `<span class="info-cplx">${cplx}</span><span class="info-op">${op}</span>: ${msg}`;
+}
+
+function addLog(html, cls) {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + (cls || '');
+  div.innerHTML = html;
+  log.insertBefore(div, log.firstChild);
+  // Cap log
+  while (log.children.length > 50) log.removeChild(log.lastChild);
+}
+
+// ===== VARIANT =====
+function setVariant(v) {
+  variant = v;
+  document.querySelectorAll('.variant-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.variant === v);
+  });
+  const desc = {
+    unordered: 'Unordered map (HashMap / Go map / dict): hash-backed, average O(1) get/put/remove; iteration order is arbitrary. Java HashMap, C++ unordered_map.',
+    sorted:    'Sorted map (TreeMap / std::map): tree-backed, O(log n) get/put/remove; iteration in sorted key order. Supports range queries (floorKey, ceilingKey, subMap).',
+    insertion: 'Insertion-ordered map (LinkedHashMap / Python dict 3.7+): hash table + doubly-linked list; O(1) operations; iteration in insertion order. Basis of LRU caches.'
+  };
+  document.getElementById('variantDesc').textContent = desc[v];
+  addLog(`Switched to <strong>${v}</strong> variant`, 'op-info');
+  render();
+}
+
+// ===== OPERATIONS =====
+async function doPut() {
+  if (busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  const vRaw = document.getElementById('valInput').value.trim();
+  if (!k) { setInfo('put', 'enter a key first.', '—'); return; }
+  if (vRaw === '') { setInfo('put', 'enter a value first.', '—'); return; }
+  const v = isNaN(Number(vRaw)) ? vRaw : Number(vRaw);
+
+  busy = true;
+  stats.puts++;
+  const idx = findIndex(k);
+  if (idx >= 0) {
+    const oldVal = entries[idx].value;
+    entries[idx].value = v;
+    render({ key: k, state: 'active' });
+    setInfo('put', `updated existing key "${k}": ${oldVal} -> ${v}`, 'O(1) avg');
+    addLog(`<strong>put("${escapeHtml(k)}", ${escapeHtml(String(v))})</strong> updated existing`, 'op-put');
+    await sleep(700);
+    render();
+  } else {
+    entries.push({ key: k, value: v, insertedAt: nextInsertId++ });
+    render({ key: k, state: 'inserted' });
+    setInfo('put', `inserted new entry ("${k}" -> ${v})`, 'O(1) avg');
+    addLog(`<strong>put("${escapeHtml(k)}", ${escapeHtml(String(v))})</strong> inserted`, 'op-put');
+    await sleep(700);
+    render();
+  }
+  renderStats();
+  busy = false;
+}
+
+async function doGet() {
+  if (busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) { setInfo('get', 'enter a key first.', '—'); return; }
+
+  busy = true;
+  stats.gets++;
+  const cplx = variant === 'sorted' ? 'O(log n)' : 'O(1) avg';
+
+  if (variant === 'sorted') {
+    // Animate sorted "tree walk": light scan for visual effect
+    const view = orderedView();
+    for (let i = 0; i < view.length; i++) {
+      render({ key: view[i].key, state: 'scanning' });
+      await sleep(180);
+      if (view[i].key === k) {
+        stats.hits++;
+        render({ key: k, state: 'found' });
+        setInfo('get', `found "${k}" -> ${view[i].value}`, cplx);
+        addLog(`<strong>get("${escapeHtml(k)}")</strong> = ${escapeHtml(String(view[i].value))}`, 'op-get');
+        await sleep(700);
+        render();
+        renderStats();
+        busy = false;
+        return;
+      }
+      if (view[i].key > k) break;
+    }
+  } else {
+    const idx = findIndex(k);
+    if (idx >= 0) {
+      stats.hits++;
+      render({ key: k, state: 'found' });
+      setInfo('get', `found "${k}" -> ${entries[idx].value}`, cplx);
+      addLog(`<strong>get("${escapeHtml(k)}")</strong> = ${escapeHtml(String(entries[idx].value))}`, 'op-get');
+      await sleep(700);
+      render();
+      renderStats();
+      busy = false;
+      return;
+    }
+  }
+
+  stats.misses++;
+  setInfo('get', `key "${k}" not present (absent)`, cplx);
+  addLog(`<strong>get("${escapeHtml(k)}")</strong> -> absent`, 'op-miss');
+  render();
+  renderStats();
+  busy = false;
+}
+
+async function doRemove() {
+  if (busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) { setInfo('remove', 'enter a key first.', '—'); return; }
+
+  busy = true;
+  const idx = findIndex(k);
+  const cplx = variant === 'sorted' ? 'O(log n)' : 'O(1) avg';
+  if (idx >= 0) {
+    stats.removes++;
+    const removed = entries[idx].value;
+    render({ key: k, state: 'deleting' });
+    await sleep(550);
+    entries.splice(idx, 1);
+    render();
+    setInfo('remove', `removed "${k}" (value was ${removed})`, cplx);
+    addLog(`<strong>remove("${escapeHtml(k)}")</strong> -> ${escapeHtml(String(removed))}`, 'op-del');
+  } else {
+    setInfo('remove', `key "${k}" not present; no-op`, cplx);
+    addLog(`<strong>remove("${escapeHtml(k)}")</strong> -> absent`, 'op-miss');
+  }
+  renderStats();
+  busy = false;
+}
+
+async function doContains() {
+  if (busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) { setInfo('containsKey', 'enter a key first.', '—'); return; }
+
+  busy = true;
+  const idx = findIndex(k);
+  const cplx = variant === 'sorted' ? 'O(log n)' : 'O(1) avg';
+  if (idx >= 0) {
+    render({ key: k, state: 'found' });
+    setInfo('containsKey', `"${k}" is present -> true`, cplx);
+    addLog(`<strong>containsKey("${escapeHtml(k)}")</strong> -> true`, 'op-get');
+    await sleep(700);
+    render();
+  } else {
+    setInfo('containsKey', `"${k}" is absent -> false`, cplx);
+    addLog(`<strong>containsKey("${escapeHtml(k)}")</strong> -> false`, 'op-miss');
+  }
+  busy = false;
+}
+
+function doClear() {
+  if (busy) return;
+  entries = [];
+  nextInsertId = 0;
+  stats = { puts: 0, gets: 0, hits: 0, misses: 0, removes: 0 };
+  render();
+  renderStats();
+  setInfo('clear', 'map cleared.', '—');
+  addLog('<strong>clear()</strong>', 'op-info');
+}
+
+async function loadSample() {
+  if (busy) return;
+  doClear();
+  const sample = [
+    ['alice', 95], ['bob', 82], ['carol', 91],
+    ['dave', 78], ['eve', 88]
+  ];
+  for (const [k, v] of sample) {
+    entries.push({ key: k, value: v, insertedAt: nextInsertId++ });
+    stats.puts++;
+  }
+  render();
+  renderStats();
+  setInfo('loadSample', `inserted ${sample.length} entries`, 'O(n)');
+  addLog(`Loaded ${sample.length} sample entries`, 'op-info');
+}
+
+async function loadRandom() {
+  if (busy) return;
+  doClear();
+  const names = ['anna','ben','cleo','dan','emma','finn','gus','hana','ivy','jay','kate','leo','mia','noah','olga','pat','quinn','ron','sue','tim'];
+  const used = new Set();
+  for (let i = 0; i < 6; i++) {
+    let name;
+    do { name = names[Math.floor(Math.random() * names.length)]; } while (used.has(name));
+    used.add(name);
+    const v = Math.floor(Math.random() * 90) + 10;
+    entries.push({ key: name, value: v, insertedAt: nextInsertId++ });
+    stats.puts++;
+  }
+  render();
+  renderStats();
+  setInfo('loadRandom', 'inserted 6 random entries', 'O(n)');
+  addLog('Loaded 6 random entries', 'op-info');
+}
+
+// ===== INIT =====
+function init() {
+  // sensible defaults
+  document.getElementById('keyInput').value = 'alice';
+  document.getElementById('valInput').value = '95';
+  setVariant('unordered');
+  loadSample();
+}
+
+init();
+</script>
+
+</body>
+</html>

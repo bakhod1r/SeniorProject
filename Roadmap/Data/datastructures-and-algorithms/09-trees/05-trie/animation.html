@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trie (Prefix Tree) — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.95rem;width:220px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.layout{display:grid;grid-template-columns:1fr 280px;gap:16px;width:100%;max-width:1180px;margin-bottom:16px}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:24px;min-height:460px;overflow:auto}
+.words-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px;overflow-y:auto;max-height:520px}
+.words-panel h3{color:var(--blue);font-size:.95rem;margin-bottom:8px}
+.word-item{font-family:monospace;padding:4px 6px;border-radius:4px;font-size:.9rem;color:var(--text)}
+.word-item:nth-child(even){background:var(--bg)}
+svg{display:block;margin:0 auto}
+.node circle{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .25s}
+.node.terminal circle{fill:rgba(63,185,80,.18);stroke:var(--green)}
+.node.path circle{stroke:var(--yellow);stroke-width:3}
+.node.found circle{fill:var(--green);stroke:var(--green)}
+.node.notfound circle{fill:var(--red);stroke:var(--red)}
+.node text{fill:var(--text);text-anchor:middle;dominant-baseline:central;font-family:monospace;font-size:.9rem;font-weight:700}
+.node.found text,.node.notfound text{fill:var(--bg)}
+.edge{stroke:var(--border);stroke-width:1.5;fill:none}
+.edge.path{stroke:var(--yellow);stroke-width:2.5}
+.edge text{fill:var(--muted);font-family:monospace;font-size:.75rem;text-anchor:middle}
+.info-panel,.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px;width:100%;max-width:1180px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.stats{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:12px 20px}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>Trie (Prefix Tree)</h1>
+<p class="subtitle">O(L) string lookup independent of dictionary size. Each path from root spells a key; common prefixes share nodes.</p>
+
+<div class="badges">
+<span class="badge best">Insert/Search/Prefix: O(L)</span>
+<span class="badge space">Space: O(N·L) worst</span>
+<span class="badge best">Alphabet-agnostic</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="wordIn" placeholder="word" value="card">
+<button onclick="doInsert()">Insert</button>
+<button onclick="doSearch()">Search</button>
+<button onclick="doPrefix()">Has prefix?</button>
+<button onclick="resetTrie()" class="secondary">↺ Reset</button>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Words</div><div class="stat-value" id="wCount">0</div></div>
+<div><div class="stat-label">Nodes</div><div class="stat-value" id="nCount">1</div></div>
+<div><div class="stat-label">Chars stored</div><div class="stat-value" id="cCount">0</div></div>
+<div><div class="stat-label">Longest</div><div class="stat-value" id="longest">-</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+</div>
+
+<div class="layout">
+<div class="canvas-container" id="canvas"></div>
+<div class="words-panel">
+  <h3>Stored words (sorted)</h3>
+  <div id="words"></div>
+</div>
+</div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Insert words to build the trie. Search and prefix lookups walk the path character by character.</div>
+</div>
+
+<p class="footer-note">Used by autocomplete (Google search bar, Algolia), DNS resolvers (BIND), IP routing (Linux kernel fib_trie), antivirus / IDS (Aho-Corasick), and Ethereum's Merkle-Patricia Trie. Compress chains of single-child nodes for radix/Patricia variants.</p>
+
+<script>
+let idc=0;
+function newNode(){ return {id:++idc, ch:new Map(), end:false, parent:null, edgeChar:null}; }
+let root=newNode();
+let pathHi=new Set(), edgeHi=new Set(), finalCls=null;
+
+function insert(w){
+  let n=root;
+  for(const c of w){
+    if(!n.ch.has(c)){
+      const nn=newNode(); nn.parent=n; nn.edgeChar=c;
+      n.ch.set(c,nn);
+    }
+    n=n.ch.get(c);
+  }
+  n.end=true;
+}
+function search(w){
+  let n=root; pathHi=new Set([root.id]); edgeHi=new Set();
+  for(const c of w){
+    if(!n.ch.has(c)){ finalCls='notfound'; return false; }
+    const next=n.ch.get(c);
+    edgeHi.add(next.id);
+    pathHi.add(next.id);
+    n=next;
+  }
+  finalCls = n.end ? 'found' : 'prefix-only';
+  return n.end;
+}
+function startsWith(p){
+  let n=root; pathHi=new Set([root.id]); edgeHi=new Set();
+  for(const c of p){
+    if(!n.ch.has(c)){ finalCls='notfound'; return false; }
+    const next=n.ch.get(c);
+    edgeHi.add(next.id);
+    pathHi.add(next.id);
+    n=next;
+  }
+  finalCls = 'prefix-yes';
+  return true;
+}
+function countNodes(n){ let c=1; for(const v of n.ch.values()) c+=countNodes(v); return c; }
+function countWords(n){ let c=n.end?1:0; for(const v of n.ch.values()) c+=countWords(v); return c; }
+function totalChars(){ return countNodes(root)-1; }
+function collectWords(n,prefix,out){
+  if(n.end) out.push(prefix);
+  const keys=[...n.ch.keys()].sort();
+  for(const k of keys) collectWords(n.ch.get(k),prefix+k,out);
+}
+
+function layout(n,depth,col,xMap){
+  if(n.ch.size===0){
+    xMap.set(n.id,{x:col,d:depth});
+    return col+1;
+  }
+  const start=col;
+  const keys=[...n.ch.keys()].sort();
+  let cur=col;
+  for(const k of keys){ cur=layout(n.ch.get(k),depth+1,cur,xMap); }
+  // node x is center of children range
+  const startX=xMap.get(n.ch.get(keys[0]).id).x;
+  const endX=xMap.get(n.ch.get(keys[keys.length-1]).id).x;
+  xMap.set(n.id,{x:(startX+endX)/2,d:depth});
+  return cur;
+}
+function render(){
+  const c=document.getElementById('canvas');
+  const xMap=new Map();
+  const total=layout(root,0,0,xMap);
+  const maxD=Math.max(...Array.from(xMap.values()).map(v=>v.d));
+  const W=Math.max(640,total*55), Hh=Math.max(440,(maxD+1)*85);
+  const sx=i=>30+i*(W-60)/Math.max(1,total-1);
+  const sy=d=>40+d*(Hh-70)/Math.max(1,maxD);
+
+  let edges='',nodes='';
+  function walk(n){
+    const p=xMap.get(n.id);
+    const keys=[...n.ch.keys()].sort();
+    for(const k of keys){
+      const child=n.ch.get(k);
+      const cp=xMap.get(child.id);
+      const cls=edgeHi.has(child.id)?'edge path':'edge';
+      const midX=(sx(p.x)+sx(cp.x))/2, midY=(sy(p.d)+sy(cp.d))/2;
+      edges+=`<line class="${cls}" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(cp.x)}" y2="${sy(cp.d)}"/>`;
+      edges+=`<text x="${midX}" y="${midY-4}">${k}</text>`;
+      walk(child);
+    }
+  }
+  walk(root);
+  function ndr(n){
+    const p=xMap.get(n.id);
+    let cls='node';
+    if(n.end) cls+=' terminal';
+    if(pathHi.has(n.id)) cls+=' path';
+    // final marker only on last node
+    let nodeLabel=n===root?'·':n.edgeChar;
+    if(finalCls){
+      const last=findLastInPath();
+      if(last===n.id){
+        if(finalCls==='found') cls+=' found';
+        else if(finalCls==='notfound') cls+=' notfound';
+      }
+    }
+    nodes+=`<g class="${cls}">
+      <circle cx="${sx(p.x)}" cy="${sy(p.d)}" r="18"/>
+      <text x="${sx(p.x)}" y="${sy(p.d)}">${nodeLabel}</text>
+    </g>`;
+    for(const v of n.ch.values()) ndr(v);
+  }
+  ndr(root);
+  c.innerHTML=`<svg width="${W}" height="${Hh+20}">${edges}${nodes}</svg>`;
+
+  document.getElementById('nCount').textContent=countNodes(root);
+  document.getElementById('wCount').textContent=countWords(root);
+  document.getElementById('cCount').textContent=totalChars();
+  const all=[]; collectWords(root,'',all);
+  document.getElementById('longest').textContent = all.length===0?'-':all.reduce((a,b)=>a.length>=b.length?a:b);
+  document.getElementById('words').innerHTML=all.map(w=>`<div class="word-item">${w}</div>`).join('') || '<div style="color:var(--muted);font-size:.85rem">(empty)</div>';
+}
+function findLastInPath(){
+  // The last node hit during a search; choose max-depth among pathHi
+  let best=-1, bestD=-1;
+  for(const id of pathHi){
+    // approximate via stored positions only after render builds map; here we rely on tracking explicit "last"
+  }
+  return _lastSearched;
+}
+let _lastSearched=-1;
+
+function doInsert(){
+  const w=document.getElementById('wordIn').value.trim().toLowerCase();
+  if(!w) return;
+  insert(w);
+  pathHi=new Set(); edgeHi=new Set(); finalCls=null; _lastSearched=-1;
+  document.getElementById('lastOp').textContent='insert "'+w+'"';
+  document.getElementById('info').innerHTML=`Inserted <span class="highlight">${w}</span> (${w.length} chars). New nodes added only where the prefix diverged from existing.`;
+  render();
+}
+function doSearch(){
+  const w=document.getElementById('wordIn').value.trim().toLowerCase();
+  if(!w) return;
+  const found=search(w);
+  // mark last
+  let n=root; for(const c of w){ if(!n.ch.has(c)){ n=null; break; } n=n.ch.get(c); }
+  _lastSearched=n?n.id:-1;
+  document.getElementById('lastOp').textContent='search "'+w+'"';
+  if(found){
+    document.getElementById('info').innerHTML=`<span class="ok">FOUND</span> "${w}" is a stored word.`;
+  } else if(finalCls==='notfound'){
+    document.getElementById('info').innerHTML=`<span class="bad">NOT FOUND</span> "${w}" — path broke at character.`;
+  } else {
+    document.getElementById('info').innerHTML=`"${w}" is a <span class="highlight">prefix only</span>, not a complete stored word.`;
+  }
+  render();
+}
+function doPrefix(){
+  const w=document.getElementById('wordIn').value.trim().toLowerCase();
+  if(!w) return;
+  const yes=startsWith(w);
+  let n=root; for(const c of w){ if(!n.ch.has(c)){ n=null; break; } n=n.ch.get(c); }
+  _lastSearched=n?n.id:-1;
+  document.getElementById('lastOp').textContent='prefix "'+w+'"';
+  if(yes){
+    document.getElementById('info').innerHTML=`<span class="ok">PREFIX EXISTS</span> "${w}" is a prefix of at least one stored word.`;
+  } else {
+    document.getElementById('info').innerHTML=`<span class="bad">NO PREFIX</span> "${w}" diverges from every stored path.`;
+  }
+  render();
+}
+function resetTrie(){ root=newNode(); idc=1; pathHi=new Set(); edgeHi=new Set(); finalCls=null; _lastSearched=-1; document.getElementById('lastOp').textContent='-'; render(); }
+['cat','car','card','care','cart','dog','do','door','dorm','apple','app','apply'].forEach(insert);
+document.getElementById('lastOp').textContent='demo build';
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Exponential Search — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.phase{color:var(--purple);border-color:var(--purple)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text],input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem}
+input[type=text]{width:340px}
+input[type=number]{width:100px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:36px 24px 28px;margin-bottom:16px;width:100%;max-width:1200px;
+       min-height:200px;overflow-x:auto;display:flex;justify-content:center;align-items:center}
+.array-row{display:flex;gap:4px;position:relative;padding-top:38px}
+.cell{min-width:38px;height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:.88rem;
+      font-family:monospace;color:var(--text);transition:all .25s;position:relative}
+.cell .idx{font-size:.6rem;color:var(--muted);position:absolute;bottom:-16px}
+.cell.eliminated{opacity:.22;background:var(--surface)}
+.cell.gallop-probe{background:var(--orange);color:var(--bg);border-color:var(--orange);
+                   box-shadow:0 0 0 3px rgba(255,166,87,.3)}
+.cell.gallop-visited{background:rgba(255,166,87,.18);border-color:var(--orange)}
+.cell.refine-range{border-color:var(--blue);background:rgba(88,166,255,.10)}
+.cell.mid{background:var(--yellow);color:var(--bg);transform:translateY(-3px);border-color:var(--yellow);
+          box-shadow:0 0 0 3px rgba(210,153,34,.25)}
+.cell.found{background:var(--green);color:var(--bg);border-color:var(--green);
+            box-shadow:0 0 0 3px rgba(63,185,80,.3)}
+.cell.notfound{background:var(--red);color:var(--bg);border-color:var(--red)}
+.arrow{position:absolute;top:-26px;font-size:.7rem;font-family:monospace;font-weight:700;
+       transform:translateX(-50%);text-align:center;line-height:1.05}
+.arrow.lo{color:var(--blue)}
+.arrow.hi{color:var(--orange)}
+.arrow.mid{color:var(--yellow)}
+.arrow.bound{color:var(--purple)}
+.arrow .ch{font-size:1rem;display:block}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px 20px;width:100%;max-width:1200px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.step-info .phase1{color:var(--orange);font-weight:600}
+.step-info .phase2{color:var(--blue);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:780px}
+</style>
+</head>
+<body>
+<h1>Exponential Search</h1>
+<p class="subtitle">Gallop (1, 2, 4, 8, …) until overshoot, then binary-search the bounded range. O(log p).</p>
+
+<div class="badges">
+<span class="badge best">Best: O(1)</span>
+<span class="badge worst">Worst: O(log p)</span>
+<span class="badge space">Space: O(1) iterative</span>
+<span class="badge phase">Two phases</span>
+<span class="badge best">Sorted input</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="customInput" placeholder="Sorted numbers: 1,3,5,7,9,11,...">
+<input type="number" id="targetInput" placeholder="target" value="23">
+<button onclick="loadInput()">Load</button>
+<button onclick="genRandom()" class="secondary">Random sorted</button>
+</div>
+
+<div class="input-control">
+<label style="color:var(--muted);font-size:.88rem;display:flex;align-items:center;gap:6px;cursor:pointer">
+  <input type="checkbox" id="unboundedMode" onchange="reset()" style="accent-color:var(--blue);width:16px;height:16px"> Unbounded stream mode (hide array length, simulate get(i) with INF sentinel)
+</label>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">▶ Start</button>
+<button id="stepBtn" onclick="stepFwd()">▷ Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>❚❚ Pause</button>
+<button id="resetBtn" onclick="reset()" class="secondary">↺ Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<span style="color:var(--muted);font-size:.8rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="5">
+<span style="color:var(--muted);font-size:.8rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg)"></div>Default</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>Gallop probe (1,2,4,…)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(255,166,87,.3);border-color:var(--orange)"></div>Past gallop probe</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.18);border-color:var(--blue)"></div>Refine range</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Binary mid</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Found</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>Not found</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Phase</div><div class="stat-value" id="phaseStat">—</div></div>
+<div><div class="stat-label">Gallop probes</div><div class="stat-value" id="gallopProbes">0</div></div>
+<div><div class="stat-label">Bisect probes</div><div class="stat-value" id="bisectProbes">0</div></div>
+<div><div class="stat-label">Total probes</div><div class="stat-value" id="totalProbes">0</div></div>
+<div><div class="stat-label">2·log₂(p+1) bound</div><div class="stat-value" id="bound">0</div></div>
+<div><div class="stat-label">Target</div><div class="stat-value" id="targetStat">-</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Press <span class="highlight">Start</span> to run exponential search.</div>
+</div>
+
+<p class="footer-note">Exponential Search requires SORTED input. Phase 1 (gallop) doubles the probe index until arr[bound] ≥ target. Phase 2 (bisect) binary-searches [bound/2, min(bound, n-1)]. Total O(log p) where p is the target's index.</p>
+
+<script>
+let array=[3,7,11,15,19,23,27,31,35,39,43,47,51,55,59,63,67,71,75,79,83,87,91,95];
+let target=23;
+let steps=[],idx=0,running=false,timer=null;
+
+function genSteps(arr,target,unbounded){
+  const out=[];
+  const n=arr.length;
+  const INF=Number.MAX_SAFE_INTEGER;
+  // get(i) simulates the Reader interface: returns INF if i >= n (OOB).
+  const get=(i)=> (i>=0 && i<n) ? arr[i] : INF;
+  let gallopProbes=0, bisectProbes=0;
+
+  out.push({type:'init', arr:[...arr], target, gallopProbes:0, bisectProbes:0,
+            visited:new Set(), refineLo:-1, refineHi:-1, phase:'—', unbounded});
+
+  if(n===0){
+    out.push({type:'notfound', arr:[...arr], target, gallopProbes:0, bisectProbes:0,
+              visited:new Set(), refineLo:-1, refineHi:-1, phase:'done', unbounded,
+              note:'Empty array/stream. Return -1.'});
+    return out;
+  }
+
+  // Special case index 0
+  gallopProbes++;
+  out.push({type:'gallop-probe', arr:[...arr], target, gallopProbes, bisectProbes,
+            visited:new Set([0]), probe:0, refineLo:-1, refineHi:-1, phase:'gallop', unbounded,
+            note:`Special case: ${unbounded?'get(0)':'arr[0]'}=${get(0)} vs target=${target}.`});
+  if(get(0)===target){
+    out.push({type:'found', arr:[...arr], target, gallopProbes, bisectProbes,
+              visited:new Set([0]), found:0, refineLo:-1, refineHi:-1, phase:'done', unbounded,
+              note:`${unbounded?'get(0)':'arr[0]'}=${get(0)} === target. Return 0.`});
+    return out;
+  }
+
+  // Phase 1: gallop
+  // In unbounded mode we trust the INF sentinel; in bounded mode we cap at n.
+  let bound=1;
+  const visited=new Set([0]);
+  if(unbounded){
+    // Unbounded: rely on INF sentinel; no `bound < n` check in the algorithm itself.
+    while(get(bound)<target){
+      gallopProbes++;
+      visited.add(bound);
+      const fmtV = get(bound)===INF ? 'INF' : get(bound);
+      out.push({type:'gallop-probe', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), probe:bound, refineLo:-1, refineHi:-1, phase:'gallop', unbounded,
+                note:`Gallop (unbounded): get(${bound})=${fmtV} < ${target} → double bound to ${bound*2}.`});
+      bound *= 2;
+      if(bound > 1<<24){ break; } // safety cap for animation
+    }
+    gallopProbes++;
+    visited.add(bound);
+    const fmtV = get(bound)===INF ? 'INF (OOB)' : get(bound);
+    out.push({type:'gallop-probe', arr:[...arr], target, gallopProbes, bisectProbes,
+              visited:new Set(visited), probe:bound, refineLo:-1, refineHi:-1, phase:'gallop', unbounded,
+              note:`Gallop (unbounded): get(${bound})=${fmtV} ≥ ${target} → STOP. Bisect [${Math.floor(bound/2)}, ${bound}].`});
+  } else {
+    while(bound<n && arr[bound]<target){
+      gallopProbes++;
+      visited.add(bound);
+      out.push({type:'gallop-probe', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), probe:bound, refineLo:-1, refineHi:-1, phase:'gallop', unbounded,
+                note:`Gallop: arr[${bound}]=${arr[bound]} < ${target} → double bound to ${bound*2}.`});
+      bound *= 2;
+    }
+    if(bound<n){
+      gallopProbes++;
+      visited.add(bound);
+      out.push({type:'gallop-probe', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), probe:bound, refineLo:-1, refineHi:-1, phase:'gallop', unbounded,
+                note:`Gallop: arr[${bound}]=${arr[bound]} ≥ ${target} → STOP. Enter bisect phase.`});
+    } else {
+      out.push({type:'gallop-overshoot', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), refineLo:-1, refineHi:-1, phase:'gallop', unbounded,
+                note:`Gallop: bound=${bound} ≥ n=${n} → STOP. Bisect [${Math.floor(bound/2)}, ${n-1}].`});
+    }
+  }
+
+  // Phase 2: bisect
+  let lo=Math.floor(bound/2);
+  let hi = unbounded ? bound : Math.min(bound, n-1);
+  out.push({type:'enter-bisect', arr:[...arr], target, gallopProbes, bisectProbes,
+            visited:new Set(visited), refineLo:lo, refineHi:hi, phase:'bisect', unbounded,
+            note:`Enter bisect: range [${lo}, ${hi}], size=${hi-lo+1}.`});
+
+  while(lo<=hi){
+    const mid=lo+Math.floor((hi-lo)/2);
+    const v=get(mid);
+    const fmtV = v===INF ? 'INF (OOB)' : v;
+    const accessor = unbounded ? `get(${mid})` : `arr[${mid}]`;
+    bisectProbes++;
+    out.push({type:'bisect-probe', arr:[...arr], target, gallopProbes, bisectProbes,
+              visited:new Set(visited), refineLo:lo, refineHi:hi, mid, phase:'bisect', unbounded,
+              note:`Bisect: mid=${mid}, ${accessor}=${fmtV}.`});
+    if(v===target){
+      out.push({type:'found', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), refineLo:lo, refineHi:hi, mid, found:mid, phase:'done', unbounded,
+                note:`${accessor}=${fmtV} === target. Return ${mid}.`});
+      return out;
+    } else if(v<target){
+      out.push({type:'bisect-step', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), refineLo:lo, refineHi:hi, mid, phase:'bisect', unbounded,
+                note:`${accessor}=${fmtV} < ${target} → lo = ${mid+1}.`});
+      lo=mid+1;
+    } else {
+      out.push({type:'bisect-step', arr:[...arr], target, gallopProbes, bisectProbes,
+                visited:new Set(visited), refineLo:lo, refineHi:hi, mid, phase:'bisect', unbounded,
+                note:`${accessor}=${fmtV} > ${target} → hi = ${mid-1}.`});
+      hi=mid-1;
+    }
+  }
+  out.push({type:'notfound', arr:[...arr], target, gallopProbes, bisectProbes,
+            visited:new Set(visited), refineLo:lo, refineHi:hi, phase:'done', unbounded,
+            note:`Bisect exhausted. lo=${lo} > hi=${hi}. Target absent.`});
+  return out;
+}
+
+function cellWidth(){ return 38+4; }
+
+function render(s){
+  const c=document.getElementById('canvas');
+  const arr=s.arr;
+  let html='<div class="array-row" id="arrayRow">';
+  for(let i=0;i<arr.length;i++){
+    let cls='';
+    if(s.type==='found' && i===s.found)        cls='found';
+    else if(s.type==='notfound')               cls='eliminated';
+    else if(s.mid===i)                         cls='mid';
+    else if(s.probe===i)                       cls='gallop-probe';
+    else if(s.refineLo>=0 && i>=s.refineLo && i<=s.refineHi)  cls='refine-range';
+    else if(s.visited && s.visited.has(i))     cls='gallop-visited';
+    else if(s.phase==='bisect' || s.phase==='done')  cls='eliminated';
+    // In unbounded mode, hide the value (show "?") and hide the index label.
+    const shownVal = s.unbounded ? '?' : arr[i];
+    const shownIdx = s.unbounded ? '' : `<span class="idx">${i}</span>`;
+    html+=`<div class="cell ${cls}">${shownVal}${shownIdx}</div>`;
+  }
+  const w=cellWidth();
+  if(s.refineLo>=0 && s.refineLo<arr.length && (s.phase==='bisect' || s.phase==='done')){
+    const x=s.refineLo*w + 19;
+    html+=`<div class="arrow lo" style="left:${x}px"><span class="ch">▼</span>lo=${s.refineLo}</div>`;
+  }
+  if(s.refineHi>=0 && s.refineHi<arr.length && (s.phase==='bisect' || s.phase==='done')){
+    const x=s.refineHi*w + 19;
+    let off=s.refineLo===s.refineHi?12:0;
+    html+=`<div class="arrow hi" style="left:${x+off}px"><span class="ch">▼</span>hi=${s.refineHi}</div>`;
+  }
+  if(s.mid!==undefined && s.mid>=0 && s.mid<arr.length && s.type!=='found'){
+    const x=s.mid*w + 19;
+    html+=`<div class="arrow mid" style="left:${x}px;top:6px"><span class="ch">●</span>mid=${s.mid}</div>`;
+  }
+  if(s.probe!==undefined && s.probe>=0 && s.probe<arr.length && s.phase==='gallop'){
+    const x=s.probe*w + 19;
+    html+=`<div class="arrow bound" style="left:${x}px;top:6px"><span class="ch">●</span>bound=${s.probe}</div>`;
+  }
+  html+='</div>';
+  c.innerHTML=html;
+
+  document.getElementById('phaseStat').textContent=s.phase || '—';
+  document.getElementById('gallopProbes').textContent=s.gallopProbes;
+  document.getElementById('bisectProbes').textContent=s.bisectProbes;
+  document.getElementById('totalProbes').textContent=s.gallopProbes+s.bisectProbes;
+  let p = (s.found!==undefined) ? s.found : (s.refineLo>=0 ? s.refineLo : arr.length);
+  document.getElementById('bound').textContent = 2*Math.ceil(Math.log2(p+2));
+  document.getElementById('targetStat').textContent=s.target;
+
+  const info=document.getElementById('info');
+  if(s.type==='init'){
+    info.innerHTML=`<b>Initialize</b>: array of size ${arr.length}, target=<span class="highlight">${s.target}</span>.`;
+  } else if(s.type==='gallop-probe' || s.type==='gallop-overshoot' || s.type==='enter-bisect'){
+    const phaseTag = s.phase==='gallop' ? '<span class="phase1">[Phase 1 — GALLOP]</span> ' :
+                     '<span class="phase2">[Phase 2 — BISECT]</span> ';
+    info.innerHTML = phaseTag + s.note;
+  } else if(s.type==='bisect-probe' || s.type==='bisect-step'){
+    info.innerHTML = '<span class="phase2">[Phase 2 — BISECT]</span> ' + s.note;
+  } else if(s.type==='found'){
+    info.innerHTML=`<span class="ok">✓ FOUND</span> target ${s.target} at index ${s.found}. Gallop probes: ${s.gallopProbes}. Bisect probes: ${s.bisectProbes}. Total: ${s.gallopProbes+s.bisectProbes}.`;
+  } else if(s.type==='notfound'){
+    info.innerHTML=`<span class="bad">✗ NOT FOUND</span>: target ${s.target} not in array. Total probes: ${s.gallopProbes+s.bisectProbes}.`;
+  }
+}
+
+function delay(){ return 1100-parseInt(document.getElementById('speedSlider').value)*100; }
+function isUnbounded(){ return document.getElementById('unboundedMode').checked; }
+function start(){
+  if(steps.length===0){ steps=genSteps(array,target,isUnbounded()); }
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  tick();
+}
+function tick(){
+  if(!running||idx>=steps.length){ pause(); return; }
+  render(steps[idx]); idx++;
+  timer=setTimeout(tick,delay());
+}
+function stepFwd(){
+  if(steps.length===0){ steps=genSteps(array,target,isUnbounded()); }
+  if(idx<steps.length){ render(steps[idx]); idx++; }
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); steps=[]; idx=0;
+  document.getElementById('gallopProbes').textContent='0';
+  document.getElementById('bisectProbes').textContent='0';
+  document.getElementById('totalProbes').textContent='0';
+  document.getElementById('phaseStat').textContent='—';
+  document.getElementById('targetStat').textContent=target;
+  document.getElementById('info').innerHTML='Press <span class="highlight">Start</span> to run exponential search.';
+  renderInit();
+}
+function loadInput(){
+  const raw=document.getElementById('customInput').value;
+  const nums=raw.split(/[, ]+/).map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+  if(nums.length>0){
+    nums.sort((a,b)=>a-b);
+    array=nums;
+    document.getElementById('customInput').value=array.join(', ');
+  }
+  const t=parseInt(document.getElementById('targetInput').value);
+  if(!isNaN(t)) target=t;
+  reset();
+}
+function genRandom(){
+  const size=12+Math.floor(Math.random()*12);
+  const set=new Set();
+  while(set.size<size) set.add(Math.floor(Math.random()*100)+1);
+  array=[...set].sort((a,b)=>a-b);
+  if(Math.random()<0.7){
+    const biased = Math.floor(Math.pow(Math.random(), 1.5) * array.length);
+    target=array[biased];
+  } else {
+    target=Math.floor(Math.random()*120);
+  }
+  document.getElementById('customInput').value=array.join(', ');
+  document.getElementById('targetInput').value=target;
+  reset();
+}
+function renderInit(){
+  const s={type:'init', arr:[...array], target, gallopProbes:0, bisectProbes:0,
+           visited:new Set(), refineLo:-1, refineHi:-1, phase:'—', unbounded:isUnbounded()};
+  render(s);
+  const mode = isUnbounded() ? ' (unbounded stream mode — array length is hidden; OOB reads return INF)' : '';
+  document.getElementById('info').innerHTML='Press <span class="highlight">Start</span> to run exponential search.' + mode;
+}
+document.getElementById('customInput').value=array.join(', ');
+document.getElementById('targetInput').value=target;
+renderInit();
+</script>
+</body>
+</html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Radix Sort (LSD) — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem;width:300px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:24px;margin-bottom:16px;width:100%;max-width:1100px;overflow-x:auto}
+.array-row{display:flex;justify-content:center;gap:6px;margin-bottom:18px;flex-wrap:nowrap}
+.cell{min-width:48px;height:48px;display:flex;align-items:center;justify-content:center;
+      background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:.95rem;
+      font-family:monospace;color:var(--text);transition:all .25s;position:relative}
+.cell.scan{background:var(--blue);color:var(--bg)}
+.cell.bucket{background:var(--yellow);color:var(--bg);transform:translateY(-3px)}
+.cell.placed{background:var(--green);color:var(--bg)}
+.cell.done{background:rgba(63,185,80,.25);color:var(--green);border-color:var(--green)}
+.cell-digit{position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+            font-size:.7rem;color:var(--orange);font-weight:700}
+.cell-digit.active{color:var(--yellow)}
+.buckets-row{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap;padding-top:18px}
+.bucket{min-width:60px;border:2px solid var(--border);border-radius:6px;padding:6px;
+        background:var(--bg);display:flex;flex-direction:column;align-items:center;gap:3px}
+.bucket-label{font-size:.75rem;color:var(--muted);font-weight:700;margin-bottom:4px}
+.bucket.active{border-color:var(--yellow);background:rgba(210,153,34,.1)}
+.bucket-item{min-width:38px;height:24px;display:flex;align-items:center;justify-content:center;
+             background:var(--surface);border:1px solid var(--border);border-radius:4px;
+             font-family:monospace;font-size:.8rem;color:var(--text)}
+.bucket-item.fresh{background:var(--yellow);color:var(--bg)}
+.section-label{color:var(--muted);font-size:.85rem;font-weight:600;text-align:center;
+               margin:14px 0 6px 0;text-transform:uppercase;letter-spacing:0.5px}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:30px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.75rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.2rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:700px}
+</style>
+</head>
+<body>
+<h1>Radix Sort (LSD)</h1>
+<p class="subtitle">Sort one digit at a time, right-to-left, using stable counting sort per pass.</p>
+
+<div class="badges">
+<span class="badge best">Best: O(d·(n+k))</span>
+<span class="badge worst">Worst: O(d·(n+k))</span>
+<span class="badge space">Space: O(n+k)</span>
+<span class="badge best">Stable</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="customInput" placeholder="Enter numbers: 170,45,75,90,802,24,2,66">
+<button onclick="loadInput()">Load</button>
+<button onclick="genRandom()" class="secondary">Random</button>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">Start</button>
+<button id="stepBtn" onclick="stepFwd()">Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+<button id="resetBtn" onclick="reset()" class="secondary">Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<span style="color:var(--muted);font-size:.8rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="5">
+<span style="color:var(--muted);font-size:.8rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>Scanning</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Bucketing</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Placed</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.25)"></div>Pass done</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Step</div><div class="stat-value"><span id="curStep">0</span>/<span id="totSteps">0</span></div></div>
+<div><div class="stat-label">Pass</div><div class="stat-value" id="passNum">0</div></div>
+<div><div class="stat-label">Digit</div><div class="stat-value" id="digitPos">ones</div></div>
+<div><div class="stat-label">Total work</div><div class="stat-value" id="work">0</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Press <span class="highlight">Start</span> to run animation. LSD Radix Sort processes the rightmost digit first.</div>
+</div>
+
+<p class="footer-note">LSD Radix Sort: O(d&middot;(n+k)) time, O(n+k) space, stable. Used inside CUB GPU sort, ClickHouse, and TeraSort. Beats Tim/Quick sort for large fixed-width integer arrays.</p>
+
+<script>
+let array=[170,45,75,90,802,24,2,66],steps=[],idx=0,running=false,timer=null;
+const BASE=10;
+
+function getDigit(v, exp){ return Math.floor(v/exp)%BASE; }
+
+function getPassName(exp){
+  if(exp===1) return 'ones';
+  if(exp===10) return 'tens';
+  if(exp===100) return 'hundreds';
+  if(exp===1000) return 'thousands';
+  return 'digit '+exp;
+}
+
+function genSteps(arr){
+  const out=[];
+  const a=[...arr];
+  let work=0;
+  let maxVal=Math.max(...a);
+  let pass=0;
+
+  for(let exp=1; Math.floor(maxVal/exp)>0; exp*=10){
+    pass++;
+    const passName=getPassName(exp);
+    // Initial pass announce
+    out.push({type:'pass-start', array:[...a], pass, exp, passName, work});
+
+    // Phase 1: scan each element, place into bucket
+    const buckets = Array.from({length: BASE}, ()=>[]);
+    for(let i=0; i<a.length; i++){
+      work++;
+      const d = getDigit(a[i], exp);
+      // scan step
+      out.push({
+        type:'scan',
+        array:[...a],
+        scanIdx:i,
+        exp, pass, passName,
+        buckets: buckets.map(b=>[...b]),
+        work,
+      });
+      buckets[d].push(a[i]);
+      out.push({
+        type:'bucket',
+        array:[...a],
+        scanIdx:i,
+        digit: d,
+        exp, pass, passName,
+        buckets: buckets.map(b=>[...b]),
+        work,
+      });
+    }
+
+    // Phase 2: collect from buckets back to array (stable, left-to-right)
+    let writeIdx = 0;
+    const newArr = new Array(a.length).fill(null);
+    for(let b=0; b<BASE; b++){
+      for(let k=0; k<buckets[b].length; k++){
+        work++;
+        newArr[writeIdx] = buckets[b][k];
+        out.push({
+          type:'collect',
+          array:[...newArr],
+          writeIdx,
+          fromBucket: b,
+          exp, pass, passName,
+          buckets: buckets.map(b=>[...b]),
+          work,
+        });
+        writeIdx++;
+      }
+    }
+
+    // Copy newArr to a
+    for(let i=0;i<a.length;i++) a[i]=newArr[i];
+
+    out.push({
+      type:'pass-end',
+      array:[...a],
+      pass, exp, passName,
+      work,
+    });
+  }
+
+  out.push({type:'done', array:[...a], pass, work});
+  return out;
+}
+
+function renderCells(arr, highlights, showDigit, exp, activeDigitPos){
+  return arr.map((v, i)=>{
+    const cls = highlights && highlights[i] ? highlights[i] : '';
+    let digitMarker = '';
+    if(showDigit && exp){
+      const digits = String(v).padStart(3, '0').split('');
+      // mark which digit position is being processed
+      digitMarker = digits.map((d, j)=>{
+        const place = digits.length - 1 - j; // 0=ones, 1=tens, ...
+        const expForPlace = Math.pow(10, place);
+        const isActive = (expForPlace === exp);
+        return `<span style="color:${isActive?'var(--yellow)':'var(--muted)'};font-weight:${isActive?'700':'400'}">${d}</span>`;
+      }).join('');
+      return `<div class="cell ${cls}"><span style="font-size:.75rem;font-family:monospace">${digitMarker}</span></div>`;
+    }
+    return `<div class="cell ${cls}">${v!==null?v:'·'}</div>`;
+  }).join('');
+}
+
+function renderBuckets(buckets, activeBucket, freshIdx){
+  return buckets.map((bucket, b)=>{
+    const isActive = (b === activeBucket);
+    const items = bucket.map((v, k)=>{
+      const isFresh = (isActive && k === freshIdx);
+      return `<div class="bucket-item ${isFresh?'fresh':''}">${v}</div>`;
+    }).join('');
+    return `<div class="bucket ${isActive?'active':''}">
+      <div class="bucket-label">${b}</div>
+      ${items || '<div style="color:var(--muted);font-size:.7rem">·</div>'}
+    </div>`;
+  }).join('');
+}
+
+function render(s){
+  const c=document.getElementById('canvas');
+  let html='';
+  let infoText = '';
+
+  if(s.type==='pass-start'){
+    html = `<div class="section-label">Array (after pass ${s.pass-1})</div>`;
+    html += `<div class="array-row">${renderCells(s.array, {}, true, s.exp)}</div>`;
+    html += `<div class="section-label">Buckets (digit value 0..9)</div>`;
+    html += `<div class="buckets-row">${renderBuckets(Array.from({length:BASE},()=>[]))}</div>`;
+    infoText = `<b>Pass ${s.pass}</b> — sorting by <span class="highlight">${s.passName}</span> digit (exp=${s.exp}).`;
+  } else if(s.type==='scan'){
+    const h={}; h[s.scanIdx]='scan';
+    html = `<div class="section-label">Array — scanning index ${s.scanIdx}</div>`;
+    html += `<div class="array-row">${renderCells(s.array, h, true, s.exp)}</div>`;
+    html += `<div class="section-label">Buckets</div>`;
+    html += `<div class="buckets-row">${renderBuckets(s.buckets)}</div>`;
+    const v = s.array[s.scanIdx];
+    const d = getDigit(v, s.exp);
+    infoText = `<b>Scan</b> arr[${s.scanIdx}] = ${v} → ${s.passName} digit = <span class="highlight">${d}</span>`;
+  } else if(s.type==='bucket'){
+    const h={}; h[s.scanIdx]='bucket';
+    html = `<div class="section-label">Array — placing ${s.array[s.scanIdx]} into bucket ${s.digit}</div>`;
+    html += `<div class="array-row">${renderCells(s.array, h, true, s.exp)}</div>`;
+    html += `<div class="section-label">Buckets</div>`;
+    const freshIdx = s.buckets[s.digit].length - 1;
+    html += `<div class="buckets-row">${renderBuckets(s.buckets, s.digit, freshIdx)}</div>`;
+    infoText = `<b>Bucket</b> arr[${s.scanIdx}] = ${s.array[s.scanIdx]} → bucket[${s.digit}]`;
+  } else if(s.type==='collect'){
+    const h={}; h[s.writeIdx]='placed';
+    html = `<div class="section-label">Array — writing index ${s.writeIdx}</div>`;
+    html += `<div class="array-row">${renderCells(s.array, h, true, s.exp)}</div>`;
+    html += `<div class="section-label">Buckets (drained left-to-right)</div>`;
+    html += `<div class="buckets-row">${renderBuckets(s.buckets, s.fromBucket)}</div>`;
+    infoText = `<b>Collect</b> from bucket[${s.fromBucket}] → arr[${s.writeIdx}] = <span class="highlight">${s.array[s.writeIdx]}</span>`;
+  } else if(s.type==='pass-end'){
+    const h={}; for(let k=0;k<s.array.length;k++) h[k]='done';
+    html = `<div class="section-label">Array (after pass ${s.pass})</div>`;
+    html += `<div class="array-row">${renderCells(s.array, h, true, s.exp)}</div>`;
+    html += `<div class="section-label">Pass complete. Stable order on last ${s.pass} digit(s) achieved.</div>`;
+    html += `<div class="buckets-row">${renderBuckets(Array.from({length:BASE},()=>[]))}</div>`;
+    infoText = `<b>End of pass ${s.pass}</b> (${s.passName}). Array is stably sorted by the last ${s.pass} digit(s).`;
+  } else if(s.type==='done'){
+    const h={}; for(let k=0;k<s.array.length;k++) h[k]='placed';
+    html = `<div class="section-label">Sorted!</div>`;
+    html += `<div class="array-row">${renderCells(s.array, h, false)}</div>`;
+    infoText = `<b>Sorted</b> in ${s.pass} pass(es). Total work: ${s.work} operations.`;
+  }
+
+  c.innerHTML=html;
+  document.getElementById('curStep').textContent = idx + 1;
+  document.getElementById('passNum').textContent = s.pass || 0;
+  document.getElementById('digitPos').textContent = s.passName || '-';
+  document.getElementById('work').textContent = s.work || 0;
+  document.getElementById('info').innerHTML = infoText;
+}
+
+function delay(){ return 1100 - parseInt(document.getElementById('speedSlider').value) * 100; }
+
+function start(){
+  if(steps.length === 0){
+    steps = genSteps(array);
+    document.getElementById('totSteps').textContent = steps.length;
+  }
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+
+function tick(){
+  if(!running || idx >= steps.length){ pause(); return; }
+  render(steps[idx]); idx++;
+  timer = setTimeout(tick, delay());
+}
+
+function stepFwd(){
+  if(steps.length === 0){
+    steps = genSteps(array);
+    document.getElementById('totSteps').textContent = steps.length;
+  }
+  if(idx < steps.length){ render(steps[idx]); idx++; }
+}
+
+function pause(){
+  running = false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset(){
+  pause(); steps = []; idx = 0;
+  ['curStep','totSteps','passNum','work'].forEach(id => document.getElementById(id).textContent = '0');
+  document.getElementById('digitPos').textContent = 'ones';
+  document.getElementById('info').innerHTML = 'Press <span class="highlight">Start</span> to run animation. LSD Radix Sort processes the rightmost digit first.';
+  renderInit();
+}
+
+function loadInput(){
+  const raw = document.getElementById('customInput').value;
+  const nums = raw.split(/[, ]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0);
+  if(nums.length > 0){ array = nums; reset(); }
+}
+
+function genRandom(){
+  const size = 7 + Math.floor(Math.random() * 3);
+  array = Array.from({length: size}, () => Math.floor(Math.random() * 900) + 1);
+  document.getElementById('customInput').value = array.join(', ');
+  reset();
+}
+
+function renderInit(){
+  const c = document.getElementById('canvas');
+  let html = `<div class="section-label">Input array</div>`;
+  html += `<div class="array-row">${renderCells(array, {}, false)}</div>`;
+  html += `<div class="section-label">Buckets (digit value 0..9)</div>`;
+  html += `<div class="buckets-row">${renderBuckets(Array.from({length:BASE},()=>[]))}</div>`;
+  c.innerHTML = html;
+}
+
+document.getElementById('customInput').value = array.join(', ');
+renderInit();
+</script>
+</body>
+</html>

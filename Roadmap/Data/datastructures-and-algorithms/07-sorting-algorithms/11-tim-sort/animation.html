@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tim Sort — Visual Animation</title>
+<style>
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --yellow:  #d29922;
+  --red:     #f85149;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --orange:  #ffa657;
+  --cyan:    #39d0d8;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+}
+h1 { font-size: 1.9rem; color: var(--cyan); text-align:center; margin-bottom: 6px; }
+.subtitle { color: var(--muted); text-align:center; margin-bottom: 18px; font-size: 0.95rem; }
+.badges {
+  display:flex; gap:8px; justify-content:center; margin-bottom: 18px; flex-wrap:wrap;
+}
+.badge {
+  padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight:600;
+  background: var(--surface); border:1px solid var(--border);
+}
+.badge.best  { color: var(--green);  border-color: var(--green); }
+.badge.avg   { color: var(--yellow); border-color: var(--yellow); }
+.badge.worst { color: var(--red);    border-color: var(--red); }
+.badge.space { color: var(--blue);   border-color: var(--blue); }
+.badge.stable{ color: var(--purple); border-color: var(--purple); }
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+@media (max-width: 880px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.panel h3 {
+  font-size: 0.95rem; color: var(--cyan); margin-bottom: 10px;
+  border-bottom: 1px solid var(--border); padding-bottom: 6px;
+}
+
+.controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 12px; }
+button {
+  padding: 8px 14px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); border-radius: 6px; cursor:pointer; font-size:0.85rem;
+  transition: all 0.2s;
+}
+button:hover { border-color: var(--cyan); color: var(--cyan); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary { background: var(--cyan); color: var(--bg); border-color: var(--cyan); font-weight:600; }
+button.primary:hover { background: #1ea7af; }
+
+.input-row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+input[type=text] {
+  flex: 1; min-width: 220px;
+  padding: 8px 12px; background: var(--bg); border:1px solid var(--border);
+  color: var(--text); border-radius: 6px; font-size: 0.9rem;
+}
+input[type=text]:focus { outline:none; border-color: var(--cyan); }
+.speed-row { display:flex; gap:8px; align-items:center; margin-bottom: 12px; font-size:0.85rem; color: var(--muted); }
+.speed-row input[type=range] { flex:1; accent-color: var(--cyan); }
+
+.array-vis {
+  display:flex; gap:3px; min-height: 220px; align-items:flex-end;
+  padding: 12px; background: var(--bg); border-radius: 8px;
+  border: 1px solid var(--border); margin-bottom: 10px;
+  overflow-x: auto;
+}
+.cell {
+  display:flex; flex-direction:column; align-items:center;
+  transition: transform 0.2s;
+}
+.cell .bar {
+  width: 28px; border-radius: 4px 4px 0 0;
+  background: var(--blue); transition: background 0.25s, height 0.25s;
+}
+.cell .val {
+  margin-top: 4px; font-size: 0.72rem; color: var(--muted);
+  font-family: 'Courier New', monospace;
+}
+.cell .idx {
+  font-size: 0.6rem; color: var(--border);
+  font-family: 'Courier New', monospace;
+}
+.cell.run-a .bar  { background: var(--blue); }
+.cell.run-b .bar  { background: var(--purple); }
+.cell.run-c .bar  { background: var(--orange); }
+.cell.run-d .bar  { background: var(--green); }
+.cell.run-e .bar  { background: var(--cyan); }
+.cell.run-f .bar  { background: var(--yellow); }
+.cell.descending .bar { background: var(--red); }
+.cell.inserting .bar  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.cell.scanning .bar   { background: var(--yellow); }
+.cell.merging .bar    { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.cell.sorted .bar     { background: var(--green); }
+
+.legend {
+  display:flex; gap: 10px; flex-wrap:wrap; font-size: 0.75rem; color: var(--muted);
+}
+.legend-item { display:flex; gap:5px; align-items:center; }
+.legend-color {
+  width: 12px; height: 12px; border-radius: 3px;
+}
+
+.phase-banner {
+  padding: 10px 14px;
+  background: var(--bg);
+  border-left: 4px solid var(--cyan);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+.phase-banner .label { color: var(--cyan); font-weight: bold; }
+
+.stack {
+  display: flex; flex-direction: column-reverse; gap: 4px;
+  min-height: 200px;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.stack-entry {
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  display: flex; justify-content: space-between;
+}
+.stack-entry .len { color: var(--cyan); font-weight:bold; }
+.stack-entry.violating {
+  border-color: var(--red);
+  background: rgba(248, 81, 73, 0.1);
+}
+.stack-entry .top-marker { color: var(--orange); }
+
+.stats {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  font-size: 0.78rem; color: var(--muted);
+}
+.stat {
+  background: var(--bg); padding: 8px; border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.stat .name { color: var(--muted); font-size: 0.7rem; }
+.stat .value { color: var(--cyan); font-size: 1rem; font-weight: 600; }
+
+.log {
+  max-height: 180px; overflow-y: auto;
+  background: var(--bg); padding: 10px; border-radius: 6px;
+  border: 1px solid var(--border);
+  font-family: 'Courier New', monospace; font-size: 0.75rem;
+}
+.log-entry { padding: 2px 0; color: var(--text); }
+.log-entry.muted { color: var(--muted); }
+.log-entry.event { color: var(--cyan); }
+.log-entry.action { color: var(--green); }
+</style>
+</head>
+<body>
+<h1>Tim Sort</h1>
+<p class="subtitle">Detect runs, pad with Binary Insertion Sort, merge via stack invariants</p>
+
+<div class="badges">
+  <span class="badge best">Best O(n)</span>
+  <span class="badge avg">Avg O(n log n)</span>
+  <span class="badge worst">Worst O(n log n)</span>
+  <span class="badge space">Space O(n)</span>
+  <span class="badge stable">Stable + Adaptive</span>
+</div>
+
+<div class="layout">
+  <div>
+    <div class="panel">
+      <h3>Array</h3>
+      <div class="input-row">
+        <input type="text" id="customInput" placeholder="comma-separated: 5,3,8,1,9,2,7,4,6">
+        <button onclick="loadCustom()">Load</button>
+        <button onclick="randomData()">Random</button>
+        <button onclick="nearSortedData()">Near-Sorted</button>
+        <button onclick="reverseData()">Reverse</button>
+      </div>
+      <div class="speed-row">
+        <span>Speed</span>
+        <span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="6">
+        <span>Fast</span>
+      </div>
+      <div class="controls">
+        <button class="primary" id="startBtn" onclick="start()">Start</button>
+        <button id="stepBtn" onclick="step()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button onclick="reset()">Reset</button>
+      </div>
+      <div class="array-vis" id="vis"></div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>Run A</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Run B</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>Run C</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Run D / inserting</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>Descending (will reverse)</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Scanning</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--cyan)"></div>Merging</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Current Phase</h3>
+      <div class="phase-banner" id="phase">
+        <span class="label">IDLE</span> Press Start or Step to begin.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h3>Run Stack</h3>
+      <div class="stack" id="stack"></div>
+      <p style="margin-top:8px; font-size:0.7rem; color:var(--muted)">
+        Bottom of stack at bottom. Invariants: A &gt; B+C, B &gt; C.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats">
+        <div class="stat"><div class="name">n</div><div class="value" id="stN">0</div></div>
+        <div class="stat"><div class="name">minrun</div><div class="value" id="stMinRun">0</div></div>
+        <div class="stat"><div class="name">comparisons</div><div class="value" id="stCmp">0</div></div>
+        <div class="stat"><div class="name">shifts (BIS)</div><div class="value" id="stShifts">0</div></div>
+        <div class="stat"><div class="name">reverses</div><div class="value" id="stRev">0</div></div>
+        <div class="stat"><div class="name">merges</div><div class="value" id="stMerges">0</div></div>
+        <div class="stat"><div class="name">runs found</div><div class="value" id="stRuns">0</div></div>
+        <div class="stat"><div class="name">stack depth max</div><div class="value" id="stStack">0</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MIN_MERGE = 32;
+let arr = [];
+let steps = [];
+let stepIdx = 0;
+let isRunning = false;
+let timer = null;
+let runColors = ['run-a', 'run-b', 'run-c', 'run-d', 'run-e', 'run-f'];
+
+function computeMinRun(n) {
+  let r = 0;
+  while (n >= MIN_MERGE) {
+    r |= (n & 1);
+    n >>= 1;
+  }
+  return n + r;
+}
+
+// Build a list of animation steps via a TimSort simulator.
+function generateSteps(input) {
+  steps = [];
+  const a = input.slice();
+  const n = a.length;
+  const cmp = { count: 0 };
+  const shifts = { count: 0 };
+  const reverses = { count: 0 };
+  const merges = { count: 0 };
+  const runs = { count: 0 };
+  let runAssignment = new Array(n).fill(-1);
+  let runIndex = 0;
+
+  const snapshot = (phase, msg, highlights = {}, stack = []) => {
+    steps.push({
+      arr: a.slice(),
+      phase, msg,
+      highlights: { ...highlights },
+      stack: stack.map(s => ({ ...s })),
+      runAssignment: runAssignment.slice(),
+      cmp: cmp.count,
+      shifts: shifts.count,
+      reverses: reverses.count,
+      merges: merges.count,
+      runs: runs.count
+    });
+  };
+
+  if (n < 2) {
+    snapshot('DONE', 'Array too small to sort.');
+    return steps;
+  }
+
+  const minRun = n < MIN_MERGE ? n : computeMinRun(n);
+  snapshot('INIT', `n=${n}, minrun=${minRun}`);
+
+  if (n < MIN_MERGE) {
+    snapshot('BINARY_INSERTION', 'n < MIN_MERGE: pure Binary Insertion Sort.');
+    binaryInsertionSort(a, 0, n, 0);
+    for (let i = 0; i < n; i++) runAssignment[i] = 0;
+    snapshot('DONE', 'Sorted via Binary Insertion Sort.', {}, []);
+    return steps;
+  }
+
+  function binaryInsertionSort(arr, lo, hi, start) {
+    if (start <= lo) start = lo + 1;
+    for (let i = start; i < hi; i++) {
+      const pivot = arr[i];
+      let left = lo, right = i;
+      while (left < right) {
+        cmp.count++;
+        const mid = (left + right) >> 1;
+        if (pivot < arr[mid]) right = mid;
+        else left = mid + 1;
+      }
+      // Highlight insertion.
+      const hl = {};
+      for (let k = lo; k < i; k++) hl[k] = 'scanning';
+      hl[i] = 'inserting';
+      snapshot('BIS_INSERT',
+        `Binary insert arr[${i}]=${pivot} → pos ${left}`,
+        hl, stackSnapshot()
+      );
+      for (let j = i; j > left; j--) {
+        arr[j] = arr[j - 1];
+        shifts.count++;
+      }
+      arr[left] = pivot;
+      const hl2 = {};
+      for (let k = lo; k <= i; k++) hl2[k] = 'inserting';
+      snapshot('BIS_DONE', `arr[${left}] = ${pivot}`, hl2, stackSnapshot());
+    }
+  }
+
+  let stack = []; // entries: {start, length}
+
+  function stackSnapshot() {
+    return stack.slice();
+  }
+
+  function countRunAndMakeAscending(lo, hi) {
+    let runHi = lo + 1;
+    if (runHi === hi) {
+      snapshot('RUN_DETECT', `Single-element run at ${lo}`,
+        { [lo]: 'scanning' }, stackSnapshot());
+      return 1;
+    }
+    cmp.count++;
+    const hl = { [lo]: 'scanning', [runHi]: 'scanning' };
+    if (a[runHi] < a[lo]) {
+      // Descending
+      runHi++;
+      while (runHi < hi) {
+        cmp.count++;
+        if (!(a[runHi] < a[runHi - 1])) break;
+        runHi++;
+      }
+      const hlDesc = {};
+      for (let k = lo; k < runHi; k++) hlDesc[k] = 'descending';
+      snapshot('RUN_DESC',
+        `Descending run at [${lo},${runHi}) → reverse`,
+        hlDesc, stackSnapshot());
+      // Reverse
+      for (let i = lo, j = runHi - 1; i < j; i++, j--) {
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      reverses.count++;
+      const colorClass = runColors[runIndex % runColors.length];
+      const hlRev = {};
+      for (let k = lo; k < runHi; k++) {
+        runAssignment[k] = runIndex;
+        hlRev[k] = colorClass;
+      }
+      snapshot('RUN_REV', `Reversed → ascending run`,
+        hlRev, stackSnapshot());
+    } else {
+      // Ascending (non-strict)
+      runHi++;
+      while (runHi < hi) {
+        cmp.count++;
+        if (a[runHi] < a[runHi - 1]) break;
+        runHi++;
+      }
+      const colorClass = runColors[runIndex % runColors.length];
+      const hlAsc = {};
+      for (let k = lo; k < runHi; k++) {
+        runAssignment[k] = runIndex;
+        hlAsc[k] = colorClass;
+      }
+      snapshot('RUN_ASC',
+        `Ascending run at [${lo},${runHi})`,
+        hlAsc, stackSnapshot());
+    }
+    return runHi - lo;
+  }
+
+  function mergeRuns(loA, midA, hiA) {
+    merges.count++;
+    const left = a.slice(loA, midA);
+    let i = 0, j = midA, k = loA;
+    const hl0 = {};
+    for (let q = loA; q < hiA; q++) hl0[q] = 'merging';
+    snapshot('MERGE_START',
+      `Merging [${loA},${midA}) + [${midA},${hiA})`,
+      hl0, stackSnapshot());
+    while (i < left.length && j < hiA) {
+      cmp.count++;
+      if (left[i] <= a[j]) { a[k++] = left[i++]; }
+      else                 { a[k++] = a[j++]; }
+    }
+    while (i < left.length) a[k++] = left[i++];
+    const hl1 = {};
+    for (let q = loA; q < hiA; q++) {
+      runAssignment[q] = runIndex;
+      hl1[q] = 'merging';
+    }
+    snapshot('MERGE_DONE', `Merged → length ${hiA - loA}`, hl1, stackSnapshot());
+  }
+
+  function maintainInvariants() {
+    while (stack.length >= 2) {
+      let top = stack.length - 1;
+      if (top >= 2) {
+        const A = stack[top - 2].length;
+        const B = stack[top - 1].length;
+        const C = stack[top].length;
+        if (A <= B + C || B <= C) {
+          const violIdx = (A <= B + C) ? top - 2 : top - 1;
+          const violMsg = `Invariant: A=${A}, B=${B}, C=${C}: ${A>B+C?'A>B+C ok':'A>B+C FAILED'}, ${B>C?'B>C ok':'B>C FAILED'}`;
+          snapshot('INV_CHECK', violMsg, {}, stack.map((s,i)=>({...s, violating: i===violIdx})));
+          if (A < C) {
+            mergeRuns(stack[top-2].start, stack[top-1].start, stack[top-1].start + stack[top-1].length);
+            stack[top-2] = { start: stack[top-2].start, length: A + B };
+            stack[top-1] = stack[top];
+            stack.pop();
+          } else {
+            mergeRuns(stack[top-1].start, stack[top].start, stack[top].start + stack[top].length);
+            stack[top-1] = { start: stack[top-1].start, length: B + C };
+            stack.pop();
+          }
+          continue;
+        }
+      }
+      if (stack.length === 2) {
+        const B = stack[0].length, C = stack[1].length;
+        if (B <= C) {
+          snapshot('INV_CHECK', `Two-entry check: B=${B} <= C=${C}, merge.`, {}, stackSnapshot());
+          mergeRuns(stack[0].start, stack[1].start, stack[1].start + stack[1].length);
+          stack[0] = { start: stack[0].start, length: B + C };
+          stack.pop();
+          continue;
+        }
+      }
+      break;
+    }
+  }
+
+  let lo = 0;
+  while (lo < n) {
+    let runLen = countRunAndMakeAscending(lo, n);
+    runs.count++;
+    if (runLen < minRun) {
+      const force = Math.min(minRun, n - lo);
+      snapshot('PAD',
+        `Run len ${runLen} < minrun ${minRun}. Pad to ${force} via BIS.`,
+        {}, stackSnapshot());
+      binaryInsertionSort(a, lo, lo + force, lo + runLen);
+      runLen = force;
+      const colorClass = runColors[runIndex % runColors.length];
+      const hlPad = {};
+      for (let k = lo; k < lo + runLen; k++) {
+        runAssignment[k] = runIndex;
+        hlPad[k] = colorClass;
+      }
+      snapshot('PAD_DONE', `Padded run ready.`, hlPad, stackSnapshot());
+    }
+    stack.push({ start: lo, length: runLen });
+    snapshot('PUSH',
+      `Push run (start=${lo}, len=${runLen}) onto stack.`,
+      {}, stackSnapshot());
+    runIndex++;
+    lo += runLen;
+    maintainInvariants();
+  }
+
+  snapshot('FORCE', `End of input → merge-force remaining runs.`, {}, stackSnapshot());
+  while (stack.length > 1) {
+    const top = stack.length - 1;
+    mergeRuns(stack[top-1].start, stack[top].start, stack[top].start + stack[top].length);
+    stack[top-1] = { start: stack[top-1].start, length: stack[top-1].length + stack[top].length };
+    stack.pop();
+  }
+
+  const hlDone = {};
+  for (let k = 0; k < n; k++) hlDone[k] = 'sorted';
+  snapshot('DONE', `Sorted!`, hlDone, []);
+  return steps;
+}
+
+function render(step) {
+  const vis = document.getElementById('vis');
+  const maxV = Math.max(1, ...step.arr);
+  vis.innerHTML = step.arr.map((v, i) => {
+    const h = Math.round(10 + (v / maxV) * 180);
+    const hl = step.highlights[i];
+    const baseColor = step.runAssignment[i] >= 0
+      ? runColors[step.runAssignment[i] % runColors.length]
+      : '';
+    const cls = hl || baseColor;
+    return `<div class="cell ${cls}">
+      <div class="bar" style="height:${h}px"></div>
+      <div class="val">${v}</div>
+      <div class="idx">${i}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('phase').innerHTML =
+    `<span class="label">${step.phase}</span> ${step.msg}`;
+
+  // Stack
+  const stEl = document.getElementById('stack');
+  stEl.innerHTML = step.stack.length === 0
+    ? `<div style="color:var(--muted); font-size:0.8rem; padding:6px">(empty)</div>`
+    : step.stack.map((e, i) => {
+        const isTop = i === step.stack.length - 1;
+        const cls = e.violating ? 'violating' : '';
+        return `<div class="stack-entry ${cls}">
+          <span>[${e.start}..${e.start + e.length}) ${isTop ? '<span class="top-marker">← top</span>' : ''}</span>
+          <span class="len">len ${e.length}</span>
+        </div>`;
+      }).join('');
+
+  document.getElementById('stN').textContent = step.arr.length;
+  document.getElementById('stMinRun').textContent =
+    step.arr.length >= MIN_MERGE ? computeMinRun(step.arr.length) : step.arr.length;
+  document.getElementById('stCmp').textContent = step.cmp;
+  document.getElementById('stShifts').textContent = step.shifts;
+  document.getElementById('stRev').textContent = step.reverses;
+  document.getElementById('stMerges').textContent = step.merges;
+  document.getElementById('stRuns').textContent = step.runs;
+  const depth = step.stack.length;
+  const cur = parseInt(document.getElementById('stStack').textContent || '0');
+  document.getElementById('stStack').textContent = Math.max(depth, cur);
+
+  // Append log entry
+  if (stepIdx > 0 || step.phase !== 'INIT') {
+    const log = document.getElementById('log');
+    const cls = (step.phase === 'MERGE_START' || step.phase === 'MERGE_DONE') ? 'event'
+      : (step.phase === 'PUSH' || step.phase === 'RUN_ASC' || step.phase === 'RUN_DESC' || step.phase === 'RUN_REV') ? 'action'
+      : 'muted';
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${cls}`;
+    entry.textContent = `[${step.phase}] ${step.msg}`;
+    log.insertBefore(entry, log.firstChild);
+    while (log.children.length > 80) log.removeChild(log.lastChild);
+  }
+}
+
+function getDelay() {
+  const v = parseInt(document.getElementById('speed').value);
+  return 1100 - v * 100;
+}
+
+function start() {
+  if (steps.length === 0) {
+    document.getElementById('stStack').textContent = '0';
+    steps = generateSteps(arr);
+  }
+  if (stepIdx >= steps.length) return;
+  isRunning = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  loop();
+}
+
+function loop() {
+  if (!isRunning || stepIdx >= steps.length) {
+    pause();
+    return;
+  }
+  render(steps[stepIdx]);
+  stepIdx++;
+  timer = setTimeout(loop, getDelay());
+}
+
+function step() {
+  if (steps.length === 0) {
+    document.getElementById('stStack').textContent = '0';
+    steps = generateSteps(arr);
+  }
+  if (stepIdx < steps.length) {
+    render(steps[stepIdx]);
+    stepIdx++;
+  }
+}
+
+function pause() {
+  isRunning = false;
+  if (timer) clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  steps = [];
+  stepIdx = 0;
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('stStack').textContent = '0';
+  renderInitial();
+}
+
+function renderInitial() {
+  const vis = document.getElementById('vis');
+  const maxV = Math.max(1, ...arr);
+  vis.innerHTML = arr.map((v, i) => {
+    const h = Math.round(10 + (v / maxV) * 180);
+    return `<div class="cell">
+      <div class="bar" style="height:${h}px"></div>
+      <div class="val">${v}</div>
+      <div class="idx">${i}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('phase').innerHTML =
+    `<span class="label">IDLE</span> Press Start or Step to begin.`;
+  document.getElementById('stack').innerHTML =
+    `<div style="color:var(--muted); font-size:0.8rem; padding:6px">(empty)</div>`;
+  document.getElementById('stN').textContent = arr.length;
+  document.getElementById('stMinRun').textContent =
+    arr.length >= MIN_MERGE ? computeMinRun(arr.length) : arr.length;
+  document.getElementById('stCmp').textContent = '0';
+  document.getElementById('stShifts').textContent = '0';
+  document.getElementById('stRev').textContent = '0';
+  document.getElementById('stMerges').textContent = '0';
+  document.getElementById('stRuns').textContent = '0';
+}
+
+function loadCustom() {
+  const raw = document.getElementById('customInput').value.trim();
+  const nums = raw.split(/[,\s]+/).map(s => parseInt(s)).filter(n => !isNaN(n));
+  if (nums.length > 0) {
+    arr = nums.slice(0, 40);
+    reset();
+  }
+}
+
+function randomData() {
+  const n = 18;
+  arr = Array.from({length: n}, () => Math.floor(Math.random() * 90) + 1);
+  document.getElementById('customInput').value = arr.join(',');
+  reset();
+}
+
+function nearSortedData() {
+  arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 5, 14, 15, 3, 17, 18];
+  document.getElementById('customInput').value = arr.join(',');
+  reset();
+}
+
+function reverseData() {
+  arr = [];
+  for (let i = 18; i >= 1; i--) arr.push(i);
+  document.getElementById('customInput').value = arr.join(',');
+  reset();
+}
+
+// Default input
+arr = [3, 1, 2, 5, 4, 9, 8, 7, 6, 10, 11, 12];
+document.getElementById('customInput').value = arr.join(',');
+renderInitial();
+</script>
+</body>
+</html>

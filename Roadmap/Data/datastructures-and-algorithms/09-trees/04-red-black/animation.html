@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Red-Black Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+        --rbred:#cf3a3a;--rbblack:#1a1f27; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.95rem;width:90px}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;width:100%;max-width:1100px;min-height:460px;overflow-x:auto}
+svg{display:block;margin:0 auto}
+.node circle{stroke:var(--text);stroke-width:2;transition:all .3s}
+.node.red circle{fill:var(--rbred);stroke:#ff7070}
+.node.black circle{fill:var(--rbblack);stroke:#ffffff}
+.node text{fill:#fff;text-anchor:middle;dominant-baseline:central;font-family:monospace;font-size:.95rem;font-weight:700}
+.edge{stroke:var(--border);stroke-width:2;fill:none}
+.info-panel,.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.stats{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:12px 20px}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:50%;border:2px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+</style>
+</head>
+<body>
+<h1>Red-Black Tree</h1>
+<p class="subtitle">Approximate-balance BST (Bayer 1972 / Guibas-Sedgewick 1978). Height ≤ 2·log₂(n+1). The structure under <code>std::map</code>, Java <code>TreeMap</code>, and the Linux kernel rbtree.</p>
+
+<div class="badges">
+<span class="badge best">Search/Insert/Delete: O(log n)</span>
+<span class="badge space">Height ≤ 2·log(n+1)</span>
+<span class="badge best">Black-height equal on all paths</span>
+</div>
+
+<div class="input-control">
+<input type="number" id="keyIn" placeholder="key" value="40">
+<button onclick="doInsert()">Insert</button>
+<button onclick="doDelete()">Delete</button>
+<button onclick="genRandom()" class="secondary">Random 12 keys</button>
+<button onclick="resetTree()" class="secondary">↺ Reset</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--rbred)"></div>Red node</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--rbblack)"></div>Black node</div>
+<div class="legend-item"><span style="font-family:monospace;color:var(--muted)">Root and NIL leaves are black; no two consecutive reds; equal black-height on every root→leaf path.</span></div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Nodes</div><div class="stat-value" id="nCount">0</div></div>
+<div><div class="stat-label">Height</div><div class="stat-value" id="hVal">0</div></div>
+<div><div class="stat-label">Black-height</div><div class="stat-value" id="bhVal">0</div></div>
+<div><div class="stat-label">Rotations</div><div class="stat-value" id="rotCount">0</div></div>
+<div><div class="stat-label">Recolors</div><div class="stat-value" id="recolorCount">0</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Insert keys to build the tree. Watch fixup recolor and rotate to preserve the five RB properties.</div>
+</div>
+
+<p class="footer-note">Internally this uses a NIL sentinel for leaves. Insert fixup handles three symmetric cases per side (uncle-red recolor, triangle, line); delete fixup adds a fourth.</p>
+
+<script>
+let NIL={color:'B',left:null,right:null,p:null,k:null,isNil:true};
+let root=NIL, rotCount=0, recolorCount=0, idc=0;
+
+function newNode(k){ return {k,color:'R',left:NIL,right:NIL,p:NIL,id:++idc,isNil:false}; }
+
+function leftRot(x){
+  const y=x.right; x.right=y.left;
+  if(!y.left.isNil) y.left.p=x;
+  y.p=x.p;
+  if(x.p.isNil) root=y;
+  else if(x===x.p.left) x.p.left=y;
+  else x.p.right=y;
+  y.left=x; x.p=y; rotCount++;
+}
+function rightRot(x){
+  const y=x.left; x.left=y.right;
+  if(!y.right.isNil) y.right.p=x;
+  y.p=x.p;
+  if(x.p.isNil) root=y;
+  else if(x===x.p.right) x.p.right=y;
+  else x.p.left=y;
+  y.right=x; x.p=y; rotCount++;
+}
+
+function rbInsert(k){
+  let z=newNode(k); let y=NIL, x=root;
+  while(!x.isNil){ y=x; if(z.k<x.k) x=x.left; else if(z.k>x.k) x=x.right; else return; }
+  z.p=y;
+  if(y.isNil) root=z;
+  else if(z.k<y.k) y.left=z;
+  else y.right=z;
+  insertFixup(z);
+}
+function insertFixup(z){
+  while(z.p.color==='R'){
+    if(z.p===z.p.p.left){
+      const u=z.p.p.right;
+      if(u.color==='R'){ z.p.color='B'; u.color='B'; z.p.p.color='R'; recolorCount+=3; z=z.p.p; }
+      else {
+        if(z===z.p.right){ z=z.p; leftRot(z); }
+        z.p.color='B'; z.p.p.color='R'; recolorCount+=2; rightRot(z.p.p);
+      }
+    } else {
+      const u=z.p.p.left;
+      if(u.color==='R'){ z.p.color='B'; u.color='B'; z.p.p.color='R'; recolorCount+=3; z=z.p.p; }
+      else {
+        if(z===z.p.left){ z=z.p; rightRot(z); }
+        z.p.color='B'; z.p.p.color='R'; recolorCount+=2; leftRot(z.p.p);
+      }
+    }
+  }
+  if(root.color!=='B'){ root.color='B'; recolorCount++; }
+}
+function transplant(u,v){
+  if(u.p.isNil) root=v;
+  else if(u===u.p.left) u.p.left=v;
+  else u.p.right=v;
+  v.p=u.p;
+}
+function treeMin(n){ while(!n.left.isNil) n=n.left; return n; }
+function rbDelete(k){
+  let z=root;
+  while(!z.isNil && z.k!==k){ z=k<z.k?z.left:z.right; }
+  if(z.isNil) return;
+  let y=z, yOrig=y.color, x;
+  if(z.left.isNil){ x=z.right; transplant(z,z.right); }
+  else if(z.right.isNil){ x=z.left; transplant(z,z.left); }
+  else {
+    y=treeMin(z.right); yOrig=y.color; x=y.right;
+    if(y.p===z) x.p=y;
+    else { transplant(y,y.right); y.right=z.right; y.right.p=y; }
+    transplant(z,y); y.left=z.left; y.left.p=y; y.color=z.color;
+  }
+  if(yOrig==='B') deleteFixup(x);
+}
+function deleteFixup(x){
+  while(x!==root && x.color==='B'){
+    if(x===x.p.left){
+      let w=x.p.right;
+      if(w.color==='R'){ w.color='B'; x.p.color='R'; recolorCount+=2; leftRot(x.p); w=x.p.right; }
+      if(w.left.color==='B' && w.right.color==='B'){ w.color='R'; recolorCount++; x=x.p; }
+      else {
+        if(w.right.color==='B'){ w.left.color='B'; w.color='R'; recolorCount+=2; rightRot(w); w=x.p.right; }
+        w.color=x.p.color; x.p.color='B'; w.right.color='B'; recolorCount+=3; leftRot(x.p); x=root;
+      }
+    } else {
+      let w=x.p.left;
+      if(w.color==='R'){ w.color='B'; x.p.color='R'; recolorCount+=2; rightRot(x.p); w=x.p.left; }
+      if(w.right.color==='B' && w.left.color==='B'){ w.color='R'; recolorCount++; x=x.p; }
+      else {
+        if(w.left.color==='B'){ w.right.color='B'; w.color='R'; recolorCount+=2; leftRot(w); w=x.p.left; }
+        w.color=x.p.color; x.p.color='B'; w.left.color='B'; recolorCount+=3; rightRot(x.p); x=root;
+      }
+    }
+  }
+  x.color='B';
+}
+
+function countN(n){ return n.isNil?0:1+countN(n.left)+countN(n.right); }
+function height(n){ return n.isNil?0:1+Math.max(height(n.left),height(n.right)); }
+function blackH(n){ if(n.isNil) return 1; return blackH(n.left)+(n.color==='B'?1:0); }
+
+function layout(n,d,xMap,col){
+  if(n.isNil) return col;
+  col=layout(n.left,d+1,xMap,col);
+  xMap.set(n.id,{x:col,d}); col++;
+  col=layout(n.right,d+1,xMap,col);
+  return col;
+}
+function render(){
+  const c=document.getElementById('canvas');
+  if(root.isNil){ c.innerHTML='<p style="color:var(--muted);text-align:center;padding-top:120px">Empty tree.</p>'; updStats(); return; }
+  const xMap=new Map();
+  const cols=layout(root,0,xMap,0);
+  const ht=height(root);
+  const W=Math.max(700,cols*60), Hh=Math.max(440,ht*90);
+  const sx=i=>40+i*(W-80)/Math.max(1,cols-1);
+  const sy=d=>40+d*(Hh-80)/Math.max(1,ht-1);
+  let edges='',nodes='';
+  function ed(n){
+    if(n.isNil) return;
+    const p=xMap.get(n.id);
+    if(!n.left.isNil){ const c2=xMap.get(n.left.id); edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(c2.x)}" y2="${sy(c2.d)}"/>`; ed(n.left); }
+    if(!n.right.isNil){ const c2=xMap.get(n.right.id); edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)}" x2="${sx(c2.x)}" y2="${sy(c2.d)}"/>`; ed(n.right); }
+  }
+  ed(root);
+  function nd(n){
+    if(n.isNil) return;
+    const p=xMap.get(n.id);
+    const cls='node '+(n.color==='R'?'red':'black');
+    nodes+=`<g class="${cls}"><circle cx="${sx(p.x)}" cy="${sy(p.d)}" r="22"/><text x="${sx(p.x)}" y="${sy(p.d)}">${n.k}</text></g>`;
+    nd(n.left); nd(n.right);
+  }
+  nd(root);
+  c.innerHTML=`<svg width="${W}" height="${Hh+30}">${edges}${nodes}</svg>`;
+  updStats();
+}
+function updStats(){
+  document.getElementById('nCount').textContent=countN(root);
+  document.getElementById('hVal').textContent=height(root);
+  document.getElementById('bhVal').textContent=blackH(root);
+  document.getElementById('rotCount').textContent=rotCount;
+  document.getElementById('recolorCount').textContent=recolorCount;
+}
+function doInsert(){
+  const k=parseInt(document.getElementById('keyIn').value); if(isNaN(k)) return;
+  const r0=rotCount, c0=recolorCount;
+  rbInsert(k);
+  document.getElementById('lastOp').textContent='insert '+k;
+  document.getElementById('info').innerHTML=`Inserted <span class="highlight">${k}</span>. Fixup performed ${rotCount-r0} rotation(s) and ${recolorCount-c0} recolor(s).`;
+  render();
+}
+function doDelete(){
+  const k=parseInt(document.getElementById('keyIn').value); if(isNaN(k)) return;
+  const r0=rotCount, c0=recolorCount;
+  rbDelete(k);
+  document.getElementById('lastOp').textContent='delete '+k;
+  document.getElementById('info').innerHTML=`Deleted <span class="highlight">${k}</span>. Fixup performed ${rotCount-r0} rotation(s) and ${recolorCount-c0} recolor(s).`;
+  render();
+}
+function genRandom(){
+  resetTree();
+  const seen=new Set();
+  while(seen.size<12) seen.add(Math.floor(Math.random()*99)+1);
+  for(const k of seen) rbInsert(k);
+  document.getElementById('lastOp').textContent='random build';
+  document.getElementById('info').innerHTML=`Built RB tree from 12 keys. Height = ${height(root)}, black-height = ${blackH(root)}.`;
+  render();
+}
+function resetTree(){ root=NIL; rotCount=0; recolorCount=0; document.getElementById('lastOp').textContent='-'; render(); }
+['40','20','60','10','30','50','70','5','15','25','35'].forEach(k=>rbInsert(parseInt(k)));
+document.getElementById('lastOp').textContent='demo build';
+render();
+</script>
+</body>
+</html>

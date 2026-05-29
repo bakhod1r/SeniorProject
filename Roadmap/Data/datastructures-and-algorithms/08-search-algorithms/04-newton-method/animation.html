@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newton's Method (Newton-Raphson) — Visual Animation</title>
+<style>
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --green:   #3fb950;
+  --yellow:  #d29922;
+  --red:     #f85149;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --orange:  #ffa657;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+.subtitle { color: var(--muted); margin-bottom: 16px; text-align: center; font-size: .95rem; }
+.badges {
+  display: flex; gap: 8px; margin-bottom: 18px;
+  flex-wrap: wrap; justify-content: center;
+}
+.badge {
+  padding: 4px 10px; border-radius: 12px; font-size: .8rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.badge.best  { color: var(--green);  border-color: var(--green);  }
+.badge.worst { color: var(--red);    border-color: var(--red);    }
+.badge.space { color: var(--blue);   border-color: var(--blue);   }
+
+.controls, .input-control {
+  display: flex; gap: 10px; margin-bottom: 14px;
+  flex-wrap: wrap; justify-content: center; align-items: center;
+}
+button {
+  padding: 8px 18px; border: 2px solid var(--blue);
+  background: transparent; color: var(--blue);
+  border-radius: 6px; cursor: pointer; font-size: .95rem;
+  font-family: inherit; transition: all .2s;
+}
+button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.secondary { border-color: var(--border); color: var(--muted); }
+button.secondary:hover:not(:disabled) { background: var(--border); color: var(--text); }
+
+select, input[type=number] {
+  padding: 8px 14px; border: 2px solid var(--border);
+  background: var(--surface); color: var(--text);
+  border-radius: 6px; font-size: .95rem; font-family: inherit;
+}
+input[type=number] { width: 110px; }
+input[type=range]  { width: 160px; accent-color: var(--blue); }
+label { color: var(--muted); font-size: .85rem; }
+
+.plot-container {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+  width: 100%;
+  max-width: 1100px;
+}
+svg.plot {
+  display: block; width: 100%; height: auto;
+  background: #0a0d12; border-radius: 6px;
+  cursor: crosshair;
+}
+
+.stats {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; padding: 12px 20px;
+  display: flex; gap: 24px; margin-bottom: 16px;
+  flex-wrap: wrap; justify-content: center;
+  width: 100%; max-width: 1100px;
+}
+.stat-label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+.stat-value { color: var(--blue); font-size: 1.05rem; font-weight: 700; font-family: 'Courier New', monospace; }
+
+.legend {
+  display: flex; gap: 18px; margin-bottom: 16px;
+  flex-wrap: wrap; justify-content: center;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.legend-color {
+  width: 14px; height: 14px; border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+.info-panel {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; padding: 16px 20px;
+  width: 100%; max-width: 1100px; margin-bottom: 16px;
+}
+.info-panel h3 { color: var(--blue); margin-bottom: 8px; font-size: 1rem; }
+.step-info { font-family: 'Courier New', monospace; font-size: .92rem; line-height: 1.6; }
+.step-info .highlight { color: var(--yellow); font-weight: 600; }
+.step-info .ok  { color: var(--green); font-weight: 600; }
+.step-info .bad { color: var(--red);   font-weight: 600; }
+
+.iteration-table {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; padding: 12px 16px;
+  width: 100%; max-width: 1100px; margin-bottom: 16px;
+  overflow-x: auto;
+}
+.iteration-table h3 { color: var(--blue); margin-bottom: 8px; font-size: 1rem; }
+.iteration-table table {
+  width: 100%; border-collapse: collapse;
+  font-family: 'Courier New', monospace; font-size: .88rem;
+}
+.iteration-table th, .iteration-table td {
+  padding: 6px 10px; text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.iteration-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .03em; }
+.iteration-table td.col-n { text-align: center; color: var(--muted); }
+.iteration-table tr.current { background: rgba(255, 166, 87, .12); }
+.iteration-table tr.current td { color: var(--orange); font-weight: 600; }
+.iteration-table tr.converged-row td { color: var(--green); font-weight: 600; }
+
+.footer-note {
+  color: var(--muted); font-size: .78rem;
+  margin-top: 8px; text-align: center; max-width: 800px;
+}
+</style>
+</head>
+<body>
+
+<h1>Newton's Method (Newton-Raphson)</h1>
+<p class="subtitle">x<sub>n+1</sub> = x<sub>n</sub> &minus; f(x<sub>n</sub>) / f'(x<sub>n</sub>) &mdash; slide down the tangent to its x-intercept.</p>
+
+<div class="badges">
+  <span class="badge best">Convergence: quadratic</span>
+  <span class="badge worst">Can diverge on bad seed</span>
+  <span class="badge space">Space: O(1)</span>
+  <span class="badge best">~4-6 iter to 1e-16</span>
+</div>
+
+<div class="input-control">
+  <label>Function:</label>
+  <select id="funcSel">
+    <option value="sqrtN" selected>f(x) = x&sup2; &minus; N  (root = &radic;N)</option>
+    <option value="cube">f(x) = x&sup3; &minus; x &minus; 1</option>
+    <option value="cosx">f(x) = cos(x) &minus; x</option>
+    <option value="oscillate">f(x) = x&sup3; &minus; 2x + 2  (oscillates from x&#x2080;=0)</option>
+    <option value="arctan">f(x) = arctan(x)  (diverges from large x&#x2080;)</option>
+    <option value="multi">f(x) = (x &minus; 1)&sup2;  (linear at multiple root)</option>
+  </select>
+  <label>N:</label><input type="number" id="nInput" value="10" step="1" min="0.1">
+  <label>x&#x2080;:</label><input type="number" id="x0Input" value="5" step="0.1">
+  <button onclick="loadInput()">Load</button>
+</div>
+
+<div class="controls">
+  <button id="startBtn" onclick="start()">&#9654; Start</button>
+  <button id="stepBtn"  onclick="stepFwd()">&#9655; Step</button>
+  <button id="pauseBtn" onclick="pause()" disabled>&#10073;&#10073; Pause</button>
+  <button id="resetBtn" onclick="reset()" class="secondary">&#8634; Reset</button>
+  <span style="color: var(--muted); font-size: .8rem; margin-left: 12px;">slow</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span style="color: var(--muted); font-size: .8rem;">fast</span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background: var(--blue);"></div>f(x) curve</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--yellow);"></div>tangent line</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--orange);"></div>current x<sub>n</sub></div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--green);"></div>true root</div>
+  <div class="legend-item"><div class="legend-color" style="background: var(--purple); opacity: .45;"></div>discarded x</div>
+</div>
+
+<div class="stats">
+  <div><div class="stat-label">Iteration</div>     <div class="stat-value" id="iter">0</div></div>
+  <div><div class="stat-label">x_n</div>            <div class="stat-value" id="xn">-</div></div>
+  <div><div class="stat-label">f(x_n)</div>         <div class="stat-value" id="fxn">-</div></div>
+  <div><div class="stat-label">slope f'(x_n)</div>  <div class="stat-value" id="slope">-</div></div>
+  <div><div class="stat-label">|&Delta;x|</div>     <div class="stat-value" id="dx">-</div></div>
+  <div><div class="stat-label">error</div>          <div class="stat-value" id="err">-</div></div>
+  <div><div class="stat-label">order est.</div>     <div class="stat-value" id="order">-</div></div>
+</div>
+
+<div class="plot-container">
+  <svg class="plot" id="plot" viewBox="0 0 1040 440" preserveAspectRatio="xMidYMid meet"></svg>
+</div>
+
+<div class="info-panel">
+  <h3>Algorithm Trace</h3>
+  <div class="step-info" id="info">
+    Pick a function and seed, then press <span class="highlight">Start</span>. Click on the plot to set x&#x2080; visually.
+  </div>
+</div>
+
+<div class="iteration-table">
+  <h3>Iteration History</h3>
+  <table id="historyTable">
+    <thead>
+      <tr><th class="col-n">n</th><th>x_n</th><th>f(x_n)</th><th>f'(x_n)</th><th>|&Delta;x|</th><th>error</th></tr>
+    </thead>
+    <tbody id="historyBody"></tbody>
+  </table>
+</div>
+
+<p class="footer-note">
+  Watch quadratic convergence: each step roughly squares the error (Order est. &rarr; 2).
+  Try "x&sup3; &minus; 2x + 2" from x&#x2080; = 0 to see <b>oscillation</b>;
+  "arctan(x)" from x&#x2080; = 2 for <b>divergence</b>;
+  "(x &minus; 1)&sup2;" for <b>linear convergence at a multiple root</b>.
+</p>
+
+<script>
+// ===================== FUNCTION CATALOG =====================
+let currentN = 10;
+const FUNCS = {
+  sqrtN: {
+    name: () => `f(x) = x² - ${currentN}`,
+    f:    x => x*x - currentN,
+    df:   x => 2*x,
+    roots:() => [Math.sqrt(currentN)],
+    range:() => {
+      const r = Math.sqrt(currentN);
+      const span = Math.max(2, r * 1.5);
+      return { xmin: Math.max(-span, -1), xmax: span + 0.5 };
+    }
+  },
+  cube: {
+    name: () => 'f(x) = x³ - x - 1',
+    f:    x => x*x*x - x - 1,
+    df:   x => 3*x*x - 1,
+    roots:() => [1.3247179572447460],
+    range:() => ({ xmin: -1.5, xmax: 2.5 })
+  },
+  cosx: {
+    name: () => 'f(x) = cos(x) - x',
+    f:    x => Math.cos(x) - x,
+    df:   x => -Math.sin(x) - 1,
+    roots:() => [0.7390851332151607],
+    range:() => ({ xmin: -1, xmax: 2 })
+  },
+  oscillate: {
+    name: () => 'f(x) = x³ - 2x + 2',
+    f:    x => x*x*x - 2*x + 2,
+    df:   x => 3*x*x - 2,
+    roots:() => [-1.7692923542386314],
+    range:() => ({ xmin: -2.5, xmax: 2.0 })
+  },
+  arctan: {
+    name: () => 'f(x) = arctan(x)',
+    f:    x => Math.atan(x),
+    df:   x => 1/(1 + x*x),
+    roots:() => [0],
+    range:() => ({ xmin: -3, xmax: 3 })
+  },
+  multi: {
+    name: () => 'f(x) = (x - 1)²',
+    f:    x => (x - 1)*(x - 1),
+    df:   x => 2*(x - 1),
+    roots:() => [1],
+    range:() => ({ xmin: -1, xmax: 3 })
+  }
+};
+
+// ===================== STATE =====================
+let funcKey = 'sqrtN';
+let x0      = 5;
+let steps   = [];
+let idx     = 0;
+let running = false;
+let timer   = null;
+
+// ===================== STEP GENERATION =====================
+function generateSteps(key, seed) {
+  const F = FUNCS[key];
+  const out = [];
+  let x = seed;
+  let prevErr = null;
+  const roots = F.roots();
+  const nearest = v => roots.reduce((b, r) => Math.abs(v-r) < Math.abs(v-b) ? r : b, roots[0]);
+
+  out.push({ type: 'init', n: 0, x, fx: F.f(x), dfx: F.df(x), err: Math.abs(x - nearest(x)) });
+
+  for (let i = 0; i < 30; i++) {
+    const fx  = F.f(x);
+    const dfx = F.df(x);
+    if (!isFinite(fx) || !isFinite(dfx)) {
+      out.push({ type: 'diverged', n: i + 1, x, fx, dfx }); return out;
+    }
+    if (Math.abs(dfx) < 1e-300) {
+      out.push({ type: 'zero-deriv', n: i + 1, x, fx, dfx }); return out;
+    }
+    const xNext = x - fx / dfx;
+    if (!isFinite(xNext)) {
+      out.push({ type: 'diverged', n: i + 1, x, fx, dfx }); return out;
+    }
+    const dx  = Math.abs(xNext - x);
+    const err = Math.abs(xNext - nearest(xNext));
+    let orderEst = null;
+    if (prevErr != null && err > 0 && prevErr > 0 && prevErr < 1) {
+      orderEst = Math.log(err) / Math.log(prevErr);
+    }
+    out.push({ type: 'iter', n: i + 1, x, fx, dfx, xNext, dx, err, orderEst });
+    if (dx < 1e-15 * (Math.abs(xNext) + 1) || Math.abs(F.f(xNext)) < 1e-15) {
+      out.push({ type: 'converged', n: i + 1, x: xNext, fx: F.f(xNext), err: Math.abs(xNext - nearest(xNext)) });
+      return out;
+    }
+    x = xNext;
+    prevErr = err;
+  }
+  out.push({ type: 'maxiter', n: 30, x, fx: F.f(x) });
+  return out;
+}
+
+// ===================== VIEWPORT =====================
+const W = 1040, H = 440, MARGIN = 44;
+const svg = document.getElementById('plot');
+
+function getViewport() {
+  const F = FUNCS[funcKey];
+  const { xmin, xmax } = F.range();
+  let ymin = Infinity, ymax = -Infinity;
+  const Nsamples = 240;
+  for (let i = 0; i <= Nsamples; i++) {
+    const xx = xmin + (xmax - xmin) * i / Nsamples;
+    const yy = F.f(xx);
+    if (isFinite(yy)) {
+      if (yy < ymin) ymin = yy;
+      if (yy > ymax) ymax = yy;
+    }
+  }
+  // Make sure we include both the seed value and y = 0
+  const seedY = F.f(x0);
+  if (isFinite(seedY)) {
+    ymin = Math.min(ymin, seedY);
+    ymax = Math.max(ymax, seedY);
+  }
+  ymin = Math.min(ymin, 0);
+  ymax = Math.max(ymax, 0);
+  const pad = Math.max(0.3, (ymax - ymin) * 0.12);
+  return { xmin, xmax, ymin: ymin - pad, ymax: ymax + pad };
+}
+
+const x2px = (x, v) => MARGIN + (x - v.xmin) / (v.xmax - v.xmin) * (W - 2*MARGIN);
+const y2px = (y, v) => H - MARGIN - (y - v.ymin) / (v.ymax - v.ymin) * (H - 2*MARGIN);
+
+// ===================== SVG HELPERS =====================
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function clearSvg() {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+}
+
+// ===================== RENDERING =====================
+function drawAxes(v) {
+  const y0 = y2px(0, v);
+  const x0p = x2px(0, v);
+
+  // x-axis
+  svg.appendChild(svgEl('line', {
+    x1: MARGIN, y1: y0, x2: W - MARGIN, y2: y0,
+    stroke: 'var(--border)', 'stroke-width': 1
+  }));
+  // y-axis if visible
+  if (x0p > MARGIN && x0p < W - MARGIN) {
+    svg.appendChild(svgEl('line', {
+      x1: x0p, y1: MARGIN, x2: x0p, y2: H - MARGIN,
+      stroke: 'var(--border)', 'stroke-width': 1
+    }));
+  }
+  // x ticks
+  for (let xi = Math.ceil(v.xmin); xi <= Math.floor(v.xmax); xi++) {
+    if (xi === 0) continue;
+    const px = x2px(xi, v);
+    svg.appendChild(svgEl('line', {
+      x1: px, y1: y0 - 4, x2: px, y2: y0 + 4,
+      stroke: 'var(--muted)', 'stroke-width': 1
+    }));
+    const t = svgEl('text', {
+      x: px, y: y0 + 16, fill: 'var(--muted)',
+      'font-size': 11, 'font-family': 'monospace',
+      'text-anchor': 'middle'
+    });
+    t.textContent = xi.toString();
+    svg.appendChild(t);
+  }
+  // axis labels
+  const xLabel = svgEl('text', {
+    x: W - MARGIN + 8, y: y0 + 4, fill: 'var(--muted)',
+    'font-size': 11, 'font-family': 'monospace'
+  });
+  xLabel.textContent = 'x';
+  svg.appendChild(xLabel);
+  const yLabel = svgEl('text', {
+    x: x0p + 6, y: MARGIN - 6, fill: 'var(--muted)',
+    'font-size': 11, 'font-family': 'monospace'
+  });
+  yLabel.textContent = 'f(x)';
+  svg.appendChild(yLabel);
+}
+
+function drawCurve(v) {
+  const F = FUNCS[funcKey];
+  const Nsamples = 400;
+  let d = '';
+  let started = false;
+  for (let i = 0; i <= Nsamples; i++) {
+    const xx = v.xmin + (v.xmax - v.xmin) * i / Nsamples;
+    const yy = F.f(xx);
+    if (!isFinite(yy)) { started = false; continue; }
+    const px = x2px(xx, v);
+    const py = y2px(yy, v);
+    if (py < -20 || py > H + 20) { started = false; continue; }
+    d += (started ? ' L' : 'M') + px.toFixed(2) + ' ' + py.toFixed(2);
+    started = true;
+  }
+  if (d) {
+    svg.appendChild(svgEl('path', {
+      d, fill: 'none',
+      stroke: 'var(--blue)', 'stroke-width': 2.4,
+      'stroke-linejoin': 'round'
+    }));
+  }
+  // draw roots in green
+  for (const r of F.roots()) {
+    if (r >= v.xmin && r <= v.xmax) {
+      svg.appendChild(svgEl('circle', {
+        cx: x2px(r, v), cy: y2px(0, v), r: 5,
+        fill: 'var(--green)', stroke: 'var(--bg)', 'stroke-width': 1.2
+      }));
+    }
+  }
+}
+
+function drawDiscardedPoints(upToIdx, v) {
+  // dim earlier iterates that have been replaced
+  for (let i = 0; i < upToIdx; i++) {
+    const s = steps[i];
+    if (!s || s.type !== 'iter') continue;
+    svg.appendChild(svgEl('circle', {
+      cx: x2px(s.x, v), cy: y2px(0, v), r: 3.5,
+      fill: 'var(--purple)', opacity: 0.45
+    }));
+  }
+}
+
+function drawStep(s, v) {
+  // Tangent line at (x, f(x))
+  if (s.dfx !== undefined && Math.abs(s.dfx) > 1e-300) {
+    const y1 = s.fx + s.dfx * (v.xmin - s.x);
+    const y2 = s.fx + s.dfx * (v.xmax - s.x);
+    svg.appendChild(svgEl('line', {
+      x1: x2px(v.xmin, v), y1: y2px(y1, v),
+      x2: x2px(v.xmax, v), y2: y2px(y2, v),
+      stroke: 'var(--yellow)', 'stroke-width': 1.7,
+      'stroke-dasharray': '6 4'
+    }));
+    // slope label near point
+    const slopeLbl = svgEl('text', {
+      x: x2px(s.x, v) + 12, y: y2px(s.fx, v) - 10,
+      fill: 'var(--yellow)', 'font-size': 11,
+      'font-family': 'monospace'
+    });
+    slopeLbl.textContent = "slope = " + s.dfx.toFixed(3);
+    svg.appendChild(slopeLbl);
+  }
+  // vertical drop from x_n on axis to (x_n, f(x_n))
+  svg.appendChild(svgEl('line', {
+    x1: x2px(s.x, v), y1: y2px(0, v),
+    x2: x2px(s.x, v), y2: y2px(s.fx, v),
+    stroke: 'var(--orange)', 'stroke-width': 1.2,
+    'stroke-dasharray': '3 3', opacity: 0.7
+  }));
+  // current x_n point on curve (orange)
+  svg.appendChild(svgEl('circle', {
+    cx: x2px(s.x, v), cy: y2px(s.fx, v), r: 6,
+    fill: 'var(--orange)', stroke: 'var(--bg)', 'stroke-width': 1.5
+  }));
+  // current x_n point on x-axis (orange)
+  svg.appendChild(svgEl('circle', {
+    cx: x2px(s.x, v), cy: y2px(0, v), r: 5,
+    fill: 'var(--orange)', stroke: 'var(--bg)', 'stroke-width': 1.2
+  }));
+  const lbl = svgEl('text', {
+    x: x2px(s.x, v) + 7, y: y2px(0, v) - 8,
+    fill: 'var(--orange)', 'font-size': 12,
+    'font-weight': 'bold', 'font-family': 'monospace'
+  });
+  lbl.textContent = 'x' + (s.n != null ? s.n : '');
+  svg.appendChild(lbl);
+  // next iterate where tangent crosses zero (also orange, slightly different label)
+  if (s.xNext !== undefined && s.xNext >= v.xmin && s.xNext <= v.xmax) {
+    svg.appendChild(svgEl('circle', {
+      cx: x2px(s.xNext, v), cy: y2px(0, v), r: 5.5,
+      fill: 'var(--orange)', stroke: 'var(--bg)', 'stroke-width': 1.5,
+      opacity: 0.9
+    }));
+    const lbl2 = svgEl('text', {
+      x: x2px(s.xNext, v) + 7, y: y2px(0, v) + 20,
+      fill: 'var(--orange)', 'font-size': 12,
+      'font-weight': 'bold', 'font-family': 'monospace'
+    });
+    lbl2.textContent = 'x' + (s.n + 1);
+    svg.appendChild(lbl2);
+  }
+}
+
+function drawConverged(s, v) {
+  svg.appendChild(svgEl('circle', {
+    cx: x2px(s.x, v), cy: y2px(0, v), r: 8,
+    fill: 'var(--green)', stroke: 'var(--bg)', 'stroke-width': 2
+  }));
+}
+
+function render(s) {
+  clearSvg();
+  const v = getViewport();
+  drawAxes(v);
+  drawCurve(v);
+  drawDiscardedPoints(idx - 1, v);
+  if (s && (s.type === 'iter' || s.type === 'init' || s.type === 'zero-deriv')) {
+    drawStep(s, v);
+  }
+  if (s && s.type === 'converged') {
+    drawConverged(s, v);
+  }
+  updateStats(s);
+  updateInfo(s);
+  updateHistory();
+}
+
+function updateStats(s) {
+  const fmt    = (v, d=6) => v == null || !isFinite(v) ? '-' : v.toFixed(d);
+  const fmtExp = v => v == null || !isFinite(v) ? '-' : v.toExponential(3);
+  document.getElementById('iter').textContent  = s && s.n != null ? s.n : '0';
+  document.getElementById('xn').textContent    = s && s.x   != null ? fmt(s.x, 8) : '-';
+  document.getElementById('fxn').textContent   = s && s.fx  != null ? fmtExp(s.fx) : '-';
+  document.getElementById('slope').textContent = s && s.dfx != null ? fmtExp(s.dfx) : '-';
+  document.getElementById('dx').textContent    = s && s.dx  != null ? fmtExp(s.dx) : '-';
+  document.getElementById('err').textContent   = s && s.err != null ? fmtExp(s.err) : '-';
+  document.getElementById('order').textContent = s && s.orderEst != null && isFinite(s.orderEst) ? s.orderEst.toFixed(2) : '-';
+}
+
+function updateInfo(s) {
+  const info = document.getElementById('info');
+  if (!s) {
+    info.innerHTML = 'Press <span class="highlight">Start</span> to run Newton\'s method.';
+    return;
+  }
+  if (s.type === 'init') {
+    info.innerHTML = `<b>Initialize</b>: x&#x2080; = <span class="highlight">${s.x.toFixed(6)}</span>, ` +
+      `f(x&#x2080;) = ${s.fx.toExponential(3)}, f'(x&#x2080;) = ${s.dfx.toExponential(3)}. ` +
+      `Initial error to root: ${s.err.toExponential(3)}.`;
+  } else if (s.type === 'iter') {
+    info.innerHTML =
+      `<b>Iter ${s.n}</b>: x_n = ${s.x.toFixed(10)}, f(x_n) = ${s.fx.toExponential(3)}, slope f'(x_n) = ${s.dfx.toExponential(3)}<br>` +
+      `Tangent line at (x_n, f(x_n)) crosses y=0 at: ` +
+      `<span class="highlight">x_{n+1} = x_n &minus; f(x_n)/f'(x_n) = ${s.xNext.toFixed(10)}</span><br>` +
+      `|&Delta;x| = ${s.dx.toExponential(3)}, distance to true root = ${s.err.toExponential(3)}` +
+      (s.orderEst != null && isFinite(s.orderEst) ? `, est. convergence order &asymp; <span class="ok">${s.orderEst.toFixed(2)}</span>` : '');
+  } else if (s.type === 'converged') {
+    info.innerHTML = `<span class="ok">&#10003; CONVERGED</span> at x = ${s.x.toFixed(15)} in ${s.n} iterations ` +
+      `(|f(x)| = ${Math.abs(s.fx).toExponential(3)}, error = ${s.err.toExponential(3)}).`;
+  } else if (s.type === 'zero-deriv') {
+    info.innerHTML = `<span class="bad">&#10007; ZERO DERIVATIVE</span> at x = ${s.x.toFixed(6)}: tangent is horizontal. ` +
+      `Division by f'(x) = 0 is undefined. Fall back to bisection.`;
+  } else if (s.type === 'diverged') {
+    info.innerHTML = `<span class="bad">&#10007; DIVERGED</span>: iterate became non-finite at step ${s.n}. ` +
+      `Bad seed. Try a different x&#x2080; or use a bracketed method.`;
+  } else if (s.type === 'maxiter') {
+    info.innerHTML = `<span class="bad">&#10007; NOT CONVERGED</span> in 30 iterations at x = ${s.x.toFixed(6)}. ` +
+      `May be oscillating, diverging slowly, or converging linearly (multiple root).`;
+  }
+}
+
+function updateHistory() {
+  const body = document.getElementById('historyBody');
+  body.innerHTML = '';
+  const upTo = Math.min(idx, steps.length);
+  for (let i = 0; i < upTo; i++) {
+    const s = steps[i];
+    if (!s) continue;
+    const row = document.createElement('tr');
+    if (i === idx - 1 && s.type === 'iter') row.classList.add('current');
+    if (s.type === 'converged')              row.classList.add('converged-row');
+
+    const fmt    = v => v == null || !isFinite(v) ? '-' : v.toFixed(12);
+    const fmtExp = v => v == null || !isFinite(v) ? '-' : v.toExponential(3);
+
+    const cells = [
+      { cls: 'col-n', text: s.n != null ? s.n : '-' },
+      { text: fmt(s.x) },
+      { text: fmtExp(s.fx) },
+      { text: fmtExp(s.dfx) },
+      { text: fmtExp(s.dx) },
+      { text: fmtExp(s.err) }
+    ];
+    for (const c of cells) {
+      const td = document.createElement('td');
+      if (c.cls) td.className = c.cls;
+      td.textContent = c.text;
+      row.appendChild(td);
+    }
+    body.appendChild(row);
+  }
+}
+
+// ===================== CONTROLS =====================
+const delay = () => 1100 - parseInt(document.getElementById('speedSlider').value) * 100;
+
+function start() {
+  if (steps.length === 0) steps = generateSteps(funcKey, x0);
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+
+function tick() {
+  if (!running || idx >= steps.length) { pause(); return; }
+  render(steps[idx]);
+  idx++;
+  timer = setTimeout(tick, delay());
+}
+
+function stepFwd() {
+  if (steps.length === 0) steps = generateSteps(funcKey, x0);
+  if (idx < steps.length) {
+    render(steps[idx]);
+    idx++;
+  }
+}
+
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function reset() {
+  pause();
+  steps = [];
+  idx = 0;
+  document.getElementById('historyBody').innerHTML = '';
+  updateStats(null);
+  document.getElementById('info').innerHTML =
+    'Press <span class="highlight">Start</span> to run Newton\'s method, or click on the plot to set x&#x2080;.';
+  // draw initial picture (curve + roots + seed marker)
+  clearSvg();
+  const v = getViewport();
+  drawAxes(v);
+  drawCurve(v);
+  svg.appendChild(svgEl('circle', {
+    cx: x2px(x0, v), cy: y2px(0, v), r: 5,
+    fill: 'var(--orange)', stroke: 'var(--bg)', 'stroke-width': 1.2
+  }));
+  const lbl = svgEl('text', {
+    x: x2px(x0, v) + 7, y: y2px(0, v) - 8,
+    fill: 'var(--orange)', 'font-size': 12,
+    'font-weight': 'bold', 'font-family': 'monospace'
+  });
+  lbl.textContent = 'x0';
+  svg.appendChild(lbl);
+}
+
+function loadInput() {
+  funcKey = document.getElementById('funcSel').value;
+  const nv = parseFloat(document.getElementById('nInput').value);
+  if (isFinite(nv) && nv > 0) currentN = nv;
+  const v0 = parseFloat(document.getElementById('x0Input').value);
+  if (isFinite(v0)) x0 = v0;
+  // hide/show N input depending on function
+  document.getElementById('nInput').style.display = (funcKey === 'sqrtN') ? '' : 'none';
+  reset();
+}
+
+// allow clicking on plot to set x0
+svg.addEventListener('click', e => {
+  const rect = svg.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const px = (e.clientX - rect.left) * scaleX;
+  const v = getViewport();
+  const xx = v.xmin + (px - MARGIN) / (W - 2 * MARGIN) * (v.xmax - v.xmin);
+  if (xx >= v.xmin && xx <= v.xmax) {
+    x0 = xx;
+    document.getElementById('x0Input').value = x0.toFixed(3);
+    reset();
+  }
+});
+
+document.getElementById('funcSel').addEventListener('change', loadInput);
+document.getElementById('nInput').addEventListener('change', loadInput);
+document.getElementById('x0Input').addEventListener('change', () => {
+  const v0 = parseFloat(document.getElementById('x0Input').value);
+  if (isFinite(v0)) { x0 = v0; reset(); }
+});
+
+// ===================== INIT =====================
+document.getElementById('x0Input').value = x0;
+document.getElementById('nInput').value = currentN;
+reset();
+</script>
+</body>
+</html>
