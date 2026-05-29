@@ -293,8 +293,8 @@ func main() {
 	a.Next = b
 	b.Next = a // cycle
 
-	b, _ := json.Marshal(a) // BUG: recursive descent never terminates
-	fmt.Println(string(b))
+	out, _ := json.Marshal(a) // BUG: recursive descent never terminates
+	fmt.Println(string(out))
 }
 ```
 
@@ -412,7 +412,7 @@ func main() {
 }
 ```
 
-<parameter>
+<details><summary>Answer</summary>
 
 **Bug:** `MarshalJSON` is declared on `*Money` (pointer receiver). When the encoder reflects on `Invoice.Total`, it sees a `Money` value, not a `*Money`. The method set of `Money` (value type) does *not* include `MarshalJSON`; only the method set of `*Money` does. The encoder falls through to the default struct encoding and emits `{"Cents":1299}` instead of `"12.99"`.
 
@@ -433,6 +433,7 @@ func (m Money) MarshalJSON() ([]byte, error) {
 Value receiver is the safe default for `MarshalJSON`. Use pointer receiver only if the method genuinely needs to lazily compute or memoize.
 
 **Why common:** Go's pointer-vs-value method dispatch is the single most error-prone interface mechanism in the language. `json.Marshaler` is the most likely interface to be silently *not* satisfied.
+</details>
 
 ---
 

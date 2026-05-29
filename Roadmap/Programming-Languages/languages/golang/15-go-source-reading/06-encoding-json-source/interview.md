@@ -12,6 +12,17 @@
 
 **Short answer:** `encoding/json` is the Go standard library's JSON codec — it converts Go values to JSON bytes (`Marshal`) and JSON bytes to Go values (`Unmarshal`), plus streaming variants (`Encoder`/`Decoder`). It's reflection-based by default, so it works on arbitrary structs without code generation, and it honours struct tags (`json:"name,omitempty"`) for field naming and behaviour. The package ships in the stdlib, has been stable since Go 1.0, and is the de-facto JSON tool in Go even when faster alternatives exist.
 
+```go
+type User struct {
+    ID    int64  `json:"id"`
+    Email string `json:"email,omitempty"`
+}
+
+b, _ := json.Marshal(User{ID: 1, Email: "x@y.z"}) // {"id":1,"email":"x@y.z"}
+var u User
+_ = json.Unmarshal(b, &u)
+```
+
 **Follow-up:** Why is it reflection-based and not codegen? Answer: stdlib policy — no code generation step in `go build`, so the codec has to discover field layout at runtime via `reflect`. The cost is speed (5–10x slower than codegen libraries), the benefit is "just works on any struct".
 
 ---
@@ -19,6 +30,18 @@
 ### Q2. `Marshal` vs `Encoder.Encode` — when do you reach for each?
 
 **Short answer:** `json.Marshal(v)` returns `([]byte, error)` — you get the complete encoded value in memory. `json.NewEncoder(w).Encode(v)` writes to an `io.Writer` and appends a trailing newline, useful for streaming multiple values to a connection or file. Reach for `Marshal` when you need the bytes (HTTP response body, log line, fixture), reach for `Encoder` when writing to a network/file stream where buffering one value at a time matters. Note the newline gotcha — `Encode` adds `\n`, `Marshal` does not, so they're not drop-in replacements when wire format matters.
+
+```go
+// One-shot — bytes in hand.
+b, err := json.Marshal(payload)
+w.Write(b)
+
+// Stream — many values to a network connection.
+enc := json.NewEncoder(conn)
+for ev := range events {
+    if err := enc.Encode(ev); err != nil { return err }
+}
+```
 
 **Follow-up:** Performance difference? Answer: `Encoder` reuses an internal buffer across `Encode` calls, so encoding many values in a loop is cheaper than `Marshal` in a loop. For one-shot encoding the difference is noise.
 
@@ -28,6 +51,15 @@
 
 **Short answer:** Struct tags tell `encoding/json` how to map Go field names to JSON keys and how to handle special cases. `json:"name"` renames the field on the wire; `json:"name,omitempty"` omits zero-value fields; `json:"-"` excludes the field entirely; `json:",string"` forces numeric encoding as a JSON string for languages with precision issues. Without tags, exported fields use their Go name verbatim (`FirstName` becomes `"FirstName"`, not the conventional `"first_name"`). Tags are the only place to put per-field codec hints — there's no global config.
 
+```go
+type Account struct {
+    ID        uint64 `json:"id,string"`       // emitted as "9007199254740993"
+    Username  string `json:"username"`        // renamed
+    Internal  string `json:"-"`               // never emitted
+    Avatar    string `json:"avatar,omitempty"`// dropped when ""
+}
+```
+
 **Follow-up:** Are tags validated at compile time? Answer: no — they're string literals, malformed tags fail silently at runtime (field gets default behaviour). Use `go vet` or staticcheck to catch the common typos.
 
 ---
@@ -36,6 +68,14 @@
 
 **Short answer:** `omitempty` skips the field during encoding if it holds the **zero value** for its type — `false` for bool, `0` for numerics, `""` for string, `nil` for pointer/interface/slice/map/chan/func, length-zero for slice/map. The semantics are checked by `isEmptyValue` in the encoder, which is a fixed list — there's no "empty" hook you can extend. The common gotcha: `time.Time{}` is *not* considered empty by `omitempty`, because its zero value is a struct and the check doesn't recurse into struct fields; you need a `*time.Time` or a custom marshaller to drop it.
 
+```go
+type Event struct {
+    At    time.Time `json:"at,omitempty"`   // still emitted when zero (struct gotcha)
+    Tags  []string  `json:"tags,omitempty"` // dropped when len(Tags)==0
+    Owner *User     `json:"owner,omitempty"`// dropped when nil
+}
+```
+
 **Follow-up:** Distinguishing "not set" from "set to zero"? Answer: use a pointer type. `Age int` with `omitempty` drops both "not set" and "set to 0" — they're indistinguishable. `Age *int` with `omitempty` drops only `nil`; a pointer to `0` survives.
 
 ---
@@ -43,6 +83,16 @@
 ### Q5. Difference between `Decoder` and `Unmarshal`?
 
 **Short answer:** `json.Unmarshal(data, &v)` takes a `[]byte` and decodes one value — you must have the whole input in memory. `json.NewDecoder(r).Decode(&v)` reads from an `io.Reader` and decodes one value at a time, so you can stream a sequence of JSON values or save memory on large inputs. `Decoder` also exposes `Token()` for incremental parsing and `More()` for stream loops. Default settings differ: `Decoder` accepts trailing garbage (you get one value, the rest stays in the reader); `Unmarshal` rejects trailing non-whitespace. Use `DisallowUnknownFields()` on `Decoder` to harden APIs against typos in untrusted input.
+
+```go
+// NDJSON consumer — one Decode per line, no manual splitting needed.
+dec := json.NewDecoder(rd)
+for {
+    var ev Event
+    if err := dec.Decode(&ev); err == io.EOF { break } else if err != nil { return err }
+    handle(ev)
+}
+```
 
 **Follow-up:** Can `Decoder` read multiple JSON objects from a single stream? Answer: yes — call `Decode` repeatedly, each call consumes one top-level value. This is how you parse NDJSON (newline-delimited JSON) cleanly. `Unmarshal` cannot do this without manual splitting.
 
@@ -53,6 +103,16 @@
 ### Q6. Walk through what happens when you call `Marshal(myStruct)`.
 
 **Short answer:** Four phases. (1) **Reflect on the type** — `reflect.TypeOf(v)` gives the concrete type; the encoder looks up or builds an encoder function for it. (2) **Type encoder cache** — `typeEncoder` returns a cached `encoderFunc` keyed by `reflect.Type`, built once per type per program. For a struct, this means walking fields, parsing tags, deciding `omitempty`/`string`/skip, and assembling a struct encoder that calls per-field encoders. (3) **Execute** — the encoder function writes to an `encodeState` buffer, recursing into fields, slices, maps, pointers. (4) **Return** — the buffer's contents become the returned `[]byte`. Reflection happens once per type (cached); subsequent calls reuse the prebuilt encoder, which still uses `reflect.Value` accessors but avoids the type analysis cost.
+
+```go
+// Sketch of the inner loop — what the stdlib does in encode.go.
+func typeEncoder(t reflect.Type) encoderFunc {
+    if fi, ok := encoderCache.Load(t); ok { return fi.(encoderFunc) }
+    f := newTypeEncoder(t, true)        // builds struct/slice/map/etc. encoder
+    encoderCache.Store(t, f)
+    return f
+}
+```
 
 **Follow-up:** Where is the cache stored? Answer: `var encoderCache sync.Map` in `encode.go`. It's process-global, never evicted; types are kept alive forever, which is fine because Go programs don't dynamically create types in practice.
 
@@ -69,6 +129,14 @@
 ### Q8. Why are reflective marshallers slow?
 
 **Short answer:** Three costs add up. (1) **Reflection itself** — `reflect.Value.Field(i)`, `Interface()`, and `Kind()` are slow compared to direct field access; each call goes through a type descriptor and may allocate. (2) **Interface boxing** — every field value passes through `interface{}` (now `any`), which heap-allocates small values like ints. (3) **Branch density** — the encoder switches on `Kind()` at every level, defeating branch prediction. Codegen libraries (`easyjson`, `ffjson`) generate per-type `MarshalJSON` methods that read fields directly with no reflection, no boxing, and predictable branches — typically 5–10x faster, sometimes more. `encoding/json/v2` keeps reflection but compiles a tighter per-type "marshaller program" to reduce the per-call overhead.
+
+```
+(pprof) top
+   flat  flat%   sum%        cum   cum%
+ 1.43s 18.1% 18.1%      1.43s 18.1%  reflect.Value.Interface
+ 0.92s 11.6% 29.7%      4.10s 51.9%  encoding/json.(*encodeState).reflectValue
+ 0.71s  9.0% 38.7%      0.71s  9.0%  runtime.mallocgc
+```
 
 **Follow-up:** Profile data — what shows up at the top? Answer: `reflect.Value.Interface`, `reflect.Value.MethodByName`, `runtime.mallocgc` (small allocations), and `encoding/json.(*encodeState).reflectValue`. The fix isn't tweaks; it's switching to codegen or v2.
 
@@ -96,6 +164,27 @@ So for `[]int`, both `nil` and `[]int{}` are "empty" (both have length 0). For `
 
 **Short answer:** `json.RawMessage` is `[]byte` with `MarshalJSON`/`UnmarshalJSON` that pass the bytes through verbatim — the encoder writes them as-is, the decoder stores the raw JSON without parsing. Use cases: (a) **lazy decoding** — keep a polymorphic field as raw bytes, parse it later once you know the concrete type (`Kind` discriminator pattern); (b) **pass-through proxies** — a service that forwards a JSON blob without inspecting it; (c) **embedded JSON in another structure** — `type Event struct { Kind string; Payload json.RawMessage }`. The bytes must be valid JSON or the outer Marshal will fail validation on emit. `RawMessage` is one of the most underused tools in the stdlib for polymorphic decoding done right.
 
+```go
+type Envelope struct {
+    Kind    string          `json:"kind"`
+    Payload json.RawMessage `json:"payload"`
+}
+
+func dispatch(b []byte) error {
+    var env Envelope
+    if err := json.Unmarshal(b, &env); err != nil { return err }
+    switch env.Kind {
+    case "click":
+        var c ClickEvent
+        return json.Unmarshal(env.Payload, &c)
+    case "purchase":
+        var p PurchaseEvent
+        return json.Unmarshal(env.Payload, &p)
+    }
+    return fmt.Errorf("unknown kind %q", env.Kind)
+}
+```
+
 **Follow-up:** Why not just use `string` or `[]byte`? Answer: `[]byte` is base64-encoded by default in JSON (the encoder treats `[]byte` specially as binary). `RawMessage` overrides that with custom Marshal/Unmarshal — the bytes are emitted as JSON, not as base64.
 
 ---
@@ -103,6 +192,14 @@ So for `[]int`, both `nil` and `[]int{}` are "empty" (both have length 0). For `
 ### Q11. When use `json.Number` instead of `float64`?
 
 **Short answer:** `json.Number` is a string-backed numeric type that preserves the exact textual form of a JSON number — useful when (a) the value exceeds `float64` precision (`int64` IDs above `2^53` lose precision when round-tripped through `float64`), (b) you need to preserve trailing zeros or original formatting, (c) you want to defer the int-vs-float decision until you know the target. Enable it on a decoder with `dec.UseNumber()`; then numbers decode into `json.Number` (a `string` alias) instead of `float64`. Convert with `Int64()`, `Float64()`, or `String()` when you know what the value should be.
+
+```go
+dec := json.NewDecoder(strings.NewReader(`{"id": 9007199254740993}`))
+dec.UseNumber()
+var m map[string]any
+_ = dec.Decode(&m)
+id, _ := m["id"].(json.Number).Int64() // 9007199254740993 — exact
+```
 
 **Follow-up:** What goes wrong without `UseNumber` for a `uint64` ID? Answer: JSON parses it into `float64`; values above `2^53` are silently rounded. A user ID like `9007199254740993` becomes `9007199254740992`. The bug is silent and irreversible — `UseNumber` is the only stdlib fix.
 
@@ -136,6 +233,16 @@ func (c *Color) UnmarshalJSON(data []byte) error {
 ### Q13. You're profiling a JSON-heavy service. Where do you look first?
 
 **Short answer:** Five hotspots, in order. (1) **CPU profile (`pprof`)** — look for `reflect.Value.Interface`, `encoding/json.(*encodeState).reflectValue`, `mallocgc`. If those dominate, the codec itself is the bottleneck. (2) **Allocation profile** — `Marshal` allocates the entire output buffer; `Encoder.Encode` reuses a buffer across calls. Switching to `Encoder` for write-heavy paths can cut allocs by 30–50%. (3) **Decode-side `Decoder` vs `Unmarshal`** — `Unmarshal` copies the input; `Decoder` doesn't necessarily. For multi-MB payloads, switching matters. (4) **Tag waste** — fields tagged but never present on the wire still cost reflection on encode. Audit struct definitions against actual payloads. (5) **Schema mismatch** — `map[string]any` decode is 5–10x slower than a typed struct because every value goes through `interface{}` boxing. Always decode into a typed struct when the schema is known. Once you've squeezed the stdlib codec, drop to `easyjson` or `sonic` for the remaining hot paths.
+
+```go
+// Concrete wins from the four steps above on a typical service.
+// Before: 12k req/s, 38% CPU in encoding/json, p99=42ms
+// (1) Encoder reuse for writes        → 30% fewer allocs on the hot path
+// (2) Typed structs instead of any    → 5x faster decode
+// (3) DisallowUnknownFields           → silently dropped bugs surface
+// (4) Hot type via easyjson           → 4x faster encode on that path
+// After:  21k req/s, 18% CPU in JSON, p99=22ms
+```
 
 **Follow-up:** When does `easyjson` or `sonic` not help? Answer: when JSON isn't the bottleneck — your slow service might be the database, the downstream API, or GC pressure unrelated to JSON. Profile first; switching codecs without evidence is cargo culting.
 
@@ -243,6 +350,18 @@ Senior moves: (a) `MarshalJSON` returns the JSON-encoded string (note `strconv.Q
 
 The package-level fix is hardening at the parser boundary: `io.LimitReader`, `DisallowUnknownFields`, schema validation, and depth caps. Don't trust user input through the codec alone.
 
+```go
+func DecodeSafe(r io.Reader, max int64, v any) error {
+    lr := io.LimitReader(r, max)
+    dec := json.NewDecoder(lr)
+    dec.DisallowUnknownFields()
+    if err := dec.Decode(v); err != nil { return err }
+    // Reject trailing junk and partial reads up to the limit.
+    if _, err := dec.Token(); err != io.EOF { return errors.New("trailing data") }
+    return nil
+}
+```
+
 **Follow-up:** How big a depth limit is safe? Answer: 100–1000 levels is more than legitimate APIs use and stops the stack-blowup attack. Anything claiming deeper nesting is either pathological or recursive data that should be stored differently.
 
 ---
@@ -250,6 +369,17 @@ The package-level fix is hardening at the parser boundary: `io.LimitReader`, `Di
 ### Q20. Forward-compatible schema design — what's the discipline?
 
 **Short answer:** Six rules for JSON APIs that need to evolve without breaking clients. (1) **Never remove a field** — clients may depend on it; deprecate first, mark in docs, remove only after a long sunset. (2) **Add new fields without `omitempty`** when they have a meaningful zero (`Visible: false` is information); use `omitempty` only when "absent" and "zero" are equivalent for consumers. (3) **Pointer-or-omitempty for tristate** — `Visible *bool` with `omitempty` distinguishes "true", "false", and "not specified"; flat `bool` cannot. (4) **Tag versioning explicitly** — embed `Version int` on root payloads so consumers know which schema they're parsing; old consumers fall through to defaults, new consumers branch on version. (5) **Discriminated unions over polymorphism** — `Kind string` + `Payload json.RawMessage` is forward-compatible (new kinds appear as unknown kinds, gracefully ignored); inheritance-style polymorphism breaks the day you add a subtype. (6) **Reserve the schema** — publish a JSON Schema document alongside the API; treat schema additions as part of the API contract.
+
+```go
+// Forward-compatible event payload.
+type Event struct {
+    Version int             `json:"version"`         // schema discriminator
+    Kind    string          `json:"kind"`            // event kind discriminator
+    Payload json.RawMessage `json:"payload"`         // opaque until kind is known
+    Tags    []string        `json:"tags,omitempty"`  // additive field
+    Hidden  *bool           `json:"hidden,omitempty"`// tristate flag
+}
+```
 
 **Follow-up:** How do you handle removing a field for real? Answer: announce deprecation, log usage on the server, wait until usage drops, then remove. For SaaS APIs, this is months; for internal microservices, days. Hard-removing a field without a deprecation window is how production outages happen.
 
@@ -261,6 +391,15 @@ The package-level fix is hardening at the parser boundary: `io.LimitReader`, `Di
 
 **Short answer:** `encoding/json` optimises for stability and "works on any struct"; `json-iterator/go` optimises for speed while keeping the same API. Three design contrasts. (1) **Hot path locality** — stdlib's encoder builds an `encoderFunc` per type but then executes through several layers of `reflect.Value` indirection; `jsoniter` flattens the hot path with direct field access via `unsafe.Pointer` arithmetic, avoiding `reflect.Value` allocation per field. The cost is a deeper reliance on `unsafe`, which the stdlib won't accept. (2) **API extension model** — stdlib's only extension points are `Marshaler`/`Unmarshaler` interfaces. `jsoniter` adds plugins (custom encoders/decoders per type at runtime registered globally), more powerful but introduces global state that's hard to reason about. (3) **Error message quality** — stdlib's `UnmarshalTypeError` is precise (field path, expected type, actual JSON token); `jsoniter`'s messages historically lagged, though they've improved. Staff perspective: stdlib's conservatism is the right call for the stdlib (stability beats speed in a package used by every Go program); `jsoniter` is the right call when you've measured and need the speed without committing to codegen.
 
+```go
+// jsoniter — drop-in replacement, often 2-3x faster with one import swap.
+import jsoniter "github.com/json-iterator/go"
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+b, err := json.Marshal(v)        // same signature as encoding/json
+err = json.Unmarshal(data, &v)
+```
+
 **Follow-up:** Why does the Go team not just absorb `jsoniter`? Answer: API surface compatibility is harder than it looks (subtle behaviour differences in numeric handling, error types, escape sequences), and the `unsafe` reliance is incompatible with stdlib hygiene. v2 is the Go team's answer — same conservative model, much faster.
 
 ---
@@ -268,6 +407,18 @@ The package-level fix is hardening at the parser boundary: `io.LimitReader`, `Di
 ### Q22. Discuss the `encoding/json/v2` proposal.
 
 **Short answer:** `encoding/json/v2` (proposal #71497, accepted, available as `GOEXPERIMENT=jsonv2` in Go 1.24+) is a major redesign aimed at correctness and performance gains without breaking v1. Key changes. (1) **`MarshalEncode`/`UnmarshalDecode` low-level API** — operate on a token stream, letting callers compose encoders without a final buffer. (2) **Per-call options** — `Marshal(v, json.Deterministic(true))`, `json.RejectUnknownMembers(true)`; behaviour configured per call, not per type. (3) **`omitzero` tag option** — finally distinguishes "field is its type's zero value" from "field's `IsZero()` returns true" or "field is empty"; the `time.Time` gotcha is fixed. (4) **`MarshalJSONTo(enc *jsontext.Encoder)` / `UnmarshalJSONFrom`** — new interfaces that operate on the token stream, avoiding the buffer-then-emit pattern of v1's `MarshalJSON`. (5) **Strict mode by default** — duplicate keys, invalid UTF-8, and unknown members can be opted into errors at decode time without external wrappers. (6) **Performance** — early benchmarks show 1.5–3x faster than v1 with the same reflection-based model, closing much of the gap to codegen libraries. Staff move: v2 is additive (v1 stays for compatibility), so projects can migrate per-package. The big-picture lesson: a decade of `encoding/json` use surfaced concrete pain points (omitempty semantics, polymorphic decode, performance, strict-mode options), and v2 is the Go team's accumulated response.
+
+```go
+// v2 sketch — per-call options + omitzero tag.
+import "encoding/json/v2"
+
+type Event struct {
+    At    time.Time `json:"at,omitzero"` // finally drops zero structs
+    Tags  []string  `json:"tags,omitempty"`
+}
+
+b, _ := json.Marshal(Event{}, json.Deterministic(true)) // sorted keys, per call
+```
 
 **Follow-up:** Should you migrate now? Answer: for new code in Go 1.24+, yes — the API is cleaner. For existing code, wait until v2 is stable and migrate hot paths first. Don't rush an API-surface change for a 2x speed win that may not affect your service.
 
@@ -304,6 +455,15 @@ The package-level fix is hardening at the parser boundary: `io.LimitReader`, `Di
 | **First-time correctness** | Bugs in reflection are stdlib bugs (rare) | Bugs in generated code are project bugs (more common) |
 
 Staff move: choose by *workload* and *team*. Default to reflection because most services are not JSON-bound, the speed loss is rarely the production bottleneck, and the maintenance overhead of codegen is real (forget to regen → silent staleness). Switch to codegen when (a) JSON is provably the bottleneck under load, (b) the schema changes rarely, (c) the team has CI discipline to regen automatically. The middle path — `jsoniter` or v2 — gets 2–3x for free without touching build pipelines, and is the right answer most of the time. Codegen for "just in case" is gold-plating; reach for it once data justifies it.
+
+```go
+//go:generate easyjson -all hot_types.go
+
+// HotType has generated MarshalJSON/UnmarshalJSON in hot_types_easyjson.go.
+// ColdType has no generated code; encoding/json falls back to reflection.
+// Same Marshal/Unmarshal call site for both — easyjson's methods are picked
+// up via the Marshaler interface, no API change required at call sites.
+```
 
 **Follow-up:** Hybrid possible? Answer: yes. Use codegen for hot types (high-volume payloads), reflection for cold types (admin endpoints, debugging). The codec libraries respect this — `easyjson` generates per-type `MarshalJSON`, which `encoding/json` honours automatically; types without generated code fall back to reflection. Mix freely; the cost is just remembering which is which.
 

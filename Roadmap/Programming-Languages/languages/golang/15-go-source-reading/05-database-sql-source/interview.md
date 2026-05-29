@@ -32,6 +32,8 @@ Twenty-five questions in interview order — junior to staff — followed by a "
 
 **Follow-up:** What about iterating fully with `rows.Next` until it returns false — does that release the connection? Answer: yes, `rows.Next` returning false auto-closes internally, so a clean full-iteration path is safe. The `defer` matters because real code has early returns, errors mid-scan, and `break` out of the loop — `defer rows.Close()` covers every exit path. Treat it as mandatory, not optional.
 
+**Second follow-up:** What does `rows.Err()` check, and when do you call it? Answer: after the `for rows.Next()` loop terminates, call `rows.Err()` to surface any error that ended iteration prematurely (network error mid-stream, malformed row, context cancellation). `rows.Next` returns false on both end-of-results and on error; `rows.Err` distinguishes them. Skipping it means silently treating "I got 3 of 10 rows" as "the database had 3 rows" — a data-loss bug that doesn't show up until production.
+
 ---
 
 ### Q4. What's the difference between `Query` and `QueryRow`?
@@ -47,6 +49,8 @@ Twenty-five questions in interview order — junior to staff — followed by a "
 **Short answer:** A driver is anything that implements `driver.Driver` (which returns a `driver.Conn` from `Open(dsn)`). The `database/sql` package never talks to a database directly — it calls into the driver for `Open`, `Prepare`, `Query`, `Exec`, `Begin`, `Commit`, `Rollback`. Drivers register themselves with `sql.Register("name", driver)` in their `init` function, and `sql.Open("name", dsn)` looks up the registered driver by name. Modern drivers also implement context-aware interfaces (`driver.QueryerContext`, `driver.ExecerContext`, `driver.ConnPrepareContext`) so cancellation propagates to the wire.
 
 **Follow-up:** Why import a driver as `_ "github.com/lib/pq"`? Answer: the blank import runs the driver's `init` (which calls `sql.Register`) without giving you a name to refer to the package — you don't need one because you talk to it through `database/sql`. The underscore tells `go vet` and linters that the side effect is intentional.
+
+**Second follow-up:** Can you register the same driver twice? Answer: no — `sql.Register` panics on a duplicate name. The pattern matters in tests where multiple init paths might pull in the same driver; libraries that wrap a driver (instrumentation, sharding) register under a new name (`sql.Register("instrumented-postgres", wrapped)`) to avoid the collision.
 
 ---
 
@@ -65,6 +69,20 @@ Twenty-five questions in interview order — junior to staff — followed by a "
 
 **Follow-up:** Where does the goroutine block in this flow? Answer: step 2 (pool checkout, on `connRequests` channel) and step 5 (wire round-trip, on the underlying TCP socket). Both honour the context — cancel `ctx` and the checkout returns `ctx.Err()`, or the driver's context-aware path closes the connection mid-query.
 
+**Second follow-up:** What does the pool checkout actually look like in code? Answer: roughly the following — `DB.conn` first tries `freeConn` (LIFO stack of returned-to-pool connections); on empty, if `numOpen < maxOpen` it calls the driver's `Open` to create a new one; if at the limit it appends a `connRequest` chan to `connRequests` and blocks selecting on `ctx.Done()` and that channel. When a connection returns to the pool, `DB.putConnDBLocked` either hands it directly to a waiting request via the chan or pushes it onto `freeConn`. LIFO is deliberate — recently-used connections are warm in the database's plan cache.
+
+```go
+// Conceptual shape of DB.conn (simplified from src).
+select {
+case <-ctx.Done():
+    return nil, ctx.Err()
+case ret := <-req: // waited for a returned conn
+    return ret.conn, ret.err
+}
+```
+
+**Third follow-up:** What's the `connectionOpener` goroutine for? Answer: `database/sql` runs a background goroutine that drains a `openerCh` channel and opens new connections asynchronously. When `DB.conn` decides it needs a new connection but doesn't want to block the calling goroutine on the handshake, it signals the opener; the opener performs `driver.Open` and feeds the result back through the pool's request channel. This overlaps connection establishment with serving — the calling goroutine takes whichever arrives first, a freed connection or a freshly-opened one. The opener also runs the `maybeOpenNewConnections` logic that wakes when a queued request can be satisfied by opening more (up to the `MaxOpenConns` ceiling).
+
 ---
 
 ### Q7. What's a prepared statement in `database/sql`, and where does it live?
@@ -80,6 +98,8 @@ Twenty-five questions in interview order — junior to staff — followed by a "
 **Short answer:** `db.BeginTx(ctx, opts)` checks out exactly one connection from the pool and pins it to the `*Tx` for the transaction's lifetime. Every `tx.Query`, `tx.Exec`, `tx.Prepare`, `tx.Stmt` is executed on that pinned connection — the pool will not hand it out to anyone else until `tx.Commit()` or `tx.Rollback()` returns it. This is non-negotiable because transaction state (the `BEGIN`, savepoints, isolation level, locks) lives on the connection; running a transaction's queries on different connections would split them across independent sessions in the database.
 
 **Follow-up:** What happens if you forget to commit or roll back? Answer: the connection stays checked out until GC finalises the `*Tx`, at which point a finalizer rolls back and returns the connection. By the time the finalizer fires you're long past the timeline where the transaction matters — and you've held an open transaction in the database for that whole window, potentially holding row locks and bloating WAL. `defer tx.Rollback()` after `BeginTx` (rollback is a no-op after a successful commit) is the mandatory shape.
+
+**Second follow-up:** What about nested transactions? Answer: `database/sql` doesn't have them — `tx.Begin()` is not a method. The database-level equivalent is **savepoints** (`SAVEPOINT sp1; ... ROLLBACK TO sp1`), which you issue as plain SQL inside the outer transaction using `tx.ExecContext`. A wrapper that emulates `Begin`-style nesting via savepoints is a common helper pattern, but the language never built it in because the semantics (what does "rollback inner" mean if the outer has already committed something?) are subtle and database-specific.
 
 ---
 
@@ -98,6 +118,8 @@ Common production mistake: leaving `MaxIdleConns` at the default of 2 with `MaxO
 
 **Follow-up:** What's the right `MaxOpenConns` for a Postgres app? Answer: lower than people expect. Postgres serves each connection with a backend process; >100 connections per database starts to hurt under load. The rule of thumb is `(cores * 2 + spindles)` per backend, and a pooled app should target half of that across all replicas combined. Beyond that, use PgBouncer in transaction-pooling mode and set `MaxOpenConns` against PgBouncer's pool rather than against Postgres directly.
 
+**Second follow-up:** What about `ConnMaxIdleTime` vs `ConnMaxLifetime` — when does each matter? Answer: `ConnMaxLifetime` is **age from open**; trims old connections regardless of activity. `ConnMaxIdleTime` is **age since last use**; trims connections nobody has touched recently. Use both: lifetime to defend against load-balancer rotation and failover-stale connections, idle-time to trim the pool during quiet periods so you're not holding 50 connections you don't need. Setting only one of them leaves a corresponding failure mode uncovered.
+
 ---
 
 ### Q10. How does context cancellation actually cancel a query?
@@ -105,6 +127,8 @@ Common production mistake: leaving `MaxIdleConns` at the default of 2 with `MaxO
 **Short answer:** Two stages. (1) **Before the wire round-trip:** every entry point (`QueryContext`, `ExecContext`, `BeginTx`) calls `ctx.Err()` early and aborts with `ctx.Err()` if already done. (2) **During the wire round-trip:** if the driver implements `driver.QueryerContext` (`pgx`, modern MySQL drivers, modern SQLite drivers do), the driver passes the context down to its read/write loop and selects on `ctx.Done()` between sends; on cancellation it sends the database's "cancel query" message (`PG: CancelRequest` on a side socket; MySQL `KILL QUERY`) and closes the connection. The `database/sql` layer also fires a watchdog goroutine that closes the connection if the context fires and the driver hasn't returned yet.
 
 **Follow-up:** What about old drivers that only implement `driver.Queryer` (no context)? Answer: `database/sql` falls back to *connection-level* cancellation — when the context fires, it forcibly closes the underlying connection, which interrupts whatever the driver was reading. The query gets aborted but the connection is destroyed (not returned to the pool). Modern context-aware drivers can preserve the connection by sending a clean cancel; legacy ones can't, which is one reason to prefer `pgx` over `lib/pq`.
+
+**Second follow-up:** Does cancelling a query roll back its writes? Answer: yes — Postgres treats a cancelled query as aborted, and any uncommitted changes from that statement are gone. Inside an explicit transaction, the transaction itself is still open (and now in `aborted` state); you must `ROLLBACK` to clear it. The driver typically does this for you when the connection is returned to the pool, but inside a long-lived `*Tx` the caller has to call `tx.Rollback()` explicitly.
 
 ---
 
@@ -114,6 +138,8 @@ Common production mistake: leaving `MaxIdleConns` at the default of 2 with `MaxO
 
 **Follow-up:** Why don't `ExecContext`-style writes get retried indefinitely? Answer: because the retry only covers the case where the connection was dead before the query reached the server. Once the query is in flight, the driver returns the real error (network error, timeout, server error) — not `ErrBadConn` — and `database/sql` propagates it. The two-retry cap also bounds pathological cases where every connection in the pool is in some way broken.
 
+**Second follow-up:** Where in driver code does `ErrBadConn` typically get returned? Answer: in the driver's read or write loop, when the syscall returns `ECONNRESET`, `EPIPE`, `io.EOF` on the very first byte of an operation. If even one byte has been written, the driver doesn't know if the server received it, so it returns the real network error (not `ErrBadConn`) and `database/sql` won't retry. This "definitely didn't start" contract is why retry safety holds across the pool.
+
 ---
 
 ### Q12. Why should you use `*Context` variants always?
@@ -121,6 +147,8 @@ Common production mistake: leaving `MaxIdleConns` at the default of 2 with `MaxO
 **Short answer:** Four reasons, in order of importance. (1) **Cancellation propagates from the caller.** An HTTP handler whose client disconnects should cancel its database query immediately, not wait for it to complete; `QueryContext` with `r.Context()` gives you that for free. (2) **Deadline propagation.** A 100 ms upstream deadline becomes a 100 ms database deadline without you computing or threading anything. (3) **Distributed tracing.** Context carries the trace span; `pgx` and OpenTelemetry instrumentation read `ctx` to attach the span to the database call. (4) **Future-proofing.** Non-context variants (`Query`, `Exec`) are equivalent to passing `context.Background()` — fine for tests, dangerous in production code because they hide the cancellation path. Treat the bare versions as deprecated.
 
 **Follow-up:** Is there ever a reason to use `db.Query` over `db.QueryContext(ctx, ...)`? Answer: short scripts and migrations where there's no caller context to propagate. Even then, `context.Background()` made explicit is clearer. In a library, expose only the `*Context` variants and refuse to add the others.
+
+**Second follow-up:** What about `context.WithValue` carrying request-scoped data into the driver? Answer: avoid it for query parameters — context values are an escape hatch, not a parameter-passing mechanism, and the driver doesn't know about your value keys. Where context values *do* matter for `database/sql`: tracing (OpenTelemetry's span context), tenant tags (multi-tenant request routing in a wrapper driver), and request IDs that the driver attaches to `application_name`. Treat context values as observability metadata, not data.
 
 ---
 
@@ -139,6 +167,8 @@ Senior moves: (a) put PgBouncer in front in transaction-pooling mode and tune th
 
 **Follow-up:** What signal tells you the pool is too small? Answer: `WaitCount` climbing and `WaitDuration / WaitCount` above ~10 ms means goroutines are queuing on the pool. Either increase `MaxOpenConns` (if Postgres has headroom) or reduce query time. Pool starvation under steady load is the canonical "raise max-open" signal.
 
+**Second follow-up:** What if `db.Stats().MaxLifetimeClosed` is climbing fast? Answer: your `ConnMaxLifetime` is too short for the workload — connections are being recycled before they get used much, paying reconnect cost without amortising it. Push `ConnMaxLifetime` to 15–30 minutes and re-measure. The flip side: if it's zero and you've never seen the pool refresh, you're vulnerable to load-balancer endpoint changes and Postgres failovers. Want a non-zero value; want it long.
+
 ---
 
 ### Q14. Diagnose: one slow query is holding a connection and the pool is starved.
@@ -152,6 +182,8 @@ Senior moves: (a) put PgBouncer in front in transaction-pooling mode and tune th
 Senior move: don't just bump `MaxOpenConns` because the pool is starved — that's treating the symptom. A pool of 200 with a 30-second runaway query is still going to starve, just slower. Add the timeout *and* fix the query *and* alert on `pg_stat_activity` long-runners so the next one surfaces before users notice.
 
 **Follow-up:** Why is `statement_timeout` better than a Go-side `context.WithTimeout` alone? Answer: complementary, not alternative. Context timeout fires the cancel from the client side and frees the goroutine; `statement_timeout` is a Postgres-side guarantee that protects against client-side bugs where the context wasn't threaded through. Belt and braces — set both.
+
+**Second follow-up:** How do you set `statement_timeout` for every query in a Go app? Answer: two options. (1) Set it in the DSN — Postgres accepts `?statement_timeout=5000` in the URL or `options='-c statement_timeout=5000'` in the keyword form; every connection inherits the setting. (2) Set it on connection check-out via a driver hook: `pgx`'s `BeforeAcquire` or a wrapper that runs `SET statement_timeout TO 5000` on each new connection. The DSN approach is simpler; the hook is more flexible (per-tenant timeouts, per-workload tuning).
 
 ---
 
@@ -167,6 +199,8 @@ Implementation: two `*sql.DB` instances (`readDB`, `writeDB`) backed by separate
 
 **Follow-up:** What about read-only transactions? Answer: `BeginTx` with `sql.TxOptions{ReadOnly: true}` lets the driver announce read-only intent to the database, but it does **not** route the transaction to a replica — that's still your job. Use `ReadOnly` on the primary too, because it enables Postgres planner optimizations and prevents accidental writes during reads.
 
+**Second follow-up:** What does isolation level on `BeginTx` actually do? Answer: `sql.TxOptions{Isolation: sql.LevelSerializable}` issues `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` at `BEGIN`. Postgres maps the levels: `LevelReadUncommitted` and `LevelReadCommitted` both become "read committed" (Postgres doesn't have read-uncommitted); `LevelRepeatableRead` is true SSI-flavoured RR; `LevelSerializable` is SSI. Picking serializable means accepting `40001` (serialization failure) retries as the price for snapshot consistency under concurrent writes.
+
 ---
 
 ### Q16. Why do prepared statements often hurt performance at low write rate?
@@ -176,6 +210,8 @@ Implementation: two `*sql.DB` instances (`readDB`, `writeDB`) backed by separate
 When prepared statements **do** help: a single SQL string executed thousands of times per second per connection (hot inner loop), where the parse-plan cost dominates. For everything else — most application queries — let the driver decide via its protocol-level caching.
 
 **Follow-up:** If I want a prepared statement, when should I scope it? Answer: scope `*sql.Stmt` to a `*sql.Tx`. A transaction is one connection, so a `tx.Prepare` prepares exactly once and `tx.Stmt(stmt)` from a global prepare-on-DB rebinds the global statement to the transaction's connection. For most callers, just pass the SQL string and arguments to `db.QueryContext` and let the driver cache it.
+
+**Second follow-up:** What about prepared statement deallocation on Postgres? Answer: Postgres tracks prepared statements per session. When a connection is closed (by `ConnMaxLifetime`, by `ErrBadConn`, by pool drain), its prepared statements are gone — fine. But under PgBouncer in *transaction pooling* mode, a single client may land on different backend sessions for each transaction, and prepared statements created in one transaction don't exist in the next. Either disable prepared statements entirely (`pgx` has a `PreferSimpleProtocol` option) or use *session pooling* in PgBouncer, which preserves prepared statements but reduces multiplexing. This trade-off is the canonical PgBouncer foot-gun.
 
 ---
 
@@ -194,6 +230,8 @@ if errors.Is(err, context.DeadlineExceeded) {
 ```
 
 **Follow-up:** What happens to the connection on cancel? Answer: with a context-aware driver, the driver sends a cancel message (Postgres `CancelRequest` on a parallel socket, MySQL `KILL QUERY`) and the connection returns to the pool clean. With a legacy driver, `database/sql` closes the connection — your pool loses one slot and a fresh handshake pays the reconnect cost. Modernise your driver.
+
+**Second follow-up:** Can you detect "the client gave up" server-side? Answer: Postgres logs cancelled queries with `ERROR: canceling statement due to user request`. `pg_stat_activity` shows them transiently. If you see a steady stream of these, you have either aggressive client-side timeouts (tune the deadline) or runaway upstream timeouts (the HTTP client is cancelling before the query completes). Either way, the metric is worth alerting on — frequent cancellation usually means a chase between deadlines that don't agree.
 
 ---
 
@@ -216,6 +254,8 @@ if errors.Is(err, context.DeadlineExceeded) {
 For new code: use `pgx` via `pgxpool` for the native API (better types, better cancellation, better performance), or via `stdlib` if you need `database/sql` compatibility (ORM, existing code, polyglot patterns). Avoid starting new projects on `lib/pq` — its lack of context-aware cancellation is the disqualifier.
 
 **Follow-up:** Should existing `lib/pq` code migrate? Answer: migrate to `pgx` via `stdlib` first (drop-in driver swap, keep `database/sql`), measure, then decide whether to port to the native API. Most apps see no functional change but get cleaner cancellation and modest latency gains. The native-API port is worth it only if you use Postgres-specific types heavily.
+
+**Second follow-up:** What about `pgxpool` vs `database/sql` for pgx-native apps? Answer: `pgxpool` is `pgx`'s native pool and beats `database/sql`'s pool on three axes — health-checked connections (it pings on acquire), tighter context integration (it never returns a connection that's already past its deadline), and lower allocation overhead (no `driver.Value` boxing layer). For new pgx code, `pgxpool` is the default; for code that needs ORM compatibility or polyglot driver support, the `stdlib` adapter is the bridge.
 
 ---
 
@@ -251,6 +291,8 @@ Senior moves: (a) only retry **idempotent** operations — reads, `INSERT ... ON
 
 **Follow-up:** What about `pgx.PgError` codes you didn't list? Answer: by default, treat unknown errors as **non-retryable**. False positives (over-retry) cause cascading load on a struggling database; false negatives (under-retry) just surface as user-visible errors and you can add the code later. Conservative default, expand the retry set with evidence.
 
+**Second follow-up:** What's wrong with retrying inside a `BeginTx`? Answer: the transaction's connection may be dead, in which case the retry needs a **new** transaction on a **new** connection — not a retry of the next statement on the same `*Tx`. The retry boundary must wrap the entire `BeginTx ... Commit` block, not individual statements within it. Code that retries `tx.ExecContext` in isolation is a common bug; the transaction is already in `aborted` state and every subsequent statement returns "current transaction is aborted."
+
 ---
 
 ### Q20. Implement read/write splitting at the pool level.
@@ -283,6 +325,8 @@ Senior moves: (a) put the routing in the **repository layer** (`UserRepo.GetByID
 
 **Follow-up:** Why not let the database driver handle replica routing? Answer: some drivers (Postgres's `target_session_attrs=read-only`, multi-host DSN) can, but the routing decisions are application-domain (which queries tolerate staleness, which need read-your-writes) — keeping them in app code keeps the decisions reviewable and testable. Driver-level routing is fine for "any replica is fine" workloads; repository-level is right for everything more nuanced.
 
+**Second follow-up:** How do you test the read/write split locally? Answer: stand up two Postgres instances (or two databases in one cluster) and configure one as a logical replica via `pg_basebackup` / streaming replication. In CI, this is heavy; a lighter alternative is one Postgres with two `*sql.DB` instances pointing at the same DSN — you get the routing logic exercised without true replication. The pure unit-test path mocks the router and asserts that the right method picks `readDB` vs `writeDB` for each call site.
+
 ---
 
 ## 5. Staff/Architect questions (Q21–Q25)
@@ -301,6 +345,8 @@ Staff move: most of these are fixable without breaking the API — better defaul
 
 **Follow-up:** Why hasn't the team fixed these? Answer: stability. `database/sql` is in the standard library, subject to the Go 1 compatibility promise, and used by every Go app that touches a database. Changing `MaxIdleConns` defaults would shift production behaviour for thousands of apps overnight. The right place for the changes is in companion packages (`pgxpool` is one) or in a `database/sql/v2` proposal, which periodically gets discussed but never lands.
 
+**Second follow-up:** Compared to `pgxpool`, what's the gap? Answer: `pgxpool` ships health-checked connection acquire (pings on take when the connection has been idle longer than a threshold), `BeforeAcquire` and `AfterRelease` hooks for per-connection bookkeeping, native context integration without the watchdog goroutine, and tighter pool-state metrics. The cost: pgx-only, so no cross-driver portability. `database/sql` chooses portability over polish; `pgxpool` chooses polish over portability. For Postgres-only apps, `pgxpool` is the better default in 2026.
+
 ---
 
 ### Q22. What changes for HTAP (hybrid transactional/analytical) workloads?
@@ -316,6 +362,8 @@ Staff move: most of these are fixable without breaking the API — better defaul
 Staff move: HTAP at scale eventually means *two storage engines* (e.g. Postgres + ClickHouse, or row store + columnar replica) and a routing layer that sends OLAP to the analytical engine. `database/sql` is a fine surface for both, but the engines and pools and timeouts diverge — design the routing in your domain code, not in the driver.
 
 **Follow-up:** What about modern HTAP databases (CockroachDB, TiDB, Yugabyte)? Answer: they unify storage but the workload patterns still diverge — short transactions vs long scans. Separate pools and separate timeouts still apply. The HTAP engine reduces the operational cost of having two systems, not the app-side discipline of treating the workloads differently.
+
+**Second follow-up:** Where does `database/sql` actively get in the way of analytical workloads? Answer: the `driver.Value` boxing layer. Every column is converted to an `any` (one of a few permitted types), passed through `convertAssign` reflection, and unboxed into the `Scan` target. For 10M rows × 20 columns × per-column allocation, this is a meaningful CPU cost. Native drivers (`pgx`'s `QueryRow().Scan()` with binary protocol, ClickHouse's columnar batch interface) skip the boxing entirely. For analytical paths, dropping below `database/sql` is the standard optimisation.
 
 ---
 
@@ -341,6 +389,8 @@ The other half of the comparison is **pool ecosystem**. JDBC's pool is HikariCP 
 
 **Follow-up:** Is the lack of XA in `database/sql` a problem? Answer: rarely. XA's classical use case (distributed transactions across heterogeneous databases or message brokers) has largely been replaced by saga-style compensation and idempotent message processing. Go apps that need cross-system atomicity reach for outbox tables or transactional outbox patterns, not XA. JDBC having XA isn't pulled often even in Java land — it's there for legacy.
 
+**Second follow-up:** What about JDBC's `PreparedStatement.setObject` vs Go's `Scanner`/`Valuer`? Answer: same concept, different ergonomics. `Scanner.Scan(src any) error` and `Valuer.Value() (driver.Value, error)` are the user-extension points for custom types — implement them on your domain type (`UUID`, `Money`, `JSONB`) and it round-trips cleanly through `database/sql`. JDBC's setter/getter pairs are more verbose (one method per JDBC type) but cover more edge cases (binary stream, NCLOB, ROWID) that Go's smaller stdlib type set doesn't have.
+
 ---
 
 ### Q24. Integrate `database/sql` with distributed tracing.
@@ -354,6 +404,8 @@ The other half of the comparison is **pool ecosystem**. JDBC's pool is HikariCP 
 Senior moves: (a) **sample SQL text**, never include argument values in span attributes — arguments are PII; (b) instrument **pool stats** as metrics, not spans (gauge for in-use, histogram for wait duration, counter for `MaxIdleClosed`); (c) propagate the trace ID into the database session via comments so you can join app traces to database slow logs without joining on timestamp ranges.
 
 **Follow-up:** What about cardinality on `db.statement`? Answer: track normalised SQL (`SELECT * FROM users WHERE id = ?` not `... id = 4711`) on the span. The driver or your wrapper can normalise by replacing positional args with `?`. Otherwise every distinct argument value creates a new span name and your tracing backend's cardinality explodes.
+
+**Second follow-up:** How do you join a Go trace to a Postgres slow-log entry? Answer: inject the trace ID as a SQL comment at the head of every query — `/* traceid=abc123 service=checkout */ SELECT ...`. Postgres captures comments in `pg_stat_statements` and the slow log; you grep by trace ID to find the matching server-side timing. This works without any database-side changes; the only cost is a few bytes per query on the wire. Sqlcommenter is the standard library implementing this convention across multiple languages and databases.
 
 ---
 
@@ -380,6 +432,8 @@ Staff move: do not try to migrate **active** transactions across a failover — 
 
 **Follow-up:** What about Postgres-style logical failover with a session-aware proxy (PgBouncer with peering, Patroni, pgcat)? Answer: those move the migration responsibility to the proxy layer. The app's DSN points at the proxy; the proxy holds the connection-to-backend mapping and can rebind connections to a new primary on failover. The app still has to handle in-flight query failures (the proxy can't replay them), but the pool-drain dance becomes the proxy's job. For most production setups, this is the right architectural place for connection migration; the app-side patterns above are the fallback when you don't have a session-aware proxy.
 
+**Second follow-up:** How do you test the failover path without taking down production? Answer: chaos-engineering style. (1) `pg_terminate_backend(pid)` on a connection in `pg_stat_activity` to simulate one connection dying; verify the next query retries cleanly. (2) `iptables -A OUTPUT -p tcp --dport 5432 -j DROP` on the app host for 30 s to simulate a network partition; verify the app surfaces user-visible errors at the right rate, then recovers. (3) Full failover drill in a staging environment with a tool like Toxiproxy injecting latency and dropped connections. Each drill targets one assumption in the migration plan; doing all three before the real failover catches the bugs.
+
 ---
 
 ## 6. What NOT to say
@@ -396,6 +450,10 @@ Phrases that signal a weak candidate. Avoid them — and notice when an intervie
 - **"The driver handles cancellation."** Only context-aware drivers do, and only when you pass the context through. `db.Query(...)` (no context) cannot be cancelled at all.
 - **"`tx.Commit()` and we're done."** What if commit fails? What if the connection died mid-commit? Commit failure is a real case — the transaction may or may not have applied — and senior code handles it.
 - **"I'll just add an ORM (`gorm`, `ent`) so I don't have to think about this."** ORMs sit on top of `database/sql`; they inherit every pool, statement, and context problem and add their own. Knowing the underlying layer is non-negotiable for any senior role.
+- **"`SELECT *` is fine, we'll fix it later."** Select-star plus `Scan` into a struct means a column reorder in the database silently shifts values into wrong fields, and adding a column adds invisible network cost on every query. Be explicit: `SELECT id, name, created_at` always.
+- **"We don't need an index because the table is small."** Tables grow. The right time to add the index is at schema design; retrofitting after a slow-query incident is more expensive. "Small now" is not a reason to skip the index.
+- **"We'll figure out replicas in v2."** Read/write splitting is a refactor that touches every query. Plan for it at v1 — even if you only have one database, expose `readDB` and `writeDB` (aliased to the same `*sql.DB`) in the repository layer so the boundary exists. Adding the split later is a project; expressing it now is a function rename.
+- **"`pgx` is for advanced users."** It's the modern default. `lib/pq` is what you use when you've already shipped on it. New projects on `lib/pq` in 2026 is a yellow flag in code review.
 
 ---
 
@@ -416,6 +474,16 @@ Run through this list the morning of the interview. If you can't recite the answ
 11. **Retry classification.** Network errors (`ECONNRESET`, `io.EOF`) — retry idempotent reads. SQLSTATE `40001`/`40P01` — retry transactions. SQLSTATE `08006`/`57P01`/`57P03` — retry with pool drain. Everything else — bubble up.
 12. **Failover discipline.** Aggressive `ConnMaxLifetime`. Drain the pool on `08006`. Idempotent writes only for failover retry. Session-aware proxy (PgBouncer, pgcat) is the right architectural place for connection migration.
 13. **What NOT to say.** Re-read section 6. The interviewer is listening for "I know this depth" markers, and reciting these badly is the fastest disqualifier.
+14. **Tracing and observability.** `application_name` per-connection for `pg_stat_activity` correlation. SQL comments (`/* traceid=... */`) for trace-to-slow-log joins. `db.Stats()` as Prometheus metrics — `WaitCount`, `WaitDuration`, `MaxIdleClosed`, `MaxLifetimeClosed`, `InUse`, `Idle`.
+15. **Driver registration.** Blank import (`_ "github.com/jackc/pgx/v5/stdlib"`) runs `init` and calls `sql.Register`. Then `sql.Open("pgx", dsn)` finds it by name. Wrapping a driver under a new name (instrumentation, sharding) is the canonical extension point.
+16. **`Scanner` and `Valuer`.** Implement `Scan(any) error` and `Value() (driver.Value, error)` on your domain types (`UUID`, `Money`, `JSONB`) so they round-trip through `database/sql` without per-call conversion code. The compiler enforces them at the type-assertion boundary; missing them surfaces as runtime conversion errors.
+17. **Outbox and idempotency for distributed atomicity.** `database/sql` doesn't do XA, and you don't need it. Write the message and the database state in the same transaction (transactional outbox), let a relay deliver the message, and design consumers to be idempotent. Saga-style compensation handles the rest.
+18. **Common production tunables for a Postgres app at 1k QPS.** `MaxOpenConns=15` per replica × 10 replicas behind PgBouncer transaction-pool of 20. `MaxIdleConns=15` (match open). `ConnMaxLifetime=15m`. `ConnMaxIdleTime=2m`. Per-query `context.WithTimeout(ctx, 5*time.Second)`. Postgres `statement_timeout=8s` as backstop. `application_name=service-name`. Sqlcommenter for trace correlation. These are starting points, not gospel — measure under your real load.
+19. **`Conn` and `SessionResetter`.** `db.Conn(ctx)` gives you a `*sql.Conn` that pins one underlying connection across multiple calls — useful for advisory locks (`pg_advisory_lock`) or session-scoped settings. Return it via `conn.Close()`. Drivers implementing `SessionResetter` get a `ResetSession` callback on check-in so per-session state is wiped before reuse.
+20. **One last sanity check.** If the interviewer says "the pool is the bottleneck," ask which metric — `WaitCount`, `WaitDuration`, or `InUse` at limit. The right answer is always "show me the metric"; jumping straight to "raise max-open" without measurement is the junior tell.
+21. **Know one war story.** Have one production incident you can describe in 60 seconds — pool starvation from a missing `rows.Close`, a slow query that ate every connection, a PgBouncer transaction-pool incompatibility with `pgx`'s prepared statements. Interviewers grade on whether you've actually run a database in production; a concrete story is the strongest possible signal.
+22. **Be honest about gaps.** If you've never operated Postgres at scale, say so — say what you have done (built `database/sql` apps, read the source, run staging benchmarks) and what you'd want to learn. Faked production stories are the easiest thing to catch under follow-up questions. Honest gaps with a learning path beat invented expertise every time.
+23. **Quick verbal recap if asked "summarise database/sql in one sentence".** A driver-pluggable connection pool plus statement, transaction, and context plumbing — the policy lives in `database/sql`, the wire protocol lives in the driver, the application talks to neither directly.
 
 ---
 
@@ -426,3 +494,7 @@ Run through this list the morning of the interview. If you can't recite the answ
 - **`pgx` documentation**: <https://pkg.go.dev/github.com/jackc/pgx/v5> — the canonical modern Postgres driver. Read the `pgxpool` package for the native pool design, which is a useful contrast to `database/sql`'s.
 - **Go database tutorial**: <https://go.dev/doc/database/> — the official tutorial, modernised in 2022. Short, accurate, and the right starting point for anyone less than expert.
 - **"Common Pitfalls When Using `database/sql` in Go"**: <https://www.alexedwards.net/blog/configuring-sqldb> — Alex Edwards' pool-tuning post, the canonical reference for `MaxIdleConns` / `MaxOpenConns` / `ConnMaxLifetime` defaults.
+- **`otelsql` instrumentation wrapper**: <https://github.com/XSAM/otelsql> — wraps any `database/sql` driver with OpenTelemetry tracing and metrics. Read the `Stats` exporter for the canonical mapping from `db.Stats()` to Prometheus metrics.
+- **Sqlcommenter convention**: <https://google.github.io/sqlcommenter/> — the standard for embedding trace IDs and service tags into SQL comments, supported across multiple drivers and database vendors. The pattern to use for joining app traces to database slow logs.
+- **PgBouncer pooling modes**: <https://www.pgbouncer.org/features.html> — session, transaction, and statement pooling, with the trade-offs each makes on prepared statements, `SET LOCAL`, and connection state. Required reading before deploying PgBouncer in front of a `database/sql` app.
+- **"How to write a SQL driver in Go"**: <https://medium.com/@matryer/golang-advent-calendar-day-eleven-persisting-data-with-a-database-driver-bbb71c95466e> — Mat Ryer's walk through implementing the `driver.Driver` interface from scratch. The right tutorial for understanding what `database/sql` actually expects from a driver.

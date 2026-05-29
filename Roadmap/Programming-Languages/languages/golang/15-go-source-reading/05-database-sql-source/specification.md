@@ -29,6 +29,8 @@ A consequence of the split is that the pool semantics are uniform across drivers
 
 A second consequence is the testing story. Because the contract is interface-based, an in-memory fake driver (the standard library's own `fakedb_test.go`, or third-party packages like `DATA-DOG/go-sqlmock`) can be substituted for a real database in tests. The application code under test still sees `*sql.DB` and calls `Query` and `Exec`; the test driver records the calls or returns canned results. This is impossible in language ecosystems where the database client is a concrete class with no interface surface; in Go it is the default mode of unit testing data-access code.
 
+A third consequence — easy to miss until a production incident exposes it — is that every cross-cutting concern landed in `database/sql` is shared across every driver. Pool exhaustion behaviour is identical for a MySQL workload and a PostgreSQL workload. Context cancellation propagation is identical. The retry-on-`ErrBadConn` policy is identical. Operators tuning a production database can read a single set of docs (`SetMaxOpenConns`, `SetConnMaxLifetime`, the `DBStats` fields) and the knowledge transfers across every database their applications talk to.
+
 ---
 
 ## 3. Stable user-facing types
@@ -61,6 +63,16 @@ Lifecycle considerations across these types:
 | `*sql.Rows` | Returned by `QueryContext` or `Stmt.QueryContext`. | `Rows.Close()`; deferred immediately after the call is the canonical pattern. | Not safe for concurrent use; iterator semantics. |
 
 The most common mistake in early Go code is treating `*sql.DB` as a single connection — calling `Close()` between requests, opening a new `DB` per HTTP handler — which defeats the pool. The shape is identical to `http.Client`: one long-lived handle shared across goroutines.
+
+Pool-tuning knobs deserve enumeration because their interaction is non-obvious:
+
+| Method | Default | Effect |
+|--------|---------|--------|
+| `SetMaxOpenConns(n)` | 0 (unlimited) | Hard cap on simultaneously open connections; reaching the cap blocks new requests until a connection is returned to the pool. The single most important production knob. |
+| `SetMaxIdleConns(n)` | 2 | Maximum connections kept idle in the pool; excess are closed on return. Should be tuned together with `MaxOpenConns` — setting idle below open creates churn. |
+| `SetConnMaxLifetime(d)` | 0 (unlimited) | Absolute age cap; older connections are closed on next return. Required for DNS-rotated database hosts and for load-balanced clusters. |
+| `SetConnMaxIdleTime(d)` | 0 (unlimited; Go 1.15+) | Idle-time cap; connections idle longer than `d` are closed. Useful for reducing idle-connection pressure on the database. |
+| `Stats()` | — | Returns `DBStats` with counters for open, in-use, idle, wait count, wait duration, max-idle-closed, max-lifetime-closed. The observability surface. |
 
 ---
 
@@ -146,6 +158,39 @@ Existing drivers continue to satisfy `driver.Driver` and the original required i
 
 Reference list of optional interfaces: <https://pkg.go.dev/database/sql/driver>.
 
+How drivers in production layer the interfaces:
+
+| Driver | Implements |
+|--------|------------|
+| `github.com/go-sql-driver/mysql` | `Driver`, `DriverContext`, `Connector`, `Conn`, `ConnBeginTx`, `ConnPrepareContext`, `ExecerContext`, `QueryerContext`, `Pinger`, `Stmt`, `StmtExecContext`, `StmtQueryContext`, `NamedValueChecker`, `Rows`, `RowsNextResultSet`, `RowsColumnTypeScanType`, `RowsColumnTypeDatabaseTypeName`, `RowsColumnTypeLength`, `RowsColumnTypeNullable`, `RowsColumnTypePrecisionScale`, `SessionResetter`. Full feature coverage. |
+| `github.com/lib/pq` | `Driver`, `Conn`, `ConnBeginTx`, `ConnPrepareContext`, `ExecerContext`, `QueryerContext`, `Pinger`, `Stmt`, `StmtExecContext`, `StmtQueryContext`, `Rows`, `RowsColumnTypeScanType`, `RowsColumnTypeDatabaseTypeName`. Older but still widely used; missing `Validator`. |
+| `github.com/jackc/pgx/v5/stdlib` | `Driver`, `DriverContext`, `Connector`, `Conn`, `ConnBeginTx`, `ConnPrepareContext`, `ExecerContext`, `QueryerContext`, `Pinger`, `Stmt`, `StmtExecContext`, `StmtQueryContext`, `NamedValueChecker`, `Rows`, all `RowsColumnType*`, `SessionResetter`, `Validator`. Modern driver; the reference example of maximally implementing the contract. |
+| `github.com/mattn/go-sqlite3` | `Driver`, `DriverContext`, `Conn`, `ConnBeginTx`, `ConnPrepareContext`, `ExecerContext`, `QueryerContext`, `Pinger`, `Stmt`, `StmtExecContext`, `StmtQueryContext`, `NamedValueChecker`, `Rows`, `RowsColumnTypeScanType`, `RowsColumnTypeDatabaseTypeName`, `RowsColumnTypeLength`, `RowsColumnTypeNullable`. CGO-based; ubiquitous in tests. |
+| `modernc.org/sqlite` | Same as `mattn/go-sqlite3`; pure Go, no CGO; identical contract coverage. |
+| `github.com/microsoft/go-mssqldb` | Full coverage including `NamedValueChecker` for SQL Server's named parameter syntax and `SessionResetter` for `sp_reset_connection`. |
+
+Reading any of these drivers is the practical complement to reading `database/sql` itself; the contract documentation alone does not convey how it is exercised in anger.
+
+A worked example of how `database/sql` selects a code path at runtime, expressed in pseudocode:
+
+```go
+func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*Rows, error) {
+    dc, err := db.conn(ctx, cachedOrNewConn)
+    if err != nil { return nil, err }
+    if qc, ok := dc.ci.(driver.QueryerContext); ok {
+        return queryDC(ctx, dc, qc, releaseConn, query, args)
+    }
+    if q, ok := dc.ci.(driver.Queryer); ok {
+        return queryLegacy(ctx, dc, q, releaseConn, query, args)
+    }
+    stmt, err := dc.prepareDC(ctx, query)
+    if err != nil { return nil, err }
+    return stmt.QueryContext(ctx, args...)
+}
+```
+
+The dispatch sequence — context-aware, then legacy, then prepare-and-query — is the central pattern. Every entry point in `database/sql` follows it for the relevant pair of interfaces.
+
 ---
 
 ## 6. Sentinel errors
@@ -188,6 +233,18 @@ Whether a level is honoured is up to the driver and the database. Drivers that d
 
 `TxOptions` also carries `ReadOnly bool`, which drivers can map to the database's read-only mode (PostgreSQL `SET TRANSACTION READ ONLY`, MySQL `START TRANSACTION READ ONLY`). The hint is advisory; the driver is free to ignore it if the database does not support read-only transactions, and `database/sql` does not enforce that no writes occur. Use `ReadOnly: true` to enable database-side query plan optimisations and to let read-only replicas accept the transaction.
 
+Practical mapping of the constants per database engine:
+
+| Engine | Read uncommitted | Read committed | Repeatable read | Serializable |
+|--------|------------------|----------------|------------------|---------------|
+| PostgreSQL | Silently upgraded to Read committed | Default; per-statement snapshot | Transaction-long snapshot | True serialisation; retry on `40001` |
+| MySQL (InnoDB) | Honoured | Honoured | Default; gap locks exclude phantoms | Honoured; row locks acquired aggressively |
+| SQL Server | Honoured | Default | Honoured | Honoured |
+| CockroachDB | Mapped to Serializable | Mapped to Serializable | Mapped to Serializable | Default and only meaningful level |
+| SQLite | Single-writer model; isolation collapses to Serializable in practice | — | — | Default |
+
+Application code that depends on a specific isolation level must verify it against the target engine's documentation, not against the `database/sql` constants alone. The constants are a portable request; the database's response is engine-specific.
+
 Documentation: <https://pkg.go.dev/database/sql#IsolationLevel>, <https://pkg.go.dev/database/sql#TxOptions>.
 
 ---
@@ -223,6 +280,18 @@ The most rewarding reading order for a senior engineer working through the sourc
 
 Approximately 5,000 lines of Go, well-commented, with the architecture mostly visible from the type declarations alone.
 
+Key implementation details worth tracing while reading:
+
+| Detail | Where to look |
+|--------|--------------|
+| Pool's connection-request queue | `sql.go`: `DB.connRequests map[uint64]chan connRequest`; goroutines block on a per-request channel and are woken when an idle connection becomes available. |
+| Statement caching across pool connections | `sql.go`: `Stmt.css []connStmt`; a prepared statement on `*sql.DB` keeps a per-connection prepared handle and re-prepares on a fresh connection if its cached one is closed. |
+| Context cancellation propagation | `sql.go` and `ctxutil.go`: each operation that takes a context spawns a watcher goroutine via `withLock` and `db.mu`; cancellation triggers `Conn.Close` (and consequently `ErrBadConn`) if the driver does not implement a context-aware variant. |
+| `ErrBadConn` retry loop | `sql.go`: `DB.conn` and `DB.queryDC` retry once on `ErrBadConn` if the operation has not yet been attempted against a non-cached connection. |
+| Connection age limit | `sql.go`: `connectionCleaner` goroutine that periodically scans `db.freeConn` for connections past `connMaxLifetime` and closes them. |
+| `Tx`'s exclusive lock on a connection | `sql.go`: `Tx.dc *driverConn` plus the `db.numOpen` accounting; the transaction's connection is removed from the pool until commit or rollback. |
+| `Rows.Scan` conversion entry point | `convert.go`: `convertAssign(dest, src)` with a large switch over destination kind; `convertAssignRows(dest, src, rows)` adds row-context for `RawBytes`. |
+
 ---
 
 ## 9. Notable additions across releases
@@ -244,6 +313,13 @@ The Go 1 compatibility promise governs how `database/sql` evolves: existing name
 | Go 1.22 (Feb 2024) | `sql.Null[T any]` generic nullable wrapper, replacing the need for a per-type `Null*` variant. |
 
 Release notes index: <https://go.dev/doc/devel/release>. `database/sql` is mentioned by release in the "Minor changes to the library" sections of each release page.
+
+Two themes recur across the additions:
+
+- **Capability via optional interfaces, never via method-set growth on required interfaces.** Every new feature since Go 1.0 — context cancellation, named parameters, multi-result sets, column type metadata, session reset, validator, isolation level — lands as a new interface that drivers may or may not implement. Required interface method sets are frozen.
+- **`*Context` siblings, never replacements.** The Go 1.8 context revision added `QueryContext`, `ExecContext`, `BeginTx`, `PingContext`, `PrepareContext`, `StmtQueryContext`, `StmtExecContext`. The original non-`Context` methods remained, with their bodies rewritten to delegate to the new methods with `context.Background()`. Application code that predates Go 1.8 still compiles unchanged.
+
+These two themes are the source of the package's stability and the reason driver code from 2013 still runs in 2026.
 
 ---
 
@@ -279,6 +355,17 @@ The package's evolution is documented in Go issue tracker proposals. The accepte
 
 The full proposal list for the package: <https://github.com/golang/go/issues?q=label%3Aproposal+database%2Fsql>.
 
+A handful of proposals were deliberately rejected or remain open for instructive reasons:
+
+| Proposal | Issue | Status / rationale |
+|----------|-------|--------------------|
+| Bulk insert API | <https://golang.org/issue/5171> | Open / declined in successive forms; the proposal would standardise a `DB.BulkInsert` or similar high-throughput entry point. Rejected because the per-database wire formats differ enough that no portable shape exists; left to drivers and helpers like `pgx.CopyFrom`. |
+| Generic typed scan | <https://golang.org/issue/61637> | Open; proposes `func ScanOne[T any](rows *Rows) (T, error)` and a generic row mapper. Active discussion; current direction is to keep the standard library minimal and let helpers (`scany`, `sqlx`) cover the ergonomic surface. |
+| Result-set iteration with closure | <https://golang.org/issue/53449> | Open; would add `Rows.Range(func(*Rows) bool)` analogous to `sync.Map.Range`. Aligned with the broader iterator landing in Go 1.23 and may be revisited under that lens. |
+| Built-in connection pool metrics | <https://golang.org/issue/35408> | Implemented in Go 1.11 as `DB.Stats()` returning `DBStats`; subsequent proposals to extend the struct with more fields are still considered case by case. |
+
+The pattern across rejections is the same: anything that requires the standard library to encode database-specific knowledge gets pushed out to drivers or helper libraries; the standard library stays minimal, portable, and stable.
+
 ---
 
 ## 12. Bug reporting
@@ -305,3 +392,16 @@ Three categories of issue are filed regularly enough to be worth distinguishing 
 | Documentation gaps | An optional driver interface whose semantics are unclear, a `*Context` method whose cancellation contract is under-specified, a sentinel error that is returned in more cases than the docs say. | <https://github.com/golang/go/issues> with the `database/sql:` prefix and the `Documentation` label. |
 
 The package's stability over thirteen years is a direct consequence of how seriously the maintainers take the Go 1 compatibility promise. The discipline — original interfaces frozen, new capability as optional interfaces, `*Context` siblings rather than replacements — is the model that the rest of the standard library aspires to and the most concrete answer in the Go ecosystem to the question "how does a foundational library evolve without breaking its users." `database/sql` is worth reading as much for that discipline as for what it does.
+
+When opening a bug report, including the following decisively shortens triage:
+
+| Item | Why it matters |
+|------|----------------|
+| Output of `go version` | Behaviour differs across releases; a bug in Go 1.18 may be fixed in Go 1.22. |
+| Output of `go env GOOS GOARCH CGO_ENABLED` | Connection pooling and goroutine scheduling differ subtly on Windows and on `GOARCH=wasm`. |
+| Driver name and version (`go list -m all | grep <driver>`) | Distinguishes a `database/sql` bug from a driver bug. |
+| A minimal reproducer using `fakedb_test.go` if possible | Lets the maintainers run the test in CI without external infrastructure. |
+| Citation of the relevant section of <https://pkg.go.dev/database/sql> | Anchors the discussion to the documented contract rather than to expected behaviour the reporter inferred. |
+| Output under `GODEBUG=sqltracing=1` if the bug is in the pool or retry path | The package supports a small set of debug knobs via `GODEBUG`; trace output is invaluable for race-condition reports. |
+
+Bug reports that include all six are usually triaged within a week; reports that include only the symptom often languish for months waiting for clarification.

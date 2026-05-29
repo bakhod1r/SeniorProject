@@ -99,6 +99,18 @@ Struct tags are the primary customisation mechanism. The tag key is `json`; valu
 
 The full tag grammar is defined in [`tags.go`](https://github.com/golang/go/blob/master/src/encoding/json/tags.go), a 30-line file that parses the comma-separated option list.
 
+**Valid characters in JSON keys.** The `name` portion of a `json:"name,..."` tag may contain almost any Unicode character; the package only forbids the comma (the option separator) and the double-quote (the tag terminator). Spaces in keys are permitted. This is laxer than most JSON consumers expect — `json:"first name"` is legal and emits `{"first name": ...}`.
+
+**Tag inheritance and overrides.** A struct embedding another struct inherits its embedded fields' tags by default. If the outer struct re-declares a field with the same name, the outer field's tag wins. There is no way to suppress an embedded field's tag without re-declaring the field; the `-` option on the outer field is the standard escape hatch.
+
+**Conflict resolution for promoted fields.** The Go docs state that when two embedded fields collide on JSON key name, the following rules apply in order:
+
+1. Of those fields, if any are JSON-tagged, only tagged fields are considered, even if there are multiple untagged fields that would otherwise conflict.
+2. If there is exactly one field (tagged or not according to the first rule), that is selected.
+3. Otherwise, there are multiple fields and all are ignored; no error occurs.
+
+The third rule is the silent-drop case: two embedded fields colliding at the same depth with no tag disambiguation cause **both** to vanish from the output. This is the most-cited subtle gotcha in struct embedding plus JSON.
+
 ---
 
 ## 5. Type conversion rules
@@ -147,6 +159,16 @@ Additional conversion rules:
 - **Slice / array reuse.** `Unmarshal` resets a slice's length to zero before appending; arrays are filled element by element and zeroed beyond the JSON length.
 - **`null` semantics.** A JSON `null` clears a pointer (sets it to nil) and leaves scalar destinations untouched; for `Unmarshaler` types, it calls `UnmarshalJSON([]byte("null"))` if the method is defined.
 
+### 5.3 Type matching for struct fields
+
+When decoding a JSON object into a struct, the decoder matches each JSON key to a struct field by walking the field set in declaration order with the following rules:
+
+1. **Exact-match precedence.** A field with `json:"name"` tag that matches the JSON key exactly is preferred.
+2. **Case-insensitive fallback.** If no exact-tagged match exists, the decoder falls back to a case-insensitive match against field names (using the ASCII-fold helper in `fold.go`). This is the source of the well-known surprise that `{"foo": 1}` decodes into `struct{ Foo int }` even without a tag.
+3. **Unknown keys.** If no match is found and `DisallowUnknownFields` is not set, the JSON value is consumed and discarded. With the option set, an error is returned.
+
+The case-insensitive fallback is the behaviour v2 changes by default. The current rule was an early design choice for compatibility with JavaScript-style camelCase JSON consumed by Go's PascalCase exported fields without requiring a tag on every field; v2 makes the consumer opt in to this matching explicitly.
+
 ---
 
 ## 6. `omitempty` semantics
@@ -186,6 +208,27 @@ Consequences:
 
 This rule has been stable since Go 1.0 and is one of the most-cited surprises in the package. It exists because RFC 8259 forbids non-UTF-8 bytes in JSON strings; base64 is the lowest-common-denominator escape.
 
+**Common opt-out pattern:**
+
+```go
+type HexBytes []byte
+
+func (h HexBytes) MarshalJSON() ([]byte, error) {
+    return []byte(`"` + hex.EncodeToString(h) + `"`), nil
+}
+
+func (h *HexBytes) UnmarshalJSON(data []byte) error {
+    s, err := strconv.Unquote(string(data))
+    if err != nil { return err }
+    b, err := hex.DecodeString(s)
+    if err != nil { return err }
+    *h = b
+    return nil
+}
+```
+
+The pattern generalises to any binary encoding: hex, base32, base58, ASCII85. Once `MarshalJSON` is implemented, the default `[]byte`-as-base64 behaviour is overridden.
+
 ---
 
 ## 8. `json.Number` semantics
@@ -206,6 +249,10 @@ Numbers must be explicitly opted into in two contexts:
 
 1. **As a struct field type** — `type T struct { ID json.Number }` opts in for that field.
 2. **As the default for `any` destinations** — call `Decoder.UseNumber()` to make every JSON number decode to `json.Number` rather than `float64`. There is no equivalent function-level option for `json.Unmarshal`; you must construct a `Decoder` over a `bytes.Reader`.
+
+**Round-trip guarantee.** A document decoded into a tree of `any` with `UseNumber` set, then re-encoded with `Marshal`, produces a document that is **value-equivalent** to the input but not necessarily byte-equal. Whitespace is normalised, key order may change for maps (lexicographic on output), and number forms are preserved exactly (because `json.Number` is a string). For applications that need byte-exact round trips (cryptographic signatures, content addressing), the only safe approach is to use `RawMessage` and avoid re-encoding the payload.
+
+**Comparison with float64.** `float64` accurately represents integers up to 2^53 (about 9.007 × 10^15). Beyond that, integer round-tripping fails: `9007199254740993` decoded into `float64` and re-encoded becomes `9007199254740992` because the original value is not representable. `json.Number` avoids this by keeping the textual form; conversion to a numeric type is the consumer's explicit choice, made after the precision-preserving decode is complete.
 
 ---
 
@@ -270,6 +317,17 @@ The package lives in [`src/encoding/json/`](https://github.com/golang/go/tree/ma
 
 Test files (`encode_test.go`, `decode_test.go`, `stream_test.go`, `scanner_test.go`, `tagkey_test.go`, `number_test.go`) are the executable specification: every documented behaviour has at least one test case, and changes to the package are gated on these tests' continued passage.
 
+**Reading order for a senior engineer encountering the source for the first time:**
+
+1. `scanner.go` — the lexer state machine; foundational, no dependencies on the rest of the package.
+2. `tags.go` — small, self-contained, parses the comma-separated tag option list.
+3. `encode.go` — the encoder; reflection-driven, but the structure of `typeEncoder` / `encoderFunc` mirrors a switch-on-`reflect.Kind`.
+4. `decode.go` — the decoder; symmetric to `encode.go` but more complex because it has to reconcile JSON values with arbitrary destination types.
+5. `stream.go` — `Decoder` and `Encoder`; thin wrappers around the previous files plus the streaming state.
+6. `tables.go`, `indent.go`, `fold.go` — small support files; read last and only when a specific question (escaping table, indenting, case-folding) needs answering.
+
+The cyclomatic complexity is concentrated in `encode.go`'s `newTypeEncoder` and `decode.go`'s `object` / `array` methods. The rest of the package is straightforward Go.
+
 ---
 
 ## 12. Compatibility
@@ -304,6 +362,8 @@ Tests that pin error message text are the most common compatibility hazard; the 
 | [**#33714 — `MarshalJSON` should be allowed to return `null`**](https://github.com/golang/go/issues/33714) | Closed; clarified | `MarshalJSON` returning `null` is permitted and produces a literal `null` in the output. |
 
 The two that matter most for senior engineers in 2026 are #45669 (use `omitzero`, not `omitempty`, for struct fields like `time.Time`) and #71497 (track v2 and plan migrations for new services).
+
+**Why these proposals took so long.** The Go 1 compatibility promise constrains v1 evolution to additive changes: a new tag option (`omitzero`), a new decoder method (`DisallowUnknownFields`), or a new encoder method (`SetEscapeHTML`) is allowed because existing code does not break. Changes to default behaviour — rejecting duplicate keys, making field matching case-sensitive, omitting `time.Time` zero values automatically — are not allowed because production systems rely on the current defaults. The compatibility cost of "fixing" v1 is borne by every consumer; the compatibility cost of "ignoring" v1 is borne by no one. The result is a two-package solution: v1 stays compatible forever, v2 fixes the defaults.
 
 ---
 

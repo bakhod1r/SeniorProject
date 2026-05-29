@@ -13,7 +13,7 @@ The package exposes four headline things:
 
 At this level the goal is not to understand the scanner state machine or the reflection-based encoder cache. It's to know what lives where, what the four entry points do, and which struct tag means what.
 
-> **Heads up.** Go 1.25 ships an experimental `encoding/json/v2` (behind a build tag). It is a real rewrite. Most code in the wild — and everything below — is still v1, at `encoding/json`. v2 gets one paragraph at the end.
+> **Heads up.** Go 1.25 ships an experimental `encoding/json/v2`. Most code in the wild — and everything below — is still v1, at `encoding/json`. v2 gets one paragraph at the end.
 
 ---
 
@@ -60,7 +60,7 @@ func NewEncoder(w io.Writer) *Encoder       // stream.go — streaming encoder
 func NewDecoder(r io.Reader) *Decoder       // stream.go — streaming decoder
 ```
 
-That's the whole public API. Everything else — `RawMessage`, the `Marshaler` interface, struct tags — is plumbing around these four functions. Open one of those files, find the function with that name, and you have your reading entry point.
+That's the whole public API. Everything else — `RawMessage`, the `Marshaler` interface, struct tags — is plumbing around these four functions.
 
 ---
 
@@ -96,7 +96,7 @@ Two things worth staring at:
 
 ## 6. Struct tags
 
-The struct tag is a string after the field type. `encoding/json` only reads the `json:"..."` part. The grammar is small:
+The struct tag is a string after the field type. `encoding/json` only reads the `json:"..."` part. Grammar:
 
 | Tag | Effect |
 |-----|--------|
@@ -106,9 +106,9 @@ The struct tag is a string after the field type. `encoding/json` only reads the 
 | `json:",omitempty"` | Keep the field name, but omit on zero value |
 | `json:"name,string"` | Encode as a JSON string even if the Go type is a number/bool |
 
-Tag parsing happens once per type and is cached. The code that does the parsing is in `tags.go` — it's about 30 lines, the smallest interesting file in the package.
+Tag parsing happens once per type and is cached. The code lives in `tags.go` — about 30 lines, the smallest interesting file in the package.
 
-> **Beginner's trap.** Only **exported** (capitalized) fields are ever encoded or decoded. `name string` is invisible to the package. Tags on unexported fields are ignored.
+> **Beginner's trap.** Only **exported** (capitalized) fields are ever encoded or decoded. `name string` is invisible. Tags on unexported fields are ignored.
 
 ---
 

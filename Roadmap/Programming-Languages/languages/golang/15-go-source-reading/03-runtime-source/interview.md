@@ -52,7 +52,28 @@
 
 ### Q6. Walk through how `ch <- v` in user code ends up in `runtime.chansend`.
 
-**Short answer:** The compiler is the missing link. When the compiler sees `ch <- v` in user code, it rewrites the statement during typecheck/SSA into a call to `runtime.chansend1(ch, &v)` — the "1" variant is the form that blocks (the two-value `select` form maps to `selectnbsend`). `chansend1` is a thin wrapper in `chan.go` that calls `chansend(c, elem, true, getcallerpc())` with `block=true`. `chansend` is the real implementation: it acquires `c.lock`, checks whether there's a waiting receiver (in `c.recvq`), copies the value directly into the receiver's frame and unblocks it via `goready` if so; otherwise tries to enqueue into `c.buf` if there's buffer room; otherwise parks the current goroutine via `gopark` on `c.sendq`. You can verify the rewrite by running `go build -gcflags='-m=2'` or by looking at the SSA dump — you'll see the `runtime.chansend1` call where your `ch <- v` was.
+**Short answer:** The compiler is the missing link. When the compiler sees `ch <- v` in user code, it rewrites the statement during typecheck/SSA into a call to `runtime.chansend1(ch, &v)` — the "1" variant is the form that blocks (the two-value `select` form maps to `selectnbsend`). `chansend1` is a thin wrapper in `chan.go` that calls `chansend(c, elem, true, getcallerpc())` with `block=true`. `chansend` is the real implementation. The path inside `chansend`:
+
+```
+chansend(c, ep, block, callerpc):
+  if c == nil:
+    if !block: return false        // select case
+    gopark forever                  // user wrote `var c chan int; c <- 1`
+  lock(&c.lock)
+  if c.closed: panic("send on closed")
+  if sg := c.recvq.dequeue(); sg != nil:
+    send(c, sg, ep, ...)            // direct hand-off to receiver, no buffer
+    return true
+  if c.qcount < c.dataqsiz:
+    typedmemmove(...)              // enqueue into ring buffer
+    c.qcount++; unlock; return true
+  if !block: unlock; return false   // select non-blocking
+  enqueue this g onto c.sendq
+  gopark(chanparkcommit, &c.lock, ...)
+  // ... wakes here after a receiver did goready ...
+```
+
+You can verify the rewrite by running `go build -gcflags='-m=2'` or by looking at the SSA dump (`GOSSAFUNC=main go build`) — you'll see the `runtime.chansend1` call where your `ch <- v` was.
 
 **Follow-up:** Why a wrapper `chansend1` instead of calling `chansend` directly? Answer: the wrapper exists because the compiler's call site needs a stable signature regardless of whether the send blocks. `chansend1` (blocking send), `selectnbsend` (non-blocking, the `case ch <- v:` form), and `chansend` (internal, takes a `block bool`) keep the compiler-visible API small and the internal API expressive. Same pattern for `chanrecv1`/`chanrecv2`/`chanrecv`.
 
@@ -92,9 +113,9 @@
 
 ### Q11. What's `g0`?
 
-**Short answer:** Every `m` (OS thread) has a special goroutine called `g0` whose stack is the *system stack* — a real OS thread stack, typically 8 MB, not the small growable user-goroutine stack. The scheduler runs on `g0`. GC mark/sweep workers transition to `g0` for some operations. Signal handlers run on `g0`. The `g0` stack exists so that runtime code which can't tolerate stack growth (because growth itself calls runtime) has a guaranteed-large stack to work in. User code never runs on `g0`. When you see `mcall(fn)` or `systemstack(fn)` in runtime source, that's an explicit switch to `g0` to run `fn`.
+**Short answer:** Every `m` (OS thread) has a special goroutine called `g0` whose stack is the *system stack* — a real OS thread stack, typically 8 MB on the main thread and ~32 KB on cgo-created threads, not the small growable user-goroutine stack. The scheduler runs on `g0`. GC mark/sweep workers transition to `g0` for some operations. Signal handlers run on `g0`. The `g0` stack exists so that runtime code which can't tolerate stack growth (because growth itself calls runtime) has a guaranteed-large stack to work in. User code never runs on `g0`. When you see `mcall(fn)` or `systemstack(fn)` in runtime source, that's an explicit switch to `g0` to run `fn`. Reading the runtime without knowing the `g0` discipline produces baffling questions like "why is this function not allowed to allocate?" — the answer is usually "because it runs on g0 and is in a context where allocation would re-enter the scheduler."
 
-**Follow-up:** What's the difference between `mcall` and `systemstack`? Answer: `mcall(fn)` switches to `g0`, calls `fn(gp)` where `gp` is the goroutine that was running, and *never returns* to the caller — `fn` is expected to schedule the next goroutine. `systemstack(fn)` switches to `g0`, runs `fn`, switches back, and returns. Use `systemstack` when you just need a big stack for a function; use `mcall` when you're parking the current goroutine and giving up control.
+**Follow-up:** What's the difference between `mcall` and `systemstack`? Answer: `mcall(fn)` switches to `g0`, calls `fn(gp)` where `gp` is the goroutine that was running, and *never returns* to the caller — `fn` is expected to schedule the next goroutine. `systemstack(fn)` switches to `g0`, runs `fn`, switches back, and returns. Use `systemstack` when you just need a big stack for a function; use `mcall` when you're parking the current goroutine and giving up control. A third sibling, `asmcgocall`, switches to `g0` to call into C code without confusing the Go scheduler about stack ownership.
 
 ---
 
@@ -197,13 +218,13 @@ Tests also encode performance contracts — `BenchmarkChanContended` in `runtime
 
 **Short answer:** Some, but the differences matter more.
 
-**What transfers.** (1) Start with the public surface — exported functions and types. For `runtime` that's a short list; for `net/http` it's `Handler`, `Server`, `Client`, `Request`, `ResponseWriter`. (2) Follow the call graph from public to internal. (3) Read the tests to anchor understanding. (4) Use a debugger to step through real scenarios.
+**What transfers.** (1) Start with the public surface — exported functions and types. For `runtime` that's a short list; for `net/http` it's `Handler`, `Server`, `Client`, `Request`, `ResponseWriter`. (2) Follow the call graph from public to internal. (3) Read the tests to anchor understanding. (4) Use a debugger to step through real scenarios. (5) Use `gopls` for symbol navigation — works equally on both.
 
-**What doesn't transfer.** (1) `net/http` is purely library code; you can grep your way through it. `runtime` has hidden compiler-inserted callers — grep doesn't show them. (2) `net/http` uses normal Go — goroutines, channels, defers, slices, maps. `runtime` uses a constrained subset with compiler annotations. (3) `net/http` is layered: handler → server → transport → connection → syscall. `runtime` is mutually recursive: the scheduler calls the allocator calls the GC calls the scheduler. You can't read it "top down" because there's no top. (4) `net/http` is mostly stable across releases; `runtime` rewrites itself every few releases. The reading you did last year may be obsolete.
+**What doesn't transfer.** (1) `net/http` is purely library code; you can grep your way through it. `runtime` has hidden compiler-inserted callers — grep doesn't show them. (2) `net/http` uses normal Go — goroutines, channels, defers, slices, maps. `runtime` uses a constrained subset with compiler annotations. (3) `net/http` is layered: handler → server → transport → connection → syscall. `runtime` is mutually recursive: the scheduler calls the allocator calls the GC calls the scheduler. You can't read it "top down" because there's no top. (4) `net/http` is mostly stable across releases; `runtime` rewrites itself every few releases. The reading you did last year may be obsolete. (5) `net/http` failures usually surface as Go-level errors; runtime failures surface as `runtime:` panics or fatal errors that bypass `recover` entirely.
 
-The practical implication: in `net/http`, "I understand this file" is a real claim. In `runtime`, "I understand this *transition*" is a real claim — file-level understanding doesn't compose cleanly because functions are scattered by concern.
+The practical implication: in `net/http`, "I understand this file" is a real claim. In `runtime`, "I understand this *transition*" is a real claim — file-level understanding doesn't compose cleanly because functions are scattered by concern (scheduler logic is spread across `proc.go`, `mgc.go` for GC-related transitions, `chan.go` for channel-related transitions, and so on).
 
-**Follow-up:** What's the closest stdlib analog in difficulty to runtime? Answer: `reflect` and `sync/atomic`. `reflect` because it knows about Go's type representation at the runtime level. `sync/atomic` because it's mostly assembly with Go shims. Both share runtime's "compiler is part of the implementation" property — though to a lesser degree.
+**Follow-up:** What's the closest stdlib analog in difficulty to runtime? Answer: `reflect` and `sync/atomic`. `reflect` because it knows about Go's type representation at the runtime level and links into runtime functions extensively via linkname. `sync/atomic` because it's mostly assembly with Go shims. Both share runtime's "compiler is part of the implementation" property — though to a lesser degree. `crypto/internal/*` is the third — performance-critical assembly with strict invariants.
 
 ---
 
@@ -357,6 +378,8 @@ These signal a weak candidate.
 - **Doesn't know about open-coded defer.** Asked about defer cost, gives pre-1.14 numbers.
 - **Treats GC as one operation.** Doesn't name the phases (sweep termination, mark, mark termination, sweep) or distinguish STW pauses from assist time.
 - **Can't say when reading runtime is a waste.** Wants to read it for every question — signals immature judgement.
+- **Treats `//go:nosplit` as a "go fast" annotation.** It's a constraint that removes the stack-growth check, not a hint to the compiler to optimize. The candidate who thinks it's a free win hasn't read the budget rules.
+- **Never opens the runtime directory but cites blog posts confidently.** Blog-derived knowledge of runtime ages out in two releases.
 
 ---
 
@@ -375,6 +398,10 @@ These signal a strong candidate.
 - **Reaches for `dlv` with caveats.** Knows optimized builds are fragile in dlv and adjusts the build flags.
 - **Names when reading is wasteful.** Recommends `go doc`, `pprof`, `runtime/trace`, or a benchmark before opening source.
 - **Critiques runtime style with respect.** Acknowledges that runtime conventions exist for performance reasons even when they're hostile to readers.
+- **Cites the compiler intrinsics file by name.** `cmd/compile/internal/typecheck/builtin/runtime.go` — naming this file shows the candidate has actually navigated the runtime/compiler boundary.
+- **Distinguishes phases of GC by name.** Sweep termination, mark, mark termination, sweep — and which is STW vs concurrent. Not "GC is mark and sweep."
+- **Brings up `GODEBUG` flags spontaneously.** `gctrace`, `schedtrace`, `allocfreetrace`, `cgocheck`, `madvdontneed`, etc. — knowing which flag to set for which question signals operational experience.
+- **Mentions Go release notes as a reading habit.** The runtime team documents big changes in release notes; tracking them is the cheapest way to stay current.
 
 ---
 
@@ -383,7 +410,11 @@ These signal a strong candidate.
 - **`runtime/HACKING.md`**: `$GOROOT/src/runtime/HACKING.md` — the runtime team's own onboarding document. The system stack, write-barrier rules, and compiler intrinsics are explained. Read once before any serious runtime work.
 - **`runtime2.go`**: `$GOROOT/src/runtime/runtime2.go` — the central type definitions (`g`, `m`, `p`, `sched`, `mheap`). Read once to anchor every other file.
 - **"Scalable Go Scheduler Design Doc" (Dmitry Vyukov, 2012)**: <https://go.dev/s/go11sched> — the original scheduler design, still 80% accurate. Read before `proc.go`.
+- **"Proposal: Non-cooperative goroutine preemption" (Austin Clements, 2019)**: <https://go.googlesource.com/proposal/+/master/design/24543-non-cooperative-preemption.md> — the 1.14 async preemption design. Explains why `SIGURG` is used and what runtime invariants it preserves.
 - **Go source mirror**: <https://cs.opensource.google/go/go/+/refs/heads/master:src/runtime/> — browsable runtime source with cross-references. Pin to a release tag for reading.
 - **`cmd/compile/internal/typecheck/builtin/runtime.go`**: the compiler's view of runtime — every function the compiler can call. Tells you which runtime functions are reached from user code.
 - **`go tool trace` documentation**: <https://pkg.go.dev/runtime/trace> — the trace primitives and how to read the output. The trace is your best entry point into the scheduler's behaviour.
 - **`GODEBUG` reference**: <https://pkg.go.dev/runtime#hdr-Environment_Variables> — the runtime's diagnostic flags (`gctrace`, `schedtrace`, `allocfreetrace`, etc.). Each one tells you which runtime path to read for that diagnostic.
+- **`runtime/metrics` package**: <https://pkg.go.dev/runtime/metrics> — the stable, version-resilient surface for runtime instrumentation. Prefer over `ReadMemStats` for new dashboards.
+- **"Getting to Go: The Journey of Go's Garbage Collector" (Rick Hudson)**: blog post tracking the GC's evolution; useful context for `mgc.go` reading.
+- **Go release notes**: <https://go.dev/doc/devel/release> — the runtime team flags significant runtime changes here. Skim each release's "Runtime" section to keep your mental model current.
