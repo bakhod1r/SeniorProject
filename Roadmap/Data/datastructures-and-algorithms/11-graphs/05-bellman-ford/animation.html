@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bellman-Ford — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .graph-pick {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .graph-pick label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+
+  .graph-pick label.active {
+    border-color: var(--blue);
+    background: rgba(88,166,255,0.12);
+  }
+
+  .graph-pick input { accent-color: var(--blue); }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+
+  svg#graph {
+    width: 100%;
+    height: 340px;
+    display: block;
+    background: var(--bg);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .edge-line { stroke: var(--border); stroke-width: 2; fill: none; }
+  .edge-line.relaxing { stroke: var(--yellow); stroke-width: 3.5; }
+  .edge-line.improved { stroke: var(--green); stroke-width: 3.5; }
+  .edge-line.cycle { stroke: var(--red); stroke-width: 3.5; }
+
+  .edge-label {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    fill: var(--muted);
+    text-anchor: middle;
+  }
+  .edge-label.active { fill: var(--yellow); font-weight: 700; }
+
+  .gnode circle { stroke-width: 2.5; transition: all 0.2s ease; }
+  .gnode.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .gnode.source circle  { fill: rgba(63,185,80,0.25); stroke: var(--green); }
+  .gnode.updated circle { fill: rgba(210,153,34,0.3); stroke: var(--yellow); }
+  .gnode.cycle circle   { fill: rgba(248,81,73,0.3); stroke: var(--red); }
+
+  .gnode text.name {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 13px; font-weight: 700; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+  .gnode text.dist {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; fill: var(--blue);
+    text-anchor: middle; pointer-events: none;
+  }
+  .gnode.updated text.dist { fill: var(--yellow); }
+  .gnode.cycle text.dist { fill: var(--red); }
+
+  /* distance + edge tables */
+  .tables {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 14px;
+  }
+  @media (max-width: 620px) { .tables { grid-template-columns: 1fr; } }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+  table caption {
+    text-align: left;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+    font-family: inherit;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: center;
+  }
+  th { color: var(--muted); font-weight: 600; background: var(--bg); }
+  td.dcell { transition: all 0.2s ease; }
+  td.dcell.updated { background: rgba(210,153,34,0.3); color: var(--yellow); font-weight: 700; }
+  td.dcell.neg { background: rgba(248,81,73,0.3); color: var(--red); font-weight: 700; }
+  tr.edge-row.active td { background: rgba(210,153,34,0.18); }
+  tr.edge-row.improved td { background: rgba(63,185,80,0.16); }
+  tr.edge-row.cycle td { background: rgba(248,81,73,0.2); color: var(--red); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+  .info-bar.alert { border-color: var(--red); }
+  .info-bar.done { border-color: var(--green); }
+
+  .stats-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .stats-row .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+  .stats-row .stat.warn b { color: var(--yellow); }
+  .stats-row .stat.alert b { color: var(--red); }
+
+  #log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 170px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.relax { color: var(--yellow); }
+  #log .entry.ok { color: var(--green); }
+  #log .entry.bad { color: var(--red); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-default { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-source  { background: rgba(63,185,80,0.25); border-color: var(--green); }
+  .dot.d-relax   { background: rgba(210,153,34,0.3); border-color: var(--yellow); }
+  .dot.d-cycle   { background: rgba(248,81,73,0.3); border-color: var(--red); }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bellman-Ford — Interactive Visualization</h1>
+  <div class="mode-pill">
+    <button class="active" disabled>Single-Source Shortest Paths</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="graph-pick" id="graphPick">
+        <label class="active"><input type="radio" name="graph" value="simple" checked /> Simple (no negative cycle)</label>
+        <label><input type="radio" name="graph" value="negedge" /> Negative edge, converges</label>
+        <label><input type="radio" name="graph" value="negcycle" /> Negative cycle (detected)</label>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnStep">Step</button>
+        <button class="btn success" id="btnRun">Run</button>
+        <button class="btn warn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1200" value="560" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Algorithm</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.65;">
+        For each edge <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">u &rarr; v (w)</code>:<br>
+        relax = if
+        <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">dist[u]+w &lt; dist[v]</code><br>
+        then
+        <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">dist[v]=dist[u]+w</code><br><br>
+        Repeat <b>V&minus;1</b> rounds.<br>
+        One extra round that still relaxes &rArr; <b style="color:var(--red);">negative cycle</b>.
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="graph" viewBox="0 0 760 340" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"></path>
+          </marker>
+          <marker id="arrowY" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#d29922"></path>
+          </marker>
+          <marker id="arrowR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f85149"></path>
+          </marker>
+        </defs>
+      </svg>
+
+      <div class="tables">
+        <div>
+          <table id="distTable"><caption>dist[] array</caption></table>
+        </div>
+        <div>
+          <table id="edgeTable"><caption>edge list (scanned in order)</caption></table>
+        </div>
+      </div>
+
+      <div class="info-bar" id="info">Pick a graph and press <code>Step</code> or <code>Run</code>.</div>
+      <div class="stats-row">
+        <div class="stat">Round: <b id="statRound">0</b> / <b id="statMaxRound">0</b></div>
+        <div class="stat">Edge: <b id="statEdge">-</b></div>
+        <div class="stat">Relaxations: <b id="statRelax">0</b></div>
+        <div class="stat warn">Phase: <b id="statPhase">idle</b></div>
+        <div class="stat alert" id="statCycleWrap" style="display:none;">Negative cycle: <b id="statCycle">no</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-default"></span>default</span>
+        <span><span class="dot d-source"></span>source</span>
+        <span><span class="dot d-relax"></span>relaxed this step</span>
+        <span><span class="dot d-cycle"></span>on negative cycle</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Relaxation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const INF = Infinity;
+
+// ---------------- graph datasets ----------------
+// Each: names[], positions[], edges [{from,to,w}], source index.
+
+const GRAPHS = {
+  simple: {
+    names: ["A", "B", "C", "D"],
+    pos:   [[110, 90], [380, 60], [380, 250], [650, 160]],
+    edges: [
+      { from: 0, to: 1, w: 4 },
+      { from: 0, to: 2, w: 5 },
+      { from: 1, to: 2, w: -2 },
+      { from: 2, to: 3, w: 3 },
+      { from: 1, to: 3, w: 6 },
+    ],
+    source: 0,
+  },
+  negedge: {
+    names: ["A", "B", "C", "D", "E"],
+    pos:   [[100, 170], [300, 70], [300, 270], [520, 170], [680, 70]],
+    edges: [
+      { from: 0, to: 1, w: 6 },
+      { from: 0, to: 2, w: 7 },
+      { from: 1, to: 2, w: 8 },
+      { from: 1, to: 3, w: -4 },
+      { from: 2, to: 3, w: 9 },
+      { from: 3, to: 4, w: 2 },
+      { from: 1, to: 4, w: -3 },
+    ],
+    source: 0,
+  },
+  negcycle: {
+    names: ["A", "B", "C", "D"],
+    pos:   [[110, 160], [360, 70], [360, 260], [640, 160]],
+    edges: [
+      { from: 0, to: 1, w: 4 },
+      { from: 1, to: 2, w: -2 },
+      { from: 2, to: 1, w: -3 }, // B<->C is a negative cycle (sum -5)
+      { from: 2, to: 3, w: 3 },
+    ],
+    source: 0,
+  },
+};
+
+// ---------------- state ----------------
+
+const state = {
+  key: "simple",
+  names: [],
+  pos: [],
+  edges: [],
+  source: 0,
+  dist: [],
+  n: 0,
+  // step machine
+  steps: [],        // precomputed list of step objects
+  ptr: 0,
+  running: false,
+  paused: false,
+  speedMs: 560,
+  relaxCount: 0,
+  negCycle: false,
+};
+
+const els = {
+  graph:        document.getElementById("graph"),
+  distTable:    document.getElementById("distTable"),
+  edgeTable:    document.getElementById("edgeTable"),
+  info:         document.getElementById("info"),
+  log:          document.getElementById("log"),
+  speed:        document.getElementById("speed"),
+  statRound:    document.getElementById("statRound"),
+  statMaxRound: document.getElementById("statMaxRound"),
+  statEdge:     document.getElementById("statEdge"),
+  statRelax:    document.getElementById("statRelax"),
+  statPhase:    document.getElementById("statPhase"),
+  statCycle:    document.getElementById("statCycle"),
+  statCycleWrap:document.getElementById("statCycleWrap"),
+  toast:        document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function fmtDist(d) { return d === INF ? "∞" : (d === -INF ? "-∞" : String(d)); }
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1700);
+}
+
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(html, klass = "") {
+  els.info.className = "info-bar " + klass;
+  els.info.innerHTML = html;
+}
+
+// ---------------- precompute the full step sequence ----------------
+// Pure simulation: produces an ordered list of "steps" the UI replays.
+// step types: scan (highlight an edge), relax (apply update), roundEnd,
+//             detectStart, detect (one extra round edge), cycleMark, done.
+
+function buildSteps() {
+  const n = state.n;
+  const edges = state.edges;
+  const dist = new Array(n).fill(INF);
+  dist[state.source] = 0;
+  const steps = [];
+
+  let converged = false;
+  let lastRound = 0;
+
+  for (let round = 1; round <= n - 1 && !converged; round++) {
+    lastRound = round;
+    let changed = false;
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      const before = dist[e.to];
+      const canRelax = dist[e.from] !== INF && dist[e.from] + e.w < dist[e.to];
+      steps.push({
+        type: "scan",
+        round, edgeIdx: i,
+        from: e.from, to: e.to, w: e.w,
+        canRelax,
+        distSnapshot: dist.slice(),
+      });
+      if (canRelax) {
+        dist[e.to] = dist[e.from] + e.w;
+        changed = true;
+        steps.push({
+          type: "relax",
+          round, edgeIdx: i,
+          from: e.from, to: e.to, w: e.w,
+          newDist: dist[e.to], oldDist: before,
+          distSnapshot: dist.slice(),
+        });
+      }
+    }
+    steps.push({ type: "roundEnd", round, changed, distSnapshot: dist.slice() });
+    if (!changed) converged = true;
+  }
+
+  // detection pass
+  steps.push({ type: "detectStart", round: lastRound + 1, distSnapshot: dist.slice() });
+  let neg = false;
+  let cycleVertex = -1;
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
+    const canRelax = dist[e.from] !== INF && dist[e.from] + e.w < dist[e.to];
+    steps.push({
+      type: "detect",
+      edgeIdx: i, from: e.from, to: e.to, w: e.w,
+      canRelax, distSnapshot: dist.slice(),
+    });
+    if (canRelax && !neg) {
+      neg = true;
+      cycleVertex = e.to;
+    }
+  }
+
+  if (neg) {
+    // find cycle vertices via repeated relaxation tracking pred (recompute from 0)
+    const cyc = computeCycle();
+    steps.push({ type: "cycleMark", cycle: cyc, distSnapshot: dist.slice() });
+  }
+  steps.push({ type: "done", neg, distSnapshot: dist.slice() });
+  return steps;
+}
+
+// Recompute a concrete negative cycle (all-dist-0 super-source style on the
+// reachable component) for marking. Returns a set of vertex indices.
+function computeCycle() {
+  const n = state.n;
+  const edges = state.edges;
+  const dist = new Array(n).fill(0);
+  const pred = new Array(n).fill(-1);
+  let x = -1;
+  for (let i = 0; i < n; i++) {
+    x = -1;
+    for (const e of edges) {
+      if (dist[e.from] + e.w < dist[e.to]) {
+        dist[e.to] = dist[e.from] + e.w;
+        pred[e.to] = e.from;
+        x = e.to;
+      }
+    }
+  }
+  if (x === -1) return [];
+  for (let i = 0; i < n; i++) x = pred[x];
+  const cycle = new Set([x]);
+  let v = pred[x];
+  while (v !== x && v !== -1) {
+    cycle.add(v);
+    v = pred[v];
+  }
+  return [...cycle];
+}
+
+// ---------------- drawing ----------------
+
+function curvedPath(a, b, bend) {
+  const mx = (a[0] + b[0]) / 2;
+  const my = (a[1] + b[1]) / 2;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const cx = mx + nx * bend, cy = my + ny * bend;
+  return { d: `M ${a[0]} ${a[1]} Q ${cx} ${cy} ${b[0]} ${b[1]}`, lx: cx, ly: cy };
+}
+
+function drawGraph() {
+  const svg = els.graph;
+  svg.querySelectorAll(".edge-line,.edge-label,.gnode").forEach(n => n.remove());
+  const R = 24;
+
+  // detect reciprocal edges to bend them apart
+  const pairSeen = {};
+  state.edges.forEach((e, i) => {
+    const a = state.pos[e.from], b = state.pos[e.to];
+    const key = e.from < e.to ? `${e.from}-${e.to}` : `${e.to}-${e.from}`;
+    const recip = state.edges.some(o => o.from === e.to && o.to === e.from);
+    let bend = 0;
+    if (recip) {
+      bend = (e.from < e.to) ? 34 : -34;
+    }
+    // shorten endpoints to node edge
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ax = a[0] + (dx / len) * R, ay = a[1] + (dy / len) * R;
+    const bx = b[0] - (dx / len) * R, by = b[1] - (dy / len) * R;
+
+    const { d, lx, ly } = curvedPath([ax, ay], [bx, by], bend);
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("class", "edge-line");
+    path.setAttribute("data-eidx", i);
+    path.setAttribute("marker-end", "url(#arrow)");
+    svg.appendChild(path);
+
+    const lbl = document.createElementNS(SVG_NS, "text");
+    lbl.setAttribute("class", "edge-label");
+    lbl.setAttribute("data-eidx", i);
+    lbl.setAttribute("x", lx);
+    lbl.setAttribute("y", ly - 4 + (bend < 0 ? 8 : 0));
+    lbl.textContent = e.w;
+    svg.appendChild(lbl);
+    pairSeen[key] = true;
+  });
+
+  // nodes
+  state.pos.forEach((p, i) => {
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "gnode " + (i === state.source ? "source" : "default"));
+    g.setAttribute("data-idx", i);
+    g.setAttribute("transform", `translate(${p[0]},${p[1]})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", R);
+    g.appendChild(c);
+
+    const nm = document.createElementNS(SVG_NS, "text");
+    nm.setAttribute("class", "name");
+    nm.setAttribute("y", -3);
+    nm.textContent = state.names[i];
+    g.appendChild(nm);
+
+    const dt = document.createElementNS(SVG_NS, "text");
+    dt.setAttribute("class", "dist");
+    dt.setAttribute("y", 11);
+    dt.textContent = fmtDist(state.dist[i]);
+    g.appendChild(dt);
+
+    svg.appendChild(g);
+  });
+}
+
+function setNodeClass(idx, klass) {
+  const g = els.graph.querySelector(`.gnode[data-idx="${idx}"]`);
+  if (g) g.setAttribute("class", "gnode " + klass);
+}
+
+function clearNodeHighlights() {
+  state.pos.forEach((_, i) => setNodeClass(i, i === state.source ? "source" : "default"));
+}
+
+function setEdgeClass(idx, klass) {
+  const p = els.graph.querySelector(`.edge-line[data-eidx="${idx}"]`);
+  const l = els.graph.querySelector(`.edge-label[data-eidx="${idx}"]`);
+  if (p) {
+    p.setAttribute("class", "edge-line" + (klass ? " " + klass : ""));
+    p.setAttribute("marker-end", klass === "relaxing" ? "url(#arrowY)"
+      : (klass === "cycle" ? "url(#arrowR)" : "url(#arrow)"));
+  }
+  if (l) l.setAttribute("class", "edge-label" + (klass === "relaxing" ? " active" : ""));
+}
+
+function clearEdgeHighlights() {
+  state.edges.forEach((_, i) => setEdgeClass(i, ""));
+}
+
+function updateNodeDist(idx) {
+  const g = els.graph.querySelector(`.gnode[data-idx="${idx}"] text.dist`);
+  if (g) g.textContent = fmtDist(state.dist[idx]);
+}
+
+// ---------------- tables ----------------
+
+function drawDistTable(highlightIdx = -1, negSet = null) {
+  let head = "<tr><th>v</th>";
+  for (let i = 0; i < state.n; i++) head += `<th>${state.names[i]}</th>`;
+  head += "</tr>";
+  let row = "<tr><td>dist</td>";
+  for (let i = 0; i < state.n; i++) {
+    let cls = "dcell";
+    if (negSet && negSet.has(i)) cls += " neg";
+    else if (i === highlightIdx) cls += " updated";
+    row += `<td class="${cls}">${fmtDist(state.dist[i])}</td>`;
+  }
+  row += "</tr>";
+  els.distTable.innerHTML = head + row;
+}
+
+function drawEdgeTable(activeIdx = -1, statusClass = "") {
+  let html = "<tr><th>#</th><th>u&rarr;v</th><th>w</th></tr>";
+  state.edges.forEach((e, i) => {
+    let cls = "edge-row";
+    if (i === activeIdx) cls += " " + statusClass;
+    html += `<tr class="${cls}"><td>${i}</td><td>${state.names[e.from]}&rarr;${state.names[e.to]}</td><td>${e.w}</td></tr>`;
+  });
+  els.edgeTable.innerHTML = html;
+}
+
+// ---------------- step application ----------------
+
+function applyStep(step) {
+  clearEdgeHighlights();
+
+  if (step.type === "scan") {
+    state.dist = step.distSnapshot.slice();
+    els.statRound.textContent = step.round;
+    els.statEdge.textContent = `${state.names[step.from]}→${state.names[step.to]}`;
+    els.statPhase.textContent = "relax rounds";
+    setEdgeClass(step.edgeIdx, "relaxing");
+    setNodeClass(step.from, "default");
+    drawEdgeTable(step.edgeIdx, "active");
+    drawDistTable();
+    const du = state.dist[step.from];
+    const dv = state.dist[step.to];
+    const sum = du === INF ? "∞" : du + step.w;
+    if (step.canRelax) {
+      info(`Round <code>${step.round}</code>: check <code>${state.names[step.from]}→${state.names[step.to]}</code>. ` +
+        `<code>dist[${state.names[step.from]}]+w = ${sum}</code> &lt; <code>dist[${state.names[step.to]}] = ${fmtDist(dv)}</code> &mdash; relax!`);
+      log(`round ${step.round}: scan ${state.names[step.from]}→${state.names[step.to]} (w=${step.w}) — will relax`, "relax");
+    } else {
+      info(`Round <code>${step.round}</code>: check <code>${state.names[step.from]}→${state.names[step.to]}</code>. ` +
+        `<code>${du === INF ? "source ∞" : (sum + " ≥ " + fmtDist(dv))}</code> &mdash; no improvement.`);
+      log(`round ${step.round}: scan ${state.names[step.from]}→${state.names[step.to]} — no change`);
+    }
+
+  } else if (step.type === "relax") {
+    state.dist = step.distSnapshot.slice();
+    state.relaxCount++;
+    els.statRelax.textContent = state.relaxCount;
+    setEdgeClass(step.edgeIdx, "improved");
+    setNodeClass(step.to, "updated");
+    updateNodeDist(step.to);
+    drawEdgeTable(step.edgeIdx, "improved");
+    drawDistTable(step.to);
+    info(`Relaxed: <code>dist[${state.names[step.to]}] = ${fmtDist(step.oldDist)} → ${fmtDist(step.newDist)}</code> via <code>${state.names[step.from]}</code>.`, "");
+    log(`  relax: dist[${state.names[step.to]}] = ${fmtDist(step.newDist)}`, "ok");
+
+  } else if (step.type === "roundEnd") {
+    state.dist = step.distSnapshot.slice();
+    clearNodeHighlights();
+    drawDistTable();
+    if (!step.changed) {
+      info(`Round <code>${step.round}</code> changed nothing &rarr; <b>converged early</b>. Distances are final.`, "done");
+      log(`round ${step.round}: no change — early termination`, "ok");
+    } else {
+      info(`Round <code>${step.round}</code> complete. Some distances improved; continue to next round.`);
+      log(`round ${step.round} complete`, "op");
+    }
+
+  } else if (step.type === "detectStart") {
+    state.dist = step.distSnapshot.slice();
+    els.statPhase.textContent = "detection";
+    els.statRound.textContent = step.round;
+    clearNodeHighlights();
+    drawDistTable();
+    info(`<b>Detection round.</b> Scan every edge once more. If any edge still relaxes, a <b style="color:var(--red);">negative cycle</b> is reachable.`);
+    log(`detection pass`, "op");
+
+  } else if (step.type === "detect") {
+    state.dist = step.distSnapshot.slice();
+    els.statEdge.textContent = `${state.names[step.from]}→${state.names[step.to]}`;
+    if (step.canRelax) {
+      setEdgeClass(step.edgeIdx, "cycle");
+      drawEdgeTable(step.edgeIdx, "cycle");
+      info(`Edge <code>${state.names[step.from]}→${state.names[step.to]}</code> STILL relaxes after V&minus;1 rounds &mdash; <b style="color:var(--red);">negative cycle detected</b>.`, "alert");
+      log(`  detect: ${state.names[step.from]}→${state.names[step.to]} still relaxes — NEG CYCLE`, "bad");
+    } else {
+      setEdgeClass(step.edgeIdx, "relaxing");
+      drawEdgeTable(step.edgeIdx, "active");
+      info(`Detection: <code>${state.names[step.from]}→${state.names[step.to]}</code> does not relax. Good.`);
+      log(`  detect: ${state.names[step.from]}→${state.names[step.to]} ok`);
+    }
+
+  } else if (step.type === "cycleMark") {
+    const negSet = new Set(step.cycle);
+    state.negCycle = true;
+    step.cycle.forEach(v => setNodeClass(v, "cycle"));
+    // highlight the cycle edges red
+    state.edges.forEach((e, i) => {
+      if (negSet.has(e.from) && negSet.has(e.to)) setEdgeClass(i, "cycle");
+    });
+    drawDistTable(-1, negSet);
+    els.statCycleWrap.style.display = "";
+    els.statCycle.textContent = "YES";
+    info(`Negative cycle on vertices <code>${step.cycle.map(v => state.names[v]).join(" → ")}</code>. Distances there fall toward <code>-∞</code>.`, "alert");
+    log(`cycle vertices: ${step.cycle.map(v => state.names[v]).join(", ")}`, "bad");
+
+  } else if (step.type === "done") {
+    state.dist = step.distSnapshot.slice();
+    clearEdgeHighlights();
+    els.statPhase.textContent = "done";
+    if (step.neg) {
+      info(`<b style="color:var(--red);">Finished: negative cycle present.</b> Shortest paths to cycle-reachable vertices are unbounded (-∞).`, "alert");
+      log(`done — negative cycle`, "bad");
+    } else {
+      clearNodeHighlights();
+      drawDistTable();
+      info(`<b style="color:var(--green);">Finished: no negative cycle.</b> All shortest distances are final.`, "done");
+      log(`done — distances final`, "ok");
+    }
+  }
+}
+
+// ---------------- driver ----------------
+
+function loadGraph(key) {
+  const g = GRAPHS[key];
+  state.key = key;
+  state.names = g.names;
+  state.pos = g.pos.map(p => p.slice());
+  state.edges = g.edges.map(e => ({ ...e }));
+  state.source = g.source;
+  state.n = g.names.length;
+  state.dist = new Array(state.n).fill(INF);
+  state.dist[state.source] = 0;
+  state.steps = buildSteps();
+  state.ptr = 0;
+  state.relaxCount = 0;
+  state.negCycle = false;
+  state.running = false;
+  state.paused = false;
+
+  els.statRound.textContent = "0";
+  els.statMaxRound.textContent = state.n - 1;
+  els.statEdge.textContent = "-";
+  els.statRelax.textContent = "0";
+  els.statPhase.textContent = "idle";
+  els.statCycleWrap.style.display = "none";
+  els.statCycle.textContent = "no";
+  els.log.innerHTML = "";
+
+  drawGraph();
+  drawDistTable();
+  drawEdgeTable();
+  info(`Loaded graph <code>${key}</code>: ${state.n} vertices, ${state.edges.length} edges, source <code>${state.names[state.source]}</code>. Press <code>Step</code> or <code>Run</code>.`);
+  log(`load ${key} (V=${state.n}, E=${state.edges.length})`, "op");
+}
+
+function doStep() {
+  if (state.ptr >= state.steps.length) {
+    showToast("Algorithm finished. Reset to replay.");
+    return false;
+  }
+  applyStep(state.steps[state.ptr]);
+  state.ptr++;
+  return true;
+}
+
+async function runAll() {
+  if (state.running) return;
+  state.running = true;
+  state.paused = false;
+  while (state.ptr < state.steps.length && !state.paused) {
+    doStep();
+    await sleep(state.speedMs);
+  }
+  state.running = false;
+}
+
+// ---------------- event wiring ----------------
+
+document.querySelectorAll('#graphPick input[name="graph"]').forEach(inp => {
+  inp.addEventListener("change", () => {
+    document.querySelectorAll("#graphPick label").forEach(l => l.classList.remove("active"));
+    inp.closest("label").classList.add("active");
+    state.paused = true;
+    loadGraph(inp.value);
+  });
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  state.paused = true;
+  state.running = false;
+  doStep();
+});
+
+document.getElementById("btnRun").addEventListener("click", () => {
+  if (state.ptr >= state.steps.length) {
+    showToast("Already finished. Reset first.");
+    return;
+  }
+  runAll();
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  state.paused = true;
+  state.running = false;
+  info("Paused. Use <code>Step</code> to advance or <code>Run</code> to resume.");
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  state.paused = true;
+  state.running = false;
+  loadGraph(state.key);
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1280 - Number(e.target.value);
+});
+
+// ---------------- init ----------------
+
+function init() {
+  state.speedMs = 1280 - Number(els.speed.value);
+  loadGraph("simple");
+  log("Bellman-Ford visualizer ready.", "ok");
+}
+
+init();
+</script>
+</body>
+</html>
