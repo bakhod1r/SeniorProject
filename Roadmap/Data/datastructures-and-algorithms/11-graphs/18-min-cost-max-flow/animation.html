@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Min-Cost Max-Flow — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  button {
+    background: var(--blue);
+    border: none;
+    color: #fff;
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: opacity 0.15s ease;
+  }
+  button:hover { opacity: 0.88; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+  button.warn { background: var(--red); }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 13px;
+  }
+  .stat:last-child { border-bottom: none; }
+  .stat .label { color: var(--muted); }
+  .stat .value { font-weight: 700; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  svg { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+
+  .log {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    max-height: 240px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: var(--muted);
+  }
+  .log .hl { color: var(--green); }
+  .log .warn { color: var(--yellow); }
+  .log .path { color: var(--purple); }
+
+  .legend { font-size: 12px; color: var(--muted); line-height: 1.8; }
+  .legend span.dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+
+  .pot-table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .pot-table th, .pot-table td { padding: 4px 6px; text-align: center; border: 1px solid var(--border); }
+  .pot-table th { color: var(--muted); font-weight: 600; }
+
+  .edge-line { stroke-width: 2; }
+  .edge-fwd { stroke: var(--border); }
+  .edge-path { stroke: var(--purple); stroke-width: 4; }
+  .edge-sat { stroke: var(--red); }
+  .node-circle { fill: var(--surface); stroke: var(--blue); stroke-width: 2; }
+  .node-src { stroke: var(--green); stroke-width: 3; }
+  .node-snk { stroke: var(--orange); stroke-width: 3; }
+  .node-onpath { stroke: var(--purple); stroke-width: 3.5; }
+  .node-label { fill: var(--text); font-size: 14px; font-weight: 700; text-anchor: middle; }
+  .edge-label { fill: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+  .edge-label-path { fill: var(--purple); font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Min-Cost Max-Flow — Successive Shortest Paths</h1>
+    <div class="sub">Edge labels: <code>(cost, flow/cap)</code> &nbsp;·&nbsp; cheapest augmenting path highlighted &nbsp;·&nbsp; potentials tracked</div>
+  </div>
+  <div class="sub" id="phase">Ready</div>
+</header>
+
+<main>
+  <!-- LEFT: controls + stats -->
+  <div>
+    <div class="panel">
+      <h2>Controls</h2>
+      <div class="btn-row">
+        <button id="stepBtn">Step</button>
+        <button id="runBtn" class="secondary">Run</button>
+        <button id="resetBtn" class="warn">Reset</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Running Totals</h2>
+      <div class="stat"><span class="label">Total Flow</span><span class="value" id="flowVal">0</span></div>
+      <div class="stat"><span class="label">Total Cost</span><span class="value" id="costVal">0</span></div>
+      <div class="stat"><span class="label">Augmentation #</span><span class="value" id="iterVal">0</span></div>
+      <div class="stat"><span class="label">Last Path Cost</span><span class="value" id="pathCostVal">—</span></div>
+      <div class="stat"><span class="label">Last Bottleneck</span><span class="value" id="botVal">—</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Vertex Potentials h[v]</h2>
+      <table class="pot-table" id="potTable"></table>
+    </div>
+
+    <div class="panel">
+      <h2>How To Read This</h2>
+      <div class="legend">
+        <div>Each <b>Step</b> runs one Successive-Shortest-Path iteration:</div>
+        <div>1. Dijkstra finds the cheapest <code>s→t</code> path using
+          <i>reduced costs</i> <code>c + h[u] − h[v]</code>.</div>
+        <div>2. Potentials <code>h[v]</code> are updated by the shortest
+          distances so every residual edge stays non-negative.</div>
+        <div>3. The full <i>bottleneck</i> is pushed along the path; flow
+          and total cost update.</div>
+        <div>The run stops when no <code>s→t</code> path remains — that is the
+          min-cost maximum flow (expected: flow 5, cost 17).</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Legend</h2>
+      <div class="legend">
+        <div><span class="dot" style="background:var(--green)"></span> Source (s)</div>
+        <div><span class="dot" style="background:var(--orange)"></span> Sink (t)</div>
+        <div><span class="dot" style="background:var(--purple)"></span> Current cheapest augmenting path</div>
+        <div><span class="dot" style="background:var(--red)"></span> Saturated edge (flow = cap)</div>
+        <div><span class="dot" style="background:var(--border)"></span> Residual edge with spare capacity</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: graph + log -->
+  <div>
+    <div class="panel">
+      <h2>Flow Network</h2>
+      <svg id="graph" viewBox="0 0 720 420" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="panel">
+      <h2>Step Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Min-Cost Max-Flow via Successive Shortest Paths + Johnson potentials.
+// Self-contained: no CDN, no external assets.
+// ---------------------------------------------------------------------------
+
+const INF = Number.MAX_SAFE_INTEGER;
+
+// The example network from junior.md: s=0, 1, 2, t=3.
+// Each edge: [u, v, cap, cost]
+const BASE_EDGES = [
+  [0, 1, 3, 1],
+  [0, 2, 2, 2],
+  [1, 2, 1, 1],
+  [1, 3, 2, 3],
+  [2, 3, 3, 1],
+];
+const N = 4;
+const SRC = 0, SNK = 3;
+
+// Node layout (x, y) inside the viewBox.
+const POS = [
+  { x: 90,  y: 210 }, // 0 = s
+  { x: 320, y: 100 }, // 1
+  { x: 320, y: 320 }, // 2
+  { x: 620, y: 210 }, // 3 = t
+];
+const NODE_NAME = ["s", "1", "2", "t"];
+
+// --- Graph state (residual representation with paired e ^ 1 edges) -----------
+let to, cap, cost, head, h;
+let totalFlow, totalCost, iterCount;
+let lastPath = [];        // list of edge ids on the last augmenting path
+let finished = false;
+let runTimer = null;
+
+function buildGraph() {
+  to = []; cap = []; cost = []; head = [];
+  for (let i = 0; i < N; i++) head.push([]);
+  for (const [u, v, c, w] of BASE_EDGES) addEdge(u, v, c, w);
+  h = new Array(N).fill(0);  // all original costs >= 0, so h = 0 is a valid start
+  totalFlow = 0; totalCost = 0; iterCount = 0;
+  lastPath = []; finished = false;
+}
+
+function addEdge(u, v, c, w) {
+  head[u].push(to.length); to.push(v); cap.push(c);  cost.push(w);
+  head[v].push(to.length); to.push(u); cap.push(0);  cost.push(-w);
+}
+
+// One SSP iteration: Dijkstra on reduced costs, then augment along cheapest path.
+// Returns {found, pathEdges, bottleneck, pathCost}.
+function sspStep() {
+  const dist = new Array(N).fill(INF);
+  const pe = new Array(N).fill(-1);
+  dist[SRC] = 0;
+  // simple binary-heap-free Dijkstra (N is tiny) using an array-based PQ.
+  const pq = [[0, SRC]];
+  while (pq.length) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [d, u] = pq.shift();
+    if (d > dist[u]) continue;
+    for (const e of head[u]) {
+      const v = to[e];
+      if (cap[e] > 0) {
+        const nd = dist[u] + cost[e] + h[u] - h[v]; // reduced cost
+        if (nd < dist[v]) {
+          dist[v] = nd; pe[v] = e; pq.push([nd, v]);
+        }
+      }
+    }
+  }
+  if (dist[SNK] === INF) return { found: false };
+
+  // maintain potentials
+  for (let i = 0; i < N; i++) if (dist[i] < INF) h[i] += dist[i];
+
+  // bottleneck
+  let push = INF;
+  for (let v = SNK; v !== SRC; ) {
+    const e = pe[v];
+    push = Math.min(push, cap[e]);
+    v = to[e ^ 1];
+  }
+  // collect path edges + apply
+  const pathEdges = [];
+  for (let v = SNK; v !== SRC; ) {
+    const e = pe[v];
+    pathEdges.push(e);
+    cap[e] -= push;
+    cap[e ^ 1] += push;
+    v = to[e ^ 1];
+  }
+  pathEdges.reverse();
+  const pathCost = h[SNK] - h[SRC]; // real cost of the cheapest path
+  totalFlow += push;
+  totalCost += push * pathCost;
+  iterCount += 1;
+  return { found: true, pathEdges, bottleneck: push, pathCost };
+}
+
+// --- Rendering ---------------------------------------------------------------
+const svg = document.getElementById("graph");
+const logEl = document.getElementById("log");
+
+function flowOnForward(forwardEdgeId) {
+  // flow on a forward edge = residual capacity of its reverse edge
+  return cap[forwardEdgeId ^ 1];
+}
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function render() {
+  svg.innerHTML = "";
+
+  // arrow marker defs
+  const defs = svgEl("defs", {});
+  const makeMarker = (id, color) => {
+    const m = svgEl("marker", { id, markerWidth: 10, markerHeight: 10, refX: 9, refY: 3, orient: "auto", markerUnits: "strokeWidth" });
+    m.appendChild(svgEl("path", { d: "M0,0 L9,3 L0,6 Z", fill: color }));
+    return m;
+  };
+  defs.appendChild(makeMarker("arrow", "#30363d"));
+  defs.appendChild(makeMarker("arrowP", "#bc8cff"));
+  defs.appendChild(makeMarker("arrowR", "#f85149"));
+  svg.appendChild(defs);
+
+  const pathSet = new Set(lastPath);
+
+  // draw forward edges (the original BASE_EDGES, in order added => even indices)
+  for (let i = 0; i < BASE_EDGES.length; i++) {
+    const fwd = i * 2;           // forward edge id
+    const u = to[fwd ^ 1];       // source of forward edge
+    const v = to[fwd];           // target of forward edge
+    const a = POS[u], b = POS[v];
+
+    // shorten endpoints so arrows sit outside node circles
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const r = 26;
+    const x1 = a.x + ux * r, y1 = a.y + uy * r;
+    const x2 = b.x - ux * r, y2 = b.y - uy * r;
+
+    const onPath = pathSet.has(fwd);
+    const saturated = cap[fwd] === 0;
+    let cls = "edge-line edge-fwd";
+    let marker = "url(#arrow)";
+    if (onPath) { cls = "edge-line edge-path"; marker = "url(#arrowP)"; }
+    else if (saturated) { cls = "edge-line edge-sat"; marker = "url(#arrowR)"; }
+
+    svg.appendChild(svgEl("line", { x1, y1, x2, y2, class: cls, "marker-end": marker }));
+
+    // label at midpoint, nudged perpendicular
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const nx = -uy * 16, ny = ux * 16;
+    const f = flowOnForward(fwd);
+    const c = BASE_EDGES[i][2];
+    const w = BASE_EDGES[i][3];
+    const t = svgEl("text", {
+      x: mx + nx, y: my + ny,
+      class: "edge-label" + (onPath ? " edge-label-path" : ""),
+      "text-anchor": "middle",
+    });
+    t.textContent = `(c=${w}, ${f}/${c})`;
+    svg.appendChild(t);
+  }
+
+  // draw nodes
+  for (let i = 0; i < N; i++) {
+    const p = POS[i];
+    let cls = "node-circle";
+    if (i === SRC) cls += " node-src";
+    else if (i === SNK) cls += " node-snk";
+    if (pathSet.size && nodeOnPath(i)) cls = "node-circle node-onpath";
+    svg.appendChild(svgEl("circle", { cx: p.x, cy: p.y, r: 22, class: cls }));
+    const t = svgEl("text", { x: p.x, y: p.y + 5, class: "node-label" });
+    t.textContent = NODE_NAME[i];
+    svg.appendChild(t);
+  }
+}
+
+function nodeOnPath(node) {
+  for (const e of lastPath) {
+    if (to[e] === node || to[e ^ 1] === node) return true;
+  }
+  return false;
+}
+
+function renderStats() {
+  document.getElementById("flowVal").textContent = totalFlow;
+  document.getElementById("costVal").textContent = totalCost;
+  document.getElementById("iterVal").textContent = iterCount;
+  // potentials table
+  const tbl = document.getElementById("potTable");
+  let header = "<tr><th>v</th>";
+  let row = "<tr><td>h</td>";
+  for (let i = 0; i < N; i++) {
+    header = `<tr><th>${NODE_NAME[i]}</th>` + header.slice(4);
+  }
+  // rebuild cleanly
+  let hcells = "<th>v</th>";
+  let vcells = "<td>h[v]</td>";
+  for (let i = 0; i < N; i++) {
+    hcells += `<th>${NODE_NAME[i]}</th>`;
+    vcells += `<td>${h[i]}</td>`;
+  }
+  tbl.innerHTML = `<tr>${hcells}</tr><tr>${vcells}</tr>`;
+}
+
+function logLine(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function pathToString(pathEdges) {
+  const names = [NODE_NAME[SRC]];
+  for (const e of pathEdges) names.push(NODE_NAME[to[e]]);
+  return names.join(" → ");
+}
+
+// --- Controls ----------------------------------------------------------------
+function doStep() {
+  if (finished) return;
+  const res = sspStep();
+  if (!res.found) {
+    finished = true;
+    lastPath = [];
+    document.getElementById("phase").textContent = "Done — min-cost max-flow reached";
+    document.getElementById("pathCostVal").textContent = "—";
+    document.getElementById("botVal").textContent = "—";
+    logLine(`<span class="hl">No augmenting path remains. FINAL flow=${totalFlow}, cost=${totalCost}.</span>`);
+    render();
+    renderStats();
+    document.getElementById("stepBtn").disabled = true;
+    document.getElementById("runBtn").disabled = true;
+    stopRun();
+    return;
+  }
+  lastPath = res.pathEdges;
+  document.getElementById("phase").textContent = `Augmentation #${iterCount}`;
+  document.getElementById("pathCostVal").textContent = res.pathCost;
+  document.getElementById("botVal").textContent = res.bottleneck;
+  logLine(
+    `<span class="path">Aug #${iterCount}:</span> path ${pathToString(res.pathEdges)} ` +
+    `· bottleneck=<b>${res.bottleneck}</b> · pathCost=<b>${res.pathCost}</b> ` +
+    `→ flow=${totalFlow}, cost=${totalCost}`
+  );
+  render();
+  renderStats();
+}
+
+function startRun() {
+  if (finished) return;
+  stopRun();
+  runTimer = setInterval(() => {
+    if (finished) { stopRun(); return; }
+    doStep();
+  }, 900);
+}
+
+function stopRun() {
+  if (runTimer) { clearInterval(runTimer); runTimer = null; }
+}
+
+function reset() {
+  stopRun();
+  buildGraph();
+  logEl.innerHTML = "";
+  document.getElementById("phase").textContent = "Ready";
+  document.getElementById("pathCostVal").textContent = "—";
+  document.getElementById("botVal").textContent = "—";
+  document.getElementById("stepBtn").disabled = false;
+  document.getElementById("runBtn").disabled = false;
+  logLine(`<span class="hl">Network loaded: s=0, t=3, ${BASE_EDGES.length} edges. Potentials h=[0,0,0,0].</span>`);
+  logLine(`Press <b>Step</b> to find the cheapest augmenting path, or <b>Run</b> to play through.`);
+  render();
+  renderStats();
+}
+
+document.getElementById("stepBtn").addEventListener("click", doStep);
+document.getElementById("runBtn").addEventListener("click", startRun);
+document.getElementById("resetBtn").addEventListener("click", reset);
+
+// init
+reset();
+</script>
+</body>
+</html>
