@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Path Compression — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  .mode-pill {
+    display: inline-flex; gap: 6px; background: var(--bg);
+    border: 1px solid var(--border); padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  input[type="number"] {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; min-width: 0;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+  .legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend .row { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); }
+  .stat { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .stat:last-child { border-bottom: none; }
+  .stat b { color: var(--blue); font-variant-numeric: tabular-nums; }
+  .canvas-wrap { position: relative; }
+  svg { width: 100%; height: 460px; display: block; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+  .narration {
+    margin-top: 12px; padding: 12px 14px; background: var(--bg);
+    border: 1px solid var(--border); border-left: 3px solid var(--purple);
+    border-radius: 6px; font-size: 13px; line-height: 1.5; min-height: 46px;
+  }
+  .arr { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .cell {
+    display: flex; flex-direction: column; align-items: center; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 6px; min-width: 34px; overflow: hidden;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell .idx { background: var(--surface); color: var(--muted); width: 100%; text-align: center; padding: 2px 0; }
+  .cell .val { padding: 5px 0; width: 100%; text-align: center; font-weight: 600; }
+  .cell.changed .val { background: var(--yellow); color: #000; }
+  .cell.onpath .val { background: rgba(88,166,255,0.25); }
+  .cell.rootcell .val { background: var(--green); color: #000; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; color: var(--orange); font-size: 12px; }
+  .small { font-size: 12px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Path Compression — Flattening a DSU Tree</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="full" class="active">Full</button>
+    <button data-mode="halving">Halving</button>
+    <button data-mode="splitting">Splitting</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <section class="panel">
+    <h2>Controls</h2>
+
+    <div class="control-group">
+      <div class="control-row">
+        <input type="number" id="chainLen" min="3" max="12" value="8" />
+        <button class="btn" id="rebuildBtn">Build Chain</button>
+      </div>
+      <div class="small">Builds a tall chain <code>0→1→…→n-1</code> (root on top).</div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-row">
+        <input type="number" id="findNode" min="0" value="0" />
+        <button class="btn primary" id="findBtn">find(x)</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="stepBtn">Step ▸</button>
+        <button class="btn success" id="autoBtn">Auto ▶</button>
+        <button class="btn danger" id="resetBtn">Reset</button>
+      </div>
+      <div class="small">Run a single <code>find</code> from the chosen node and watch the path get re-pointed.</div>
+    </div>
+
+    <div class="control-group">
+      <h2>Stats</h2>
+      <div class="stat"><span>Mode</span><b id="statMode">full</b></div>
+      <div class="stat"><span>Path length walked</span><b id="statPath">—</b></div>
+      <div class="stat"><span>Pointer rewrites</span><b id="statWrites">0</b></div>
+      <div class="stat"><span>Root found</span><b id="statRoot">—</b></div>
+      <div class="stat"><span>Avg depth (all nodes)</span><b id="statAvg">—</b></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Legend</h2>
+      <div class="legend">
+        <div class="row"><span class="swatch" style="background:var(--green)"></span> root (parent[r]==r)</div>
+        <div class="row"><span class="swatch" style="background:var(--blue)"></span> current node in walk</div>
+        <div class="row"><span class="swatch" style="background:rgba(88,166,255,0.25)"></span> on the find-path</div>
+        <div class="row"><span class="swatch" style="background:var(--yellow)"></span> just re-pointed</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: visualization -->
+  <section class="panel">
+    <h2>Forest</h2>
+    <div class="canvas-wrap">
+      <svg id="svg" viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="narration" id="narration">Build a chain, then run <code>find(0)</code>. Toggle Full / Halving / Splitting to compare how each variant rewrites parents.</div>
+
+    <h2 style="margin-top:18px;">parent[] array</h2>
+    <div class="arr" id="arrView"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var svg = document.getElementById("svg");
+  var NS = "http://www.w3.org/2000/svg";
+
+  var mode = "full";
+  var parent = [];          // parent[i]
+  var n = 8;
+
+  // Animation state for a single find
+  var anim = null;          // { x, root, steps, idx, justChanged:Set, onPath:Set, current }
+  var autoTimer = null;
+
+  // ---- DSU helpers ----
+  function buildChain(len) {
+    n = len;
+    parent = [];
+    for (var i = 0; i < n - 1; i++) parent.push(i + 1);
+    parent.push(n - 1); // root
+    stopAuto();
+    anim = null;
+    document.getElementById("findNode").max = String(n - 1);
+    render();
+    narrate("Chain built: <code>0→1→…→" + (n - 1) + "</code>. Root is <b>" + (n - 1) + "</b>. Run find(x).");
+    updateStats(null);
+  }
+
+  function depthOf(p, x) {
+    var d = 0, guard = 0;
+    while (p[x] !== x && guard++ < 10000) { x = p[x]; d++; }
+    return d;
+  }
+
+  function avgDepth() {
+    var t = 0;
+    for (var i = 0; i < n; i++) t += depthOf(parent, i);
+    return (t / n).toFixed(2);
+  }
+
+  // ---- Build the step list for a find under the chosen mode ----
+  // Each step is a closure that mutates `parent` and records what changed.
+  function planFind(x) {
+    // First, find the root (read-only walk) to know it for full mode and path display.
+    var path = [];
+    var cur = x, guard = 0;
+    while (parent[cur] !== cur && guard++ < 10000) { path.push(cur); cur = parent[cur]; }
+    var root = cur;
+    path.push(root);
+
+    var steps = [];
+    var writes = 0;
+
+    if (mode === "full") {
+      // Walk to root (highlight), then re-point each non-root node on path to root.
+      for (var i = 0; i < path.length; i++) {
+        (function (node, isRoot) {
+          steps.push({
+            current: node,
+            apply: function () {
+              if (!isRoot && parent[node] !== root) { parent[node] = root; return node; }
+              return null;
+            },
+            desc: isRoot
+              ? "Reached root <b>" + node + "</b>. Now re-point every node on the path directly to it."
+              : "Walking up: at node <b>" + node + "</b> (depth " + path.indexOf(node) + ")."
+          });
+        })(path[i], path[i] === root);
+      }
+      // Second pass: re-point
+      for (var j = 0; j < path.length - 1; j++) {
+        (function (node) {
+          steps.push({
+            current: node,
+            apply: function () {
+              if (parent[node] !== root) { parent[node] = root; return node; }
+              return null;
+            },
+            desc: "Full compression: <code>parent[" + node + "] = " + root + "</code> (straight to root)."
+          });
+        })(path[j]);
+      }
+    } else if (mode === "halving") {
+      // while parent[x]!=x: parent[x]=parent[parent[x]]; x=parent[x]
+      var t = x, g2 = 0;
+      while (parent[t] !== t && g2++ < 10000) {
+        (function (node) {
+          var gp = parent[parent[node]];
+          steps.push({
+            current: node,
+            apply: function () {
+              var grand = parent[parent[node]];
+              if (parent[node] !== grand) { parent[node] = grand; return node; }
+              return null;
+            },
+            desc: "Halving: point <b>" + node + "</b> to its grandparent <b>" + gp + "</b>, then jump up."
+          });
+        })(t);
+        // advance as halving would (using the *will-be* parent = grandparent)
+        t = parent[parent[t]];
+      }
+    } else { // splitting
+      var s = x, g3 = 0;
+      while (parent[s] !== s && g3++ < 10000) {
+        (function (node) {
+          var gp = parent[parent[node]];
+          steps.push({
+            current: node,
+            apply: function () {
+              var grand = parent[parent[node]];
+              if (parent[node] !== grand) { parent[node] = grand; return node; }
+              return null;
+            },
+            desc: "Splitting: point <b>" + node + "</b> to its grandparent <b>" + gp + "</b>, then advance to old parent."
+          });
+        })(s);
+        s = parent[s]; // advance to OLD parent (read before any mutation in real run; here parent[s] unchanged yet for s)
+      }
+    }
+
+    return { path: path, root: root, steps: steps, idx: 0, writes: 0, justChanged: null, current: x };
+  }
+
+  function startFind() {
+    var x = parseInt(document.getElementById("findNode").value, 10);
+    if (isNaN(x) || x < 0 || x >= n) { narrate("Pick a node in <code>0…" + (n - 1) + "</code>."); return; }
+    anim = planFind(x);
+    narrate("Starting <code>find(" + x + ")</code> in <b>" + mode + "</b> mode. Step or Auto to proceed.");
+    updateStats(anim);
+    render();
+  }
+
+  function step() {
+    if (!anim) { startFind(); return; }
+    if (anim.idx >= anim.steps.length) {
+      narrate("Done. <code>find(" + anim.current + ")</code> returned root <b>" + anim.root + "</b>. Tree is flatter now.");
+      stopAuto();
+      anim.current = anim.root;
+      anim.justChanged = null;
+      render();
+      updateStats(anim);
+      return;
+    }
+    var st = anim.steps[anim.idx++];
+    var changed = st.apply();
+    anim.current = st.current;
+    anim.justChanged = (changed === null) ? null : changed;
+    if (changed !== null) anim.writes++;
+    narrate(st.desc);
+    render();
+    updateStats(anim);
+  }
+
+  function auto() {
+    if (autoTimer) { stopAuto(); return; }
+    if (!anim) startFind();
+    document.getElementById("autoBtn").textContent = "Pause ⏸";
+    autoTimer = setInterval(function () {
+      if (!anim || anim.idx >= anim.steps.length) { step(); stopAuto(); return; }
+      step();
+    }, 650);
+  }
+
+  function stopAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    document.getElementById("autoBtn").textContent = "Auto ▶";
+  }
+
+  function resetAnim() {
+    stopAuto();
+    anim = null;
+    narrate("Reset. The current <code>parent[]</code> is kept; run another <code>find</code> or rebuild the chain.");
+    render();
+    updateStats(null);
+  }
+
+  // ---- Rendering ----
+  function layout() {
+    // Place nodes by depth from root. Root at top center.
+    var depth = new Array(n);
+    for (var i = 0; i < n; i++) depth[i] = depthOf(parent, i);
+    var maxD = 0;
+    for (i = 0; i < n; i++) maxD = Math.max(maxD, depth[i]);
+
+    // Group nodes by depth level.
+    var levels = {};
+    for (i = 0; i < n; i++) {
+      (levels[depth[i]] = levels[depth[i]] || []).push(i);
+    }
+    var W = 900, H = 460;
+    var pad = 40;
+    var rowH = (H - 2 * pad) / Math.max(1, maxD);
+    var pos = {};
+    for (var d = 0; d <= maxD; d++) {
+      var arr = levels[d] || [];
+      var cnt = arr.length;
+      for (var k = 0; k < cnt; k++) {
+        var node = arr[k];
+        var x = (cnt === 1) ? W / 2 : pad + (W - 2 * pad) * (k / (cnt - 1));
+        var y = pad + (maxD - d) * rowH; // root (max depth from leaves? no) -> we want root at top
+        pos[node] = { x: x, y: y };
+      }
+    }
+    // We placed depth 0 (roots) at the BOTTOM by formula; fix so root is on top:
+    // depth(root)=0 -> y = pad + maxD*rowH (bottom). Invert:
+    for (i = 0; i < n; i++) {
+      pos[i].y = pad + depth[i] * rowH; // depth 0 (root) at top
+    }
+    return pos;
+  }
+
+  function render() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var pos = layout();
+
+    var onPath = {};
+    if (anim) for (var i = 0; i < anim.path.length; i++) onPath[anim.path[i]] = true;
+
+    // edges (child -> parent)
+    for (var c = 0; c < n; c++) {
+      if (parent[c] === c) continue;
+      var p = parent[c];
+      var line = document.createElementNS(NS, "line");
+      line.setAttribute("x1", pos[c].x); line.setAttribute("y1", pos[c].y);
+      line.setAttribute("x2", pos[p].x); line.setAttribute("y2", pos[p].y);
+      var hot = anim && (anim.justChanged === c);
+      line.setAttribute("stroke", hot ? "var(--yellow)" : (onPath[c] ? "var(--blue)" : "var(--border)"));
+      line.setAttribute("stroke-width", hot ? "3" : "1.6");
+      if (hot) line.setAttribute("stroke-dasharray", "5,4");
+      svg.appendChild(line);
+    }
+
+    // nodes
+    for (var node = 0; node < n; node++) {
+      var g = document.createElementNS(NS, "g");
+      var isRoot = parent[node] === node;
+      var fill = "var(--surface)";
+      var stroke = "var(--border)";
+      if (isRoot) { fill = "var(--green)"; stroke = "var(--green)"; }
+      if (anim && anim.current === node) { stroke = "var(--blue)"; }
+      if (anim && anim.justChanged === node) { fill = "var(--yellow)"; }
+      var circ = document.createElementNS(NS, "circle");
+      circ.setAttribute("cx", pos[node].x); circ.setAttribute("cy", pos[node].y);
+      circ.setAttribute("r", 18);
+      circ.setAttribute("fill", fill);
+      circ.setAttribute("stroke", stroke);
+      circ.setAttribute("stroke-width", (anim && anim.current === node) ? "3.5" : "2");
+      g.appendChild(circ);
+      var txt = document.createElementNS(NS, "text");
+      txt.setAttribute("x", pos[node].x); txt.setAttribute("y", pos[node].y + 5);
+      txt.setAttribute("text-anchor", "middle");
+      txt.setAttribute("font-size", "14");
+      txt.setAttribute("font-weight", "600");
+      txt.setAttribute("fill", (isRoot || (anim && anim.justChanged === node)) ? "#000" : "var(--text)");
+      txt.textContent = node;
+      g.appendChild(txt);
+      svg.appendChild(g);
+    }
+
+    renderArray(onPath);
+  }
+
+  function renderArray(onPath) {
+    var view = document.getElementById("arrView");
+    view.innerHTML = "";
+    for (var i = 0; i < n; i++) {
+      var cell = document.createElement("div");
+      cell.className = "cell";
+      if (parent[i] === i) cell.className += " rootcell";
+      else if (onPath && onPath[i]) cell.className += " onpath";
+      if (anim && anim.justChanged === i) cell.className += " changed";
+      var idx = document.createElement("div"); idx.className = "idx"; idx.textContent = i;
+      var val = document.createElement("div"); val.className = "val"; val.textContent = parent[i];
+      cell.appendChild(idx); cell.appendChild(val);
+      view.appendChild(cell);
+    }
+  }
+
+  function narrate(html) { document.getElementById("narration").innerHTML = html; }
+
+  function updateStats(a) {
+    document.getElementById("statMode").textContent = mode;
+    document.getElementById("statAvg").textContent = avgDepth();
+    if (!a) {
+      document.getElementById("statPath").textContent = "—";
+      document.getElementById("statWrites").textContent = "0";
+      document.getElementById("statRoot").textContent = "—";
+      return;
+    }
+    document.getElementById("statPath").textContent = String(a.path.length - 1);
+    document.getElementById("statWrites").textContent = String(a.writes);
+    document.getElementById("statRoot").textContent = String(a.root);
+  }
+
+  // ---- wire up ----
+  document.getElementById("modePill").addEventListener("click", function (e) {
+    if (e.target.tagName !== "BUTTON") return;
+    var btns = this.querySelectorAll("button");
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove("active");
+    e.target.classList.add("active");
+    mode = e.target.getAttribute("data-mode");
+    stopAuto();
+    anim = null;
+    updateStats(null);
+    render();
+    narrate("Mode set to <b>" + mode + "</b>. Run <code>find</code> to see how it rewrites parents.");
+  });
+
+  document.getElementById("rebuildBtn").addEventListener("click", function () {
+    var len = parseInt(document.getElementById("chainLen").value, 10);
+    if (isNaN(len) || len < 3) len = 3;
+    if (len > 12) len = 12;
+    buildChain(len);
+  });
+  document.getElementById("findBtn").addEventListener("click", startFind);
+  document.getElementById("stepBtn").addEventListener("click", step);
+  document.getElementById("autoBtn").addEventListener("click", auto);
+  document.getElementById("resetBtn").addEventListener("click", resetAnim);
+
+  // init
+  buildChain(8);
+})();
+</script>
+</body>
+</html>
