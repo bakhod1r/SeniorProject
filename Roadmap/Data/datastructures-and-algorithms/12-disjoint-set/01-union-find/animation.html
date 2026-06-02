@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Union-Find (Disjoint Set Union) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 420px;
+    overflow-x: auto;
+  }
+
+  svg#forest {
+    width: 100%;
+    height: 380px;
+    display: block;
+  }
+
+  .edge {
+    stroke: var(--border);
+    stroke-width: 2;
+    fill: none;
+  }
+  .edge.path { stroke: var(--purple); stroke-width: 3; }
+  .edge.linknew { stroke: var(--green); stroke-width: 3; }
+
+  .node circle {
+    stroke-width: 2;
+    transition: all 0.25s ease;
+  }
+
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  .node text.tag {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    fill: var(--muted);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  /* node states */
+  .node.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .node.root circle { fill: rgba(63,185,80,0.22); stroke: var(--green); }
+  .node.finding circle { fill: rgba(210,153,34,0.3); stroke: var(--yellow); }
+  .node.foundroot circle { fill: rgba(248,81,73,0.25); stroke: var(--red); }
+  .node.path circle { fill: rgba(188,140,255,0.22); stroke: var(--purple); }
+  .node.linked circle { fill: rgba(63,185,80,0.32); stroke: var(--green); }
+
+  .node.default text.val { fill: var(--text); }
+  .node.root text.val { fill: var(--green); }
+  .node.finding text.val { fill: var(--yellow); }
+  .node.foundroot text.val { fill: var(--red); }
+  .node.path text.val { fill: var(--purple); }
+
+  .array-strip {
+    display: flex;
+    gap: 4px;
+    margin-top: 18px;
+    padding: 6px 2px;
+    overflow-x: auto;
+    flex-wrap: wrap;
+  }
+
+  .arr-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 40px;
+  }
+
+  .arr-box {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--blue);
+    background: rgba(88,166,255,0.15);
+    color: var(--text);
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.25s ease;
+  }
+
+  .arr-box.root { border-color: var(--green); background: rgba(63,185,80,0.22); color: var(--green); }
+  .arr-box.finding { border-color: var(--yellow); background: rgba(210,153,34,0.3); color: var(--yellow); }
+  .arr-box.foundroot { border-color: var(--red); background: rgba(248,81,73,0.25); color: var(--red); }
+  .arr-box.path { border-color: var(--purple); background: rgba(188,140,255,0.22); color: var(--purple); }
+  .arr-box.linked { border-color: var(--green); background: rgba(63,185,80,0.32); color: var(--green); }
+
+  .arr-idx {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .stats-row .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.walk { color: var(--purple); }
+  #log .entry.link { color: var(--yellow); }
+  #log .entry.ok { color: var(--green); }
+  #log .entry.no { color: var(--red); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .legend .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid;
+  }
+
+  .dot.d-default { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-root { background: rgba(63,185,80,0.22); border-color: var(--green); }
+  .dot.d-finding { background: rgba(210,153,34,0.3); border-color: var(--yellow); }
+  .dot.d-foundroot { background: rgba(248,81,73,0.25); border-color: var(--red); }
+  .dot.d-path { background: rgba(188,140,255,0.22); border-color: var(--purple); }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Union-Find (Disjoint Set Union) — Interactive Visualization</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="naive" class="active">Naive QuickUnion</button>
+    <button data-mode="size">Union by Size</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Universe</h2>
+      <div class="control-row">
+        <input type="number" id="nVal" placeholder="n (size)" value="8" min="1" max="16" />
+        <button class="btn success" id="btnInit" style="flex:1">MakeSet n</button>
+      </div>
+      <div class="control-row">
+        <button class="btn danger" id="btnReset" style="flex:1">Reset</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Operations</h2>
+      <div class="control-row">
+        <input type="number" id="unionA" placeholder="a" />
+        <input type="number" id="unionB" placeholder="b" />
+        <button class="btn primary" id="btnUnion">Union</button>
+      </div>
+      <div class="control-row">
+        <input type="number" id="findX" placeholder="x" />
+        <button class="btn warn" id="btnFind" style="flex:1">Find</button>
+        <button class="btn" id="btnConn">Connected?</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Step Controls</h2>
+      <div class="step-controls">
+        <button class="btn" id="btnStart">Resume</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn" id="btnStopRun">Stop</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1200" value="500" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Rules</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
+        root <code style="background:rgba(63,185,80,0.22);color:var(--green);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">parent[r]==r</code><br>
+        Find walks <code style="background:rgba(188,140,255,0.22);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">parent[x]</code> to root<br>
+        Union links <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">parent[Find(a)]=Find(b)</code>
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="forest" viewBox="0 0 1000 380" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="array-strip" id="arrStrip"></div>
+      <div class="info-bar" id="info">Click <code>MakeSet n</code> to create n singleton sets, then Union and Find.</div>
+      <div class="stats-row">
+        <div class="stat">n: <b id="statN">0</b></div>
+        <div class="stat">Sets: <b id="statCount">0</b></div>
+        <div class="stat">Mode: <b id="statMode">naive</b></div>
+        <div class="stat">Find steps: <b id="statFind">0</b></div>
+        <div class="stat">Links: <b id="statLink">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-default"></span>node</span>
+        <span><span class="dot d-root"></span>root (representative)</span>
+        <span><span class="dot d-finding"></span>walking up</span>
+        <span><span class="dot d-foundroot"></span>found root</span>
+        <span><span class="dot d-path"></span>find path</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Union-Find (Disjoint Set Union) visualizer
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const state = {
+  parent: [],     // parent[i] = parent of i; root iff parent[i] === i
+  size: [],       // size[root] = number of nodes in that tree (for union by size)
+  count: 0,       // number of disjoint sets
+  mode: "naive",  // 'naive' or 'size'
+  busy: false,
+  findSteps: 0,
+  links: 0,
+  speedMs: 500,
+  paused: false,
+  stepRequested: false,
+  stopped: false,
+};
+
+const els = {
+  forest:    document.getElementById("forest"),
+  arrStrip:  document.getElementById("arrStrip"),
+  info:      document.getElementById("info"),
+  log:       document.getElementById("log"),
+  nVal:      document.getElementById("nVal"),
+  unionA:    document.getElementById("unionA"),
+  unionB:    document.getElementById("unionB"),
+  findX:     document.getElementById("findX"),
+  speed:     document.getElementById("speed"),
+  statN:     document.getElementById("statN"),
+  statCount: document.getElementById("statCount"),
+  statMode:  document.getElementById("statMode"),
+  statFind:  document.getElementById("statFind"),
+  statLink:  document.getElementById("statLink"),
+  toast:     document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function pauseGate() {
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) { state.stepRequested = false; return; }
+    await sleep(60);
+  }
+}
+
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function bumpFind() { state.findSteps++; els.statFind.textContent = state.findSteps; }
+function bumpLink() { state.links++; els.statLink.textContent = state.links; }
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function log(msg, klass = "") {
+  const ts = new Date();
+  const hh = String(ts.getHours()).padStart(2, "0");
+  const mm = String(ts.getMinutes()).padStart(2, "0");
+  const ss = String(ts.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(text) { els.info.innerHTML = text; }
+
+function isRoot(i) { return state.parent[i] === i; }
+
+function setMode() { els.statMode.textContent = state.mode; }
+
+// ---------------- non-animated DSU primitives (for layout) ----------------
+
+function findRoot(x) {
+  while (state.parent[x] !== x) x = state.parent[x];
+  return x;
+}
+
+// ---------------- layout ----------------
+
+// Group nodes by their root, then lay each tree out as a small rooted tree.
+function computeLayout() {
+  const n = state.parent.length;
+  if (n === 0) return {};
+
+  // Build children lists.
+  const children = Array.from({ length: n }, () => []);
+  const roots = [];
+  for (let i = 0; i < n; i++) {
+    if (isRoot(i)) roots.push(i);
+    else children[state.parent[i]].push(i);
+  }
+
+  // Depth of each subtree (to size columns) and assign x slots via in-order leaf counting.
+  const pos = {};
+  const W = 1000;
+  const treeGap = 24;
+
+  // First pass: compute leaf-width of each node (number of leaves under it).
+  const width = new Array(n).fill(0);
+  function computeWidth(u) {
+    if (children[u].length === 0) { width[u] = 1; return 1; }
+    let w = 0;
+    for (const c of children[u]) w += computeWidth(c);
+    width[u] = w;
+    return w;
+  }
+  let totalLeaves = 0;
+  for (const r of roots) totalLeaves += computeWidth(r);
+
+  // unit width per leaf, leaving small gaps between trees
+  const unit = (W - treeGap * (roots.length + 1)) / Math.max(1, totalLeaves);
+  const vGap = 70;
+
+  let cursor = treeGap;
+  function place(u, depth, leftEdge) {
+    const myWidth = width[u] * unit;
+    const cx = leftEdge + myWidth / 2;
+    pos[u] = { x: cx, y: 40 + depth * vGap };
+    let childLeft = leftEdge;
+    for (const c of children[u]) {
+      place(c, depth + 1, childLeft);
+      childLeft += width[c] * unit;
+    }
+  }
+  for (const r of roots) {
+    place(r, 0, cursor);
+    cursor += width[r] * unit + treeGap;
+  }
+  return pos;
+}
+
+function drawForest(highlightEdges = {}) {
+  const svg = els.forest;
+  svg.innerHTML = "";
+  const n = state.parent.length;
+  if (n === 0) {
+    const t = document.createElementNS(SVG_NS, "text");
+    t.setAttribute("x", "500");
+    t.setAttribute("y", "180");
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("fill", "#8b949e");
+    t.setAttribute("font-size", "16");
+    t.textContent = "No sets — click MakeSet n";
+    svg.appendChild(t);
+    return;
+  }
+  const pos = computeLayout();
+
+  // edges: from child i to parent[i]
+  for (let i = 0; i < n; i++) {
+    if (isRoot(i)) continue;
+    const p = pos[state.parent[i]], c = pos[i];
+    if (!p || !c) continue;
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", c.x);
+    line.setAttribute("y1", c.y);
+    line.setAttribute("x2", p.x);
+    line.setAttribute("y2", p.y);
+    let cls = "edge";
+    if (highlightEdges[i] === "path") cls = "edge path";
+    if (highlightEdges[i] === "linknew") cls = "edge linknew";
+    line.setAttribute("class", cls);
+    line.setAttribute("data-child", i);
+    svg.appendChild(line);
+  }
+
+  // nodes
+  for (let i = 0; i < n; i++) {
+    const { x, y } = pos[i];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node " + (isRoot(i) ? "root" : "default"));
+    g.setAttribute("data-idx", i);
+    g.setAttribute("transform", `translate(${x},${y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 18);
+    c.setAttribute("cx", 0);
+    c.setAttribute("cy", 0);
+    g.appendChild(c);
+
+    const tv = document.createElementNS(SVG_NS, "text");
+    tv.setAttribute("class", "val");
+    tv.setAttribute("x", 0);
+    tv.setAttribute("y", 0);
+    tv.textContent = i;
+    g.appendChild(tv);
+
+    const tt = document.createElementNS(SVG_NS, "text");
+    tt.setAttribute("class", "tag");
+    tt.setAttribute("x", 0);
+    tt.setAttribute("y", 30);
+    if (isRoot(i)) {
+      tt.textContent = state.mode === "size" ? `root·sz${state.size[i]}` : "root";
+    } else {
+      tt.textContent = `↑${state.parent[i]}`;
+    }
+    g.appendChild(tt);
+
+    svg.appendChild(g);
+  }
+}
+
+function drawArray() {
+  els.arrStrip.innerHTML = "";
+  const n = state.parent.length;
+  if (n === 0) {
+    const empty = document.createElement("div");
+    empty.style.color = "var(--muted)";
+    empty.style.fontSize = "12px";
+    empty.style.padding = "4px";
+    empty.textContent = "parent[] is empty";
+    els.arrStrip.appendChild(empty);
+    return;
+  }
+  for (let i = 0; i < n; i++) {
+    const cell = document.createElement("div");
+    cell.className = "arr-cell";
+
+    const box = document.createElement("div");
+    box.className = "arr-box " + (isRoot(i) ? "root" : "default");
+    box.dataset.idx = i;
+    box.textContent = state.parent[i];
+    cell.appendChild(box);
+
+    const idx = document.createElement("div");
+    idx.className = "arr-idx";
+    idx.textContent = i;
+    cell.appendChild(idx);
+
+    els.arrStrip.appendChild(cell);
+  }
+}
+
+function render(highlightEdges = {}) {
+  drawForest(highlightEdges);
+  drawArray();
+  els.statN.textContent = state.parent.length;
+  els.statCount.textContent = state.count;
+}
+
+// ---------------- highlight helpers ----------------
+
+function setNodeClass(idx, klass) {
+  if (idx < 0 || idx >= state.parent.length) return;
+  const node = els.forest.querySelector(`g.node[data-idx="${idx}"]`);
+  const box = els.arrStrip.querySelector(`.arr-box[data-idx="${idx}"]`);
+  if (node) node.setAttribute("class", "node " + klass);
+  if (box) box.className = "arr-box " + klass;
+}
+
+function clearHighlights() {
+  for (let i = 0; i < state.parent.length; i++) {
+    setNodeClass(i, isRoot(i) ? "root" : "default");
+  }
+}
+
+// ---------------- operations (animated) ----------------
+
+async function animatedFind(x, label) {
+  if (x < 0 || x >= state.parent.length) {
+    showToast("Index out of range", true);
+    throw new Error("__stopped__");
+  }
+  info(`${label}: walk parent pointers from <code>${x}</code> up to its root.`);
+  const visited = [];
+  let cur = x;
+  while (state.parent[cur] !== cur) {
+    setNodeClass(cur, "finding");
+    visited.push(cur);
+    bumpFind();
+    info(`At <code>${cur}</code>: <code>parent[${cur}] = ${state.parent[cur]}</code>, not a root — move up.`);
+    log(`  walk ${cur} -> ${state.parent[cur]}`, "walk");
+    await wait();
+    setNodeClass(cur, "path");
+    cur = state.parent[cur];
+  }
+  // cur is the root
+  setNodeClass(cur, "foundroot");
+  bumpFind();
+  info(`Reached root <code>${cur}</code> (<code>parent[${cur}] = ${cur}</code>). It is the representative.`);
+  log(`  root of ${x} = ${cur}`, "ok");
+  await wait();
+  return cur;
+}
+
+async function doUnion(a, b) {
+  if (a < 0 || a >= state.parent.length || b < 0 || b >= state.parent.length) {
+    showToast("Index out of range", true);
+    return;
+  }
+  log(`union(${a}, ${b})`, "op");
+  info(`Union(<code>${a}</code>, <code>${b}</code>): first Find both roots.`);
+  await wait();
+
+  const ra = await animatedFind(a, `Find(${a})`);
+  await wait();
+  clearHighlights();
+  setNodeClass(ra, "foundroot");
+  const rb = await animatedFind(b, `Find(${b})`);
+  await wait();
+
+  setNodeClass(ra, "foundroot");
+  setNodeClass(rb, "foundroot");
+
+  if (ra === rb) {
+    info(`Both roots are <code>${ra}</code>. Already in the same set — no link, count unchanged.`);
+    log(`  same root ${ra}: no-op`, "no");
+    await wait();
+    clearHighlights();
+    render();
+    return;
+  }
+
+  // decide link direction
+  let child = ra, par = rb;
+  if (state.mode === "size") {
+    if (state.size[ra] < state.size[rb]) { child = ra; par = rb; }
+    else { child = rb; par = ra; }
+    info(`Union by size: attach the smaller tree (root <code>${child}</code>, size ${state.size[child]}) under the larger (root <code>${par}</code>, size ${state.size[par]}).`);
+  } else {
+    child = ra; par = rb; // naive: always link first root under second
+    info(`Naive QuickUnion: link first root <code>${ra}</code> under second root <code>${rb}</code>.`);
+  }
+  log(`  link root ${child} under root ${par}`, "link");
+  await wait();
+
+  state.parent[child] = par;
+  if (state.mode === "size") state.size[par] += state.size[child];
+  state.count--;
+  bumpLink();
+
+  const hl = {};
+  hl[child] = "linknew";
+  render(hl);
+  setNodeClass(child, "linked");
+  setNodeClass(par, "root");
+  info(`Linked: <code>parent[${child}] = ${par}</code>. Sets merged. Now <b>${state.count}</b> set(s).`);
+  log(`  done — ${state.count} set(s)`, "ok");
+  await wait();
+  clearHighlights();
+  render();
+}
+
+async function doFind(x) {
+  log(`find(${x})`, "op");
+  const r = await animatedFind(x, `Find(${x})`);
+  info(`<code>Find(${x}) = ${r}</code>. That is the representative of ${x}'s set.`);
+  await wait();
+  clearHighlights();
+  render();
+  return r;
+}
+
+async function doConnected(a, b) {
+  if (a < 0 || a >= state.parent.length || b < 0 || b >= state.parent.length) {
+    showToast("Index out of range", true);
+    return;
+  }
+  log(`connected(${a}, ${b})`, "op");
+  info(`Connected(<code>${a}</code>, <code>${b}</code>) = (Find(${a}) == Find(${b}))?`);
+  await wait();
+  const ra = await animatedFind(a, `Find(${a})`);
+  await wait();
+  clearHighlights();
+  setNodeClass(ra, "foundroot");
+  const rb = await animatedFind(b, `Find(${b})`);
+  await wait();
+  const same = ra === rb;
+  info(`Find(${a}) = <code>${ra}</code>, Find(${b}) = <code>${rb}</code> → <b>${same ? "connected" : "NOT connected"}</b>.`);
+  log(`  connected = ${same}`, same ? "ok" : "no");
+  await wait();
+  clearHighlights();
+  render();
+}
+
+// ---------------- driver ----------------
+
+async function withBusy(fn) {
+  if (state.busy) { showToast("Operation in progress…", true); return; }
+  if (state.parent.length === 0) { showToast("Create sets first (MakeSet n)", true); return; }
+  state.busy = true;
+  state.stopped = false;
+  try {
+    await fn();
+  } catch (e) {
+    if (e.message !== "__stopped__") {
+      console.error(e);
+      showToast("Error: " + e.message, true);
+    } else {
+      log(`  stopped by user`, "no");
+      info("Operation stopped.");
+    }
+  } finally {
+    clearHighlights();
+    render();
+    state.busy = false;
+    state.paused = false;
+    state.stepRequested = false;
+  }
+}
+
+function makeSet(n) {
+  state.parent = Array.from({ length: n }, (_, i) => i);
+  state.size = new Array(n).fill(1);
+  state.count = n;
+  state.findSteps = 0;
+  state.links = 0;
+  els.statFind.textContent = "0";
+  els.statLink.textContent = "0";
+  render();
+  info(`Created <code>${n}</code> singleton sets. Each element is its own root.`);
+  log(`makeSet(${n})`, "op");
+}
+
+// ---------------- event wiring ----------------
+
+document.getElementById("btnInit").addEventListener("click", () => {
+  if (state.busy) { showToast("Wait for current op", true); return; }
+  let n = parseInt(els.nVal.value, 10);
+  if (!Number.isFinite(n) || n < 1) { showToast("Enter n >= 1", true); return; }
+  if (n > 16) { n = 16; els.nVal.value = "16"; showToast("Capped at 16 for clarity"); }
+  makeSet(n);
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; return; }
+  state.parent = [];
+  state.size = [];
+  state.count = 0;
+  state.findSteps = 0;
+  state.links = 0;
+  els.statFind.textContent = "0";
+  els.statLink.textContent = "0";
+  render();
+  info("Reset. Click MakeSet n to start again.");
+  log("reset()", "op");
+});
+
+document.getElementById("btnUnion").addEventListener("click", () => {
+  const a = parseInt(els.unionA.value, 10);
+  const b = parseInt(els.unionB.value, 10);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) { showToast("Enter a and b", true); return; }
+  withBusy(() => doUnion(a, b));
+});
+
+document.getElementById("btnFind").addEventListener("click", () => {
+  const x = parseInt(els.findX.value, 10);
+  if (!Number.isFinite(x)) { showToast("Enter x", true); return; }
+  withBusy(() => doFind(x));
+});
+
+document.getElementById("btnConn").addEventListener("click", () => {
+  const a = parseInt(els.unionA.value, 10);
+  const b = parseInt(els.unionB.value, 10);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) { showToast("Enter a and b in the Union fields", true); return; }
+  withBusy(() => doConnected(a, b));
+});
+
+document.getElementById("btnStart").addEventListener("click", () => {
+  state.paused = false;
+  state.stepRequested = false;
+  if (state.busy) info("Resuming animation…");
+  else showToast("Trigger an operation to animate");
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) { showToast("Start an operation first"); return; }
+  state.paused = true;
+  state.stepRequested = true;
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance." : "Resumed.");
+});
+
+document.getElementById("btnStopRun").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.stopped = true;
+  state.paused = false;
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1280 - Number(e.target.value);
+});
+
+document.querySelectorAll("#modePill button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (state.busy) { showToast("Wait for current op to finish", true); return; }
+    document.querySelectorAll("#modePill button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.mode = btn.dataset.mode;
+    setMode();
+    render();
+    info(`Mode: <code>${state.mode === "size" ? "union by size" : "naive QuickUnion"}</code>. ${state.mode === "size" ? "Smaller tree hangs under larger." : "First root always links under second."}`);
+    log(`mode = ${state.mode}`, "op");
+  });
+});
+
+[els.unionA, els.unionB].forEach(inp => {
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btnUnion").click();
+  });
+});
+els.findX.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btnFind").click();
+});
+
+// ---------------- init ----------------
+
+function init() {
+  state.speedMs = 1280 - Number(els.speed.value);
+  setMode();
+  makeSet(8);
+  log("Union-Find visualizer ready.", "ok");
+}
+
+init();
+</script>
+</body>
+</html>
