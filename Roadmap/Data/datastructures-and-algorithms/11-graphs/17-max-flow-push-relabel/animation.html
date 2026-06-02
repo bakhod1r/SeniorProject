@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Push-Relabel Max-Flow — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  button {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    flex: 1;
+  }
+  button:hover { border-color: var(--blue); color: var(--blue); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.primary:hover { background: #4493e0; color: #fff; }
+  button.danger:hover { border-color: var(--red); color: var(--red); }
+
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .stat:last-child { border-bottom: none; }
+  .stat .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .val.green { color: var(--green); }
+  .val.blue { color: var(--blue); }
+  .val.orange { color: var(--orange); }
+
+  .log {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px;
+    white-space: pre-wrap;
+  }
+  .log .push { color: var(--green); }
+  .log .relabel { color: var(--orange); }
+  .log .init { color: var(--blue); }
+  .log .done { color: var(--purple); font-weight: 600; }
+  .log .gap { color: var(--yellow); }
+
+  canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: var(--bg);
+    border-radius: 8px;
+  }
+
+  .speed-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+
+  .desc { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; color: var(--orange); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Push-Relabel Max-Flow — Interactive Visualization</h1>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--blue)"></i>source / sink</span>
+    <span><i class="swatch" style="background:var(--orange)"></i>active (excess &gt; 0)</span>
+    <span><i class="swatch" style="background:var(--green)"></i>admissible edge</span>
+    <span><i class="swatch" style="background:var(--red)"></i>min-cut edge</span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="control-group">
+      <h2>Controls</h2>
+      <div class="btn-row">
+        <button id="stepBtn" class="primary">Step</button>
+        <button id="runBtn">Run</button>
+        <button id="resetBtn" class="danger">Reset</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="60" max="1200" value="500" step="20" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>State</h2>
+      <div class="stat"><span>Phase</span><span class="val blue" id="phase">idle</span></div>
+      <div class="stat"><span>Active vertices</span><span class="val orange" id="activeCount">0</span></div>
+      <div class="stat"><span>Pushes</span><span class="val" id="pushes">0</span></div>
+      <div class="stat"><span>Relabels</span><span class="val" id="relabels">0</span></div>
+      <div class="stat"><span>Flow into sink</span><span class="val green" id="flow">0</span></div>
+      <div class="stat"><span>Min-cut capacity</span><span class="val red" id="mincut">-</span></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Event Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="desc">
+      Vertices are drawn at a <b>vertical position equal to their height</b>: higher = taller.
+      The <b>source</b> starts pinned at height <code>n</code>. Excess (the badge) flows
+      <b>downhill</b> along <span style="color:var(--green)">admissible</span> edges
+      (<code>h(u)=h(v)+1</code>). When a vertex is stuck, it is <span style="color:var(--orange)">relabeled</span>
+      (rises). When done, the <span style="color:var(--red)">min-cut</span> edges are highlighted.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Network (heights as vertical layers)</h2>
+    <canvas id="cv" width="900" height="560"></canvas>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ---------- Graph definition (CLRS-style 6-vertex network, max flow = 23) ----------
+const N = 6;
+const S = 0, T = 5;
+const NAMES = ["s", "a", "b", "c", "d", "t"];
+const RAW_EDGES = [
+  [0,1,16],[0,2,13],[1,2,10],[2,1,4],
+  [1,3,12],[3,2,9],[2,4,14],[4,3,7],
+  [3,5,20],[4,5,4]
+];
+
+// Fixed layout (x positions); y is computed from height each frame.
+const LAYOUT_X = [80, 320, 320, 600, 600, 840];
+const LAYOUT_BASE_Y = [280, 150, 410, 150, 410, 280];
+
+// ---------- Residual edge structure (paired edges) ----------
+let to, cap, flow, g;          // edge arrays + adjacency (indices)
+let h, ex;                     // heights, excess
+let pushes, relabels;
+let queue, inq;                // FIFO active set
+let phaseName;
+let finished;
+let minCutSet = null;
+let cur;                       // current vertex being discharged
+let curArcLogged;
+
+function buildGraph() {
+  to = []; cap = []; flow = []; g = Array.from({length: N}, () => []);
+  const seen = {};
+  for (const [u, v, c] of RAW_EDGES) {
+    addEdge(u, v, c);
+  }
+}
+function addEdge(u, v, c) {
+  g[u].push(to.length); to.push(v); cap.push(c); flow.push(0);
+  g[v].push(to.length); to.push(u); cap.push(0); flow.push(0);
+}
+
+function reset() {
+  buildGraph();
+  h = new Array(N).fill(0);
+  ex = new Array(N).fill(0);
+  pushes = 0; relabels = 0;
+  finished = false; minCutSet = null; cur = -1;
+  h[S] = N;
+  // saturate source edges
+  for (const e of g[S]) {
+    const a = cap[e];
+    if (a > 0) {
+      flow[e] += a; flow[e ^ 1] -= a;
+      ex[S] -= a; ex[to[e]] += a;
+    }
+  }
+  queue = [];
+  inq = new Array(N).fill(false);
+  for (let v = 0; v < N; v++) {
+    if (v !== S && v !== T && ex[v] > 0) { queue.push(v); inq[v] = true; }
+  }
+  phaseName = "init";
+  clearLog();
+  logLine("init", "INIT  h[s]=" + N + ", saturate source edges");
+  for (const e of g[S]) if (cap[e] > 0) logLine("init", "  push " + NAMES[S] + "→" + NAMES[to[e]] + " (" + cap[e] + ")");
+  updateUI();
+  draw();
+}
+
+// ---------- One atomic algorithm step ----------
+// We expose granular steps: pick a vertex, try one admissible push, or one relabel.
+function algoStep() {
+  if (finished) return false;
+
+  if (cur === -1) {
+    if (queue.length === 0) {
+      finishUp();
+      return false;
+    }
+    cur = queue.shift();
+    inq[cur] = false;
+    phaseName = "discharge " + NAMES[cur];
+    return true;
+  }
+
+  const u = cur;
+  if (ex[u] === 0) { cur = -1; return true; }
+
+  // try one admissible push
+  for (const e of g[u]) {
+    if (cap[e] - flow[e] > 0 && h[u] === h[to[e]] + 1) {
+      const d = Math.min(ex[u], cap[e] - flow[e]);
+      flow[e] += d; flow[e ^ 1] -= d;
+      ex[u] -= d; ex[to[e]] += d;
+      pushes++;
+      const v = to[e];
+      if (v !== S && v !== T && !inq[v]) { queue.push(v); inq[v] = true; }
+      logLine("push", "PUSH  " + NAMES[u] + "→" + NAMES[v] + "  " + d + " unit(s)  (h " + h[u] + "→" + h[v] + ")");
+      if (ex[u] === 0) cur = -1;
+      updateUI();
+      draw();
+      return true;
+    }
+  }
+
+  // no admissible edge: relabel
+  let mn = Infinity;
+  for (const e of g[u]) {
+    if (cap[e] - flow[e] > 0 && h[to[e]] + 1 < mn) mn = h[to[e]] + 1;
+  }
+  if (mn === Infinity) {
+    // stranded (cannot happen on this connected net before finish); drop
+    cur = -1;
+    return true;
+  }
+  const old = h[u];
+  h[u] = mn;
+  relabels++;
+  logLine("relabel", "RELABEL  " + NAMES[u] + "  h " + old + "→" + mn);
+  updateUI();
+  draw();
+  return true;
+}
+
+function finishUp() {
+  finished = true;
+  phaseName = "done";
+  // residual BFS from s for min-cut
+  const vis = new Array(N).fill(false);
+  const q = [S]; vis[S] = true;
+  while (q.length) {
+    const u = q.shift();
+    for (const e of g[u]) {
+      if (!vis[to[e]] && cap[e] - flow[e] > 0) { vis[to[e]] = true; q.push(to[e]); }
+    }
+  }
+  minCutSet = vis;
+  let cut = 0;
+  const cutEdges = [];
+  for (let u = 0; u < N; u++) if (vis[u]) {
+    for (const e of g[u]) {
+      if (!vis[to[e]] && cap[e] > 0) { cut += cap[e]; cutEdges.push(NAMES[u] + "→" + NAMES[to[e]]); }
+    }
+  }
+  logLine("done", "DONE  max flow = " + flowValue() + ",  min-cut = " + cut);
+  logLine("done", "  cut edges: " + cutEdges.join(", "));
+  document.getElementById("mincut").textContent = cut;
+  updateUI();
+  draw();
+}
+
+function flowValue() {
+  let total = 0;
+  for (const e of g[S]) total += flow[e];
+  return total;
+}
+
+// ---------- UI ----------
+function updateUI() {
+  document.getElementById("phase").textContent = phaseName;
+  let act = 0;
+  for (let v = 0; v < N; v++) if (v !== S && v !== T && ex[v] > 0) act++;
+  document.getElementById("activeCount").textContent = act;
+  document.getElementById("pushes").textContent = pushes;
+  document.getElementById("relabels").textContent = relabels;
+  document.getElementById("flow").textContent = Math.max(0, flowValue());
+}
+
+function clearLog() { document.getElementById("log").innerHTML = ""; }
+function logLine(cls, text) {
+  const el = document.getElementById("log");
+  const span = document.createElement("div");
+  span.className = cls;
+  span.textContent = text;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---------- Canvas drawing ----------
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const CSS = getComputedStyle(document.documentElement);
+const C = {
+  bg:    CSS.getPropertyValue("--bg").trim(),
+  text:  CSS.getPropertyValue("--text").trim(),
+  muted: CSS.getPropertyValue("--muted").trim(),
+  green: CSS.getPropertyValue("--green").trim(),
+  yellow:CSS.getPropertyValue("--yellow").trim(),
+  red:   CSS.getPropertyValue("--red").trim(),
+  blue:  CSS.getPropertyValue("--blue").trim(),
+  orange:CSS.getPropertyValue("--orange").trim(),
+  border:CSS.getPropertyValue("--border").trim()
+};
+
+function vertexY(v) {
+  // height 0 -> bottom area, height N (source) -> top. Map height to y.
+  const maxH = 2 * N; // possible range
+  const top = 60, bot = cv.height - 60;
+  // blend base layout with height so the picture stays readable
+  const hy = bot - (h[v] / maxH) * (bot - top);
+  return 0.45 * LAYOUT_BASE_Y[v] + 0.55 * hy;
+}
+
+function isAdmissible(eidx) {
+  const u = edgeFrom(eidx);
+  return cap[eidx] - flow[eidx] > 0 && h[u] === h[to[eidx]] + 1;
+}
+
+// recover the tail of an edge index by scanning adjacency (small N)
+let TAIL = null;
+function buildTail() {
+  TAIL = new Array(to.length);
+  for (let u = 0; u < N; u++) for (const e of g[u]) TAIL[e] = u;
+}
+function edgeFrom(e) { return TAIL[e]; }
+
+function draw() {
+  if (!TAIL || TAIL.length !== to.length) buildTail();
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  // height gridlines
+  ctx.strokeStyle = C.border;
+  ctx.fillStyle = C.muted;
+  ctx.font = "11px monospace";
+  ctx.lineWidth = 1;
+  const maxH = 2 * N, top = 60, bot = cv.height - 60;
+  for (let level = 0; level <= maxH; level += 2) {
+    const y = bot - (level / maxH) * (bot - top);
+    ctx.globalAlpha = 0.25;
+    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(cv.width - 10, y); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillText("h=" + level, 6, y + 3);
+  }
+
+  // draw only the forward (original-capacity) edges
+  for (let e = 0; e < to.length; e++) {
+    if (cap[e] === 0) continue; // skip pure reverse residual edges
+    const u = edgeFrom(e), v = to[e];
+    drawEdge(u, v, e);
+  }
+
+  // draw vertices
+  for (let v = 0; v < N; v++) drawVertex(v);
+}
+
+function drawEdge(u, v, e) {
+  const x1 = LAYOUT_X[u], y1 = vertexY(u);
+  const x2 = LAYOUT_X[v], y2 = vertexY(v);
+  const r = 24;
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const sx = x1 + Math.cos(ang) * r, sy = y1 + Math.sin(ang) * r;
+  const ex2 = x2 - Math.cos(ang) * r, ey2 = y2 - Math.sin(ang) * r;
+
+  const inCut = minCutSet && minCutSet[u] && !minCutSet[v];
+  const admis = !finished && isAdmissible(e);
+
+  ctx.lineWidth = (admis || inCut) ? 3 : 1.5;
+  ctx.strokeStyle = inCut ? C.red : (admis ? C.green : C.border);
+  ctx.globalAlpha = inCut ? 1 : (admis ? 1 : 0.85);
+
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex2, ey2); ctx.stroke();
+
+  // arrowhead
+  const ah = 8;
+  ctx.beginPath();
+  ctx.moveTo(ex2, ey2);
+  ctx.lineTo(ex2 - ah * Math.cos(ang - 0.4), ey2 - ah * Math.sin(ang - 0.4));
+  ctx.lineTo(ex2 - ah * Math.cos(ang + 0.4), ey2 - ah * Math.sin(ang + 0.4));
+  ctx.closePath();
+  ctx.fillStyle = inCut ? C.red : (admis ? C.green : C.muted);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // flow / cap label at midpoint
+  const mx = (sx + ex2) / 2, my = (sy + ey2) / 2;
+  ctx.fillStyle = C.text;
+  ctx.font = "11px monospace";
+  const f = Math.max(0, flow[e]);
+  const label = f + "/" + cap[e];
+  ctx.save();
+  ctx.fillStyle = C.bg;
+  const w = ctx.measureText(label).width + 6;
+  ctx.fillRect(mx - w / 2, my - 8, w, 15);
+  ctx.fillStyle = f > 0 ? C.green : C.muted;
+  ctx.textAlign = "center";
+  ctx.fillText(label, mx, my + 3);
+  ctx.restore();
+}
+
+function drawVertex(v) {
+  const x = LAYOUT_X[v], y = vertexY(v);
+  const r = 24;
+  const active = (v !== S && v !== T && ex[v] > 0);
+  let fill = C.bg, stroke = C.muted;
+  if (v === S || v === T) { stroke = C.blue; }
+  if (active) { stroke = C.orange; }
+  if (v === cur && !finished) { stroke = C.purple; }
+
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = stroke;
+  ctx.stroke();
+
+  ctx.fillStyle = C.text;
+  ctx.font = "bold 15px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(NAMES[v], x, y + 5);
+
+  // height label above
+  ctx.font = "11px monospace";
+  ctx.fillStyle = C.blue;
+  ctx.fillText("h=" + h[v], x, y - r - 6);
+
+  // excess badge
+  if (active) {
+    ctx.beginPath();
+    ctx.arc(x + r - 4, y - r + 4, 11, 0, Math.PI * 2);
+    ctx.fillStyle = C.orange;
+    ctx.fill();
+    ctx.fillStyle = "#0d1117";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("+" + ex[v], x + r - 4, y - r + 8);
+  }
+}
+
+// ---------- Run loop ----------
+let timer = null;
+function stepOnce() {
+  const progressed = algoStep();
+  if (!progressed && finished) stopRun();
+}
+function startRun() {
+  if (timer) return;
+  const speed = +document.getElementById("speed").value;
+  document.getElementById("runBtn").textContent = "Pause";
+  timer = setInterval(() => {
+    if (finished) { stopRun(); return; }
+    algoStep();
+  }, 1300 - speed);
+}
+function stopRun() {
+  if (timer) { clearInterval(timer); timer = null; }
+  document.getElementById("runBtn").textContent = "Run";
+}
+function toggleRun() {
+  if (timer) stopRun(); else startRun();
+}
+
+document.getElementById("stepBtn").addEventListener("click", () => { stopRun(); stepOnce(); });
+document.getElementById("runBtn").addEventListener("click", toggleRun);
+document.getElementById("resetBtn").addEventListener("click", () => { stopRun(); reset(); });
+document.getElementById("speed").addEventListener("input", () => {
+  if (timer) { stopRun(); startRun(); }
+});
+
+// init
+reset();
+</script>
+</body>
+</html>
