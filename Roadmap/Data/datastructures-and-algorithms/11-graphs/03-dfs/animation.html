@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Depth-First Search — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 420px;
+    overflow-x: auto;
+  }
+
+  svg#graph {
+    width: 100%;
+    height: 420px;
+    display: block;
+  }
+
+  .edge {
+    stroke: var(--border);
+    stroke-width: 2;
+    fill: none;
+    transition: stroke 0.25s ease, stroke-width 0.25s ease;
+  }
+  .edge.tree    { stroke: var(--green);  stroke-width: 3; }
+  .edge.back    { stroke: var(--red);    stroke-width: 3; stroke-dasharray: 6 4; }
+  .edge.forward { stroke: var(--blue);   stroke-width: 3; stroke-dasharray: 2 4; }
+  .edge.cross   { stroke: var(--purple); stroke-width: 3; stroke-dasharray: 2 4; }
+  .edge.active  { stroke: var(--orange); stroke-width: 4; }
+
+  .node circle { stroke-width: 2.5; transition: all 0.25s ease; }
+
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 15px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+  .node text.times {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    fill: var(--muted);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  /* node states: white / gray / black + current */
+  .node.white circle { fill: #1c2128; stroke: var(--muted); }
+  .node.white text.val { fill: var(--text); }
+  .node.gray  circle { fill: rgba(210,153,34,0.35); stroke: var(--yellow); }
+  .node.gray  text.val { fill: var(--yellow); }
+  .node.black circle { fill: rgba(139,148,158,0.18); stroke: var(--text); }
+  .node.black text.val { fill: var(--text); }
+  .node.current circle { fill: rgba(255,166,87,0.4); stroke: var(--orange); stroke-width: 4; }
+  .node.current text.val { fill: var(--orange); }
+
+  .stack-strip {
+    display: flex;
+    gap: 6px;
+    margin-top: 18px;
+    padding: 6px 2px;
+    overflow-x: auto;
+    align-items: flex-end;
+    min-height: 56px;
+  }
+
+  .stack-label {
+    font-size: 11px;
+    color: var(--muted);
+    align-self: center;
+    margin-right: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .stk-box {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--yellow);
+    background: rgba(210,153,34,0.25);
+    color: var(--yellow);
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+    font-size: 15px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+  }
+  .stk-box.top { border-color: var(--orange); background: rgba(255,166,87,0.35); color: var(--orange); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .stats-row .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.tree { color: var(--green); }
+  #log .entry.back { color: var(--red); }
+  #log .entry.fin { color: var(--blue); }
+  #log .entry.ok { color: var(--green); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-white   { background: #1c2128; border-color: var(--muted); }
+  .dot.d-gray    { background: rgba(210,153,34,0.35); border-color: var(--yellow); }
+  .dot.d-black   { background: rgba(139,148,158,0.18); border-color: var(--text); }
+  .dot.d-current { background: rgba(255,166,87,0.4); border-color: var(--orange); }
+  .legend .line { width: 16px; height: 0; border-top: 3px solid; }
+  .line.l-tree { border-color: var(--green); }
+  .line.l-back { border-color: var(--red); border-top-style: dashed; }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Depth-First Search — Interactive Visualization</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="directed" class="active">Directed</button>
+    <button data-mode="undirected">Undirected</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Run DFS</h2>
+      <div class="control-row">
+        <input type="number" id="startVal" placeholder="Start vertex (e.g. 0)" />
+        <button class="btn primary" id="btnRun">Run</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="btnFull" style="flex:1">Run Full DFS (all vertices)</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="control-row">
+        <button class="btn success" id="btnSample" style="flex:1">Sample Graph</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="control-row">
+        <button class="btn danger" id="btnReset" style="flex:1">Reset Colors</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Step Controls</h2>
+      <div class="step-controls">
+        <button class="btn" id="btnStart">Resume</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn" id="btnStopRun">Stop</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1200" value="600" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>State Colors</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
+        <b style="color:var(--muted);">WHITE</b> — undiscovered<br>
+        <b style="color:var(--yellow);">GRAY</b> — on the stack (being explored)<br>
+        <b style="color:var(--text);">BLACK</b> — finished<br>
+        Each node shows <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">d/f</code> = discovery / finish time.
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="graph" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="stack-strip" id="stackStrip">
+        <span class="stack-label">stack&nbsp;(gray&nbsp;path):</span>
+      </div>
+      <div class="info-bar" id="info">Click <code>Sample Graph</code>, then <code>Run</code> from a start vertex.</div>
+      <div class="stats-row">
+        <div class="stat">Clock: <b id="statClock">0</b></div>
+        <div class="stat">Step: <b id="statStep">0</b></div>
+        <div class="stat">Discovered: <b id="statDisc">0</b></div>
+        <div class="stat">Finished: <b id="statFin">0</b></div>
+        <div class="stat">Edges seen: <b id="statEdges">0</b></div>
+        <div class="stat">Mode: <b id="statMode">directed</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-white"></span>white</span>
+        <span><span class="dot d-gray"></span>gray</span>
+        <span><span class="dot d-black"></span>black</span>
+        <span><span class="dot d-current"></span>current</span>
+        <span><span class="line l-tree"></span>tree edge</span>
+        <span><span class="line l-back"></span>back edge</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Traversal Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Depth-First Search visualizer
+//  Colors: WHITE (undiscovered), GRAY (on stack), BLACK (finished)
+//  Shows discovery/finish times, the gray "stack" path,
+//  and classifies each edge as tree / back / forward / cross.
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const WHITE = 0, GRAY = 1, BLACK = 2;
+
+const state = {
+  n: 0,
+  adj: [],            // adjacency list
+  pos: [],            // {x,y} per vertex
+  mode: "directed",
+  // dfs runtime
+  color: [],
+  disc: [],
+  fin: [],
+  stack: [],          // gray path (vertex ids), for display
+  clock: 0,
+  steps: 0,
+  edgesSeen: 0,
+  // animation control
+  busy: false,
+  paused: false,
+  stepRequested: false,
+  stopped: false,
+  speedMs: 600,
+};
+
+const els = {
+  svg:       document.getElementById("graph"),
+  stackStrip:document.getElementById("stackStrip"),
+  info:      document.getElementById("info"),
+  log:       document.getElementById("log"),
+  startVal:  document.getElementById("startVal"),
+  speed:     document.getElementById("speed"),
+  statClock: document.getElementById("statClock"),
+  statStep:  document.getElementById("statStep"),
+  statDisc:  document.getElementById("statDisc"),
+  statFin:   document.getElementById("statFin"),
+  statEdges: document.getElementById("statEdges"),
+  statMode:  document.getElementById("statMode"),
+  toast:     document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function pauseGate() {
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) { state.stepRequested = false; return; }
+    await sleep(60);
+  }
+}
+
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function bumpStep() { state.steps++; els.statStep.textContent = state.steps; }
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(html) { els.info.innerHTML = html; }
+
+// ---------------- graph data ----------------
+
+function sampleGraph() {
+  // 0 -> 1, 2 ; 1 -> 3 ; 2 -> 3, 4 ; 3 -> 5 ; 4 -> 5 ; 5 -> 1 (back edge)
+  // A small directed graph that exhibits a tree, back, forward, and cross edge.
+  const adj = [
+    [1, 2], // 0
+    [3],    // 1
+    [3, 4], // 2
+    [5],    // 3
+    [5],    // 4
+    [1],    // 5 -> 1 forms a back edge (cycle 1-3-5-1)
+  ];
+  const pos = [
+    { x: 500, y: 50 },   // 0
+    { x: 300, y: 150 },  // 1
+    { x: 700, y: 150 },  // 2
+    { x: 400, y: 270 },  // 3
+    { x: 800, y: 270 },  // 4
+    { x: 500, y: 380 },  // 5
+  ];
+  return { adj, pos };
+}
+
+function randomGraph() {
+  const n = 6 + Math.floor(Math.random() * 3); // 6..8
+  const adj = Array.from({ length: n }, () => []);
+  for (let u = 0; u < n; u++) {
+    const k = 1 + Math.floor(Math.random() * 2);
+    for (let t = 0; t < k; t++) {
+      const v = Math.floor(Math.random() * n);
+      if (v !== u && !adj[u].includes(v)) adj[u].push(v);
+    }
+  }
+  // circular-ish layout
+  const pos = [];
+  const cx = 500, cy = 210, R = 165;
+  for (let i = 0; i < n; i++) {
+    const a = (-Math.PI / 2) + (2 * Math.PI * i) / n;
+    pos.push({ x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) });
+  }
+  return { adj, pos };
+}
+
+function loadGraph(g) {
+  state.n = g.adj.length;
+  state.adj = g.adj.map(l => l.slice());
+  state.pos = g.pos.map(p => ({ ...p }));
+  resetRuntime();
+  render();
+}
+
+function resetRuntime() {
+  const n = state.n;
+  state.color = new Array(n).fill(WHITE);
+  state.disc = new Array(n).fill(0);
+  state.fin = new Array(n).fill(0);
+  state.stack = [];
+  state.clock = 0;
+  state.steps = 0;
+  state.edgesSeen = 0;
+  els.statClock.textContent = "0";
+  els.statStep.textContent = "0";
+  els.statDisc.textContent = "0";
+  els.statFin.textContent = "0";
+  els.statEdges.textContent = "0";
+}
+
+// edge key (directed; for undirected we normalize when classifying display)
+function edgeId(u, v) { return `${u}_${v}`; }
+
+// ---------------- drawing ----------------
+
+function arrowDefs(svg) {
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.innerHTML =
+    `<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+       <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"></path>
+     </marker>`;
+  svg.appendChild(defs);
+}
+
+function render() {
+  const svg = els.svg;
+  svg.innerHTML = "";
+  arrowDefs(svg);
+  const n = state.n;
+  if (n === 0) return;
+
+  // edges
+  for (let u = 0; u < n; u++) {
+    for (const v of state.adj[u]) {
+      if (state.mode === "undirected" && v < u && state.adj[v].includes(u)) continue; // draw once
+      const p = state.pos[u], q = state.pos[v];
+      // shorten so arrow sits at node edge
+      const dx = q.x - p.x, dy = q.y - p.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const r = 24;
+      const x1 = p.x + (dx / len) * r, y1 = p.y + (dy / len) * r;
+      const x2 = q.x - (dx / len) * r, y2 = q.y - (dy / len) * r;
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+      line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+      line.setAttribute("class", "edge");
+      line.setAttribute("data-edge", edgeId(u, v));
+      if (state.mode === "directed") line.setAttribute("marker-end", "url(#arrow)");
+      svg.appendChild(line);
+    }
+  }
+
+  // nodes
+  for (let i = 0; i < n; i++) {
+    const { x, y } = state.pos[i];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node " + colorClass(i));
+    g.setAttribute("data-idx", i);
+    g.setAttribute("transform", `translate(${x},${y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 22);
+    g.appendChild(c);
+
+    const tv = document.createElementNS(SVG_NS, "text");
+    tv.setAttribute("class", "val");
+    tv.textContent = i;
+    g.appendChild(tv);
+
+    const tt = document.createElementNS(SVG_NS, "text");
+    tt.setAttribute("class", "times");
+    tt.setAttribute("y", 36);
+    tt.textContent = timeLabel(i);
+    g.appendChild(tt);
+
+    svg.appendChild(g);
+  }
+  drawStack();
+}
+
+function colorClass(i) {
+  if (state.color[i] === GRAY) return "gray";
+  if (state.color[i] === BLACK) return "black";
+  return "white";
+}
+
+function timeLabel(i) {
+  const d = state.disc[i] || "-";
+  const f = state.fin[i] || "-";
+  if (d === "-" && f === "-") return "";
+  return `${d}/${f}`;
+}
+
+function refreshNode(i) {
+  const g = els.svg.querySelector(`g.node[data-idx="${i}"]`);
+  if (!g) return;
+  g.setAttribute("class", "node " + colorClass(i));
+  const tt = g.querySelector("text.times");
+  if (tt) tt.textContent = timeLabel(i);
+}
+
+function setCurrent(i, on) {
+  const g = els.svg.querySelector(`g.node[data-idx="${i}"]`);
+  if (!g) return;
+  if (on) g.setAttribute("class", "node current");
+  else refreshNode(i);
+}
+
+function markEdge(u, v, klass) {
+  let key = edgeId(u, v);
+  let line = els.svg.querySelector(`line[data-edge="${key}"]`);
+  if (!line && state.mode === "undirected") {
+    line = els.svg.querySelector(`line[data-edge="${edgeId(v, u)}"]`);
+  }
+  if (line) line.setAttribute("class", "edge " + klass);
+}
+
+function drawStack() {
+  els.stackStrip.innerHTML = '<span class="stack-label">stack&nbsp;(gray&nbsp;path):</span>';
+  state.stack.forEach((v, idx) => {
+    const box = document.createElement("div");
+    box.className = "stk-box" + (idx === state.stack.length - 1 ? " top" : "");
+    box.textContent = v;
+    els.stackStrip.appendChild(box);
+  });
+}
+
+function updateStats() {
+  els.statClock.textContent = state.clock;
+  els.statEdges.textContent = state.edgesSeen;
+  els.statDisc.textContent = state.color.filter(c => c !== WHITE).length;
+  els.statFin.textContent = state.color.filter(c => c === BLACK).length;
+}
+
+// ---------------- DFS (animated, explicit recursion via async) ----------------
+
+async function dfsVisit(u) {
+  // discover u
+  state.clock++;
+  state.disc[u] = state.clock;
+  state.color[u] = GRAY;
+  state.stack.push(u);
+  bumpStep();
+  refreshNode(u);
+  setCurrent(u, true);
+  drawStack();
+  updateStats();
+  info(`Discover <code>${u}</code> — color it <b style="color:var(--yellow)">GRAY</b>, push to stack, <code>disc[${u}] = ${state.clock}</code>.`);
+  log(`discover ${u} (disc=${state.disc[u]})`, "op");
+  await wait();
+
+  for (const v of state.adj[u]) {
+    state.edgesSeen++;
+    updateStats();
+    markEdge(u, v, "active");
+    setCurrent(u, false);          // briefly show as gray while examining edge
+    refreshNode(u);
+    info(`Examine edge <code>${u} → ${v}</code>. Neighbour <code>${v}</code> is <b>${stateName(v)}</b>.`);
+    await wait();
+
+    if (state.color[v] === WHITE) {
+      markEdge(u, v, "tree");
+      log(`  tree edge ${u} -> ${v}`, "tree");
+      info(`<code>${v}</code> is WHITE → <b style="color:var(--green)">tree edge</b>. Recurse into <code>${v}</code>.`);
+      await wait();
+      await dfsVisit(v);
+      setCurrent(u, true);          // back at u after recursion
+      drawStack();
+      info(`Back at <code>${u}</code> after finishing the subtree of <code>${v}</code>.`);
+      await wait();
+    } else if (state.color[v] === GRAY) {
+      markEdge(u, v, "back");
+      log(`  BACK edge ${u} -> ${v}  (cycle!)`, "back");
+      info(`<code>${v}</code> is GRAY (on the stack) → <b style="color:var(--red)">back edge</b>: a cycle <code>${v} … ${u} → ${v}</code>.`);
+      await wait();
+    } else { // BLACK
+      const klass = state.disc[u] < state.disc[v] ? "forward" : "cross";
+      markEdge(u, v, klass);
+      log(`  ${klass} edge ${u} -> ${v}`, "fin");
+      info(`<code>${v}</code> is BLACK → <b>${klass} edge</b> (${klass === "forward" ? "descendant" : "other subtree"}).`);
+      await wait();
+    }
+  }
+
+  // finish u
+  state.color[u] = BLACK;
+  state.clock++;
+  state.fin[u] = state.clock;
+  state.stack.pop();
+  bumpStep();
+  setCurrent(u, false);
+  refreshNode(u);
+  drawStack();
+  updateStats();
+  info(`Finish <code>${u}</code> — all neighbours done. Color <b>BLACK</b>, <code>fin[${u}] = ${state.clock}</code>.`);
+  log(`finish ${u} (fin=${state.fin[u]})`, "fin");
+  await wait();
+}
+
+function stateName(v) {
+  return state.color[v] === WHITE ? "WHITE" : state.color[v] === GRAY ? "GRAY" : "BLACK";
+}
+
+// ---------------- driver ----------------
+
+async function runFrom(start, full) {
+  resetRuntimeColors();
+  if (start < 0 || start >= state.n) {
+    showToast("Invalid start vertex", true);
+    return;
+  }
+  log(full ? `Full DFS starting at ${start}` : `DFS from ${start}`, "op");
+  await dfsVisit(start);
+  if (full) {
+    for (let u = 0; u < state.n; u++) {
+      if (state.color[u] === WHITE) {
+        info(`Vertex <code>${u}</code> still WHITE (a new DFS tree / component). Start a fresh DFS here.`);
+        log(`new DFS tree at ${u}`, "op");
+        await wait();
+        await dfsVisit(u);
+      }
+    }
+  }
+  const cyc = els.svg.querySelector("line.edge.back") ? "a back edge was found → the graph has a cycle" : "no back edge → no cycle on this run";
+  info(`DFS complete. ${cyc}. Reverse the finish order for a topological order (DAGs only).`);
+  log(`done — ${cyc}`, "ok");
+}
+
+function resetRuntimeColors() {
+  resetRuntime();
+  render();
+}
+
+async function withBusy(fn) {
+  if (state.busy) { showToast("Operation in progress…", true); return; }
+  state.busy = true;
+  state.stopped = false;
+  try {
+    await fn();
+  } catch (e) {
+    if (e.message !== "__stopped__") {
+      console.error(e);
+      showToast("Error: " + e.message, true);
+    } else {
+      log("  stopped by user", "back");
+      info("Traversal stopped.");
+    }
+  } finally {
+    state.busy = false;
+    state.paused = false;
+    state.stepRequested = false;
+    state.stack = [];
+    drawStack();
+  }
+}
+
+// ---------------- event wiring ----------------
+
+document.getElementById("btnRun").addEventListener("click", () => {
+  const raw = els.startVal.value.trim();
+  const s = raw === "" ? 0 : Number(raw);
+  withBusy(() => runFrom(s, false));
+});
+
+document.getElementById("btnFull").addEventListener("click", () => {
+  const raw = els.startVal.value.trim();
+  const s = raw === "" ? 0 : Number(raw);
+  withBusy(() => runFrom(s, true));
+});
+
+document.getElementById("btnSample").addEventListener("click", () => {
+  if (state.busy) { showToast("Wait for current run", true); return; }
+  loadGraph(sampleGraph());
+  info("Loaded sample directed graph. Press <code>Run</code> from vertex <code>0</code>.");
+  log("sample graph loaded", "op");
+});
+
+document.getElementById("btnRandom").addEventListener("click", () => {
+  if (state.busy) { showToast("Wait for current run", true); return; }
+  loadGraph(randomGraph());
+  info("Loaded a random graph. Press <code>Run Full DFS</code> to cover all components.");
+  log("random graph loaded", "op");
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; return; }
+  resetRuntimeColors();
+  info("Colors reset. All vertices are WHITE again.");
+  log("reset colors", "op");
+});
+
+document.getElementById("btnStart").addEventListener("click", () => {
+  state.paused = false;
+  state.stepRequested = false;
+  if (state.busy) info("Resuming…");
+  else showToast("Press Run to start a traversal");
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) { showToast("Start a traversal first"); return; }
+  state.paused = true;
+  state.stepRequested = true;
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance." : "Resumed.");
+});
+
+document.getElementById("btnStopRun").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.stopped = true;
+  state.paused = false;
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1280 - Number(e.target.value);
+});
+
+document.querySelectorAll("#modePill button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (state.busy) { showToast("Wait for current run", true); return; }
+    document.querySelectorAll("#modePill button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.mode = btn.dataset.mode;
+    els.statMode.textContent = state.mode;
+    // For undirected, symmetrize the adjacency list.
+    if (state.mode === "undirected" && state.n > 0) {
+      const sym = state.adj.map(l => l.slice());
+      for (let u = 0; u < state.n; u++) {
+        for (const v of state.adj[u]) {
+          if (!sym[v].includes(u)) sym[v].push(u);
+        }
+      }
+      state.adj = sym;
+    }
+    resetRuntimeColors();
+    info(`Mode switched to <code>${state.mode}</code>.`);
+    log(`mode = ${state.mode}`, "op");
+  });
+});
+
+// ---------------- init ----------------
+
+function init() {
+  state.speedMs = 1280 - Number(els.speed.value);
+  els.statMode.textContent = state.mode;
+  loadGraph(sampleGraph());
+  log("DFS visualizer ready. Sample graph loaded.", "ok");
+}
+
+init();
+</script>
+</body>
+</html>
