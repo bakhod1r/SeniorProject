@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Graph Representation — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  input[type="number"]:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .hint code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+
+  svg#graph {
+    width: 100%;
+    height: 340px;
+    display: block;
+  }
+
+  .edge {
+    stroke: var(--border);
+    stroke-width: 2.5;
+    transition: stroke 0.2s ease, stroke-width 0.2s ease;
+  }
+  .edge.highlight { stroke: var(--orange); stroke-width: 4; }
+
+  .vertex circle {
+    fill: rgba(88,166,255,0.15);
+    stroke: var(--blue);
+    stroke-width: 2;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .vertex.endpoint circle { fill: rgba(255,166,87,0.25); stroke: var(--orange); }
+  .vertex.selected circle { fill: rgba(63,185,80,0.3); stroke: var(--green); }
+
+  .vertex text {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 15px;
+    font-weight: 600;
+    fill: var(--text);
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  .views {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .view-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  .view-card h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin: 0 0 10px 0;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+  }
+  .view-card h3 .cost {
+    color: var(--purple);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* matrix */
+  table.matrix {
+    border-collapse: collapse;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+  }
+  table.matrix th, table.matrix td {
+    width: 34px;
+    height: 30px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  table.matrix th { color: var(--muted); font-weight: 600; background: var(--surface); }
+  table.matrix td { color: var(--muted); }
+  table.matrix td.one { color: var(--green); background: rgba(63,185,80,0.12); }
+  table.matrix td.hl { background: rgba(255,166,87,0.3); color: var(--orange); border-color: var(--orange); }
+
+  /* list */
+  .list-rows { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.9; }
+  .list-rows .src { color: var(--blue); }
+  .list-rows .arrow { color: var(--muted); margin: 0 6px; }
+  .nbr {
+    display: inline-block;
+    padding: 1px 8px;
+    margin: 0 3px 3px 0;
+    border-radius: 5px;
+    background: rgba(88,166,255,0.12);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .nbr.hl { background: rgba(255,166,87,0.3); border-color: var(--orange); color: var(--orange); }
+  .empty-nbr { color: var(--muted); font-style: italic; }
+
+  /* edge list */
+  .edge-strip { display: flex; flex-wrap: wrap; gap: 6px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 13px; }
+  .edge-chip {
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(188,140,255,0.12);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .edge-chip.hl { background: rgba(255,166,87,0.3); border-color: var(--orange); color: var(--orange); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .stats-row .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-default { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-endpoint { background: rgba(255,166,87,0.25); border-color: var(--orange); }
+  .dot.d-selected { background: rgba(63,185,80,0.3); border-color: var(--green); }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Graph Representation — Interactive Visualization</h1>
+  <div class="mode-pill" id="dirPill">
+    <button data-dir="undirected" class="active">Undirected</button>
+    <button data-dir="directed">Directed</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Add / Remove Edge</h2>
+      <div class="control-row">
+        <input type="number" id="edgeU" placeholder="u" min="0" />
+        <input type="number" id="edgeV" placeholder="v" min="0" />
+      </div>
+      <div class="control-row">
+        <button class="btn success" id="btnAdd" style="flex:1">Add Edge</button>
+        <button class="btn danger" id="btnRemove" style="flex:1">Remove</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Query an Edge</h2>
+      <div class="control-row">
+        <input type="number" id="queryU" placeholder="u" min="0" />
+        <input type="number" id="queryV" placeholder="v" min="0" />
+      </div>
+      <div class="control-row">
+        <button class="btn primary" id="btnQuery" style="flex:1">Highlight u → v</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="btnClearHl" style="flex:1">Clear Highlight</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="control-row">
+        <button class="btn" id="btnSample" style="flex:1">Sample</button>
+        <button class="btn warn" id="btnReset" style="flex:1">Reset</button>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        5 vertices, labelled <code>0</code>..<code>4</code>. Add edges, then
+        toggle the three views below to see how the <em>same</em> graph is
+        stored as a matrix, a list, and an edge list.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>How To Read It</h2>
+      <div class="hint">
+        <b>Matrix</b>: cell <code>(u,v)=1</code> means an edge. <code>O(1)</code> lookup, <code>O(V²)</code> space.<br>
+        <b>List</b>: each vertex maps to its neighbors. <code>O(V+E)</code> space, fast iteration.<br>
+        <b>Edge list</b>: a flat array of pairs. Smallest, but <code>O(E)</code> to find anything.
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: graph + three views -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="graph" viewBox="0 0 700 340" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Click <code>Sample</code> for a starter graph, or add edges with the controls.</div>
+      <div class="stats-row">
+        <div class="stat">Vertices: <b id="statV">5</b></div>
+        <div class="stat">Edges: <b id="statE">0</b></div>
+        <div class="stat">Mode: <b id="statDir">undirected</b></div>
+        <div class="stat">Matrix space: <b id="statMatrix">O(V²)</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-default"></span>vertex</span>
+        <span><span class="dot d-endpoint"></span>queried endpoint</span>
+        <span><span class="dot d-selected"></span>last added</span>
+      </div>
+    </section>
+
+    <section class="views">
+      <div class="view-card">
+        <h3>Adjacency Matrix <span class="cost">space O(V²) · hasEdge O(1)</span></h3>
+        <div id="matrixView"></div>
+      </div>
+      <div class="view-card">
+        <h3>Adjacency List <span class="cost">space O(V+E) · neighbors O(d)</span></h3>
+        <div class="list-rows" id="listView"></div>
+      </div>
+      <div class="view-card">
+        <h3>Edge List <span class="cost">space O(E) · hasEdge O(E)</span></h3>
+        <div class="edge-strip" id="edgeView"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Graph Representation visualizer
+//  Shows ONE graph in three representations simultaneously:
+//  adjacency matrix, adjacency list, edge list.
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const N = 5; // fixed vertex set 0..4
+
+const state = {
+  directed: false,
+  edges: [],            // array of [u, v] in insertion order (canonical: as entered)
+  highlight: null,      // { u, v } currently queried edge
+  lastAdded: null,      // [u, v] just added (for the "selected" highlight)
+};
+
+const els = {
+  graph:      document.getElementById("graph"),
+  info:       document.getElementById("info"),
+  matrixView: document.getElementById("matrixView"),
+  listView:   document.getElementById("listView"),
+  edgeView:   document.getElementById("edgeView"),
+  edgeU:      document.getElementById("edgeU"),
+  edgeV:      document.getElementById("edgeV"),
+  queryU:     document.getElementById("queryU"),
+  queryV:     document.getElementById("queryV"),
+  statV:      document.getElementById("statV"),
+  statE:      document.getElementById("statE"),
+  statDir:    document.getElementById("statDir"),
+  toast:      document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function info(html) { els.info.innerHTML = html; }
+
+function validVertex(x) { return Number.isInteger(x) && x >= 0 && x < N; }
+
+// Does the stored edge list contain a directed edge u->v?
+// For undirected, an entry [a,b] covers both a->b and b->a.
+function hasEdge(u, v) {
+  for (const [a, b] of state.edges) {
+    if (a === u && b === v) return true;
+    if (!state.directed && a === v && b === u) return true;
+  }
+  return false;
+}
+
+// Build adjacency (out-neighbors) lists from the edge list, in insertion order.
+function buildAdj() {
+  const adj = Array.from({ length: N }, () => []);
+  for (const [a, b] of state.edges) {
+    if (!adj[a].includes(b)) adj[a].push(b);
+    if (!state.directed && !adj[b].includes(a)) adj[b].push(a);
+  }
+  return adj;
+}
+
+// ---------------- graph drawing (SVG) ----------------
+
+function vertexPositions() {
+  // place N vertices on a circle
+  const cx = 350, cy = 165, r = 125;
+  const pos = [];
+  for (let i = 0; i < N; i++) {
+    const angle = (-Math.PI / 2) + (2 * Math.PI * i) / N;
+    pos.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+  }
+  return pos;
+}
+
+function drawGraph() {
+  const svg = els.graph;
+  svg.innerHTML = "";
+  const pos = vertexPositions();
+
+  // arrow marker for directed edges
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.innerHTML =
+    '<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+    '<path d="M0,0 L10,5 L0,10 z" fill="#8b949e"></path></marker>' +
+    '<marker id="arrowHl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+    '<path d="M0,0 L10,5 L0,10 z" fill="#ffa657"></path></marker>';
+  svg.appendChild(defs);
+
+  // edges (deduped for drawing)
+  const drawn = new Set();
+  for (const [a, b] of state.edges) {
+    const key = state.directed ? `${a}->${b}` : (a < b ? `${a}-${b}` : `${b}-${a}`);
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+
+    const p = pos[a], q = pos[b];
+    const isHl = state.highlight &&
+      ((state.highlight.u === a && state.highlight.v === b) ||
+       (!state.directed && state.highlight.u === b && state.highlight.v === a));
+
+    if (a === b) {
+      // self-loop: small circle above the node
+      const loop = document.createElementNS(SVG_NS, "circle");
+      loop.setAttribute("cx", p.x);
+      loop.setAttribute("cy", p.y - 30);
+      loop.setAttribute("r", 14);
+      loop.setAttribute("fill", "none");
+      loop.setAttribute("class", "edge" + (isHl ? " highlight" : ""));
+      svg.appendChild(loop);
+      continue;
+    }
+
+    const line = document.createElementNS(SVG_NS, "line");
+    // shorten endpoints so arrows don't hide under the circle
+    const dx = q.x - p.x, dy = q.y - p.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ox = (dx / len) * 22, oy = (dy / len) * 22;
+    line.setAttribute("x1", p.x + ox);
+    line.setAttribute("y1", p.y + oy);
+    line.setAttribute("x2", q.x - ox);
+    line.setAttribute("y2", q.y - oy);
+    line.setAttribute("class", "edge" + (isHl ? " highlight" : ""));
+    if (state.directed) {
+      line.setAttribute("marker-end", isHl ? "url(#arrowHl)" : "url(#arrow)");
+    }
+    svg.appendChild(line);
+  }
+
+  // vertices
+  for (let i = 0; i < N; i++) {
+    const { x, y } = pos[i];
+    const g = document.createElementNS(SVG_NS, "g");
+    let cls = "vertex";
+    if (state.highlight && (state.highlight.u === i || state.highlight.v === i)) cls += " endpoint";
+    else if (state.lastAdded && state.lastAdded.includes(i)) cls += " selected";
+    g.setAttribute("class", cls);
+    g.setAttribute("transform", `translate(${x},${y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 20);
+    g.appendChild(c);
+
+    const t = document.createElementNS(SVG_NS, "text");
+    t.textContent = i;
+    g.appendChild(t);
+
+    svg.appendChild(g);
+  }
+}
+
+// ---------------- the three views ----------------
+
+function drawMatrix() {
+  const hl = state.highlight;
+  let html = "<table class='matrix'><tr><th></th>";
+  for (let v = 0; v < N; v++) html += `<th>${v}</th>`;
+  html += "</tr>";
+  for (let u = 0; u < N; u++) {
+    html += `<tr><th>${u}</th>`;
+    for (let v = 0; v < N; v++) {
+      const set = hasEdge(u, v);
+      const isHl = hl && hl.u === u && hl.v === v;
+      let cls = set ? "one" : "";
+      if (isHl) cls += " hl";
+      html += `<td class="${cls.trim()}">${set ? 1 : 0}</td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</table>";
+  els.matrixView.innerHTML = html;
+}
+
+function drawList() {
+  const adj = buildAdj();
+  const hl = state.highlight;
+  let html = "";
+  for (let u = 0; u < N; u++) {
+    html += `<div><span class="src">${u}</span><span class="arrow">→</span>`;
+    if (adj[u].length === 0) {
+      html += `<span class="empty-nbr">[]</span>`;
+    } else {
+      for (const v of adj[u]) {
+        const isHl = hl && hl.u === u && hl.v === v;
+        html += `<span class="nbr${isHl ? " hl" : ""}">${v}</span>`;
+      }
+    }
+    html += "</div>";
+  }
+  els.listView.innerHTML = html;
+}
+
+function drawEdgeList() {
+  const hl = state.highlight;
+  // canonical edge chips (each undirected edge once)
+  const chips = [];
+  const drawn = new Set();
+  for (const [a, b] of state.edges) {
+    const key = state.directed ? `${a}->${b}` : (a <= b ? `${a}-${b}` : `${b}-${a}`);
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+    const isHl = hl &&
+      ((hl.u === a && hl.v === b) ||
+       (!state.directed && hl.u === b && hl.v === a));
+    const sep = state.directed ? "→" : ",";
+    chips.push(`<span class="edge-chip${isHl ? " hl" : ""}">(${a}${sep}${b})</span>`);
+  }
+  els.edgeView.innerHTML = chips.length
+    ? chips.join("")
+    : `<span class="empty-nbr">[]  (no edges)</span>`;
+}
+
+// ---------------- render ----------------
+
+function countEdges() {
+  // count canonical (undirected => each pair once)
+  const drawn = new Set();
+  for (const [a, b] of state.edges) {
+    const key = state.directed ? `${a}->${b}` : (a <= b ? `${a}-${b}` : `${b}-${a}`);
+    drawn.add(key);
+  }
+  return drawn.size;
+}
+
+function render() {
+  drawGraph();
+  drawMatrix();
+  drawList();
+  drawEdgeList();
+  els.statV.textContent = N;
+  els.statE.textContent = countEdges();
+  els.statDir.textContent = state.directed ? "directed" : "undirected";
+}
+
+// ---------------- operations ----------------
+
+function addEdge(u, v) {
+  if (!validVertex(u) || !validVertex(v)) {
+    showToast(`Vertices must be 0..${N - 1}`, true);
+    return;
+  }
+  if (hasEdge(u, v)) {
+    showToast("Edge already exists", true);
+    info(`Edge <code>${u}${state.directed ? "→" : "—"}${v}</code> already present. ` +
+         `A 0/1 matrix and a set-based list both reject the duplicate; a multigraph would keep it.`);
+    return;
+  }
+  state.edges.push([u, v]);
+  state.lastAdded = [u, v];
+  state.highlight = null;
+  render();
+  if (state.directed) {
+    info(`Added directed edge <code>${u}→${v}</code>. ` +
+         `Matrix sets <code>M[${u}][${v}]=1</code>; list appends <code>${v}</code> to <code>adj[${u}]</code>; ` +
+         `edge list appends <code>(${u}→${v})</code>.`);
+  } else {
+    info(`Added undirected edge <code>${u}—${v}</code>. ` +
+         `Matrix sets <code>M[${u}][${v}]</code> AND <code>M[${v}][${u}]</code>; ` +
+         `list appends to both <code>adj[${u}]</code> and <code>adj[${v}]</code>; ` +
+         `edge list stores the pair once.`);
+  }
+}
+
+function removeEdge(u, v) {
+  if (!validVertex(u) || !validVertex(v)) {
+    showToast(`Vertices must be 0..${N - 1}`, true);
+    return;
+  }
+  if (!hasEdge(u, v)) {
+    showToast("No such edge", true);
+    return;
+  }
+  state.edges = state.edges.filter(([a, b]) => {
+    if (state.directed) return !(a === u && b === v);
+    return !((a === u && b === v) || (a === v && b === u));
+  });
+  state.lastAdded = null;
+  state.highlight = null;
+  render();
+  info(`Removed edge <code>${u}${state.directed ? "→" : "—"}${v}</code>. ` +
+       `Matrix flips the cell(s) to 0 in <code>O(1)</code>; the list must scan <code>adj[${u}]</code> ` +
+       `(<code>O(degree)</code>); the edge list scans all edges (<code>O(E)</code>).`);
+}
+
+function queryEdge(u, v) {
+  if (!validVertex(u) || !validVertex(v)) {
+    showToast(`Vertices must be 0..${N - 1}`, true);
+    return;
+  }
+  state.highlight = { u, v };
+  state.lastAdded = null;
+  render();
+  const present = hasEdge(u, v);
+  if (present) {
+    info(`Query <code>hasEdge(${u}, ${v})</code> → <b style="color:var(--green)">true</b>. ` +
+         `Matrix reads one cell <code>M[${u}][${v}]</code> in <code>O(1)</code>; ` +
+         `the list scans <code>adj[${u}]</code> until it finds <code>${v}</code> (<code>O(degree)</code>); ` +
+         `the edge list scans every pair (<code>O(E)</code>). Watch all three highlight where they look.`);
+  } else {
+    info(`Query <code>hasEdge(${u}, ${v})</code> → <b style="color:var(--red)">false</b>. ` +
+         `The highlighted matrix cell is <code>0</code>; <code>${v}</code> is absent from <code>adj[${u}]</code>; ` +
+         `no edge chip matches.`);
+  }
+}
+
+function loadSample() {
+  // a small connected graph: 0-1, 0-2, 1-2, 2-3, 3-4, 2-2 (self-loop)
+  state.edges = [[0, 1], [0, 2], [1, 2], [2, 3], [3, 4], [2, 2]];
+  state.highlight = null;
+  state.lastAdded = null;
+  render();
+  info(`Loaded a sample graph with a self-loop on <code>2</code>. ` +
+       `Try <code>Highlight 2 → 3</code> to watch each representation find the edge differently.`);
+}
+
+function reset() {
+  state.edges = [];
+  state.highlight = null;
+  state.lastAdded = null;
+  render();
+  info(`Graph reset. ${N} isolated vertices: empty matrix, empty neighbor lists, empty edge list.`);
+}
+
+// ---------------- event wiring ----------------
+
+document.getElementById("btnAdd").addEventListener("click", () => {
+  addEdge(Number(els.edgeU.value), Number(els.edgeV.value));
+});
+document.getElementById("btnRemove").addEventListener("click", () => {
+  removeEdge(Number(els.edgeU.value), Number(els.edgeV.value));
+});
+document.getElementById("btnQuery").addEventListener("click", () => {
+  queryEdge(Number(els.queryU.value), Number(els.queryV.value));
+});
+document.getElementById("btnClearHl").addEventListener("click", () => {
+  state.highlight = null;
+  render();
+  info("Highlight cleared.");
+});
+document.getElementById("btnSample").addEventListener("click", loadSample);
+document.getElementById("btnReset").addEventListener("click", reset);
+
+// Enter-to-submit on the add fields
+[els.edgeU, els.edgeV].forEach(inp => {
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("btnAdd").click();
+  });
+});
+[els.queryU, els.queryV].forEach(inp => {
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("btnQuery").click();
+  });
+});
+
+// clicking a vertex prefills the add-edge "u" field for convenience
+els.graph.addEventListener("click", e => {
+  const g = e.target.closest("g.vertex");
+  if (!g) return;
+  const id = g.querySelector("text").textContent;
+  if (els.edgeU.value === "" || els.edgeV.value !== "") {
+    els.edgeU.value = id;
+    els.edgeV.value = "";
+  } else {
+    els.edgeV.value = id;
+  }
+});
+
+document.querySelectorAll("#dirPill button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#dirPill button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.directed = btn.dataset.dir === "directed";
+    state.highlight = null;
+    render();
+    info(`Switched to <code>${state.directed ? "directed" : "undirected"}</code>. ` +
+         (state.directed
+           ? `Each stored pair is now a one-way edge; the matrix is no longer symmetric.`
+           : `Each stored pair counts both ways; the matrix is symmetric and the list stores both directions.`));
+  });
+});
+
+// ---------------- init ----------------
+
+function init() {
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
