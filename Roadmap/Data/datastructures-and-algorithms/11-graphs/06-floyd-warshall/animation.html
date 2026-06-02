@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Floyd-Warshall — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 1040px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="number"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 420px;
+    overflow-x: auto;
+  }
+
+  .vis-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 1280px) { .vis-grid { grid-template-columns: 1fr; } }
+
+  svg#graph {
+    width: 100%;
+    height: 360px;
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .edge { stroke: var(--border); stroke-width: 2; fill: none; }
+  .edge.active { stroke: var(--purple); stroke-width: 3; }
+  .edge-label {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 11px; fill: var(--muted); pointer-events: none;
+  }
+
+  .gnode circle { stroke-width: 2; fill: rgba(88,166,255,0.15); stroke: var(--blue); transition: all 0.25s ease; }
+  .gnode.pivot circle { fill: rgba(210,153,34,0.3); stroke: var(--yellow); }
+  .gnode.src circle { fill: rgba(248,81,73,0.25); stroke: var(--red); }
+  .gnode.dst circle { fill: rgba(63,185,80,0.3); stroke: var(--green); }
+  .gnode text {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px; font-weight: 600; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+
+  /* matrix */
+  .matrix-wrap { overflow-x: auto; }
+  table.matrix {
+    border-collapse: collapse;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+  }
+  table.matrix th, table.matrix td {
+    width: 40px; height: 38px; text-align: center;
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
+  }
+  table.matrix th {
+    color: var(--muted); font-weight: 600; background: var(--bg);
+  }
+  table.matrix td { background: rgba(88,166,255,0.06); color: var(--text); }
+  table.matrix td.diag { background: rgba(139,148,158,0.12); color: var(--muted); }
+  table.matrix td.inf { color: var(--muted); }
+
+  /* highlight states */
+  table.matrix td.row-k { background: rgba(210,153,34,0.18); }
+  table.matrix td.col-k { background: rgba(210,153,34,0.18); }
+  table.matrix th.hdr-k { background: rgba(210,153,34,0.3); color: var(--yellow); }
+  table.matrix td.operand { background: rgba(188,140,255,0.28); color: var(--purple); border-color: var(--purple); }
+  table.matrix td.target { background: rgba(248,81,73,0.22); color: var(--red); border-color: var(--red); }
+  table.matrix td.updated { background: rgba(63,185,80,0.3); color: var(--green); border-color: var(--green); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15); color: var(--blue);
+    padding: 1px 6px; border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 10px; font-size: 12px; color: var(--muted);
+  }
+  .stats-row .stat {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  #log {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; max-height: 180px; overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.upd { color: var(--green); }
+  #log .entry.cmp { color: var(--purple); }
+  #log .entry.ok { color: var(--blue); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 3px; border: 2px solid; }
+  .dot.d-k { background: rgba(210,153,34,0.3); border-color: var(--yellow); }
+  .dot.d-operand { background: rgba(188,140,255,0.28); border-color: var(--purple); }
+  .dot.d-target { background: rgba(248,81,73,0.22); border-color: var(--red); }
+  .dot.d-updated { background: rgba(63,185,80,0.3); border-color: var(--green); }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Floyd-Warshall — All-Pairs Shortest Path Visualization</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="shortest" class="active">Shortest (min,+)</button>
+    <button data-mode="closure">Closure (OR,AND)</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="control-row">
+        <input type="number" id="vertexCount" value="5" min="2" max="8" placeholder="V" />
+        <button class="btn success" id="btnRandom" style="flex:1">Random Graph</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="btnSample" style="flex:1">Sample (4 vertices)</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnRun">Run</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="40" max="1000" value="420" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>The Relaxation</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
+        For intermediate <code style="background:rgba(210,153,34,0.3);color:var(--yellow);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">k</code>:<br>
+        <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:2px 5px;border-radius:3px;font-family:'SF Mono',monospace;">dist[i][j] = min(dist[i][j],<br>&nbsp;&nbsp;dist[i][k] + dist[k][j])</code><br><br>
+        Loop order:
+        <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">k</code> outer,
+        then <code style="background:rgba(248,81,73,0.2);color:var(--red);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">i</code>,
+        then <code style="background:rgba(63,185,80,0.2);color:var(--green);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">j</code>.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Negative Cycle Check</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.6;">
+        After running, if any
+        <code style="background:rgba(248,81,73,0.2);color:var(--red);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">dist[i][i] &lt; 0</code>,
+        a negative cycle exists.
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <div class="vis-grid">
+        <div>
+          <svg id="graph" viewBox="0 0 480 360" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="matrix-wrap" id="matrixWrap"></div>
+      </div>
+      <div class="info-bar" id="info">Click <code>Sample</code> or <code>Random Graph</code>, then <code>Run</code> or <code>Step</code>.</div>
+      <div class="stats-row">
+        <div class="stat">V: <b id="statV">0</b></div>
+        <div class="stat">k: <b id="statK">-</b></div>
+        <div class="stat">i: <b id="statI">-</b></div>
+        <div class="stat">j: <b id="statJ">-</b></div>
+        <div class="stat">Relaxations: <b id="statRelax">0</b></div>
+        <div class="stat">Updates: <b id="statUpd">0</b></div>
+        <div class="stat">Neg cycle: <b id="statNeg">no</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-k"></span>pivot k row/column</span>
+        <span><span class="dot d-operand"></span>operands dist[i][k], dist[k][j]</span>
+        <span><span class="dot d-target"></span>target dist[i][j]</span>
+        <span><span class="dot d-updated"></span>improved</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Floyd-Warshall visualizer
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const INF = Infinity;
+
+const state = {
+  n: 0,
+  edges: [],          // {u, v, w}
+  dist: [],           // V x V matrix
+  mode: "shortest",   // 'shortest' or 'closure'
+  busy: false,
+  paused: false,
+  stepRequested: false,
+  stopped: false,
+  speedMs: 420,
+  relaxations: 0,
+  updates: 0,
+  negCycle: false,
+};
+
+const els = {
+  graph:      document.getElementById("graph"),
+  matrixWrap: document.getElementById("matrixWrap"),
+  info:       document.getElementById("info"),
+  log:        document.getElementById("log"),
+  vertexCount:document.getElementById("vertexCount"),
+  speed:      document.getElementById("speed"),
+  statV:      document.getElementById("statV"),
+  statK:      document.getElementById("statK"),
+  statI:      document.getElementById("statI"),
+  statJ:      document.getElementById("statJ"),
+  statRelax:  document.getElementById("statRelax"),
+  statUpd:    document.getElementById("statUpd"),
+  statNeg:    document.getElementById("statNeg"),
+  toast:      document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function pauseGate() {
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) { state.stepRequested = false; return; }
+    await sleep(50);
+  }
+}
+
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(html) { els.info.innerHTML = html; }
+
+function cellText(v) {
+  if (state.mode === "closure") return v ? "1" : "0";
+  if (v === INF) return "∞";
+  return String(v);
+}
+
+// ---------------- model ----------------
+
+function initMatrix() {
+  const n = state.n;
+  const d = [];
+  for (let i = 0; i < n; i++) {
+    d.push(new Array(n).fill(state.mode === "closure" ? false : INF));
+    if (state.mode === "closure") d[i][i] = true; else d[i][i] = 0;
+  }
+  for (const e of state.edges) {
+    if (state.mode === "closure") {
+      d[e.u][e.v] = true;
+    } else if (e.w < d[e.u][e.v]) {
+      d[e.u][e.v] = e.w;
+    }
+  }
+  state.dist = d;
+  state.relaxations = 0;
+  state.updates = 0;
+  state.negCycle = false;
+}
+
+function loadSample() {
+  state.n = 4;
+  state.edges = [
+    { u: 0, v: 1, w: 3 }, { u: 0, v: 3, w: 7 }, { u: 1, v: 0, w: 8 },
+    { u: 1, v: 2, w: 2 }, { u: 2, v: 0, w: 5 }, { u: 2, v: 3, w: 1 },
+    { u: 3, v: 0, w: 2 },
+  ];
+  els.vertexCount.value = 4;
+  initMatrix();
+  render();
+  info("Loaded the 4-vertex sample graph. Click <code>Run</code> or <code>Step</code>.");
+  log("loaded sample (4 vertices)", "op");
+}
+
+function randomGraph() {
+  let n = parseInt(els.vertexCount.value, 10);
+  if (!Number.isFinite(n) || n < 2) n = 5;
+  n = Math.min(8, Math.max(2, n));
+  state.n = n;
+  state.edges = [];
+  for (let u = 0; u < n; u++) {
+    for (let v = 0; v < n; v++) {
+      if (u !== v && Math.random() < 0.45) {
+        state.edges.push({ u, v, w: 1 + Math.floor(Math.random() * 9) });
+      }
+    }
+  }
+  initMatrix();
+  render();
+  info(`Random graph with <code>${n}</code> vertices and <code>${state.edges.length}</code> edges.`);
+  log(`random graph: ${n} vertices, ${state.edges.length} edges`, "op");
+}
+
+// ---------------- layout / drawing ----------------
+
+function nodePositions(n) {
+  const cx = 240, cy = 180, r = 130;
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    const ang = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    pos.push({ x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang) });
+  }
+  return pos;
+}
+
+function drawGraph(activeEdge = null, pivot = -1, src = -1, dst = -1) {
+  const svg = els.graph;
+  svg.innerHTML = "";
+  const n = state.n;
+  if (n === 0) return;
+  const pos = nodePositions(n);
+
+  // arrow marker
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.innerHTML =
+    '<marker id="arr" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">' +
+    '<path d="M0,0 L8,3 L0,6 Z" fill="#8b949e"/></marker>';
+  svg.appendChild(defs);
+
+  for (const e of state.edges) {
+    const a = pos[e.u], b = pos[e.v];
+    // shorten to node edge
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const x1 = a.x + ux * 20, y1 = a.y + uy * 20;
+    const x2 = b.x - ux * 22, y2 = b.y - uy * 22;
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    let cls = "edge";
+    if (activeEdge && activeEdge.u === e.u && activeEdge.v === e.v) cls = "edge active";
+    line.setAttribute("class", cls);
+    line.setAttribute("marker-end", "url(#arr)");
+    svg.appendChild(line);
+
+    if (state.mode === "shortest") {
+      const lbl = document.createElementNS(SVG_NS, "text");
+      lbl.setAttribute("x", (x1 + x2) / 2 + 6);
+      lbl.setAttribute("y", (y1 + y2) / 2 - 4);
+      lbl.setAttribute("class", "edge-label");
+      lbl.textContent = e.w;
+      svg.appendChild(lbl);
+    }
+  }
+
+  for (let i = 0; i < n; i++) {
+    const g = document.createElementNS(SVG_NS, "g");
+    let cls = "gnode";
+    if (i === pivot) cls += " pivot";
+    else if (i === src) cls += " src";
+    else if (i === dst) cls += " dst";
+    g.setAttribute("class", cls);
+    g.setAttribute("transform", `translate(${pos[i].x},${pos[i].y})`);
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 18);
+    g.appendChild(c);
+    const t = document.createElementNS(SVG_NS, "text");
+    t.textContent = i;
+    g.appendChild(t);
+    svg.appendChild(g);
+  }
+}
+
+function buildMatrixTable() {
+  const n = state.n;
+  const tbl = document.createElement("table");
+  tbl.className = "matrix";
+  // header row
+  const thead = document.createElement("tr");
+  thead.appendChild(document.createElement("th")); // corner
+  for (let j = 0; j < n; j++) {
+    const th = document.createElement("th");
+    th.textContent = j;
+    th.dataset.col = j;
+    th.className = "col-hdr";
+    thead.appendChild(th);
+  }
+  tbl.appendChild(thead);
+  for (let i = 0; i < n; i++) {
+    const tr = document.createElement("tr");
+    const rh = document.createElement("th");
+    rh.textContent = i;
+    rh.dataset.row = i;
+    rh.className = "row-hdr";
+    tr.appendChild(rh);
+    for (let j = 0; j < n; j++) {
+      const td = document.createElement("td");
+      td.dataset.i = i;
+      td.dataset.j = j;
+      tr.appendChild(td);
+    }
+    tbl.appendChild(tr);
+  }
+  els.matrixWrap.innerHTML = "";
+  els.matrixWrap.appendChild(tbl);
+}
+
+function refreshMatrix() {
+  const n = state.n;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const td = els.matrixWrap.querySelector(`td[data-i="${i}"][data-j="${j}"]`);
+      if (!td) continue;
+      const v = state.dist[i][j];
+      td.textContent = cellText(v);
+      let cls = "";
+      if (i === j) cls = "diag";
+      if (state.mode === "shortest" && v === INF) cls += " inf";
+      if (state.mode === "closure" && v === false) cls += " inf";
+      td.className = cls.trim();
+    }
+  }
+}
+
+function highlight(k, i, j, target, operands, updated) {
+  const n = state.n;
+  // reset to base classes
+  refreshMatrix();
+  // header k
+  const colHdr = els.matrixWrap.querySelector(`th.col-hdr[data-col="${k}"]`);
+  const rowHdr = els.matrixWrap.querySelector(`th.row-hdr[data-row="${k}"]`);
+  if (colHdr) colHdr.classList.add("hdr-k");
+  if (rowHdr) rowHdr.classList.add("hdr-k");
+  // pivot row k and column k
+  for (let x = 0; x < n; x++) {
+    const rk = els.matrixWrap.querySelector(`td[data-i="${k}"][data-j="${x}"]`);
+    const ck = els.matrixWrap.querySelector(`td[data-i="${x}"][data-j="${k}"]`);
+    if (rk) rk.classList.add("row-k");
+    if (ck) ck.classList.add("col-k");
+  }
+  if (operands) {
+    const oik = els.matrixWrap.querySelector(`td[data-i="${i}"][data-j="${k}"]`);
+    const okj = els.matrixWrap.querySelector(`td[data-i="${k}"][data-j="${j}"]`);
+    if (oik) oik.classList.add("operand");
+    if (okj) okj.classList.add("operand");
+  }
+  const tgt = els.matrixWrap.querySelector(`td[data-i="${i}"][data-j="${j}"]`);
+  if (tgt) tgt.classList.add(updated ? "updated" : "target");
+}
+
+function render() {
+  buildMatrixTable();
+  refreshMatrix();
+  drawGraph();
+  els.statV.textContent = state.n;
+  els.statRelax.textContent = state.relaxations;
+  els.statUpd.textContent = state.updates;
+  els.statNeg.textContent = state.negCycle ? "YES" : "no";
+}
+
+// ---------------- algorithm (animated) ----------------
+
+async function runFW() {
+  if (state.n === 0) { showToast("Load a graph first", true); return; }
+  initMatrix();
+  buildMatrixTable();
+  refreshMatrix();
+  els.statRelax.textContent = "0";
+  els.statUpd.textContent = "0";
+  els.statNeg.textContent = "no";
+  log(`run Floyd-Warshall (${state.mode})`, "op");
+  const n = state.n;
+
+  for (let k = 0; k < n; k++) {
+    els.statK.textContent = k;
+    drawGraph(null, k);
+    info(`Intermediate <code>k = ${k}</code>: allow paths to route through vertex ${k}. Its row and column are read-only this pass.`);
+    log(`k = ${k}: relaxing all pairs through vertex ${k}`, "ok");
+    await wait();
+
+    for (let i = 0; i < n; i++) {
+      els.statI.textContent = i;
+      for (let j = 0; j < n; j++) {
+        els.statJ.textContent = j;
+        state.relaxations++;
+        els.statRelax.textContent = state.relaxations;
+
+        const dik = state.dist[i][k];
+        const dkj = state.dist[k][j];
+
+        if (state.mode === "shortest") {
+          highlight(k, i, j, true, true, false);
+          const through = (dik === INF || dkj === INF) ? INF : dik + dkj;
+          info(`Try <code>dist[${i}][${k}] + dist[${k}][${j}] = ${cellText(dik)} + ${cellText(dkj)}</code> vs current <code>dist[${i}][${j}] = ${cellText(state.dist[i][j])}</code>.`);
+          await wait();
+          if (through < state.dist[i][j]) {
+            state.dist[i][j] = through;
+            state.updates++;
+            els.statUpd.textContent = state.updates;
+            highlight(k, i, j, true, true, true);
+            info(`Improved! <code>dist[${i}][${j}] = ${cellText(through)}</code> via ${k}.`);
+            log(`  dist[${i}][${j}] <- ${cellText(through)} (through ${k})`, "upd");
+            await wait();
+          }
+        } else {
+          highlight(k, i, j, true, true, false);
+          const through = dik && dkj;
+          await wait();
+          if (through && !state.dist[i][j]) {
+            state.dist[i][j] = true;
+            state.updates++;
+            els.statUpd.textContent = state.updates;
+            highlight(k, i, j, true, true, true);
+            log(`  reach[${i}][${j}] <- true (through ${k})`, "upd");
+            await wait();
+          }
+        }
+      }
+    }
+  }
+
+  // negative cycle check
+  if (state.mode === "shortest") {
+    for (let i = 0; i < n; i++) {
+      if (state.dist[i][i] < 0) { state.negCycle = true; break; }
+    }
+    els.statNeg.textContent = state.negCycle ? "YES" : "no";
+  }
+  refreshMatrix();
+  els.statK.textContent = "done";
+  els.statI.textContent = "-";
+  els.statJ.textContent = "-";
+  info(state.negCycle
+    ? `Done. A <span style="color:var(--red)">negative cycle</span> was detected (some <code>dist[i][i] &lt; 0</code>).`
+    : `Done. Every cell now holds the ${state.mode === "closure" ? "reachability" : "all-pairs shortest distance"}. Total updates: ${state.updates}.`);
+  log(`finished: ${state.updates} updates, ${state.relaxations} relaxations`, "op");
+}
+
+// ---------------- driver ----------------
+
+async function withBusy(fn) {
+  if (state.busy) { showToast("Running…", true); return; }
+  state.busy = true;
+  state.stopped = false;
+  state.paused = false;
+  try { await fn(); }
+  catch (e) {
+    if (e.message !== "__stopped__") { console.error(e); showToast("Error: " + e.message, true); }
+    else { log("  stopped by user", "cmp"); info("Run stopped."); }
+  } finally {
+    state.busy = false;
+    state.paused = false;
+    state.stepRequested = false;
+  }
+}
+
+// ---------------- event wiring ----------------
+
+document.getElementById("btnSample").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; }
+  loadSample();
+});
+
+document.getElementById("btnRandom").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; }
+  randomGraph();
+});
+
+document.getElementById("btnRun").addEventListener("click", () => {
+  state.paused = false;
+  withBusy(() => runFW());
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) {
+    // begin a paused run
+    state.paused = true;
+    withBusy(() => runFW());
+    state.stepRequested = true;
+  } else {
+    state.paused = true;
+    state.stepRequested = true;
+  }
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance one relaxation." : "Resumed.");
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  state.stopped = true;
+  state.paused = false;
+  setTimeout(() => {
+    initMatrix();
+    state.relaxations = 0;
+    state.updates = 0;
+    state.negCycle = false;
+    els.statK.textContent = "-";
+    els.statI.textContent = "-";
+    els.statJ.textContent = "-";
+    render();
+    info("Reset. Matrix re-initialized from the graph.");
+    log("reset", "op");
+  }, 60);
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1040 - Number(e.target.value);
+});
+
+document.querySelectorAll("#modePill button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (state.busy) { showToast("Wait for the run to finish", true); return; }
+    document.querySelectorAll("#modePill button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.mode = btn.dataset.mode;
+    initMatrix();
+    render();
+    info(`Mode: <code>${state.mode === "closure" ? "Transitive closure (OR, AND)" : "Shortest path (min, +)"}</code>.`);
+    log(`mode = ${state.mode}`, "op");
+  });
+});
+
+// ---------------- init ----------------
+
+function init() {
+  state.speedMs = 1040 - Number(els.speed.value);
+  loadSample();
+  log("Floyd-Warshall visualizer ready.", "op");
+}
+
+init();
+</script>
+</body>
+</html>
