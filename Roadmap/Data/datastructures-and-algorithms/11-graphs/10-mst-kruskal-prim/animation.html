@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Minimum Spanning Tree — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  .mode-pill {
+    display: inline-flex; gap: 6px; background: var(--bg); border: 1px solid var(--border);
+    padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted); padding: 6px 16px;
+    border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px;
+    max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted);
+    margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit; transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  .step-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  #vis { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-height: 420px; }
+  svg#graph { width: 100%; height: 440px; display: block; }
+  .gedge { stroke: var(--border); stroke-width: 3; fill: none; transition: all 0.3s ease; }
+  .gedge.consider { stroke: var(--yellow); stroke-width: 5; }
+  .gedge.accepted { stroke: var(--green); stroke-width: 5; }
+  .gedge.rejected { stroke: var(--red); stroke-width: 2; opacity: 0.4; }
+  .gedge.frontier { stroke: var(--purple); stroke-width: 3; stroke-dasharray: 6 4; }
+  .wlabel { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 13px; fill: var(--muted); }
+  .node circle { stroke: var(--border); stroke-width: 2; transition: all 0.3s ease; }
+  .node circle.intree { stroke: var(--green); stroke-width: 3; }
+  .node text { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 15px; fill: var(--text); font-weight: 600; }
+  table.edges { width: 100%; border-collapse: collapse; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+  table.edges th, table.edges td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  table.edges th { color: var(--muted); font-weight: 600; }
+  table.edges tr.cur td { background: rgba(210,153,34,0.15); }
+  table.edges tr.acc td { color: var(--green); }
+  table.edges tr.rej td { color: var(--red); opacity: 0.6; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-family: "SF Mono", monospace; }
+  .total { font-size: 22px; font-weight: 700; font-family: "SF Mono", monospace; color: var(--green); }
+  .log { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px; max-height: 160px; overflow-y: auto; }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .log .op { color: var(--blue); }
+  .log .ok { color: var(--green); }
+  .log .no { color: var(--red); }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .legend { font-size: 11px; color: var(--muted); line-height: 1.8; }
+  .swatch { display: inline-block; width: 22px; height: 4px; vertical-align: middle; border-radius: 2px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Minimum Spanning Tree — Kruskal &amp; Prim</h1>
+  <div class="mode-pill">
+    <button id="modeKruskal" class="active">Kruskal</button>
+    <button id="modePrim">Prim</button>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="control-group">
+      <h2>Controls</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="stepBtn">Step ▶</button>
+        <button class="btn" id="runBtn">Run ⏩</button>
+        <button class="btn danger" id="resetBtn">Reset ↺</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="120" max="1180" value="640" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>MST Total Weight</h2>
+      <div class="total" id="total">0</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+        Edges in tree: <span id="edgeCount">0</span> / <span id="needEdges">4</span>
+      </div>
+    </div>
+
+    <div class="control-group" id="edgeListGroup">
+      <h2 id="rightTitle">Sorted Edge List</h2>
+      <table class="edges" id="edgeTable">
+        <thead><tr><th>edge</th><th>w</th><th>state</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="control-group">
+      <h2>Legend</h2>
+      <div class="legend">
+        <span class="swatch" style="background:var(--yellow)"></span>considering<br/>
+        <span class="swatch" style="background:var(--green)"></span>accepted (in MST)<br/>
+        <span class="swatch" style="background:var(--red)"></span>rejected (cycle)<br/>
+        <span class="swatch" style="background:var(--purple)"></span>frontier / crossing edge
+      </div>
+    </div>
+  </div>
+
+  <div class="right-col">
+    <div id="vis">
+      <svg id="graph" viewBox="0 0 720 440" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="panel">
+      <h2>Step Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ---------------- fixed demo graph (6 vertices A..F) ----------------
+// Coordinates in the 720x440 viewBox.
+const NODES = [
+  { id: 0, name: "A", x: 120, y: 90 },
+  { id: 1, name: "B", x: 360, y: 60 },
+  { id: 2, name: "C", x: 600, y: 100 },
+  { id: 3, name: "D", x: 140, y: 350 },
+  { id: 4, name: "E", x: 380, y: 380 },
+  { id: 5, name: "F", x: 610, y: 330 },
+];
+// undirected edges (u, v, w)
+const EDGES = [
+  { u: 0, v: 1, w: 6 },
+  { u: 0, v: 3, w: 5 },
+  { u: 1, v: 2, w: 5 },
+  { u: 1, v: 3, w: 3 },
+  { u: 1, v: 4, w: 6 },
+  { u: 2, v: 4, w: 4 },
+  { u: 2, v: 5, w: 2 },
+  { u: 3, v: 4, w: 6 },
+  { u: 4, v: 5, w: 6 },
+];
+const N = NODES.length;
+const NEED = N - 1;
+
+const els = {
+  graph: document.getElementById("graph"),
+  total: document.getElementById("total"),
+  edgeCount: document.getElementById("edgeCount"),
+  needEdges: document.getElementById("needEdges"),
+  edgeBody: document.querySelector("#edgeTable tbody"),
+  rightTitle: document.getElementById("rightTitle"),
+  log: document.getElementById("log"),
+  step: document.getElementById("stepBtn"),
+  run: document.getElementById("runBtn"),
+  reset: document.getElementById("resetBtn"),
+  speed: document.getElementById("speed"),
+  modeKruskal: document.getElementById("modeKruskal"),
+  modePrim: document.getElementById("modePrim"),
+};
+
+let state = {};
+let runTimer = null;
+
+function init() {
+  els.needEdges.textContent = NEED;
+  reset();
+}
+
+function reset() {
+  stopRun();
+  state = {
+    mode: state.mode || "kruskal",
+    total: 0,
+    treeEdges: new Set(),     // edge indices accepted
+    rejected: new Set(),      // edge indices rejected
+    consider: -1,             // edge index being considered
+    frontier: new Set(),      // edge indices on the frontier (Prim)
+    inTree: new Array(N).fill(false),
+    parent: NODES.map((_, i) => i),  // DSU for Kruskal
+    finished: false,
+    plan: [],                 // ordered list of steps
+    cursor: 0,
+  };
+  if (state.mode === "kruskal") buildKruskalPlan();
+  else buildPrimPlan();
+  els.log.innerHTML = "";
+  log(`Mode: <code>${state.mode}</code>. Press Step or Run.`, "op");
+  render();
+}
+
+// ---------------- DSU helpers (recomputed deterministically) ----------------
+function findIn(parent, x) {
+  while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+  return x;
+}
+
+// ---------------- KRUSKAL plan ----------------
+function buildKruskalPlan() {
+  const order = EDGES.map((e, i) => i).sort((a, b) => EDGES[a].w - EDGES[b].w);
+  const parent = NODES.map((_, i) => i);
+  const plan = [];
+  let accepted = 0, total = 0;
+  for (const idx of order) {
+    const e = EDGES[idx];
+    const ra = findIn(parent, e.u), rb = findIn(parent, e.v);
+    if (ra !== rb) {
+      parent[ra] = rb;
+      accepted++; total += e.w;
+      plan.push({ idx, accept: true, total, count: accepted,
+        msg: `Edge ${nm(e.u)}–${nm(e.v)} (w=${e.w}): endpoints in different components → <b>ACCEPT</b>.` });
+      if (accepted === NEED) break;
+    } else {
+      plan.push({ idx, accept: false, total, count: accepted,
+        msg: `Edge ${nm(e.u)}–${nm(e.v)} (w=${e.w}): would form a cycle (same component) → <b>REJECT</b>.` });
+    }
+  }
+  state.plan = plan;
+  state.order = order;
+}
+
+// ---------------- PRIM plan ----------------
+function buildPrimPlan() {
+  const start = 0;
+  const inTree = new Array(N).fill(false);
+  inTree[start] = true;
+  const plan = [];
+  let total = 0, count = 1;
+  // adjacency
+  const adj = NODES.map(() => []);
+  EDGES.forEach((e, i) => { adj[e.u].push({ to: e.v, w: e.w, idx: i }); adj[e.v].push({ to: e.u, w: e.w, idx: i }); });
+  plan.push({ start: true, node: start, total: 0, count: 1,
+    msg: `Start Prim at ${nm(start)}. Its incident edges become the frontier.` });
+  while (count < N) {
+    // collect frontier: edges from inTree to outside
+    let best = null;
+    for (let u = 0; u < N; u++) {
+      if (!inTree[u]) continue;
+      for (const e of adj[u]) {
+        if (!inTree[e.to]) {
+          if (best === null || e.w < best.w) best = { idx: e.idx, w: e.w, to: e.to, from: u };
+        }
+      }
+    }
+    if (best === null) break; // disconnected
+    inTree[best.to] = true;
+    total += best.w; count++;
+    plan.push({ idx: best.idx, accept: true, node: best.to, total, count,
+      msg: `Cheapest crossing edge ${nm(best.from)}–${nm(best.to)} (w=${best.w}) → add ${nm(best.to)} to the tree.` });
+  }
+  state.plan = plan;
+}
+
+function nm(i) { return NODES[i].name; }
+
+// ---------------- stepping ----------------
+function step() {
+  if (state.finished || state.cursor >= state.plan.length) {
+    finish();
+    return;
+  }
+  const s = state.plan[state.cursor];
+  state.cursor++;
+
+  if (state.mode === "kruskal") {
+    state.consider = s.idx;
+    if (s.accept) {
+      state.treeEdges.add(s.idx);
+      const e = EDGES[s.idx];
+      const ra = findIn(state.parent, e.u), rb = findIn(state.parent, e.v);
+      state.parent[ra] = rb;
+      state.inTree[e.u] = true; state.inTree[e.v] = true;
+      log(s.msg, "ok");
+    } else {
+      state.rejected.add(s.idx);
+      log(s.msg, "no");
+    }
+    state.total = s.total;
+  } else {
+    // prim
+    if (s.start) {
+      state.inTree[s.node] = true;
+      log(s.msg, "op");
+    } else {
+      state.treeEdges.add(s.idx);
+      state.inTree[s.node] = true;
+      state.total = s.total;
+      log(s.msg, "ok");
+    }
+    state.consider = s.idx === undefined ? -1 : s.idx;
+    recomputePrimFrontier();
+  }
+
+  if (state.cursor >= state.plan.length) finish();
+  render();
+}
+
+function recomputePrimFrontier() {
+  state.frontier = new Set();
+  const adj = NODES.map(() => []);
+  EDGES.forEach((e, i) => { adj[e.u].push({ to: e.v, idx: i }); adj[e.v].push({ to: e.u, idx: i }); });
+  for (let u = 0; u < N; u++) {
+    if (!state.inTree[u]) continue;
+    for (const e of adj[u]) {
+      if (!state.inTree[e.to] && !state.treeEdges.has(e.idx)) state.frontier.add(e.idx);
+    }
+  }
+}
+
+function finish() {
+  if (state.finished) return;
+  state.finished = true;
+  state.consider = -1;
+  state.frontier = new Set();
+  stopRun();
+  log(`Done. MST weight = <b>${state.total}</b> with ${state.treeEdges.size} edges.`, "op");
+  render();
+}
+
+// ---------------- rendering ----------------
+function render() {
+  const svg = els.graph;
+  svg.innerHTML = "";
+
+  // edges first
+  EDGES.forEach((e, i) => {
+    const a = NODES[e.u], b = NODES[e.v];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    let cls = "gedge";
+    if (state.treeEdges.has(i)) cls += " accepted";
+    else if (state.rejected.has(i)) cls += " rejected";
+    else if (state.consider === i) cls += " consider";
+    else if (state.frontier.has(i)) cls += " frontier";
+    line.setAttribute("class", cls);
+    svg.appendChild(line);
+
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", mx); t.setAttribute("y", my - 4);
+    t.setAttribute("class", "wlabel");
+    t.setAttribute("text-anchor", "middle");
+    t.textContent = e.w;
+    svg.appendChild(t);
+  });
+
+  // nodes
+  NODES.forEach((nd) => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "node");
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", nd.x); c.setAttribute("cy", nd.y); c.setAttribute("r", 22);
+    c.setAttribute("fill", state.inTree[nd.id] ? "#16301f" : "var(--bg)");
+    if (state.inTree[nd.id]) c.setAttribute("class", "intree");
+    g.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", nd.x); t.setAttribute("y", nd.y + 5);
+    t.setAttribute("text-anchor", "middle");
+    t.textContent = nd.name;
+    g.appendChild(t);
+    svg.appendChild(g);
+  });
+
+  els.total.textContent = state.total;
+  els.edgeCount.textContent = state.treeEdges.size;
+
+  renderEdgeTable();
+}
+
+function renderEdgeTable() {
+  els.edgeBody.innerHTML = "";
+  if (state.mode === "kruskal") {
+    els.rightTitle.textContent = "Sorted Edge List";
+    for (const idx of state.order) {
+      const e = EDGES[idx];
+      const tr = document.createElement("tr");
+      if (state.treeEdges.has(idx)) tr.className = "acc";
+      else if (state.rejected.has(idx)) tr.className = "rej";
+      else if (state.consider === idx) tr.className = "cur";
+      tr.innerHTML = `<td>${nm(e.u)}–${nm(e.v)}</td><td>${e.w}</td><td>${
+        state.treeEdges.has(idx) ? "✓ in MST" :
+        state.rejected.has(idx) ? "✗ cycle" :
+        state.consider === idx ? "…" : ""
+      }</td>`;
+      els.edgeBody.appendChild(tr);
+    }
+  } else {
+    els.rightTitle.textContent = "Frontier (crossing edges)";
+    // show frontier edges sorted ascending — the priority queue view
+    const fr = [...state.frontier].sort((a, b) => EDGES[a].w - EDGES[b].w);
+    if (fr.length === 0 && !state.finished) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="3" style="color:var(--muted)">(empty — step to grow tree)</td>`;
+      els.edgeBody.appendChild(tr);
+    }
+    fr.forEach((idx, k) => {
+      const e = EDGES[idx];
+      const tr = document.createElement("tr");
+      if (k === 0) tr.className = "cur"; // next to be popped
+      tr.innerHTML = `<td>${nm(e.u)}–${nm(e.v)}</td><td>${e.w}</td><td>${k === 0 ? "← min" : ""}</td>`;
+      els.edgeBody.appendChild(tr);
+    });
+    // also list accepted edges
+    state.treeEdges.forEach((idx) => {
+      const e = EDGES[idx];
+      const tr = document.createElement("tr");
+      tr.className = "acc";
+      tr.innerHTML = `<td>${nm(e.u)}–${nm(e.v)}</td><td>${e.w}</td><td>✓ in MST</td>`;
+      els.edgeBody.appendChild(tr);
+    });
+  }
+}
+
+function log(msg, cls) {
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.innerHTML = msg;
+  els.log.prepend(d);
+}
+
+// ---------------- run loop ----------------
+function startRun() {
+  if (runTimer) return;
+  const tick = () => {
+    if (state.finished || state.cursor >= state.plan.length) { step(); stopRun(); return; }
+    step();
+    runTimer = setTimeout(tick, 1300 - Number(els.speed.value));
+  };
+  tick();
+}
+function stopRun() {
+  if (runTimer) { clearTimeout(runTimer); runTimer = null; }
+}
+
+// ---------------- wire up ----------------
+els.step.addEventListener("click", () => { stopRun(); step(); });
+els.run.addEventListener("click", () => { if (runTimer) stopRun(); else startRun(); });
+els.reset.addEventListener("click", reset);
+
+els.modeKruskal.addEventListener("click", () => {
+  if (state.mode === "kruskal") return;
+  state.mode = "kruskal";
+  els.modeKruskal.classList.add("active");
+  els.modePrim.classList.remove("active");
+  reset();
+});
+els.modePrim.addEventListener("click", () => {
+  if (state.mode === "prim") return;
+  state.mode = "prim";
+  els.modePrim.classList.add("active");
+  els.modeKruskal.classList.remove("active");
+  reset();
+});
+
+init();
+</script>
+</body>
+</html>
