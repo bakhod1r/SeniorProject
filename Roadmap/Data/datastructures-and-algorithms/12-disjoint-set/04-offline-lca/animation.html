@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Offline LCA (Tarjan) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px; padding: 16px;
+    max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+  input[type="text"] {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 6px;
+    font-size: 13px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; min-width: 0;
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--blue); }
+
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  #vis {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; min-height: 380px; overflow-x: auto;
+  }
+  svg#tree { width: 100%; height: 340px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; fill: none; }
+  .edge.merged { stroke: var(--purple); stroke-width: 3; }
+
+  .node circle { stroke-width: 2.5; transition: all 0.25s ease; }
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px; font-weight: 600; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+  .node text.idx { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 10px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
+
+  /* node states */
+  .node.white circle    { fill: rgba(139,148,158,0.10); stroke: var(--muted); }
+  .node.gray circle     { fill: rgba(210,153,34,0.30);  stroke: var(--yellow); }
+  .node.black circle    { fill: rgba(88,166,255,0.18);  stroke: var(--blue); }
+  .node.current circle  { fill: rgba(248,81,73,0.28);   stroke: var(--red); }
+  .node.lca circle      { fill: rgba(63,185,80,0.35);   stroke: var(--green); }
+  .node.endpoint circle { fill: rgba(188,140,255,0.28); stroke: var(--purple); }
+
+  .info-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5; min-height: 44px;
+    color: var(--text); margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15); color: var(--blue);
+    padding: 1px 6px; border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+  }
+
+  .stats-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stat b { color: var(--text); }
+
+  .queries-box { margin-top: 6px; }
+  table.qtab { width: 100%; border-collapse: collapse; font-size: 12px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; }
+  table.qtab th, table.qtab td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  table.qtab th { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+  tr.q-pending td { color: var(--muted); }
+  tr.q-active   td { color: var(--orange); }
+  tr.q-done     td { color: var(--green); }
+  td.ans { font-weight: 700; }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px; max-height: 170px; overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.union { color: var(--purple); }
+  #log .entry.ans { color: var(--green); }
+  #log .entry.visit { color: var(--blue); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-white    { background: rgba(139,148,158,0.10); border-color: var(--muted); }
+  .dot.d-gray     { background: rgba(210,153,34,0.30);  border-color: var(--yellow); }
+  .dot.d-black    { background: rgba(88,166,255,0.18);  border-color: var(--blue); }
+  .dot.d-current  { background: rgba(248,81,73,0.28);   border-color: var(--red); }
+  .dot.d-lca      { background: rgba(63,185,80,0.35);   border-color: var(--green); }
+  .dot.d-endpoint { background: rgba(188,140,255,0.28); border-color: var(--purple); }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Offline LCA — Tarjan's Algorithm</h1>
+  <div class="sub">Single DFS · DSU ancestor-union · answers a batch of LCA queries</div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Queries (offline batch)</h2>
+      <div class="control-row">
+        <input type="text" id="queryInput" placeholder="e.g. 4-5, 4-6, 5-3" />
+      </div>
+      <div class="control-row">
+        <button class="btn success" id="btnSetQueries" style="flex:1">Set Queries</button>
+        <button class="btn" id="btnSample">Sample</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+        Pairs are node labels (1-indexed) separated by <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 4px;border-radius:3px;">-</code>, queries by commas.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnRun">Run</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1200" value="650" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>How it works</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.65;">
+        DFS from the root. When a node <b style="color:var(--blue)">finishes</b> (subtree done) it is
+        <b style="color:var(--purple)">unioned</b> into its parent's DSU set. A query
+        <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;">(u,v)</code>
+        resolves when its <b>second</b> endpoint is visited:<br>
+        <code style="background:rgba(63,185,80,0.2);color:var(--green);padding:1px 5px;border-radius:3px;display:inline-block;margin-top:6px;">LCA = ancestor[find(other)]</code>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Tree</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.6;">
+        Fixed demo tree, rooted at <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;">1</code>:<br>
+        1 → 2, 3 &nbsp;·&nbsp; 2 → 4, 5 &nbsp;·&nbsp; 3 → 6, 7
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + queries + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="tree" viewBox="0 0 1000 340" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Set a query batch (or click <code>Sample</code>), then press <code>Run</code>.</div>
+      <div class="stats-row">
+        <div class="stat">Phase: <b id="statPhase">idle</b></div>
+        <div class="stat">Current: <b id="statCur">—</b></div>
+        <div class="stat">Unions: <b id="statUnions">0</b></div>
+        <div class="stat">Resolved: <b id="statResolved">0</b>/<b id="statTotal">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-white"></span>unvisited</span>
+        <span><span class="dot d-gray"></span>in-progress (gray)</span>
+        <span><span class="dot d-current"></span>current</span>
+        <span><span class="dot d-black"></span>finished (black)</span>
+        <span><span class="dot d-endpoint"></span>query endpoint</span>
+        <span><span class="dot d-lca"></span>LCA found</span>
+      </div>
+    </section>
+
+    <section class="panel queries-box">
+      <h2>Query Batch</h2>
+      <table class="qtab" id="qtab">
+        <thead><tr><th>#</th><th>u</th><th>v</th><th>status</th><th>LCA</th></tr></thead>
+        <tbody id="qbody"></tbody>
+      </table>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">DFS Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// ---- Fixed demo tree (0-indexed internally; labels are +1) ----
+// 1->2,3 ; 2->4,5 ; 3->6,7   (labels)   => 0-indexed children:
+const ADJ = [
+  [1, 2], // node 0 (label 1) -> 1,2
+  [3, 4], // node 1 (label 2) -> 3,4
+  [5, 6], // node 2 (label 3) -> 5,6
+  [], [], [], [],
+];
+const ROOT = 0;
+const N = ADJ.length;
+const LABEL = i => i + 1;
+
+// ---- visual state ----
+const state = {
+  steps: [],         // precomputed animation steps
+  idx: 0,            // current step
+  playing: false,
+  paused: false,
+  speedMs: 630,
+  queries: [],       // [{u, v}]  0-indexed
+  timer: null,
+};
+
+const els = {
+  tree:        document.getElementById("tree"),
+  info:        document.getElementById("info"),
+  log:         document.getElementById("log"),
+  queryInput:  document.getElementById("queryInput"),
+  speed:       document.getElementById("speed"),
+  qbody:       document.getElementById("qbody"),
+  statPhase:   document.getElementById("statPhase"),
+  statCur:     document.getElementById("statCur"),
+  statUnions:  document.getElementById("statUnions"),
+  statResolved:document.getElementById("statResolved"),
+  statTotal:   document.getElementById("statTotal"),
+  toast:       document.getElementById("toast"),
+};
+
+// ---------------- layout ----------------
+function levelOf(i) { return Math.floor(Math.log2(i + 1)); }
+
+function layoutPositions(n) {
+  const W = 1000, H = 340;
+  const levels = Math.floor(Math.log2(n)) + 1;
+  const vGap = Math.min(95, (H - 70) / Math.max(1, levels - 1 || 1));
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    const lvl = levelOf(i);
+    const idxInLvl = i - (Math.pow(2, lvl) - 1);
+    const nodesInLvl = Math.pow(2, lvl);
+    const x = (W * (idxInLvl + 1)) / (nodesInLvl + 1);
+    const y = 44 + lvl * vGap;
+    pos.push({ x, y });
+  }
+  return pos;
+}
+
+const POS = layoutPositions(N);
+
+function drawTree() {
+  const svg = els.tree;
+  svg.innerHTML = "";
+  // edges
+  for (let i = 1; i < N; i++) {
+    const parent = Math.floor((i - 1) / 2);
+    // find true parent via ADJ (this complete-tree mapping matches our ADJ)
+    const p = POS[parent], c = POS[i];
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", p.x); line.setAttribute("y1", p.y);
+    line.setAttribute("x2", c.x); line.setAttribute("y2", c.y);
+    line.setAttribute("class", "edge");
+    line.setAttribute("data-edge", i);
+    svg.appendChild(line);
+  }
+  // nodes
+  for (let i = 0; i < N; i++) {
+    const { x, y } = POS[i];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node white");
+    g.setAttribute("data-idx", i);
+    g.setAttribute("transform", `translate(${x},${y})`);
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 21); c.setAttribute("cx", 0); c.setAttribute("cy", 0);
+    g.appendChild(c);
+    const tv = document.createElementNS(SVG_NS, "text");
+    tv.setAttribute("class", "val"); tv.setAttribute("x", 0); tv.setAttribute("y", 0);
+    tv.textContent = LABEL(i);
+    g.appendChild(tv);
+    const ti = document.createElementNS(SVG_NS, "text");
+    ti.setAttribute("class", "idx"); ti.setAttribute("x", 0); ti.setAttribute("y", 35);
+    ti.textContent = `idx ${i}`;
+    g.appendChild(ti);
+    svg.appendChild(g);
+  }
+}
+
+function setNodeClass(idx, klass) {
+  const node = els.tree.querySelector(`g.node[data-idx="${idx}"]`);
+  if (node) node.setAttribute("class", "node " + klass);
+}
+function setEdgeMerged(childIdx) {
+  const e = els.tree.querySelector(`line[data-edge="${childIdx}"]`);
+  if (e) e.classList.add("merged");
+}
+
+// ---------------- log / toast ----------------
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function info(html) { els.info.innerHTML = html; }
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1700);
+}
+
+// ---------------- query table ----------------
+function renderQueryTable() {
+  els.qbody.innerHTML = "";
+  state.queries.forEach((q, i) => {
+    const tr = document.createElement("tr");
+    tr.className = "q-pending";
+    tr.id = "qrow-" + i;
+    tr.innerHTML =
+      `<td>${i}</td><td>${LABEL(q.u)}</td><td>${LABEL(q.v)}</td>` +
+      `<td class="status">pending</td><td class="ans">—</td>`;
+    els.qbody.appendChild(tr);
+  });
+  els.statTotal.textContent = state.queries.length;
+  els.statResolved.textContent = "0";
+}
+function markQuery(i, status, ansLabel) {
+  const tr = document.getElementById("qrow-" + i);
+  if (!tr) return;
+  tr.className = "q-" + (status === "resolved" ? "done" : status === "active" ? "active" : "pending");
+  tr.querySelector(".status").textContent = status;
+  if (ansLabel != null) tr.querySelector(".ans").textContent = ansLabel;
+}
+
+// ============================================================
+//  Build the full step list by SIMULATING Tarjan offline LCA.
+//  Each step is a closure-free descriptor consumed by applyStep.
+// ============================================================
+function buildSteps() {
+  const steps = [];
+  // DSU
+  const parent = Array.from({ length: N }, (_, i) => i);
+  const rank = new Array(N).fill(0);
+  const ancestor = Array.from({ length: N }, (_, i) => i);
+  const visited = new Array(N).fill(false);
+
+  const qByNode = Array.from({ length: N }, () => []);
+  state.queries.forEach((q, id) => {
+    qByNode[q.u].push({ other: q.v, id });
+    qByNode[q.v].push({ other: q.u, id });
+  });
+
+  function find(x) {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+  }
+  function union(p, c) {
+    let rp = find(p), rc = find(c);
+    if (rp === rc) return;
+    if (rank[rp] < rank[rc]) { const t = rp; rp = rc; rc = t; }
+    parent[rc] = rp;
+    if (rank[rp] === rank[rc]) rank[rp]++;
+    ancestor[find(rp)] = p;
+  }
+
+  // recursive simulate, emitting steps
+  function dfs(u) {
+    ancestor[find(u)] = u;
+    steps.push({ kind: "enter", node: u });
+    for (const c of ADJ[u]) {
+      dfs(c);
+      union(u, c);
+      ancestor[find(u)] = u;
+      steps.push({ kind: "union", parent: u, child: c });
+    }
+    visited[u] = true;
+    steps.push({ kind: "visit", node: u });
+    for (const q of qByNode[u]) {
+      if (visited[q.other]) {
+        const lca = ancestor[find(q.other)];
+        steps.push({ kind: "answer", node: u, other: q.other, id: q.id, lca });
+      }
+    }
+    steps.push({ kind: "leave", node: u });
+  }
+  dfs(ROOT);
+  steps.push({ kind: "done" });
+  return steps;
+}
+
+// ---- per-node display state during playback ----
+function resetVisualState() {
+  for (let i = 0; i < N; i++) setNodeClass(i, "white");
+  els.tree.querySelectorAll("line.edge").forEach(e => e.classList.remove("merged"));
+}
+
+// We keep a lightweight model of node states so we can re-color consistently.
+let nodeStateModel; // 'white' | 'gray' | 'black'
+let unionsDone, resolvedDone;
+
+function recolor(highlightCurrent, lcaNode, endpoints) {
+  for (let i = 0; i < N; i++) {
+    setNodeClass(i, nodeStateModel[i]);
+  }
+  if (endpoints) endpoints.forEach(e => { if (e !== lcaNode) setNodeClass(e, "endpoint"); });
+  if (lcaNode != null) setNodeClass(lcaNode, "lca");
+  if (highlightCurrent != null) setNodeClass(highlightCurrent, "current");
+}
+
+function applyStep(step) {
+  switch (step.kind) {
+    case "enter":
+      nodeStateModel[step.node] = "gray";
+      els.statPhase.textContent = "descend";
+      els.statCur.textContent = LABEL(step.node);
+      recolor(step.node);
+      info(`Enter node <code>${LABEL(step.node)}</code> — now <b style="color:var(--yellow)">gray</b> (in-progress). It owns its own DSU set: <code>ancestor[find(${LABEL(step.node)})] = ${LABEL(step.node)}</code>.`);
+      log(`enter ${LABEL(step.node)}`, "op");
+      break;
+
+    case "union":
+      unionsDone++;
+      els.statUnions.textContent = unionsDone;
+      els.statPhase.textContent = "union";
+      setEdgeMerged(step.child);
+      recolor(step.parent);
+      info(`Child <code>${LABEL(step.child)}</code> finished. <b style="color:var(--purple)">Union</b> its subtree into parent <code>${LABEL(step.parent)}</code>: now <code>ancestor[find(${LABEL(step.parent)})] = ${LABEL(step.parent)}</code> owns the merged set.`);
+      log(`union(${LABEL(step.parent)}, ${LABEL(step.child)})  →  set owned by ${LABEL(step.parent)}`, "union");
+      break;
+
+    case "visit":
+      nodeStateModel[step.node] = "black";
+      els.statPhase.textContent = "visit";
+      els.statCur.textContent = LABEL(step.node);
+      recolor(step.node);
+      info(`Mark <code>${LABEL(step.node)}</code> visited (still gray on the stack until it returns). Check its queries: any whose other endpoint is already finished can be answered.`);
+      log(`visit ${LABEL(step.node)} — check queries`, "visit");
+      break;
+
+    case "answer": {
+      resolvedDone++;
+      els.statResolved.textContent = resolvedDone;
+      els.statPhase.textContent = "resolve";
+      recolor(step.node, step.lca, [step.node, step.other]);
+      markQuery(step.id, "resolved", LABEL(step.lca));
+      info(`Query <code>(${LABEL(step.node)}, ${LABEL(step.other)})</code>: other endpoint <code>${LABEL(step.other)}</code> is finished → <code>LCA = ancestor[find(${LABEL(step.other)})] = <b style="color:var(--green)">${LABEL(step.lca)}</b></code>.`);
+      log(`answer (${LABEL(step.node)},${LABEL(step.other)}) = LCA ${LABEL(step.lca)}`, "ans");
+      break;
+    }
+
+    case "leave":
+      els.statPhase.textContent = "backtrack";
+      recolor();
+      info(`Leave node <code>${LABEL(step.node)}</code> — its subtree is complete; control returns to its parent (which will union it in).`);
+      log(`leave ${LABEL(step.node)}`, "op");
+      break;
+
+    case "done":
+      els.statPhase.textContent = "done";
+      els.statCur.textContent = "—";
+      recolor();
+      info(`DFS complete. All <b>${state.queries.length}</b> queries resolved. Total unions = <code>${unionsDone}</code> (= N − 1 = ${N - 1}).`);
+      log(`done — ${resolvedDone}/${state.queries.length} queries resolved`, "ans");
+      break;
+  }
+}
+
+// ---------------- playback driver ----------------
+function prepareRun() {
+  if (state.queries.length === 0) {
+    showToast("Set a query batch first", true);
+    return false;
+  }
+  resetVisualState();
+  els.log.innerHTML = "";
+  state.steps = buildSteps();
+  state.idx = 0;
+  nodeStateModel = new Array(N).fill("white");
+  unionsDone = 0;
+  resolvedDone = 0;
+  els.statUnions.textContent = "0";
+  els.statResolved.textContent = "0";
+  state.queries.forEach((q, i) => markQuery(i, "pending", null));
+  log(`Tarjan offline LCA over ${state.queries.length} queries`, "op");
+  return true;
+}
+
+function stepOnce() {
+  if (state.idx >= state.steps.length) {
+    stopPlayback();
+    return false;
+  }
+  applyStep(state.steps[state.idx]);
+  state.idx++;
+  return true;
+}
+
+function tick() {
+  if (state.paused || !state.playing) return;
+  const more = stepOnce();
+  if (!more) { stopPlayback(); return; }
+  state.timer = setTimeout(tick, state.speedMs);
+}
+
+function startPlayback() {
+  if (state.idx === 0 && state.steps.length === 0) {
+    if (!prepareRun()) return;
+  } else if (state.idx >= state.steps.length) {
+    if (!prepareRun()) return;
+  }
+  state.playing = true;
+  state.paused = false;
+  tick();
+}
+function stopPlayback() {
+  state.playing = false;
+  state.paused = false;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+}
+
+// ---------------- query parsing ----------------
+function parseQueries(raw) {
+  const out = [];
+  const parts = raw.split(",").map(s => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    const m = p.split(/[-\s]+/).map(s => Number(s));
+    if (m.length !== 2 || !Number.isFinite(m[0]) || !Number.isFinite(m[1])) {
+      throw new Error(`bad pair: "${p}"`);
+    }
+    const u = m[0] - 1, v = m[1] - 1; // labels are 1-indexed
+    if (u < 0 || u >= N || v < 0 || v >= N) {
+      throw new Error(`node out of range in "${p}" (use 1..${N})`);
+    }
+    out.push({ u, v });
+  }
+  return out;
+}
+
+// ---------------- event wiring ----------------
+document.getElementById("btnSetQueries").addEventListener("click", () => {
+  const raw = els.queryInput.value.trim();
+  if (!raw) { showToast("Enter queries like 4-5, 4-6", true); return; }
+  try {
+    stopPlayback();
+    state.queries = parseQueries(raw);
+    state.steps = [];
+    state.idx = 0;
+    renderQueryTable();
+    resetVisualState();
+    nodeStateModel = new Array(N).fill("white");
+    els.statUnions.textContent = "0";
+    els.statResolved.textContent = "0";
+    els.statPhase.textContent = "idle";
+    els.statCur.textContent = "—";
+    info(`Loaded <b>${state.queries.length}</b> queries. Press <code>Run</code> or <code>Step</code>.`);
+    log(`queries set: ${state.queries.map(q => `(${LABEL(q.u)},${LABEL(q.v)})`).join(" ")}`, "op");
+  } catch (e) {
+    showToast(e.message, true);
+  }
+});
+
+document.getElementById("btnSample").addEventListener("click", () => {
+  els.queryInput.value = "4-5, 4-6, 5-3, 7-4";
+  document.getElementById("btnSetQueries").click();
+});
+
+document.getElementById("btnRun").addEventListener("click", () => {
+  if (state.queries.length === 0) { showToast("Set a query batch first", true); return; }
+  if (state.playing && !state.paused) { showToast("Already running"); return; }
+  startPlayback();
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.queries.length === 0) { showToast("Set a query batch first", true); return; }
+  stopPlayback();
+  if (state.steps.length === 0 || state.idx >= state.steps.length) {
+    if (!prepareRun()) return;
+  }
+  state.paused = true;
+  stepOnce();
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.playing) return;
+  state.paused = !state.paused;
+  if (!state.paused) tick();
+  info(state.paused ? "Paused. Use <code>Step</code> to advance." : "Resumed.");
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  stopPlayback();
+  state.steps = [];
+  state.idx = 0;
+  nodeStateModel = new Array(N).fill("white");
+  unionsDone = 0; resolvedDone = 0;
+  resetVisualState();
+  els.statUnions.textContent = "0";
+  els.statResolved.textContent = "0";
+  els.statPhase.textContent = "idle";
+  els.statCur.textContent = "—";
+  state.queries.forEach((q, i) => markQuery(i, "pending", "—"));
+  els.statResolved.textContent = "0";
+  info("Reset. Press <code>Run</code> to replay the batch.");
+  log("reset", "op");
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1280 - Number(e.target.value);
+});
+
+els.queryInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btnSetQueries").click();
+});
+
+// ---------------- init ----------------
+function init() {
+  state.speedMs = 1280 - Number(els.speed.value);
+  drawTree();
+  nodeStateModel = new Array(N).fill("white");
+  renderQueryTable();
+  log("Tarjan offline LCA visualizer ready.", "ans");
+}
+init();
+</script>
+</body>
+</html>
