@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Union by Rank / Size — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+
+  header .mode-pill {
+    display: inline-flex; gap: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+
+  main {
+    display: grid; grid-template-columns: 320px 1fr;
+    gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+  input[type="number"], input[type="text"] {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; min-width: 0;
+  }
+  input:focus { outline: none; border-color: var(--blue); }
+
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  #vis { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-height: 420px; overflow-x: auto; }
+  svg#forest { width: 100%; height: 360px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; fill: none; }
+  .edge.new { stroke: var(--green); stroke-width: 3; }
+
+  .node circle { stroke-width: 2; transition: all 0.25s ease; }
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px; font-weight: 600; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+  .node text.meta {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 10px; fill: var(--muted); text-anchor: middle; pointer-events: none;
+  }
+
+  .node.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .node.rootA circle   { fill: rgba(63,185,80,0.30); stroke: var(--green); }
+  .node.rootB circle   { fill: rgba(255,166,87,0.30); stroke: var(--orange); }
+  .node.comparing circle { fill: rgba(248,81,73,0.25); stroke: var(--red); }
+  .node.winner circle  { fill: rgba(63,185,80,0.30); stroke: var(--green); stroke-width: 3; }
+  .node.loser circle   { fill: rgba(210,153,34,0.30); stroke: var(--yellow); }
+
+  .node.comparing text.val { fill: var(--red); }
+  .node.winner text.val { fill: var(--green); }
+  .node.loser text.val { fill: var(--yellow); }
+
+  /* arrays */
+  .arrays { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+  .arr-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+  .array-strip { display: flex; gap: 4px; flex-wrap: wrap; }
+  .arr-cell { display: flex; flex-direction: column; align-items: center; min-width: 36px; }
+  .arr-box {
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--blue); background: rgba(88,166,255,0.15); color: var(--text);
+    border-radius: 6px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-weight: 600; font-size: 13px; transition: all 0.25s ease;
+  }
+  .arr-box.winner { border-color: var(--green); background: rgba(63,185,80,0.30); color: var(--green); }
+  .arr-box.loser  { border-color: var(--yellow); background: rgba(210,153,34,0.30); color: var(--yellow); }
+  .arr-box.changed { border-color: var(--purple); background: rgba(188,140,255,0.25); color: var(--purple); }
+  .arr-idx { font-size: 10px; color: var(--muted); margin-top: 3px; font-family: "SF Mono", monospace; }
+
+  .info-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5; min-height: 44px;
+    color: var(--text); margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15); color: var(--blue); padding: 1px 6px; border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+  }
+
+  .stats-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .stats-row .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    max-height: 170px; overflow-y: auto; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.link { color: var(--green); }
+  #log .entry.cmp { color: var(--red); }
+  #log .entry.bump { color: var(--purple); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-default { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-winner  { background: rgba(63,185,80,0.30); border-color: var(--green); }
+  .dot.d-loser   { background: rgba(210,153,34,0.30); border-color: var(--yellow); }
+  .dot.d-comparing { background: rgba(248,81,73,0.25); border-color: var(--red); }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px; background: var(--surface);
+    border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Union by Rank / Size — Interactive Visualization</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="rank" class="active">By Rank</button>
+    <button data-mode="size">By Size</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Union</h2>
+      <div class="control-row">
+        <input type="number" id="ua" placeholder="a" />
+        <input type="number" id="ub" placeholder="b" />
+        <button class="btn primary" id="btnUnion">Union</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5;">
+        Merges the trees of <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;">a</code>
+        and <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;">b</code>.
+        The shorter/smaller root is attached under the taller/larger one.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Setup</h2>
+      <div class="control-row">
+        <input type="number" id="nVal" placeholder="n (elements)" value="8" />
+        <button class="btn success" id="btnInit">Init</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="btnPreset" style="flex:1">Preset Trees</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Step Controls</h2>
+      <div class="step-controls">
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn" id="btnStep">Step</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1200" value="550" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Rule</h2>
+      <div id="ruleBox" style="font-size:12px;color:var(--muted);line-height:1.6;"></div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="forest" viewBox="0 0 1000 360" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="arrays">
+        <div>
+          <div class="arr-label">parent[]</div>
+          <div class="array-strip" id="parentStrip"></div>
+        </div>
+        <div>
+          <div class="arr-label" id="auxLabel">rank[]</div>
+          <div class="array-strip" id="auxStrip"></div>
+        </div>
+      </div>
+      <div class="info-bar" id="info">Click <code>Preset Trees</code> then <code>Union</code> to watch a balanced merge.</div>
+      <div class="stats-row">
+        <div class="stat">n: <b id="statN">0</b></div>
+        <div class="stat">Mode: <b id="statMode">by rank</b></div>
+        <div class="stat">Components: <b id="statComp">0</b></div>
+        <div class="stat">Unions: <b id="statUnions">0</b></div>
+        <div class="stat">Rank bumps: <b id="statBumps">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-default"></span>node</span>
+        <span><span class="dot d-comparing"></span>comparing roots</span>
+        <span><span class="dot d-winner"></span>winner (new parent)</span>
+        <span><span class="dot d-loser"></span>loser (becomes child)</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// =====================================================================
+//  Union by Rank / Size visualizer
+//  Visualizes two DSU trees merging; highlights which root becomes the
+//  child based on rank/size; updates rank[]/size[] live; toggle modes.
+// =====================================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const state = {
+  n: 0,
+  parent: [],
+  rank: [],
+  size: [],
+  mode: "rank",        // 'rank' | 'size'
+  components: 0,
+  unions: 0,
+  bumps: 0,
+  busy: false,
+  paused: false,
+  stepRequested: false,
+  stopped: false,
+  speedMs: 550,
+  newEdge: null,       // [child, parent] freshly linked, drawn green
+};
+
+const els = {
+  forest:      document.getElementById("forest"),
+  parentStrip: document.getElementById("parentStrip"),
+  auxStrip:    document.getElementById("auxStrip"),
+  auxLabel:    document.getElementById("auxLabel"),
+  info:        document.getElementById("info"),
+  log:         document.getElementById("log"),
+  ua:          document.getElementById("ua"),
+  ub:          document.getElementById("ub"),
+  nVal:        document.getElementById("nVal"),
+  speed:       document.getElementById("speed"),
+  ruleBox:     document.getElementById("ruleBox"),
+  statN:       document.getElementById("statN"),
+  statMode:    document.getElementById("statMode"),
+  statComp:    document.getElementById("statComp"),
+  statUnions:  document.getElementById("statUnions"),
+  statBumps:   document.getElementById("statBumps"),
+  toast:       document.getElementById("toast"),
+};
+
+// ------------- helpers -------------
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function pauseGate() {
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) { state.stepRequested = false; return; }
+    await sleep(60);
+  }
+}
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1700);
+}
+
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(text) { els.info.innerHTML = text; }
+
+// pure find (no compression) so the tree SHAPE stays visible for teaching
+function find(x) {
+  while (state.parent[x] !== x) x = state.parent[x];
+  return x;
+}
+
+// ------------- model init -------------
+
+function initDSU(n) {
+  state.n = n;
+  state.parent = Array.from({ length: n }, (_, i) => i);
+  state.rank = new Array(n).fill(0);
+  state.size = new Array(n).fill(1);
+  state.components = n;
+  state.unions = 0;
+  state.bumps = 0;
+  state.newEdge = null;
+  render();
+  updateStats();
+}
+
+function presetTrees() {
+  // Build two balanced trees of different heights so a merge is interesting.
+  initDSU(8);
+  // Tree A: 0 over {1, 2-over-3}  (rank 2)
+  state.parent[1] = 0; state.parent[3] = 2; state.parent[2] = 0;
+  state.rank[0] = 2; state.rank[2] = 1;
+  state.size[2] = 2; state.size[0] = 4;
+  // Tree B: 4 over {5}  (rank 1)
+  state.parent[5] = 4; state.rank[4] = 1; state.size[4] = 2;
+  // 6 and 7 left as singletons
+  state.components = 4;
+  render();
+  updateStats();
+  info("Two trees ready. Try <code>Union 0 4</code> (rank 2 vs 1) or <code>Union 6 7</code> (a tie).");
+  log("preset trees loaded", "op");
+}
+
+// ------------- layout -------------
+
+// Compute, per root, the subtree under it, then assign x positions.
+function computeLayout() {
+  const n = state.n;
+  const children = Array.from({ length: n }, () => []);
+  const roots = [];
+  for (let i = 0; i < n; i++) {
+    const p = state.parent[i];
+    if (p === i) roots.push(i);
+    else children[p].push(i);
+  }
+  // depth of each node
+  const depth = new Array(n).fill(0);
+  function setDepth(node, d) {
+    depth[node] = d;
+    for (const c of children[node]) setDepth(c, d + 1);
+  }
+  roots.forEach(r => setDepth(r, 0));
+
+  // assign leaf x-slots via in-order over the forest
+  let slot = 0;
+  const xslot = new Array(n).fill(0);
+  function assign(node) {
+    if (children[node].length === 0) { xslot[node] = slot++; return; }
+    let sum = 0;
+    for (const c of children[node]) { assign(c); sum += xslot[c]; }
+    xslot[node] = sum / children[node].length;
+  }
+  // small gap between separate trees
+  roots.forEach(r => { assign(r); slot += 1; });
+
+  const totalSlots = Math.max(1, slot);
+  const W = 1000, H = 360;
+  const maxDepth = Math.max(0, ...depth);
+  const vGap = Math.min(80, (H - 70) / Math.max(1, maxDepth));
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    pos[i] = {
+      x: 30 + (W - 60) * (xslot[i] + 0.5) / totalSlots,
+      y: 35 + depth[i] * vGap,
+    };
+  }
+  return { pos, children, roots };
+}
+
+function render() {
+  const svg = els.forest;
+  svg.innerHTML = "";
+  if (state.n === 0) {
+    const t = document.createElementNS(SVG_NS, "text");
+    t.setAttribute("x", "500"); t.setAttribute("y", "180");
+    t.setAttribute("text-anchor", "middle"); t.setAttribute("fill", "#8b949e");
+    t.setAttribute("font-size", "16"); t.textContent = "No elements — click Init or Preset Trees";
+    svg.appendChild(t);
+    drawArrays();
+    return;
+  }
+  const { pos, children } = computeLayout();
+
+  // edges
+  for (let i = 0; i < state.n; i++) {
+    const p = state.parent[i];
+    if (p === i) continue;
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", pos[p].x); line.setAttribute("y1", pos[p].y);
+    line.setAttribute("x2", pos[i].x); line.setAttribute("y2", pos[i].y);
+    let cls = "edge";
+    if (state.newEdge && state.newEdge[0] === i && state.newEdge[1] === p) cls += " new";
+    line.setAttribute("class", cls);
+    svg.appendChild(line);
+  }
+
+  // nodes
+  for (let i = 0; i < state.n; i++) {
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node default");
+    g.setAttribute("data-idx", i);
+    g.setAttribute("transform", `translate(${pos[i].x},${pos[i].y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 18); c.setAttribute("cx", 0); c.setAttribute("cy", 0);
+    g.appendChild(c);
+
+    const tv = document.createElementNS(SVG_NS, "text");
+    tv.setAttribute("class", "val"); tv.setAttribute("x", 0); tv.setAttribute("y", 0);
+    tv.textContent = i;
+    g.appendChild(tv);
+
+    // show rank/size only on roots
+    if (state.parent[i] === i) {
+      const tm = document.createElementNS(SVG_NS, "text");
+      tm.setAttribute("class", "meta"); tm.setAttribute("x", 0); tm.setAttribute("y", 31);
+      tm.textContent = state.mode === "rank"
+        ? `r=${state.rank[i]}`
+        : `sz=${state.size[i]}`;
+      g.appendChild(tm);
+    }
+    svg.appendChild(g);
+  }
+  drawArrays();
+}
+
+function drawArrays() {
+  els.parentStrip.innerHTML = "";
+  els.auxStrip.innerHTML = "";
+  els.auxLabel.textContent = state.mode === "rank" ? "rank[]" : "size[]";
+  for (let i = 0; i < state.n; i++) {
+    // parent
+    const cell = document.createElement("div");
+    cell.className = "arr-cell";
+    const box = document.createElement("div");
+    box.className = "arr-box default"; box.dataset.idx = i; box.dataset.kind = "parent";
+    box.textContent = state.parent[i];
+    cell.appendChild(box);
+    const idx = document.createElement("div"); idx.className = "arr-idx"; idx.textContent = i;
+    cell.appendChild(idx);
+    els.parentStrip.appendChild(cell);
+
+    // aux
+    const cell2 = document.createElement("div");
+    cell2.className = "arr-cell";
+    const box2 = document.createElement("div");
+    box2.className = "arr-box default"; box2.dataset.idx = i; box2.dataset.kind = "aux";
+    box2.textContent = state.mode === "rank" ? state.rank[i] : state.size[i];
+    cell2.appendChild(box2);
+    const idx2 = document.createElement("div"); idx2.className = "arr-idx"; idx2.textContent = i;
+    cell2.appendChild(idx2);
+    els.auxStrip.appendChild(cell2);
+  }
+}
+
+function nodeClass(idx, klass) {
+  const g = els.forest.querySelector(`g.node[data-idx="${idx}"]`);
+  if (g) g.setAttribute("class", "node " + klass);
+}
+function clearNodes() {
+  for (let i = 0; i < state.n; i++) nodeClass(i, "default");
+}
+function boxClass(idx, kind, klass) {
+  const b = (kind === "parent" ? els.parentStrip : els.auxStrip)
+    .querySelector(`.arr-box[data-idx="${idx}"]`);
+  if (b) b.className = "arr-box " + klass;
+}
+
+function updateStats() {
+  els.statN.textContent = state.n;
+  els.statMode.textContent = state.mode === "rank" ? "by rank" : "by size";
+  els.statComp.textContent = state.components;
+  els.statUnions.textContent = state.unions;
+  els.statBumps.textContent = state.bumps;
+  els.ruleBox.innerHTML = state.mode === "rank"
+    ? "Attach <b>lower-rank</b> root under higher-rank.<br>On a <b>tie</b>: winner's <code style='background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 4px;border-radius:3px;'>rank += 1</code>."
+    : "Attach <b>smaller-size</b> root under larger.<br>Always <code style='background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 4px;border-radius:3px;'>size += otherSize</code> (no tie-break).";
+}
+
+// ------------- the animated union -------------
+
+async function animateUnion(a, b) {
+  if (a < 0 || a >= state.n || b < 0 || b >= state.n) {
+    showToast("Index out of range", true); return;
+  }
+  state.newEdge = null;
+  render();
+  info(`Union(<code>${a}</code>, <code>${b}</code>): first find both roots.`);
+  log(`union(${a}, ${b})`, "op");
+
+  const ra = find(a), rb = find(b);
+  nodeClass(ra, "comparing");
+  nodeClass(rb, "comparing");
+  await wait();
+
+  if (ra === rb) {
+    info(`Roots are equal (<code>${ra}</code>). Already in the same set — no-op.`);
+    log(`  find(${a})=find(${b})=${ra} → no-op`, "cmp");
+    await wait();
+    clearNodes();
+    state.newEdge = null;
+    render();
+    return;
+  }
+
+  // decide winner/loser by the active rule
+  let winner, loser, bumped = false;
+  if (state.mode === "rank") {
+    info(`Compare ranks: <code>rank[${ra}]=${state.rank[ra]}</code> vs <code>rank[${rb}]=${state.rank[rb]}</code>.`);
+    log(`  compare rank[${ra}]=${state.rank[ra]} vs rank[${rb}]=${state.rank[rb]}`, "cmp");
+    await wait();
+    if (state.rank[ra] < state.rank[rb]) { winner = rb; loser = ra; }
+    else if (state.rank[ra] > state.rank[rb]) { winner = ra; loser = rb; }
+    else { winner = ra; loser = rb; bumped = true; }
+  } else {
+    info(`Compare sizes: <code>size[${ra}]=${state.size[ra]}</code> vs <code>size[${rb}]=${state.size[rb]}</code>.`);
+    log(`  compare size[${ra}]=${state.size[ra]} vs size[${rb}]=${state.size[rb]}`, "cmp");
+    await wait();
+    if (state.size[ra] >= state.size[rb]) { winner = ra; loser = rb; }
+    else { winner = rb; loser = ra; }
+  }
+
+  nodeClass(winner, "winner");
+  nodeClass(loser, "loser");
+  boxClass(loser, "parent", "loser");
+  boxClass(winner, "parent", "winner");
+  const why = state.mode === "rank"
+    ? (bumped ? "equal ranks (tie)" : `rank[${winner}] ≥ rank[${loser}]`)
+    : `size[${winner}] ≥ size[${loser}]`;
+  info(`Winner is <code>${winner}</code> (${why}). Attach <code>${loser}</code> under <code>${winner}</code>.`);
+  await wait();
+
+  // perform the link
+  state.parent[loser] = winner;
+  state.newEdge = [loser, winner];
+  if (state.mode === "size") {
+    state.size[winner] += state.size[loser];
+    log(`  parent[${loser}]=${winner}; size[${winner}] += size[${loser}] → ${state.size[winner]}`, "link");
+  } else if (bumped) {
+    state.rank[winner] += 1;
+    state.bumps++;
+    log(`  parent[${loser}]=${winner}; TIE → rank[${winner}] += 1 → ${state.rank[winner]}`, "bump");
+  } else {
+    log(`  parent[${loser}]=${winner}; ranks unchanged (no tie)`, "link");
+  }
+  state.unions++;
+  state.components--;
+  render();
+  // highlight changed array cells after redraw
+  boxClass(loser, "parent", "changed");
+  boxClass(winner, "aux", state.mode === "size" || bumped ? "changed" : "default");
+  updateStats();
+
+  const tail = state.mode === "size"
+    ? `<code>size[${winner}]</code> is now <code>${state.size[winner]}</code>.`
+    : (bumped ? `<code>rank[${winner}]</code> bumped to <code>${state.rank[winner]}</code> (tie).`
+              : `no rank changed (shorter slid under taller).`);
+  info(`Linked <code>${loser}</code> → <code>${winner}</code>. ${tail}`);
+  await wait();
+  clearNodes();
+}
+
+// ------------- driver -------------
+
+async function withBusy(fn) {
+  if (state.busy) { showToast("Animation in progress…", true); return; }
+  state.busy = true; state.stopped = false;
+  try { await fn(); }
+  catch (e) {
+    if (e.message !== "__stopped__") { console.error(e); showToast("Error: " + e.message, true); }
+    else { log("  stopped by user", "cmp"); }
+  } finally {
+    state.busy = false; state.paused = false; state.stepRequested = false;
+    clearNodes();
+    state.newEdge = state.newEdge; // keep last edge visible
+    render();
+  }
+}
+
+// ------------- events -------------
+
+document.getElementById("btnUnion").addEventListener("click", () => {
+  const a = Number(els.ua.value), b = Number(els.ub.value);
+  if (!Number.isInteger(a) || !Number.isInteger(b)) { showToast("Enter two integers", true); return; }
+  withBusy(() => animateUnion(a, b));
+});
+
+document.getElementById("btnInit").addEventListener("click", () => {
+  if (state.busy) { showToast("Wait for current op", true); return; }
+  const n = Number(els.nVal.value);
+  if (!Number.isInteger(n) || n < 1 || n > 20) { showToast("n must be 1..20", true); return; }
+  initDSU(n);
+  info(`Initialized <code>${n}</code> singletons. parent[i]=i, rank=0, size=1.`);
+  log(`init(${n})`, "op");
+});
+
+document.getElementById("btnPreset").addEventListener("click", () => {
+  if (state.busy) { showToast("Wait for current op", true); return; }
+  presetTrees();
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; return; }
+  initDSU(0);
+  els.log.innerHTML = "";
+  info("Reset. Click Init or Preset Trees.");
+  log("reset()", "op");
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance." : "Resumed.");
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) { showToast("Start a union first"); return; }
+  state.paused = true;
+  state.stepRequested = true;
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1280 - Number(e.target.value);
+});
+
+document.querySelectorAll("#modePill button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (state.busy) { showToast("Wait for current op", true); return; }
+    document.querySelectorAll("#modePill button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.mode = btn.dataset.mode;
+    updateStats();
+    render();
+    info(`Mode switched to <code>${state.mode === "rank" ? "union by rank" : "union by size"}</code>.`);
+    log(`mode = ${state.mode}`, "op");
+  });
+});
+
+// ------------- init -------------
+
+function init() {
+  state.speedMs = 1280 - Number(els.speed.value);
+  updateStats();
+  presetTrees();
+  log("Union by Rank / Size visualizer ready.", "op");
+}
+
+init();
+</script>
+</body>
+</html>
