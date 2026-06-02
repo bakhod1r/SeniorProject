@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lowest Common Ancestor (Binary Lifting) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+
+  label.small { font-size: 12px; color: var(--muted); min-width: 64px; }
+
+  input[type="number"], input[type="text"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  input:focus { outline: none; border-color: var(--blue); }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 420px;
+    overflow-x: auto;
+  }
+
+  svg#tree { width: 100%; height: 420px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; fill: none; }
+  .edge.path { stroke: var(--purple); stroke-width: 3; }
+
+  .node circle { stroke-width: 2; transition: all 0.25s ease; }
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px; font-weight: 600; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+  .node text.meta {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 9px; fill: var(--muted); text-anchor: middle; pointer-events: none;
+  }
+
+  .node.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .node.u circle { fill: rgba(63,185,80,0.30); stroke: var(--green); }
+  .node.v circle { fill: rgba(255,166,87,0.30); stroke: var(--orange); }
+  .node.comparing circle { fill: rgba(248,81,73,0.25); stroke: var(--red); }
+  .node.lca circle { fill: rgba(188,140,255,0.35); stroke: var(--purple); }
+  .node.path circle { fill: rgba(210,153,34,0.25); stroke: var(--yellow); }
+
+  .node.u text.val { fill: var(--green); }
+  .node.v text.val { fill: var(--orange); }
+  .node.lca text.val { fill: var(--purple); }
+  .node.comparing text.val { fill: var(--red); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 10px; font-size: 12px; color: var(--muted);
+  }
+  .stats-row .stat {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  #table-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  table.up { border-collapse: collapse; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 11px; }
+  table.up th, table.up td {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    text-align: center;
+    color: var(--muted);
+  }
+  table.up th { color: var(--text); background: var(--bg); }
+  table.up td.hl { background: rgba(210,153,34,0.30); color: var(--yellow); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px; max-height: 170px; overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.jump { color: var(--yellow); }
+  #log .entry.cmp { color: var(--red); }
+  #log .entry.ok { color: var(--green); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-u { background: rgba(63,185,80,0.30); border-color: var(--green); }
+  .dot.d-v { background: rgba(255,166,87,0.30); border-color: var(--orange); }
+  .dot.d-cmp { background: rgba(248,81,73,0.25); border-color: var(--red); }
+  .dot.d-lca { background: rgba(188,140,255,0.35); border-color: var(--purple); }
+  .dot.d-path { background: rgba(210,153,34,0.25); border-color: var(--yellow); }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Lowest Common Ancestor — Binary Lifting</h1>
+  <div class="sub">equalize depth &middot; then climb in 2<sup>k</sup> jumps until just below the LCA</div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Query</h2>
+      <div class="control-row">
+        <label class="small">Node u</label>
+        <input type="number" id="uVal" placeholder="u" value="7" />
+      </div>
+      <div class="control-row">
+        <label class="small">Node v</label>
+        <input type="number" id="vVal" placeholder="v" value="8" />
+      </div>
+      <div class="control-row">
+        <button class="btn primary" id="btnQuery" style="flex:1">Find LCA(u, v)</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Tree</h2>
+      <div class="control-row">
+        <button class="btn success" id="btnSample" style="flex:1">Sample Tree</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="control-row">
+        <button class="btn danger" id="btnReset" style="flex:1">Clear Highlights</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Step Controls</h2>
+      <div class="step-controls">
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn" id="btnRun">Run</button>
+        <button class="btn" id="btnStopRun">Stop</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="80" max="1400" value="650" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>How it works</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.65;">
+        <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">up[k][v]</code> = 2<sup>k</sup>-th ancestor of v<br>
+        1. Lift deeper node to equal depth.<br>
+        2. If equal &rarr; that node is the LCA.<br>
+        3. For k high&rarr;low: jump both when<br>
+        &nbsp;&nbsp;<code style="background:rgba(210,153,34,0.2);color:var(--yellow);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">up[k][u] != up[k][v]</code>.<br>
+        4. Answer = <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;font-family:'SF Mono',monospace;">up[0][u]</code>.
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + table + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="tree" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Pick two nodes and click <code>Find LCA(u, v)</code>.</div>
+      <div class="stats-row">
+        <div class="stat">Nodes: <b id="statN">0</b></div>
+        <div class="stat">LOG: <b id="statLog">0</b></div>
+        <div class="stat">u: <b id="statU">-</b></div>
+        <div class="stat">v: <b id="statV">-</b></div>
+        <div class="stat">Step: <b id="statStep">0</b></div>
+        <div class="stat">Jumps: <b id="statJumps">0</b></div>
+        <div class="stat">LCA: <b id="statLca">-</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-u"></span>node u</span>
+        <span><span class="dot d-v"></span>node v</span>
+        <span><span class="dot d-cmp"></span>comparing 2^k anc.</span>
+        <span><span class="dot d-path"></span>jump path</span>
+        <span><span class="dot d-lca"></span>LCA</span>
+      </div>
+    </section>
+
+    <section id="table-panel">
+      <h2>Binary Lifting Table&nbsp;&nbsp;<span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;">up[k][v] = 2<sup>k</sup>-th ancestor (root's parent = itself)</span></h2>
+      <div class="tablewrap"><table class="up" id="upTable"></table></div>
+    </section>
+
+    <section id="log-panel">
+      <h2>Query Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  LCA via Binary Lifting — visualizer
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const state = {
+  n: 0,
+  parent: [],     // parent[v] (-1 for root display; root's up[0] = root)
+  children: [],
+  depth: [],
+  up: [],         // up[k][v]
+  log: 0,
+  pos: [],        // {x,y} per node
+  busy: false,
+  paused: false,
+  stepRequested: false,
+  stopped: false,
+  speedMs: 630,
+  steps: 0,
+  jumps: 0,
+};
+
+const els = {
+  tree:     document.getElementById("tree"),
+  info:     document.getElementById("info"),
+  log:      document.getElementById("log"),
+  upTable:  document.getElementById("upTable"),
+  uVal:     document.getElementById("uVal"),
+  vVal:     document.getElementById("vVal"),
+  speed:    document.getElementById("speed"),
+  statN:    document.getElementById("statN"),
+  statLog:  document.getElementById("statLog"),
+  statU:    document.getElementById("statU"),
+  statV:    document.getElementById("statV"),
+  statStep: document.getElementById("statStep"),
+  statJumps:document.getElementById("statJumps"),
+  statLca:  document.getElementById("statLca"),
+  toast:    document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function pauseGate() {
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) { state.stepRequested = false; return; }
+    await sleep(60);
+  }
+}
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function showToast(msg, isError = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isError);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1800);
+}
+
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(text) { els.info.innerHTML = text; }
+function bumpStep() { state.steps++; els.statStep.textContent = state.steps; }
+function bumpJump() { state.jumps++; els.statJumps.textContent = state.jumps; }
+
+// ---------------- tree construction ----------------
+
+function buildFromParents(parent) {
+  const n = parent.length;
+  state.n = n;
+  state.parent = parent.slice();
+  state.children = Array.from({ length: n }, () => []);
+  state.depth = new Array(n).fill(0);
+  let root = 0;
+  for (let v = 0; v < n; v++) {
+    if (parent[v] === -1) root = v;
+    else state.children[parent[v]].push(v);
+  }
+  // depth via BFS
+  const queue = [root];
+  state.depth[root] = 0;
+  for (let qi = 0; qi < queue.length; qi++) {
+    const x = queue[qi];
+    for (const c of state.children[x]) {
+      state.depth[c] = state.depth[x] + 1;
+      queue.push(c);
+    }
+  }
+  // LOG
+  let lg = 1;
+  while ((1 << lg) < n) lg++;
+  state.log = lg;
+  // up table; root's parent = itself (sentinel)
+  state.up = Array.from({ length: lg }, () => new Array(n).fill(0));
+  for (let v = 0; v < n; v++) state.up[0][v] = parent[v] === -1 ? v : parent[v];
+  for (let k = 1; k < lg; k++)
+    for (let v = 0; v < n; v++)
+      state.up[k][v] = state.up[k - 1][state.up[k - 1][v]];
+
+  layout(root);
+  els.statN.textContent = n;
+  els.statLog.textContent = lg;
+  renderTree();
+  renderTable();
+}
+
+function layout(root) {
+  // Assign x by in-order leaf counting; y by depth.
+  const n = state.n;
+  state.pos = new Array(n);
+  let nextX = 0;
+  const W = 1000, H = 420;
+  const maxDepth = Math.max(...state.depth, 1);
+  const vGap = Math.min(90, (H - 70) / Math.max(1, maxDepth));
+  function dfs(v) {
+    const kids = state.children[v];
+    if (kids.length === 0) {
+      state.pos[v] = { xUnit: nextX, y: 40 + state.depth[v] * vGap };
+      nextX++;
+      return;
+    }
+    for (const c of kids) dfs(c);
+    const first = state.pos[kids[0]].xUnit;
+    const last = state.pos[kids[kids.length - 1]].xUnit;
+    state.pos[v] = { xUnit: (first + last) / 2, y: 40 + state.depth[v] * vGap };
+  }
+  dfs(root);
+  const totalLeaves = Math.max(1, nextX);
+  for (let v = 0; v < n; v++) {
+    const u = state.pos[v].xUnit;
+    state.pos[v].x = (W * (u + 1)) / (totalLeaves + 1);
+  }
+}
+
+// ---------------- rendering ----------------
+
+function renderTree() {
+  const svg = els.tree;
+  svg.innerHTML = "";
+  const n = state.n;
+  if (n === 0) return;
+
+  for (let v = 0; v < n; v++) {
+    const p = state.parent[v];
+    if (p === -1) continue;
+    const a = state.pos[p], b = state.pos[v];
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    line.setAttribute("class", "edge");
+    line.setAttribute("data-edge", v); // edge identified by child
+    svg.appendChild(line);
+  }
+
+  for (let v = 0; v < n; v++) {
+    const { x, y } = state.pos[v];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node default");
+    g.setAttribute("data-idx", v);
+    g.setAttribute("transform", `translate(${x},${y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 18); c.setAttribute("cx", 0); c.setAttribute("cy", 0);
+    g.appendChild(c);
+
+    const tv = document.createElementNS(SVG_NS, "text");
+    tv.setAttribute("class", "val"); tv.setAttribute("x", 0); tv.setAttribute("y", 0);
+    tv.textContent = v;
+    g.appendChild(tv);
+
+    const tm = document.createElementNS(SVG_NS, "text");
+    tm.setAttribute("class", "meta"); tm.setAttribute("x", 0); tm.setAttribute("y", 30);
+    tm.textContent = `d=${state.depth[v]}`;
+    g.appendChild(tm);
+
+    svg.appendChild(g);
+  }
+}
+
+function renderTable(highlight) {
+  // highlight: optional {k, cols:[v...]} to mark cells
+  const n = state.n, lg = state.log;
+  let html = "<tr><th>k \\ v</th>";
+  for (let v = 0; v < n; v++) html += `<th>${v}</th>`;
+  html += "</tr>";
+  for (let k = 0; k < lg; k++) {
+    html += `<tr><th>2^${k}</th>`;
+    for (let v = 0; v < n; v++) {
+      const hl = highlight && highlight.k === k && highlight.cols.includes(v) ? " class='hl'" : "";
+      html += `<td${hl}>${state.up[k][v]}</td>`;
+    }
+    html += "</tr>";
+  }
+  els.upTable.innerHTML = html;
+}
+
+function setNodeClass(v, klass) {
+  if (v < 0 || v >= state.n) return;
+  const g = els.tree.querySelector(`g.node[data-idx="${v}"]`);
+  if (g) g.setAttribute("class", "node " + klass);
+}
+
+function setEdgeClass(child, klass) {
+  const e = els.tree.querySelector(`line[data-edge="${child}"]`);
+  if (e) e.setAttribute("class", "edge " + klass);
+}
+
+function clearHighlights() {
+  for (let v = 0; v < state.n; v++) setNodeClass(v, "default");
+  els.tree.querySelectorAll("line.edge").forEach(e => e.setAttribute("class", "edge"));
+  renderTable();
+}
+
+function markUV(u, v) {
+  clearHighlights();
+  setNodeClass(u, "u");
+  setNodeClass(v, "v");
+}
+
+// ---------------- the animated LCA query ----------------
+
+async function lcaQuery(u0, v0) {
+  let u = u0, v = v0;
+  els.statU.textContent = u0;
+  els.statV.textContent = v0;
+  els.statLca.textContent = "-";
+  state.steps = 0; state.jumps = 0;
+  els.statStep.textContent = 0; els.statJumps.textContent = 0;
+
+  log(`LCA(${u0}, ${v0})  depth[u]=${state.depth[u]}, depth[v]=${state.depth[v]}`, "op");
+  markUV(u, v);
+  info(`Query <code>LCA(${u0}, ${v0})</code>. First equalize depths.`);
+  await wait();
+
+  // Ensure u is the deeper node.
+  if (state.depth[u] < state.depth[v]) {
+    [u, v] = [v, u];
+    info(`Swap so <code>u</code> is the deeper node: u=${u} (d=${state.depth[u]}), v=${v} (d=${state.depth[v]}).`);
+    markUV(u, v);
+    // keep stat labels showing the *roles* now
+    await wait();
+  }
+
+  // Step 1: lift u to depth of v.
+  let diff = state.depth[u] - state.depth[v];
+  if (diff > 0) {
+    info(`Lift the deeper node <code>u=${u}</code> up by <code>${diff}</code> level(s).`);
+    log(`  equalize: lift u by ${diff}`, "op");
+    await wait();
+    for (let k = 0; k < state.log; k++) {
+      if ((diff >> k) & 1) {
+        const target = state.up[k][u];
+        renderTable({ k, cols: [u] });
+        setNodeClass(u, "comparing");
+        bumpStep();
+        info(`Bit <code>${k}</code> set in ${diff}: jump u up by <code>2^${k}=${1 << k}</code> via <code>up[${k}][${u}]=${target}</code>.`);
+        log(`  jump u: ${u} -> up[${k}][${u}] = ${target}`, "jump");
+        await wait();
+        u = target;
+        bumpJump();
+        markUVwithRoles(u, v);
+        setNodeClass(u, "path");
+        await wait();
+      }
+    }
+    markUVwithRoles(u, v);
+    renderTable();
+  }
+
+  // Step 2: equal after equalize => v was ancestor of u.
+  if (u === v) {
+    setNodeClass(u, "lca");
+    els.statLca.textContent = u;
+    info(`After equalizing, <code>u == v == ${u}</code>. One node is an ancestor of the other &rarr; LCA = <code>${u}</code>.`);
+    log(`  u == v after equalize -> LCA = ${u}`, "ok");
+    return u;
+  }
+
+  info(`Both at depth <code>${state.depth[u]}</code> but different (u=${u}, v=${v}). Climb together, high bit to low.`);
+  await wait();
+
+  // Step 3: climb together from high to low.
+  for (let k = state.log - 1; k >= 0; k--) {
+    const au = state.up[k][u], av = state.up[k][v];
+    renderTable({ k, cols: [u, v] });
+    setNodeClass(u, "comparing");
+    setNodeClass(v, "comparing");
+    bumpStep();
+    info(`k=${k}: compare <code>up[${k}][${u}]=${au}</code> vs <code>up[${k}][${v}]=${av}</code>.`);
+    log(`  compare up[${k}][u]=${au} vs up[${k}][v]=${av}`, "cmp");
+    await wait();
+    if (au !== av) {
+      info(`Different &rarr; both still below the LCA. Jump both up by <code>2^${k}=${1 << k}</code>.`);
+      log(`  differ -> jump both: u=${u}->${au}, v=${v}->${av}`, "jump");
+      setNodeClass(u, "path"); setNodeClass(v, "path");
+      await wait();
+      u = au; v = av;
+      bumpJump(); bumpJump();
+      markUVwithRoles(u, v);
+      setNodeClass(u, "path"); setNodeClass(v, "path");
+      await wait();
+    } else {
+      info(`Equal &rarr; that ancestor is at or above the LCA. Do NOT jump (would overshoot).`);
+      log(`  equal -> skip (would overshoot LCA)`, "ok");
+      markUVwithRoles(u, v);
+      await wait();
+    }
+  }
+  renderTable();
+
+  // Step 4: u and v are children of the LCA.
+  const lca = state.up[0][u];
+  setNodeClass(u, "comparing");
+  setNodeClass(v, "comparing");
+  info(`u=${u} and v=${v} are now the LCA's two children. Answer = <code>up[0][${u}] = ${lca}</code>.`);
+  log(`  u,v are children of LCA -> LCA = up[0][${u}] = ${lca}`, "ok");
+  await wait();
+  setNodeClass(lca, "lca");
+  // highlight the path edges from u0/v0 up to lca for context
+  highlightPath(u0, lca);
+  highlightPath(v0, lca);
+  els.statLca.textContent = lca;
+  info(`<code>LCA(${u0}, ${v0}) = ${lca}</code>. Distance = depth[u]+depth[v]-2&middot;depth[LCA] = ${state.depth[u0]}+${state.depth[v0]}-2&middot;${state.depth[lca]} = <code>${state.depth[u0] + state.depth[v0] - 2 * state.depth[lca]}</code>.`);
+  return lca;
+}
+
+function markUVwithRoles(u, v) {
+  clearHighlights();
+  setNodeClass(u, "u");
+  setNodeClass(v, "v");
+}
+
+function highlightPath(from, to) {
+  let x = from;
+  let guard = 0;
+  while (x !== to && guard <= state.n) {
+    setEdgeClass(x, "path");
+    x = state.up[0][x];
+    guard++;
+  }
+}
+
+// ---------------- driver ----------------
+
+async function withBusy(fn) {
+  if (state.busy) { showToast("Operation in progress…", true); return; }
+  state.busy = true; state.stopped = false; state.paused = false;
+  try {
+    await fn();
+  } catch (e) {
+    if (e.message !== "__stopped__") { console.error(e); showToast("Error: " + e.message, true); }
+    else { log("  stopped by user", "cmp"); info("Query stopped."); }
+  } finally {
+    state.busy = false; state.paused = false; state.stepRequested = false;
+  }
+}
+
+// ---------------- sample / random trees ----------------
+
+// Sample tree (matches docs feel): 13 nodes.
+//        0
+//      / | \
+//     1  2  3
+//    /|     |
+//   4 5     6
+//   |  \     \
+//   7   8     9
+//  / \
+// 10 11
+//      \
+//      12
+function sampleParents() {
+  // parent[v]; -1 for root
+  return [-1, 0, 0, 0, 1, 1, 3, 4, 5, 6, 7, 7, 11];
+}
+
+function randomParents() {
+  const n = 9 + Math.floor(Math.random() * 7); // 9..15
+  const parent = new Array(n).fill(-1);
+  for (let v = 1; v < n; v++) parent[v] = Math.floor(Math.random() * v);
+  return parent;
+}
+
+// ---------------- events ----------------
+
+document.getElementById("btnQuery").addEventListener("click", () => {
+  const u = Number(els.uVal.value), v = Number(els.vVal.value);
+  if (!Number.isInteger(u) || !Number.isInteger(v) || u < 0 || v < 0 || u >= state.n || v >= state.n) {
+    showToast(`Nodes must be in [0, ${state.n - 1}]`, true);
+    return;
+  }
+  withBusy(() => lcaQuery(u, v));
+});
+
+document.getElementById("btnSample").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; return; }
+  buildFromParents(sampleParents());
+  els.uVal.value = 7; els.vVal.value = 9;
+  els.log.innerHTML = "";
+  info("Loaded sample tree. Try <code>LCA(7, 9)</code> or pick your own.");
+  log("loaded sample tree (13 nodes)", "ok");
+});
+
+document.getElementById("btnRandom").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; return; }
+  buildFromParents(randomParents());
+  els.uVal.value = state.n - 1;
+  els.vVal.value = Math.max(0, state.n - 2);
+  els.log.innerHTML = "";
+  info(`Random tree with <code>${state.n}</code> nodes. Pick u and v, then query.`);
+  log(`generated random tree (${state.n} nodes)`, "ok");
+});
+
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.busy) { state.stopped = true; return; }
+  clearHighlights();
+  els.statU.textContent = "-"; els.statV.textContent = "-"; els.statLca.textContent = "-";
+  els.statStep.textContent = "0"; els.statJumps.textContent = "0";
+  info("Highlights cleared.");
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) { showToast("Start a query first"); return; }
+  state.paused = true;
+  state.stepRequested = true;
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance." : "Resumed.");
+});
+
+document.getElementById("btnRun").addEventListener("click", () => {
+  if (!state.busy) { showToast("Trigger a query to animate"); return; }
+  state.paused = false; state.stepRequested = false;
+  info("Running…");
+});
+
+document.getElementById("btnStopRun").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.stopped = true; state.paused = false;
+});
+
+els.speed.addEventListener("input", (e) => {
+  state.speedMs = 1480 - Number(e.target.value);
+});
+
+[els.uVal, els.vVal].forEach(inp => {
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btnQuery").click();
+  });
+});
+
+// ---------------- init ----------------
+
+function init() {
+  state.speedMs = 1480 - Number(els.speed.value);
+  buildFromParents(sampleParents());
+  log("LCA (binary lifting) visualizer ready.", "ok");
+  info("Loaded sample tree. Try <code>LCA(7, 9)</code> or pick your own.");
+}
+
+init();
+</script>
+</body>
+</html>
