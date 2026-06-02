@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Breadth-First Search — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --muted:     #8b949e;
+    --green:     #3fb950;  /* visited */
+    --yellow:    #d29922;  /* frontier / in queue */
+    --red:       #f85149;  /* current node being expanded */
+    --blue:      #58a6ff;
+    --purple:    #bc8cff;
+    --orange:    #ffa657;
+    --unvisited: #21262d;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+
+  main {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    flex: 1;
+    min-width: 84px;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { filter: brightness(1.1); background: var(--blue); }
+
+  .speed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--muted); }
+  .speed-row input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .legend { display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
+
+  .queue-box {
+    display: flex; gap: 6px; flex-wrap: wrap; min-height: 44px;
+    padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .qcell {
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; background: var(--yellow); color: #1a1a1a; font-weight: 700; font-size: 14px;
+  }
+  .qcell.front { outline: 2px solid var(--red); outline-offset: 1px; }
+  .queue-empty { color: var(--muted); font-size: 13px; align-self: center; }
+
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .stat-row .k { color: var(--muted); }
+  .stat-row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  svg { width: 100%; height: auto; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+
+  .node-circle { stroke: var(--border); stroke-width: 2px; transition: fill 0.25s ease, stroke 0.25s ease; }
+  .node-circle.unvisited { fill: var(--unvisited); }
+  .node-circle.frontier  { fill: var(--yellow);  stroke: var(--orange); }
+  .node-circle.current   { fill: var(--red);     stroke: #fff; }
+  .node-circle.visited   { fill: var(--green);   stroke: #2a7d38; }
+  .node-label { fill: var(--text); font-size: 15px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .node-circle.frontier + .node-label, .node-circle.current + .node-label { fill: #0d1117; }
+  .dist-badge { fill: var(--purple); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .edge-line { stroke: var(--border); stroke-width: 2px; transition: stroke 0.25s ease; }
+  .edge-line.tree { stroke: var(--green); stroke-width: 3px; }
+  .edge-line.active { stroke: var(--red); stroke-width: 3px; }
+
+  .log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; font-size: 13px; min-height: 40px; color: var(--text); line-height: 1.5;
+  }
+  .log .hl { color: var(--orange); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Breadth-First Search — Interactive Visualization</h1>
+    <div class="sub">FIFO queue • enqueue-time visited mark • distance labels per level</div>
+  </div>
+  <div class="sub">Source = node 0</div>
+</header>
+
+<main>
+  <!-- LEFT: controls + legend + queue + stats -->
+  <section class="panel">
+    <h2>Controls</h2>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn">Step ▶</button>
+      <button class="btn" id="runBtn">Run ⏩</button>
+      <button class="btn" id="resetBtn">Reset ↺</button>
+    </div>
+
+    <div class="speed-row">
+      <span>Slow</span>
+      <input type="range" id="speed" min="120" max="1400" value="650" />
+      <span>Fast</span>
+    </div>
+
+    <h2>Queue (front → back)</h2>
+    <div class="queue-box" id="queueBox">
+      <span class="queue-empty">empty</span>
+    </div>
+
+    <h2 style="margin-top:16px;">Step Log</h2>
+    <div class="log" id="log">Press <span class="hl">Step</span> to begin BFS from node 0.</div>
+
+    <h2 style="margin-top:16px;">Stats</h2>
+    <div class="stat-row"><span class="k">Current level</span><span class="v" id="statLevel">—</span></div>
+    <div class="stat-row"><span class="k">Visited</span><span class="v" id="statVisited">1 / 8</span></div>
+    <div class="stat-row"><span class="k">Frontier size</span><span class="v" id="statFrontier">1</span></div>
+    <div class="stat-row"><span class="k">Edges scanned</span><span class="v" id="statEdges">0</span></div>
+
+    <h2 style="margin-top:16px;">Legend</h2>
+    <div class="legend">
+      <div class="legend-item"><span class="swatch" style="background:var(--unvisited)"></span> Unvisited</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--yellow)"></span> In queue (frontier)</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--red)"></span> Current (being expanded)</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--green)"></span> Done (dequeued)</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--purple);border:none"></span> Distance label</div>
+    </div>
+  </section>
+
+  <!-- RIGHT: graph -->
+  <section class="panel" style="padding:0;">
+    <svg id="graph" viewBox="0 0 720 520" preserveAspectRatio="xMidYMid meet"></svg>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ---- Graph definition (undirected adjacency list) ----
+// Layout chosen so BFS rings are visually clear from source = 0.
+const NODES = [
+  { id: 0, x: 110, y: 260 },
+  { id: 1, x: 270, y: 130 },
+  { id: 2, x: 270, y: 390 },
+  { id: 3, x: 440, y:  70 },
+  { id: 4, x: 440, y: 220 },
+  { id: 5, x: 440, y: 400 },
+  { id: 6, x: 610, y: 150 },
+  { id: 7, x: 610, y: 330 },
+];
+
+const ADJ = [
+  [1, 2],       // 0
+  [0, 3, 4],    // 1
+  [0, 4, 5],    // 2
+  [1, 6],       // 3
+  [1, 2, 6, 7], // 4
+  [2, 7],       // 5
+  [3, 4],       // 6
+  [4, 5],       // 7
+];
+
+const N = NODES.length;
+const SOURCE = 0;
+
+// ---- Build the full event timeline up front (deterministic) ----
+// Each event mutates a snapshot of state; we replay them on Step/Run.
+function buildEvents() {
+  const events = [];
+  const dist = new Array(N).fill(-1);
+  const parent = new Array(N).fill(-1);
+  const state = new Array(N).fill("unvisited"); // unvisited|frontier|current|visited
+  let queue = [];
+  let edgesScanned = 0;
+
+  function snap(msg, activeEdge) {
+    events.push({
+      dist: dist.slice(),
+      parent: parent.slice(),
+      state: state.slice(),
+      queue: queue.slice(),
+      edgesScanned,
+      msg,
+      activeEdge: activeEdge || null,
+    });
+  }
+
+  // init
+  dist[SOURCE] = 0;
+  state[SOURCE] = "frontier";
+  queue.push(SOURCE);
+  snap(`Enqueue source <span class="hl">0</span>, dist[0] = 0.`);
+
+  while (queue.length > 0) {
+    const u = queue.shift();
+    state[u] = "current";
+    snap(`Dequeue <span class="hl">${u}</span> (dist ${dist[u]}). Scan its neighbors.`);
+
+    for (const v of ADJ[u]) {
+      edgesScanned++;
+      if (dist[v] === -1) {
+        dist[v] = dist[u] + 1;
+        parent[v] = u;
+        state[v] = "frontier";
+        queue.push(v);
+        snap(`Discover <span class="hl">${v}</span> from ${u}: dist[${v}] = ${dist[v]}, enqueue.`, [u, v]);
+      } else {
+        snap(`Neighbor <span class="hl">${v}</span> already seen — skip.`, [u, v]);
+      }
+    }
+
+    state[u] = "visited";
+    snap(`Done expanding <span class="hl">${u}</span>. Mark visited.`);
+  }
+
+  snap(`Queue empty — BFS complete. Distances: [${dist.join(", ")}].`);
+  return events;
+}
+
+const EVENTS = buildEvents();
+let cursor = -1;       // index into EVENTS; -1 = before first event
+let timer = null;
+
+// ---- SVG rendering ----
+const svg = document.getElementById("graph");
+const SVGNS = "http://www.w3.org/2000/svg";
+
+function el(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+// Pre-render edges (so tree/active highlighting can reuse them).
+const edgeEls = {}; // key "min-max" -> line element
+function edgeKey(a, b) { return Math.min(a, b) + "-" + Math.max(a, b); }
+
+function renderStatic() {
+  svg.innerHTML = "";
+  // edges first (behind nodes)
+  for (let u = 0; u < N; u++) {
+    for (const v of ADJ[u]) {
+      if (u < v) {
+        const line = el("line", {
+          x1: NODES[u].x, y1: NODES[u].y,
+          x2: NODES[v].x, y2: NODES[v].y,
+          class: "edge-line",
+        });
+        svg.appendChild(line);
+        edgeEls[edgeKey(u, v)] = line;
+      }
+    }
+  }
+  // nodes
+  for (const node of NODES) {
+    const g = el("g", {});
+    const c = el("circle", { cx: node.x, cy: node.y, r: 26, class: "node-circle unvisited", id: "node-" + node.id });
+    const lbl = el("text", { x: node.x, y: node.y, class: "node-label", id: "lbl-" + node.id });
+    lbl.textContent = node.id;
+    const badge = el("text", { x: node.x + 30, y: node.y - 28, class: "dist-badge", id: "dist-" + node.id });
+    badge.textContent = "";
+    g.appendChild(c); g.appendChild(lbl); g.appendChild(badge);
+    svg.appendChild(g);
+  }
+}
+
+function paint(ev) {
+  // node states + distances
+  for (let i = 0; i < N; i++) {
+    const c = document.getElementById("node-" + i);
+    c.setAttribute("class", "node-circle " + ev.state[i]);
+    const badge = document.getElementById("dist-" + i);
+    badge.textContent = ev.dist[i] >= 0 ? "d=" + ev.dist[i] : "";
+  }
+  // edges: tree edges (parent links) + active edge highlight
+  for (const key in edgeEls) edgeEls[key].setAttribute("class", "edge-line");
+  for (let v = 0; v < N; v++) {
+    if (ev.parent[v] !== -1) {
+      const e = edgeEls[edgeKey(v, ev.parent[v])];
+      if (e) e.setAttribute("class", "edge-line tree");
+    }
+  }
+  if (ev.activeEdge) {
+    const e = edgeEls[edgeKey(ev.activeEdge[0], ev.activeEdge[1])];
+    if (e) e.setAttribute("class", "edge-line active");
+  }
+
+  // queue
+  const qbox = document.getElementById("queueBox");
+  qbox.innerHTML = "";
+  if (ev.queue.length === 0) {
+    const span = document.createElement("span");
+    span.className = "queue-empty";
+    span.textContent = "empty";
+    qbox.appendChild(span);
+  } else {
+    ev.queue.forEach((id, idx) => {
+      const cell = document.createElement("div");
+      cell.className = "qcell" + (idx === 0 ? " front" : "");
+      cell.textContent = id;
+      qbox.appendChild(cell);
+    });
+  }
+
+  // log + stats
+  document.getElementById("log").innerHTML = ev.msg;
+  const visited = ev.state.filter(s => s === "visited").length;
+  const discovered = ev.dist.filter(d => d >= 0).length;
+  const curLevel = Math.max(...ev.dist.filter(d => d >= 0), 0);
+  document.getElementById("statLevel").textContent = curLevel;
+  document.getElementById("statVisited").textContent = discovered + " / " + N;
+  document.getElementById("statFrontier").textContent = ev.queue.length;
+  document.getElementById("statEdges").textContent = ev.edgesScanned;
+}
+
+function blankState() {
+  return {
+    dist: new Array(N).fill(-1),
+    parent: new Array(N).fill(-1),
+    state: new Array(N).fill("unvisited"),
+    queue: [],
+    edgesScanned: 0,
+    msg: 'Press <span class="hl">Step</span> to begin BFS from node 0.',
+    activeEdge: null,
+  };
+}
+
+function step() {
+  if (cursor >= EVENTS.length - 1) { stopRun(); return false; }
+  cursor++;
+  paint(EVENTS[cursor]);
+  if (cursor >= EVENTS.length - 1) {
+    document.getElementById("stepBtn").disabled = true;
+    stopRun();
+  }
+  return true;
+}
+
+function reset() {
+  stopRun();
+  cursor = -1;
+  renderStatic();
+  paint(blankState());
+  document.getElementById("stepBtn").disabled = false;
+}
+
+function startRun() {
+  if (timer) return;
+  const runBtn = document.getElementById("runBtn");
+  runBtn.textContent = "Pause ⏸";
+  const speed = +document.getElementById("speed").value;
+  timer = setInterval(() => {
+    if (!step()) stopRun();
+  }, 1520 - speed); // higher slider value => shorter interval => faster
+}
+
+function stopRun() {
+  if (timer) { clearInterval(timer); timer = null; }
+  document.getElementById("runBtn").textContent = "Run ⏩";
+}
+
+document.getElementById("stepBtn").addEventListener("click", step);
+document.getElementById("runBtn").addEventListener("click", () => {
+  if (timer) stopRun(); else startRun();
+});
+document.getElementById("resetBtn").addEventListener("click", reset);
+document.getElementById("speed").addEventListener("input", () => {
+  if (timer) { stopRun(); startRun(); } // re-arm at new speed
+});
+
+// boot
+reset();
+</script>
+</body>
+</html>
