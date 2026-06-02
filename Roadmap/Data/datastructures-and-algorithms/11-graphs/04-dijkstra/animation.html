@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dijkstra's Algorithm — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .src-pill {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  header .src-pill select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger  { border-color: var(--red); color: var(--red); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  /* distance / PQ / settled tables */
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+  table.data th, table.data td {
+    border: 1px solid var(--border);
+    padding: 5px 6px;
+    text-align: center;
+  }
+  table.data th { color: var(--muted); font-weight: 600; background: var(--bg); }
+  table.data td.dist { color: var(--text); }
+  table.data td.settled { background: rgba(63,185,80,0.18); color: var(--green); }
+  table.data td.current { background: rgba(255,166,87,0.22); color: var(--orange); font-weight: 700; }
+  table.data td.improved { background: rgba(210,153,34,0.25); color: var(--yellow); font-weight: 700; }
+
+  .pq-strip, .settled-strip {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 30px;
+  }
+  .pq-item {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid var(--blue);
+    background: rgba(88,166,255,0.15);
+    border-radius: 6px;
+    color: var(--text);
+  }
+  .pq-item.top { border-color: var(--orange); background: rgba(255,166,87,0.22); color: var(--orange); font-weight: 700; }
+  .pq-item.stale { border-color: var(--muted); background: rgba(139,148,158,0.12); color: var(--muted); text-decoration: line-through; opacity: 0.6; }
+  .settled-item {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid var(--green);
+    background: rgba(63,185,80,0.18);
+    border-radius: 6px;
+    color: var(--green);
+  }
+  .empty-note { color: var(--muted); font-size: 12px; font-style: italic; }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 420px;
+    overflow-x: auto;
+  }
+
+  svg#graph { width: 100%; height: 420px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; fill: none; transition: all 0.2s ease; }
+  .edge.relaxing { stroke: var(--orange); stroke-width: 4; }
+  .edge.tree { stroke: var(--purple); stroke-width: 3; }
+
+  .edge-w {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    fill: var(--muted);
+    text-anchor: middle;
+  }
+  .edge-w.relaxing { fill: var(--orange); font-weight: 700; }
+
+  .node circle { stroke-width: 2.5; transition: all 0.25s ease; }
+  .node text.id {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 15px; font-weight: 700; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+  .node text.d {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; fill: var(--blue);
+    text-anchor: middle; pointer-events: none;
+  }
+
+  .node.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .node.settled circle { fill: rgba(63,185,80,0.25); stroke: var(--green); }
+  .node.current circle { fill: rgba(255,166,87,0.30); stroke: var(--orange); }
+  .node.frontier circle { fill: rgba(210,153,34,0.25); stroke: var(--yellow); }
+  .node.target circle { fill: rgba(188,140,255,0.20); stroke: var(--purple); }
+
+  .node.settled text.d { fill: var(--green); }
+  .node.current text.d { fill: var(--orange); }
+  .node.frontier text.d { fill: var(--yellow); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-top: 10px; font-size: 12px; color: var(--muted);
+  }
+  .stats-row .stat {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-default { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-frontier { background: rgba(210,153,34,0.25); border-color: var(--yellow); }
+  .dot.d-current { background: rgba(255,166,87,0.30); border-color: var(--orange); }
+  .dot.d-settled { background: rgba(63,185,80,0.25); border-color: var(--green); }
+  .dot.d-tree { background: rgba(188,140,255,0.20); border-color: var(--purple); }
+
+  #log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px; max-height: 180px; overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.relax { color: var(--yellow); }
+  #log .entry.settle { color: var(--green); }
+  #log .entry.stale { color: var(--muted); }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dijkstra's Algorithm — Interactive Visualization</h1>
+  <div class="src-pill">
+    Source:
+    <select id="srcSelect"></select>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls + tables -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Controls</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnStep">Step</button>
+        <button class="btn success" id="btnRun">Run</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="120" max="1400" value="700" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Priority Queue (min by dist)</h2>
+      <div class="pq-strip" id="pqStrip"><span class="empty-note">empty</span></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Settled Set</h2>
+      <div class="settled-strip" id="settledStrip"><span class="empty-note">empty</span></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Tentative Distances</h2>
+      <table class="data" id="distTable"></table>
+    </div>
+  </aside>
+
+  <!-- RIGHT: graph + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="graph" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Press <code>Step</code> to settle the closest unsettled vertex, or <code>Run</code> to animate the whole algorithm.</div>
+      <div class="stats-row">
+        <div class="stat">Source: <b id="statSrc">A</b></div>
+        <div class="stat">Settled: <b id="statSettled">0</b></div>
+        <div class="stat">Step: <b id="statStep">0</b></div>
+        <div class="stat">Relaxations: <b id="statRelax">0</b></div>
+        <div class="stat">Stale pops: <b id="statStale">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-default"></span>unreached</span>
+        <span><span class="dot d-frontier"></span>in queue (frontier)</span>
+        <span><span class="dot d-current"></span>current (just popped)</span>
+        <span><span class="dot d-settled"></span>settled (final)</span>
+        <span><span class="dot d-tree"></span>shortest-path tree edge</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Dijkstra's algorithm visualizer
+//  Lazy-deletion binary heap, settled set, predecessor array.
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const INF = Infinity;
+
+// --- fixed small weighted graph (directed) ---
+// Vertices A..G with hand-placed coordinates for a clean layout.
+const NODES = [
+  { id: "A", x: 120, y: 210 },
+  { id: "B", x: 320, y: 90  },
+  { id: "C", x: 320, y: 330 },
+  { id: "D", x: 540, y: 90  },
+  { id: "E", x: 540, y: 330 },
+  { id: "F", x: 760, y: 210 },
+  { id: "G", x: 900, y: 210 },
+];
+const NAME = NODES.map(n => n.id);
+
+// directed edges: [from, to, weight]
+const EDGES = [
+  ["A", "B", 4],
+  ["A", "C", 2],
+  ["B", "D", 5],
+  ["B", "C", 1],
+  ["C", "B", 1],
+  ["C", "D", 8],
+  ["C", "E", 10],
+  ["D", "E", 2],
+  ["D", "F", 6],
+  ["E", "F", 3],
+  ["F", "G", 4],
+  ["E", "G", 11],
+];
+
+function idx(name) { return NAME.indexOf(name); }
+
+// adjacency list: adj[u] = [{to, w}, ...]
+function buildAdj() {
+  const adj = NAME.map(() => []);
+  for (const [f, t, w] of EDGES) adj[idx(f)].push({ to: idx(t), w });
+  return adj;
+}
+
+const state = {
+  src: 0,
+  dist: [],
+  prev: [],
+  settled: [],      // boolean per vertex
+  inQueue: [],      // boolean per vertex (currently has a live frontier entry)
+  pq: [],           // array of {d, u} — lazy heap modelled as sorted array for clarity
+  adj: buildAdj(),
+  steps: 0,
+  relaxations: 0,
+  stalePops: 0,
+  running: false,
+  paused: false,
+  stopped: false,
+  speedMs: 600,
+  done: false,
+};
+
+const els = {
+  graph:       document.getElementById("graph"),
+  pqStrip:     document.getElementById("pqStrip"),
+  settledStrip:document.getElementById("settledStrip"),
+  distTable:   document.getElementById("distTable"),
+  info:        document.getElementById("info"),
+  log:         document.getElementById("log"),
+  speed:       document.getElementById("speed"),
+  srcSelect:   document.getElementById("srcSelect"),
+  statSrc:     document.getElementById("statSrc"),
+  statSettled: document.getElementById("statSettled"),
+  statStep:    document.getElementById("statStep"),
+  statRelax:   document.getElementById("statRelax"),
+  statStale:   document.getElementById("statStale"),
+  toast:       document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function pauseGate() {
+  while (state.paused && !state.stopped) await sleep(60);
+}
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+
+function showToast(msg) {
+  els.toast.textContent = msg;
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1700);
+}
+
+function log(msg, klass = "") {
+  const ts = new Date();
+  const hh = String(ts.getHours()).padStart(2, "0");
+  const mm = String(ts.getMinutes()).padStart(2, "0");
+  const ss = String(ts.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(text) { els.info.innerHTML = text; }
+function fmtD(d) { return d === INF ? "∞" : d; }
+
+// ---------------- lazy priority queue (sorted-array model) ----------------
+// We model the lazy heap as an array kept sorted by distance so the
+// visualization clearly shows "pop the smallest tentative distance",
+// including stale duplicate entries.
+
+function pqPush(d, u) {
+  state.pq.push({ d, u, stale: false });
+  state.pq.sort((a, b) => a.d - b.d || a.u - b.u);
+}
+function pqPopMin() {
+  return state.pq.shift();
+}
+
+// ---------------- state init ----------------
+
+function resetState() {
+  state.dist = NAME.map(() => INF);
+  state.prev = NAME.map(() => -1);
+  state.settled = NAME.map(() => false);
+  state.inQueue = NAME.map(() => false);
+  state.pq = [];
+  state.steps = 0;
+  state.relaxations = 0;
+  state.stalePops = 0;
+  state.done = false;
+  state.stopped = false;
+  state.paused = false;
+
+  state.dist[state.src] = 0;
+  pqPush(0, state.src);
+  state.inQueue[state.src] = true;
+}
+
+// ---------------- drawing ----------------
+
+function nodeClass(u) {
+  if (state.settled[u]) return "settled";
+  if (state._current === u) return "current";
+  if (state.inQueue[u]) return "frontier";
+  return "default";
+}
+
+function drawGraph() {
+  const svg = els.graph;
+  svg.innerHTML = "";
+
+  // arrow marker
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.innerHTML =
+    `<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+       <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"></path>
+     </marker>
+     <marker id="arrowHot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+       <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffa657"></path>
+     </marker>
+     <marker id="arrowTree" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+       <path d="M 0 0 L 10 5 L 0 10 z" fill="#bc8cff"></path>
+     </marker>`;
+  svg.appendChild(defs);
+
+  const R = 24;
+
+  // edges
+  for (const [f, t, w] of EDGES) {
+    const u = idx(f), v = idx(t);
+    const a = NODES[u], b = NODES[v];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    // shorten so arrow stops at node border
+    const x1 = a.x + ux * R, y1 = a.y + uy * R;
+    const x2 = b.x - ux * R, y2 = b.y - uy * R;
+
+    let cls = "edge";
+    let marker = "url(#arrow)";
+    if (state._relaxEdge && state._relaxEdge[0] === u && state._relaxEdge[1] === v) {
+      cls = "edge relaxing"; marker = "url(#arrowHot)";
+    } else if (state.prev[v] === u && state.settled[v]) {
+      cls = "edge tree"; marker = "url(#arrowTree)";
+    }
+
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.setAttribute("class", cls);
+    line.setAttribute("marker-end", marker);
+    svg.appendChild(line);
+
+    // weight label (offset perpendicular to the edge)
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const px = -uy, py = ux;
+    const wt = document.createElementNS(SVG_NS, "text");
+    wt.setAttribute("x", mx + px * 12);
+    wt.setAttribute("y", my + py * 12);
+    wt.setAttribute("class",
+      state._relaxEdge && state._relaxEdge[0] === u && state._relaxEdge[1] === v
+        ? "edge-w relaxing" : "edge-w");
+    wt.textContent = w;
+    svg.appendChild(wt);
+  }
+
+  // nodes
+  for (let u = 0; u < NODES.length; u++) {
+    const n = NODES[u];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "node " + nodeClass(u));
+    g.setAttribute("transform", `translate(${n.x},${n.y})`);
+
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", R);
+    g.appendChild(c);
+
+    const tid = document.createElementNS(SVG_NS, "text");
+    tid.setAttribute("class", "id");
+    tid.setAttribute("y", -2);
+    tid.textContent = n.id;
+    g.appendChild(tid);
+
+    const td = document.createElementNS(SVG_NS, "text");
+    td.setAttribute("class", "d");
+    td.setAttribute("y", R + 16);
+    td.textContent = "d=" + fmtD(state.dist[u]);
+    g.appendChild(td);
+
+    svg.appendChild(g);
+  }
+}
+
+function drawPQ() {
+  els.pqStrip.innerHTML = "";
+  if (state.pq.length === 0) {
+    els.pqStrip.innerHTML = '<span class="empty-note">empty</span>';
+    return;
+  }
+  state.pq.forEach((e, i) => {
+    const span = document.createElement("div");
+    let cls = "pq-item";
+    // stale = entry whose dist is larger than the vertex's current best
+    if (e.d > state.dist[e.u]) cls += " stale";
+    else if (i === 0) cls += " top";
+    span.className = cls;
+    span.textContent = `(${e.d}, ${NAME[e.u]})`;
+    els.pqStrip.appendChild(span);
+  });
+}
+
+function drawSettled() {
+  els.settledStrip.innerHTML = "";
+  const items = [];
+  for (let u = 0; u < NAME.length; u++) {
+    if (state.settled[u]) items.push(u);
+  }
+  if (items.length === 0) {
+    els.settledStrip.innerHTML = '<span class="empty-note">empty</span>';
+    return;
+  }
+  for (const u of items) {
+    const span = document.createElement("div");
+    span.className = "settled-item";
+    span.textContent = `${NAME[u]}=${state.dist[u]}`;
+    els.settledStrip.appendChild(span);
+  }
+}
+
+function drawDistTable() {
+  const t = els.distTable;
+  t.innerHTML = "";
+  const head = document.createElement("tr");
+  head.innerHTML = "<th>v</th>" + NAME.map(n => `<th>${n}</th>`).join("");
+  t.appendChild(head);
+
+  const distRow = document.createElement("tr");
+  distRow.innerHTML = "<th>dist</th>" + NAME.map((n, u) => {
+    let cls = "dist";
+    if (state._current === u) cls = "current";
+    else if (u === state._improved) cls = "improved";
+    else if (state.settled[u]) cls = "settled";
+    return `<td class="${cls}">${fmtD(state.dist[u])}</td>`;
+  }).join("");
+  t.appendChild(distRow);
+
+  const prevRow = document.createElement("tr");
+  prevRow.innerHTML = "<th>prev</th>" + NAME.map((n, u) =>
+    `<td>${state.prev[u] === -1 ? "–" : NAME[state.prev[u]]}</td>`).join("");
+  t.appendChild(prevRow);
+}
+
+function render() {
+  drawGraph();
+  drawPQ();
+  drawSettled();
+  drawDistTable();
+  els.statSrc.textContent = NAME[state.src];
+  els.statSettled.textContent = state.settled.filter(Boolean).length;
+  els.statStep.textContent = state.steps;
+  els.statRelax.textContent = state.relaxations;
+  els.statStale.textContent = state.stalePops;
+}
+
+// ---------------- one algorithm step (settle one vertex) ----------------
+// Returns false when the algorithm is finished.
+
+async function stepOnce() {
+  if (state.done) return false;
+  state._improved = -1;
+  state._relaxEdge = null;
+
+  // pop until a non-stale entry (or empty)
+  while (state.pq.length > 0) {
+    const top = state.pq[0];
+    state._current = -1;
+    render();
+    info(`Pop the minimum from the PQ: <code>(${top.d}, ${NAME[top.u]})</code>.`);
+    await wait();
+
+    const e = pqPopMin();
+
+    // stale check: lazy deletion's settled guard
+    if (e.d > state.dist[e.u]) {
+      state.stalePops++;
+      log(`stale pop (${e.d}, ${NAME[e.u]}) — dist[${NAME[e.u]}]=${state.dist[e.u]}, skip`, "stale");
+      info(`Stale entry: <code>${e.d} &gt; dist[${NAME[e.u]}]=${state.dist[e.u]}</code>. Skip (the settled check).`);
+      render();
+      await wait();
+      continue;
+    }
+
+    // settle e.u
+    const u = e.u;
+    state._current = u;
+    state.inQueue[u] = false;
+    state.settled[u] = true;
+    state.steps++;
+    log(`settle ${NAME[u]} with final dist = ${state.dist[u]}`, "settle");
+    info(`Settle <code>${NAME[u]}</code>: its distance <code>${state.dist[u]}</code> is now final. Relax its outgoing edges.`);
+    render();
+    await wait();
+
+    // relax outgoing edges
+    for (const { to: v, w } of state.adj[u]) {
+      state._relaxEdge = [u, v];
+      state._improved = -1;
+      render();
+      const nd = state.dist[u] + w;
+      info(`Relax edge <code>${NAME[u]} → ${NAME[v]}</code> (w=${w}): is <code>${state.dist[u]} + ${w} = ${nd} &lt; dist[${NAME[v]}]=${fmtD(state.dist[v])}</code>?`);
+      await wait();
+
+      if (nd < state.dist[v]) {
+        state.dist[v] = nd;
+        state.prev[v] = u;
+        state.relaxations++;
+        state.inQueue[v] = true;
+        pqPush(nd, v);
+        state._improved = v;
+        log(`relax ${NAME[u]}→${NAME[v]}: dist[${NAME[v]}] = ${nd}, push (${nd}, ${NAME[v]})`, "relax");
+        info(`Improved! <code>dist[${NAME[v]}] = ${nd}</code>, <code>prev[${NAME[v]}] = ${NAME[u]}</code>. Push <code>(${nd}, ${NAME[v]})</code> to the PQ.`);
+        render();
+        await wait();
+      } else {
+        log(`relax ${NAME[u]}→${NAME[v]}: ${nd} not < ${fmtD(state.dist[v])}, no change`, "");
+        info(`No improvement: <code>${nd} ≥ dist[${NAME[v]}]=${fmtD(state.dist[v])}</code>. Skip.`);
+        render();
+        await wait();
+      }
+      state._relaxEdge = null;
+      state._improved = -1;
+    }
+
+    state._current = -1;
+    render();
+    return true; // settled exactly one vertex this call
+  }
+
+  // queue empty -> done
+  state.done = true;
+  state._current = -1;
+  render();
+  const unreached = NAME.filter((n, u) => state.dist[u] === INF);
+  info(`PQ is empty — all reachable distances are final.` +
+    (unreached.length ? ` Unreachable: <code>${unreached.join(", ")}</code>.` : ""));
+  log(`done — ${state.settled.filter(Boolean).length} vertices settled`, "op");
+  return false;
+}
+
+// ---------------- drivers ----------------
+
+async function doStep() {
+  if (state.running) { showToast("Already running…"); return; }
+  if (state.done) { showToast("Finished. Reset to restart."); return; }
+  state.running = true; state.stopped = false; state.paused = false;
+  try {
+    await stepOnce();
+  } catch (e) {
+    if (e.message !== "__stopped__") console.error(e);
+  } finally {
+    state.running = false;
+  }
+}
+
+async function doRun() {
+  if (state.running) { showToast("Already running…"); return; }
+  if (state.done) { showToast("Finished. Reset to restart."); return; }
+  state.running = true; state.stopped = false; state.paused = false;
+  log("run: animating Dijkstra to completion", "op");
+  try {
+    let more = true;
+    while (more && !state.stopped) {
+      more = await stepOnce();
+    }
+  } catch (e) {
+    if (e.message !== "__stopped__") console.error(e);
+    else { info("Paused/stopped by user."); }
+  } finally {
+    state.running = false;
+  }
+}
+
+function doReset() {
+  state.stopped = true;
+  state.paused = false;
+  // allow any in-flight loop to unwind, then re-init
+  setTimeout(() => {
+    state._current = -1;
+    state._relaxEdge = null;
+    state._improved = -1;
+    resetState();
+    render();
+    info(`Reset. Source = <code>${NAME[state.src]}</code>. Press <code>Step</code> or <code>Run</code>.`);
+    log(`reset (source ${NAME[state.src]})`, "op");
+  }, 80);
+}
+
+// ---------------- event wiring ----------------
+
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnRun").addEventListener("click", doRun);
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.running) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Press <code>Pause</code> again or <code>Step</code> to resume." : "Resumed.");
+});
+document.getElementById("btnReset").addEventListener("click", doReset);
+
+els.speed.addEventListener("input", (e) => {
+  const v = Number(e.target.value); // 120..1400, bigger = faster
+  state.speedMs = 1520 - v;
+});
+
+// ---------------- init ----------------
+
+function buildSrcSelect() {
+  els.srcSelect.innerHTML = NAME.map(n => `<option value="${n}">${n}</option>`).join("");
+  els.srcSelect.value = NAME[state.src];
+  els.srcSelect.addEventListener("change", () => {
+    if (state.running) { showToast("Wait for the current run to finish"); els.srcSelect.value = NAME[state.src]; return; }
+    state.src = idx(els.srcSelect.value);
+    resetState();
+    render();
+    info(`Source set to <code>${NAME[state.src]}</code>. Press <code>Step</code> or <code>Run</code>.`);
+    log(`source = ${NAME[state.src]}`, "op");
+  });
+}
+
+function init() {
+  state.speedMs = 1520 - Number(els.speed.value);
+  buildSrcSelect();
+  resetState();
+  render();
+  log("Dijkstra visualizer ready.", "settle");
+  info("Press <code>Step</code> to settle the closest unsettled vertex, or <code>Run</code> to animate the whole algorithm.");
+}
+
+init();
+</script>
+</body>
+</html>
