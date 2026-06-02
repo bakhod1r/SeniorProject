@@ -5,15 +5,17 @@
 ## Table of Contents
 1. [Introduction](#1-introduction)
 2. [System Design: Assemblers and Route Optimization](#2-system-design-assemblers-and-route-optimization)
-3. [Distributed and Large-Graph Eulerian Construction](#3-distributed-and-large-graph-eulerian-construction)
-4. [Concurrency](#4-concurrency)
-5. [Comparison at Scale](#5-comparison-at-scale)
-6. [Architecture Patterns](#6-architecture-patterns)
-7. [Code Examples](#7-code-examples)
-8. [Observability](#8-observability)
-9. [Failure Modes](#9-failure-modes)
-10. [Capacity Planning](#10-capacity-planning)
-11. [Summary](#11-summary)
+3. [Worked Example: de Bruijn Assembly of a Tiny Genome](#3-worked-example-de-bruijn-assembly-of-a-tiny-genome)
+4. [Chinese Postman in Practice](#4-chinese-postman-in-practice)
+5. [Distributed and Large-Graph Eulerian Construction](#5-distributed-and-large-graph-eulerian-construction)
+6. [Concurrency](#6-concurrency)
+7. [Comparison at Scale](#7-comparison-at-scale)
+8. [Architecture Patterns](#8-architecture-patterns)
+9. [Code Examples](#9-code-examples)
+10. [Observability](#10-observability)
+11. [Failure Modes](#11-failure-modes)
+12. [Capacity Planning](#12-capacity-planning)
+13. [Summary](#13-summary)
 
 ---
 
@@ -60,7 +62,147 @@ The senior insight: in routing, Hierholzer is the *cheap* finishing move; the op
 
 ---
 
-## 3. Distributed and Large-Graph Eulerian Construction
+## 3. Worked Example: de Bruijn Assembly of a Tiny Genome
+
+To make the assembly framing concrete, walk a toy example end to end. Suppose the true genome is the circular string `ATGGCGTGCA` and a sequencer produced these reads (here, all length-5 substrings, no errors, full coverage):
+
+```
+ATGGC, TGGCG, GGCGT, GCGTG, CGTGC, GTGCA, TGCAT, GCATG, CATGG
+```
+
+We pick `k = 4`, so each read of length 5 contributes two overlapping 4-mers, and each 4-mer becomes an **arc** between its two flanking 3-mers (the `k-1 = 3` prefixes and suffixes are the **vertices**).
+
+**Step 1 — build the de Bruijn graph.** For a 4-mer `w₁w₂w₃w₄` add an arc from `w₁w₂w₃` to `w₂w₃w₄`. Collecting the distinct 4-mers across reads:
+
+```
+ATGG → arc ATG → TGG
+TGGC → arc TGG → GGC
+GGCG → arc GGC → GCG
+GCGT → arc GCG → CGT
+CGTG → arc CGT → GTG
+GTGC → arc GTG → TGC
+TGCA → arc TGC → GCA
+GCAT → arc GCA → CAT
+CATG → arc CAT → ATG
+```
+
+**Step 2 — vertex degree table.** Vertices are the 3-mers:
+
+| vertex (3-mer) | out | in | balance (out−in) |
+|----------------|-----|----|------------------|
+| ATG | 1 (→TGG) | 1 (CAT→) | 0 |
+| TGG | 1 (→GGC) | 1 (ATG→) | 0 |
+| GGC | 1 (→GCG) | 1 (TGG→) | 0 |
+| GCG | 1 (→CGT) | 1 (GGC→) | 0 |
+| CGT | 1 (→GTG) | 1 (GCG→) | 0 |
+| GTG | 1 (→TGC) | 1 (CGT→) | 0 |
+| TGC | 1 (→GCA) | 1 (GTG→) | 0 |
+| GCA | 1 (→CAT) | 1 (TGC→) | 0 |
+| CAT | 1 (→ATG) | 1 (GCA→) | 0 |
+
+Every vertex is balanced (`in = out`) and the graph is strongly connected, so an Eulerian **circuit** exists — consistent with the genome being circular.
+
+**Step 3 — Euler circuit.** The graph is a single cycle here, so Hierholzer returns the obvious tour:
+
+```
+ATG → TGG → GGC → GCG → CGT → GTG → TGC → GCA → CAT → ATG
+```
+
+**Step 4 — spell the genome.** Start with the first vertex's 3 characters, then append the last character of each subsequent vertex (each arc adds exactly one new base):
+
+```
+ATG + G + C + G + T + G + C + A + T  =  ATGGCGTGCAT
+```
+
+Dropping the final `T` (it wraps to the start in a circular genome) recovers `ATGGCGTGCA` — the original. The Eulerian circuit *is* the assembly.
+
+**Step 5 — what breaks in reality.** Now perturb the toy to show why production assemblers do not just run Hierholzer:
+
+- **A sequencing error** turns one read's `GGCGT` into `GGCAT`, creating a spurious arc `GGC → GCA` and a *tip* (a short dead-end branch). The graph is no longer balanced; Hierholzer's balance check fails. Mitigation: tip removal in the cleanup stage.
+- **A repeat** — say the genome contained `…CGT…CGT…` — collapses two distinct genomic regions onto the same vertex, raising its degree to 2-in/2-out. Now there are *multiple* Eulerian circuits, and only one matches biology. This ambiguity is exactly why assemblers emit **unitigs** (the unambiguous non-branching paths) and defer the branch resolution to paired/long reads.
+- **A coverage gap** drops a 4-mer entirely, splitting the graph into two components; each yields its own partial trail, never a single tour.
+
+This 9-read example is the entire conceptual payload of `Pevzner et al. (2001)`: assembly = Euler path on a de Bruijn graph, but the engineering is the graph-cleaning that makes the Euler step meaningful.
+
+---
+
+## 4. Chinese Postman in Practice
+
+The **Chinese Postman Problem** (CPP, or Route Inspection) asks for a *minimum-length closed walk that traverses every edge at least once*. If the graph is already Eulerian, the answer is an Euler circuit (each edge once, cost = sum of weights). Otherwise some edges must be repeated, and the optimization is *which* edges to duplicate so the result becomes Eulerian at minimum extra cost.
+
+### 4.1 The reduction to matching (undirected)
+
+The odd-degree vertices are the obstruction (Theorem: a connected graph is Eulerian iff all degrees are even). An undirected graph always has an even number of odd vertices (handshake lemma). The optimal CPP solution:
+
+1. Find all odd-degree vertices `O` (`|O|` is even).
+2. Compute all-pairs shortest paths among `O`.
+3. Find a **minimum-weight perfect matching** on `O` using those shortest-path distances (Edmonds' blossom algorithm, `O(V³)`).
+4. **Duplicate** the edges along each matched shortest path. Now every vertex is even-degree → Eulerian.
+5. Run Hierholzer on the augmented multigraph. Its cost = (sum of all original edge weights) + (matching cost).
+
+```
+         odd vertices: {b, d, f, h}
+         shortest paths between them, then min-weight perfect matching:
+
+              b ---- d           pairing {b-d, f-h}  cost = 7
+               \    /            vs
+                \  /             pairing {b-f, d-h}  cost = 9  ✗
+                 ⋈               vs
+                /  \             pairing {b-h, d-f}  cost = 11 ✗
+               /    \
+              f ---- h           choose the cheapest perfect matching
+```
+
+The minimum-weight perfect matching is the expensive step (`O(V³)`); Hierholzer afterward is linear and trivial. This is the senior point repeated: **in routing, the cost lives in the matching, not the Euler tour.**
+
+### 4.2 Directed and mixed variants
+
+- **Directed CPP** (one-way streets only): balance `out − in` at every vertex by adding minimum-cost paths from over-out vertices to over-in vertices. This is a **min-cost flow** problem (poly-time), not matching.
+- **Mixed CPP** (some streets two-way, some one-way): **NP-hard**. The clean polynomial structure collapses the moment you mix orientations. Real city networks are mixed, so production routing uses heuristics or ILP solvers with time limits.
+
+### 4.3 Python — undirected Chinese Postman skeleton
+
+```python
+import itertools, networkx as nx
+
+def chinese_postman(G):
+    """G: weighted undirected nx.Graph. Returns (extra_cost, augmented multigraph)."""
+    odd = [v for v, d in G.degree() if d % 2 == 1]
+    if not odd:
+        return 0, nx.MultiGraph(G)  # already Eulerian
+
+    # all-pairs shortest path lengths among odd vertices
+    dist = {}
+    paths = {}
+    for u in odd:
+        lengths, p = nx.single_source_dijkstra(G, u, weight="weight")
+        for v in odd:
+            if u < v:
+                dist[(u, v)] = lengths[v]
+                paths[(u, v)] = p[v]
+
+    # min-weight perfect matching on odd set (use max-weight on negated weights)
+    H = nx.Graph()
+    for (u, v), w in dist.items():
+        H.add_edge(u, v, weight=-w)
+    matching = nx.max_weight_matching(H, maxcardinality=True)
+
+    aug = nx.MultiGraph(G)
+    extra = 0
+    for u, v in matching:
+        key = (u, v) if (u, v) in paths else (v, u)
+        path = paths[key]
+        extra += dist[key]
+        for a, b in zip(path, path[1:]):       # duplicate edges along the path
+            aug.add_edge(a, b, weight=G[a][b]["weight"])
+    return extra, aug
+```
+
+The duplicated multigraph is now Eulerian; feeding `aug` to a Hierholzer (the §9 code) yields the optimal inspection route. The `O(V³)` matching dominates; for a city of `10⁵` edges with a few hundred odd vertices this is seconds, while the Euler tour is milliseconds.
+
+---
+
+## 5. Distributed and Large-Graph Eulerian Construction
 
 A human de Bruijn graph at `k = 31` can have on the order of **10⁹–10¹⁰** edges. Strategies when it does not fit in one machine's RAM:
 
@@ -82,7 +224,7 @@ The **splice order** of Hierholzer is a sequential dependency: you cannot trivia
 
 ---
 
-## 4. Concurrency
+## 6. Concurrency
 
 ### 4.1 Parallelism across components
 
@@ -102,7 +244,7 @@ If multiple queries run Euler tours over the *same* immutable graph (e.g., gener
 
 ---
 
-## 5. Comparison at Scale
+## 7. Comparison at Scale
 
 | Approach | Edges feasible | Memory | Notes |
 |----------|----------------|--------|-------|
@@ -116,7 +258,7 @@ For routing-scale graphs (≤10⁶ edges) any in-memory method is instant; the c
 
 ---
 
-## 6. Architecture Patterns
+## 8. Architecture Patterns
 
 ### 6.1 Validate-clean-construct
 
@@ -139,7 +281,7 @@ Each pipeline stage writes its output (compacted graph, component list, per-comp
 
 ---
 
-## 7. Code Examples
+## 9. Code Examples
 
 ### 7.1 Go — overflow-safe iterative Hierholzer for huge graphs
 
@@ -314,7 +456,7 @@ The point of this stage in a large pipeline is to **fail fast and cheaply** (a d
 
 ---
 
-## 8. Observability
+## 10. Observability
 
 A multi-hour Euler-based pipeline is opaque without instrumentation. Wire these from the start.
 
@@ -332,7 +474,7 @@ The most useful single signal is `euler_edges_consumed / component_edges`: if it
 
 ---
 
-## 9. Failure Modes
+## 11. Failure Modes
 
 ### 9.1 Graph not actually Eulerian
 Raw biological graphs fail balance constantly. Mitigation: pre-validate and route non-Eulerian components to the unitig extractor instead of demanding a single tour.
@@ -354,7 +496,7 @@ Hierholzer's output depends on adjacency order; two runs differ. For reproducibl
 
 ---
 
-## 10. Capacity Planning
+## 12. Capacity Planning
 
 ### 10.1 Memory
 
@@ -379,7 +521,7 @@ Move to a distributed build (Spark/GraphX or a dedicated assembler's MPI mode) w
 
 ---
 
-## 11. Summary
+## 13. Summary
 
 - Hierholzer is a linear-time finishing move; the engineering lives upstream (graph build, validation, error cleanup, compaction).
 - Always iterative — recursive Hierholzer overflows at depth `O(E)` and is the classic production crash.

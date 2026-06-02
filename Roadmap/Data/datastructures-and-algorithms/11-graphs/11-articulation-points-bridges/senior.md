@@ -130,6 +130,40 @@ Diffing is what turns a periodic batch job into an early-warning system.
 
 Because the trees are small (one node per block / 2ECC), you can cheaply simulate "what if we add edge (x, y)?" by checking whether `x` and `y` are in different parts of the tree — adding that edge makes the entire tree-path between them 2-connected, removing every cut/bridge on it. This is how redundancy-planning tools recommend the *single* most valuable link to add.
 
+### 6.4 Constructing and persisting the block-cut tree
+
+The block-cut tree is built in the same DFS that finds cut vertices, using an edge stack (see the middle-level biconnected-components code). The persisted artifact is small and query-friendly:
+
+```
+BC-tree node types:
+  BLOCK  b0  = {edges of biconnected component 0}   (a "room")
+  BLOCK  b1  = {single bridge edge}                  (a one-edge room)
+  CUT    c1  = articulation vertex v                 (a "doorway")
+
+BC-tree edges connect each CUT node to every BLOCK that contains it:
+
+        b0 ── c(service-A) ── b1 ── c(service-B) ── b2
+       (DB     (gateway        (link  (cache         (web
+        cluster) is a SPOF)    bridge) is a SPOF)     tier)
+```
+
+Reading this tree: any path between two service vertices that crosses a CUT node means that cut vertex (a doorway) is a single point of failure on every route between them. The number of BLOCK nodes a query path passes through is the number of independent failure domains it spans. Persist three columns per snapshot — `snapshot_id`, `node` (block id or cut vertex), `members` — plus the tree adjacency, and reliability queries become indexed lookups.
+
+### 6.5 SPOF report shape
+
+A useful single-point-of-failure report is not "vertex 4837 is an articulation point." It is contextual:
+
+| field | example | source |
+|-------|---------|--------|
+| `spof_vertex` | `payments-gateway` | articulation set |
+| `severity` | how many vertices get isolated if it fails | size of the subtrees it separates |
+| `affected_services` | `[checkout, refunds, ledger]` | the smaller side of the cut |
+| `blocks_joined` | `b0 (DB cluster), b3 (web tier)` | BC-tree neighbors |
+| `suggested_fix` | "add link checkout↔ledger" | what-if simulation (6.3) |
+| `first_seen_snapshot` | `2026-06-02T14:00` | diff history |
+
+`severity` ranked by isolated-vertex count is what lets on-call triage: a cut vertex that isolates three leaf services is far less urgent than one that bisects the fleet 50/50.
+
 ---
 
 ## 7. Code Examples — Iterative DFS
@@ -411,6 +445,20 @@ If you only DFS from vertex 0, you miss everything in other components. **Mitiga
 
 A planned topology change (decommissioning redundant links) can momentarily spike the SPOF count and page everyone. **Mitigation:** diff-based alerting with a maintenance-window suppression, and alert on the *delta* not the absolute count.
 
+### 9.7 Off-by-one in the iterative low-fold
+
+The most common *correctness* bug in production code is folding `low[u]` into the wrong parent in the iterative version. With a parent-vertex stack you must fold into `stack.peek()` *after* popping `u` (the new top is `u`'s parent), or equivalently track `parent[]` explicitly. A common mistake — folding into `parent[u]` while it is still stale, or applying the criteria on *enter* rather than on *pop* — silently misclassifies cut vertices on graphs with cross-subtree back edges. **Mitigation:** keep a brute-force remove-and-check oracle in the test suite and fuzz against random small graphs; the bug surfaces immediately.
+
+### 9.8 Incident runbook — "new SPOF" page
+
+When `new_spof_total` increments and pages on-call:
+
+1. **Confirm freshness.** Check `snapshot_staleness_seconds`. If the snapshot is hours old, the SPOF may already be resolved — re-run the analysis on a fresh topology pull before acting.
+2. **Read the severity.** Pull `affected_services` and the isolated-vertex count. A 50/50 bisection is sev-1; a three-leaf isolation is sev-3.
+3. **Find the cause in the diff.** Compare against the previous snapshot's bridge/cut sets — which edge was *removed* (or which redundant path went down) to create this cut? That removed edge is usually the real incident.
+4. **Apply the suggested fix or restore redundancy.** Either re-establish the lost redundant link, or add the what-if-recommended edge from the SPOF report. Verify the next analysis run shows the SPOF cleared.
+5. **Suppress if planned.** If the change was a maintenance-window decommission, acknowledge and suppress rather than reverting.
+
 ---
 
 ## 10. Capacity Planning
@@ -427,7 +475,19 @@ Side tables are `O(V)`: `disc`, `low`, `parent`, `visited`, `iter` — five `int
 
 Linear in `V + E`. Practical throughput is roughly 10–100 M edges/second for an iterative DFS, dominated by random memory access into the adjacency structure. So `E = 10⁸` runs in ~1–10 seconds. A second pass for BCCs/trees doubles that at most.
 
-### 10.3 When to leave the single node
+### 10.3 Sizing table across scales
+
+| Graph (V / E) | CSR adjacency | Side tables (5×int32) | Edge stack (BCC) | Iterative DFS time | Verdict |
+|---------------|---------------|-----------------------|------------------|--------------------|---------|
+| 10⁴ / 5·10⁴ | ~0.4 MB | ~0.2 MB | ~0.2 MB | < 1 ms | trivial, even recursive |
+| 10⁶ / 5·10⁶ | ~40 MB | ~20 MB | ~20 MB | ~50–200 ms | single node, iterative |
+| 10⁷ / 5·10⁷ | ~400 MB | ~200 MB | ~200 MB | ~1–5 s | single node, iterative |
+| 10⁸ / 5·10⁸ | ~4 GB | ~2 GB | ~2 GB | ~10–60 s | fat node (16–32 GB) |
+| 10⁹ / 5·10⁹ | ~40 GB | ~20 GB | streamed | minutes | semi-external / SSD |
+
+The CSR figure assumes 32-bit endpoint ids (`8 bytes × 2E` for an undirected graph stored both directions). The recursive variant adds `O(depth)` call frames — fatal on the deep-graph rows, which is why every row from 10⁶ up specifies *iterative*. The edge stack is only allocated when you extract biconnected components / the block-cut tree; pure cut+bridge detection skips it.
+
+### 10.4 When to leave the single node
 
 Move off one machine only when:
 
@@ -436,6 +496,18 @@ Move off one machine only when:
 - You need sub-second freshness on a constantly-mutating graph → dynamic/online bridge maintenance (`30-online-bridges`) instead of full recompute.
 
 Until one of those is true, a single fat node with an iterative DFS is the right and simplest answer.
+
+### 10.5 Recompute cadence and SLO budget
+
+The freshness SLO drives the schedule, not the other way around. If the topology mutates every few minutes and your reliability SLO promises "SPOF alerts within 5 minutes of a change," then a 10⁷-edge graph analyzed in ~3 s leaves ample budget for a 1-minute cron — staleness stays well under target. But if you promise sub-second freshness on a constantly-churning graph, full recompute cannot keep up regardless of how fast a single pass is: at one mutation per 100 ms, even a 50 ms analysis falls behind, and you must switch to incremental/online bridge maintenance (`30-online-bridges`). The decision rule:
+
+```
+recompute_interval  >=  analysis_time  +  ingestion_time
+staleness_p99       ~=  recompute_interval + analysis_time
+if staleness_p99 > freshness_SLO:  go event-driven, then go online/dynamic
+```
+
+Event-driven recompute (trigger on a topology-change event rather than a fixed cron) cuts staleness to roughly `analysis_time` plus event-propagation latency, and is the usual middle ground before reaching for the dynamic structures.
 
 ---
 

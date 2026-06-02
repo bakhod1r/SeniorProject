@@ -343,7 +343,232 @@ if __name__ == "__main__":
     print("MST weight:", total)  # 13
 ```
 
-The Go/Java equivalents follow the same two-phase shape (reduce per-component MWOE, then union). The reduce phase is where you fan out across threads/executors, each owning a partition of the edge list and proposing candidate minima into atomic per-component slots.
+#### Go — Parallel Borůvka (shared-memory, sharded reduce)
+
+The reduce phase fans out: each worker owns a slice of the edge list and proposes a candidate MWOE per component into a private buffer; a serial merge then combines the per-shard candidates and contracts. Sharding the *write target* (private buffers, not a shared slot) sidesteps the atomic-min contention that dominates naive parallel Borůvka.
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+type Edge struct{ u, v, w, id int }
+
+// parallelBoruvkaRound runs the per-component MWOE reduction across `workers`
+// goroutines, then merges and contracts serially. Returns added weight + merges.
+func parallelBoruvkaRound(n int, edges []Edge, find func(int) int,
+	union func(int, int) bool, workers int) (int64, int) {
+
+	type cand struct {
+		idx int // index into edges, or -1
+	}
+	// each shard computes a private cheapest[comp] map keyed by root.
+	shardBest := make([]map[int]int, workers)
+	var wg sync.WaitGroup
+	chunk := (len(edges) + workers - 1) / workers
+	for s := 0; s < workers; s++ {
+		lo := s * chunk
+		hi := lo + chunk
+		if hi > len(edges) {
+			hi = len(edges)
+		}
+		if lo >= hi {
+			shardBest[s] = map[int]int{}
+			continue
+		}
+		wg.Add(1)
+		go func(s, lo, hi int) {
+			defer wg.Done()
+			best := make(map[int]int)
+			for i := lo; i < hi; i++ {
+				e := edges[i]
+				ru, rv := find(e.u), find(e.v) // find is read-mostly; safe with no concurrent union
+				if ru == rv {
+					continue
+				}
+				consider := func(c int) {
+					if j, ok := best[c]; !ok {
+						best[c] = i
+					} else {
+						b := edges[j]
+						if e.w < b.w || (e.w == b.w && e.id < b.id) {
+							best[c] = i
+						}
+					}
+				}
+				consider(ru)
+				consider(rv)
+			}
+			shardBest[s] = best
+		}(s, lo, hi)
+	}
+	wg.Wait()
+
+	// serial reduce-of-reduces: combine shard candidates into one MWOE per component
+	global := make(map[int]int)
+	for _, best := range shardBest {
+		for c, i := range best {
+			if j, ok := global[c]; !ok {
+				global[c] = i
+			} else {
+				a, b := edges[i], edges[j]
+				if a.w < b.w || (a.w == b.w && a.id < b.id) {
+					global[c] = i
+				}
+			}
+		}
+	}
+	var added int64
+	merged := 0
+	for _, i := range global { // contract serially (concurrent UF is the alternative)
+		e := edges[i]
+		if union(e.u, e.v) {
+			added += int64(e.w)
+			merged++
+		}
+	}
+	return added, merged
+}
+
+func main() {
+	edges := []Edge{{0, 1, 6, 0}, {0, 3, 5, 1}, {1, 2, 5, 2}, {1, 3, 3, 3},
+		{1, 4, 6, 4}, {2, 4, 4, 5}, {2, 5, 2, 6}, {3, 4, 6, 7}, {4, 5, 6, 8}}
+	n := 6
+	par := make([]int, n)
+	rnk := make([]int, n)
+	for i := range par {
+		par[i] = i
+	}
+	var find func(int) int
+	find = func(x int) int {
+		for par[x] != x {
+			par[x] = par[par[x]]
+			x = par[x]
+		}
+		return x
+	}
+	union := func(a, b int) bool {
+		ra, rb := find(a), find(b)
+		if ra == rb {
+			return false
+		}
+		if rnk[ra] < rnk[rb] {
+			ra, rb = rb, ra
+		}
+		par[rb] = ra
+		if rnk[ra] == rnk[rb] {
+			rnk[ra]++
+		}
+		return true
+	}
+	var total int64
+	for {
+		add, merged := parallelBoruvkaRound(n, edges, find, union, 4)
+		total += add
+		if merged == 0 {
+			break
+		}
+	}
+	fmt.Println("MST weight:", total) // 19
+}
+```
+
+#### Java — Parallel Borůvka (fork/join reduce of per-shard candidates)
+
+```java
+import java.util.*;
+import java.util.concurrent.*;
+
+public class ParallelBoruvka {
+    static int[] par, rnk;
+    static int find(int x) { while (par[x] != x) { par[x] = par[par[x]]; x = par[x]; } return x; }
+    static boolean union(int a, int b) {
+        int ra = find(a), rb = find(b);
+        if (ra == rb) return false;
+        if (rnk[ra] < rnk[rb]) { int t = ra; ra = rb; rb = t; }
+        par[rb] = ra; if (rnk[ra] == rnk[rb]) rnk[ra]++;
+        return true;
+    }
+
+    // edges[i] = {u, v, w, id}
+    static long mst(int n, int[][] edges, int workers) throws Exception {
+        par = new int[n]; rnk = new int[n];
+        for (int i = 0; i < n; i++) par[i] = i;
+        ExecutorService pool = Executors.newFixedThreadPool(workers);
+        long total = 0;
+        boolean progress = true;
+        while (progress) {
+            int chunk = (edges.length + workers - 1) / workers;
+            List<Future<Map<Integer,Integer>>> futs = new ArrayList<>();
+            for (int s = 0; s < workers; s++) {
+                final int lo = s * chunk, hi = Math.min(lo + chunk, edges.length);
+                futs.add(pool.submit(() -> {
+                    Map<Integer,Integer> best = new HashMap<>();
+                    for (int i = lo; i < hi; i++) {
+                        int[] e = edges[i];
+                        int ru = find(e[0]), rv = find(e[1]);
+                        if (ru == rv) continue;
+                        for (int c : new int[]{ru, rv}) {
+                            Integer j = best.get(c);
+                            if (j == null) best.put(c, i);
+                            else {
+                                int[] b = edges[j];
+                                if (e[2] < b[2] || (e[2] == b[2] && e[3] < b[3])) best.put(c, i);
+                            }
+                        }
+                    }
+                    return best;
+                }));
+            }
+            Map<Integer,Integer> global = new HashMap<>();
+            for (Future<Map<Integer,Integer>> f : futs)
+                for (Map.Entry<Integer,Integer> en : f.get().entrySet()) {
+                    Integer j = global.get(en.getKey());
+                    if (j == null) global.put(en.getKey(), en.getValue());
+                    else {
+                        int[] a = edges[en.getValue()], b = edges[j];
+                        if (a[2] < b[2] || (a[2] == b[2] && a[3] < b[3]))
+                            global.put(en.getKey(), en.getValue());
+                    }
+                }
+            int merged = 0;
+            for (int i : global.values()) {
+                int[] e = edges[i];
+                if (union(e[0], e[1])) { total += e[2]; merged++; }
+            }
+            progress = merged > 0;
+        }
+        pool.shutdown();
+        return total;
+    }
+
+    public static void main(String[] args) throws Exception {
+        int[][] edges = {{0,1,6,0},{0,3,5,1},{1,2,5,2},{1,3,3,3},
+                         {1,4,6,4},{2,4,4,5},{2,5,2,6},{3,4,6,7},{4,5,6,8}};
+        System.out.println("MST weight: " + mst(6, edges, 4)); // 19
+    }
+}
+```
+
+The Python single-threaded `boruvka_round` above is the reference; the Go and Java versions show the actual parallelization pattern — **shard the edge list, reduce per shard into private maps, reduce-of-reduces serially, contract once**. The contract step is the only serialization point; on a real cluster it becomes a tiny `reduce` over `O(c)` candidate edges, which is why Borůvka shuffles geometrically less data each round.
+
+### Distributed Borůvka on MapReduce/Spark — round skeleton
+
+```
+Round r (input: live edges keyed by endpoint, current component labels):
+  MAP:    for edge (u,v,w):
+            ru, rv = label[u], label[v]
+            if ru != rv: emit (ru -> (w,u,v)), (rv -> (w,u,v))
+  REDUCE: per component c: pick min (w, id) candidate  → MWOE[c]
+  JOIN:   union components across all MWOEs (driver-side, O(c) work)
+  RELABEL: broadcast new label[]; drop now-internal edges
+  repeat until 1 component or no MWOE (forest)
+```
+
+Data shuffled in round `r` ≈ live edges, which fall geometrically (components at least halve), so round 0 dominates network cost. Co-partitioning edges by `min(label[u],label[v])` keeps most candidate emission node-local.
 
 ---
 

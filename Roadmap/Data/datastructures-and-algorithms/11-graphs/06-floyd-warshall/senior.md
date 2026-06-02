@@ -60,6 +60,30 @@ The most expensive mistake is precomputing a `V²` matrix for a graph that mutat
 
 A precomputed matrix turns every shortest-path query into a single array read — `O(1)`, lock-free, trivially cacheable, trivially shardable by row. For a read-heavy workload over a static small graph (store-locator distances, game-map pathing tables, a service-mesh latency matrix of a few hundred nodes), that is unbeatable. The cost is the cubic build and the quadratic footprint.
 
+### 2.3 Anatomy of a distance-matrix service
+
+A production distance-matrix service is three decoupled stages, each with its own scaling and failure profile:
+
+1. **Ingest / topology store.** The source of truth for edges and weights — a graph database, a config table, or a stream of edge-change events. It owns *what the graph is*; it does not compute distances.
+2. **Build worker.** A batch job that reads a consistent snapshot of the topology, runs (blocked, parallel) Floyd-Warshall, validates the result (no negative diagonal, expected `V`), and writes a versioned immutable artifact (the `V²` matrix plus an optional `next` matrix). It is CPU- and memory-bound and scales with `V³`/`V²`.
+3. **Query layer.** A stateless, horizontally-scalable read tier that memory-maps or loads the current artifact and answers `dist(i, j)` / `path(i, j)` in `O(1)` / `O(path)`. It scales with QPS, independent of `V`.
+
+```mermaid
+flowchart LR
+    T[Topology store<br/>edges + weights] -->|snapshot| B[Build worker<br/>blocked parallel FW<br/>validate + version]
+    B -->|publish artifact| S[(Versioned matrix<br/>+ next matrix<br/>immutable)]
+    S -->|mmap / load| Q1[Query replica 1]
+    S --> Q2[Query replica 2]
+    S --> Q3[Query replica N]
+    Q1 --> C[Clients O(1) reads]
+    Q2 --> C
+    Q3 --> C
+```
+
+The key architectural property is that **build and serve are fully separated**. A build can fail, run long, or be rolled back without the query tier noticing — it simply keeps serving the last good version. Conversely, query replicas can autoscale on QPS without re-running any computation. The artifact is the contract between them, and versioning it (content hash + `V` + build timestamp) lets every query answer be traced back to a specific topology snapshot.
+
+For sharding, partition the matrix by **row ranges**: replica `r` owns rows `[r·V/N, (r+1)·V/N)`. A `dist(i, j)` query routes to the replica owning row `i`. This keeps each replica's footprint at `V²/N` and makes the query layer scale horizontally in memory as well as QPS — important once a single matrix approaches node RAM (see §10.1).
+
 ---
 
 ## 3. Distributed and Blocked Floyd-Warshall
@@ -87,6 +111,35 @@ flowchart TB
 
 On a GPU the blocked algorithm maps naturally: phase 3 launches one thread block per matrix tile, each doing `B³` min-plus updates from shared memory. Reported speedups over a single CPU core are 30–100× for `V` in the low thousands. The min-plus inner op is FMA-like but uses `min` instead of `+` for accumulation, so it does not use the FMA pipeline — memory bandwidth and occupancy dominate.
 
+The phase-3 kernel is the workhorse. Sketched in CUDA-style pseudocode, each thread block loads its destination tile, the pivot-row tile, and the pivot-column tile into shared memory, then performs `B` min-plus relaxations entirely from shared memory before writing back:
+
+```text
+// One thread block per destination tile (bi, bj); blockDim = (B, B).
+__global__ void phase3(int *D, int n, int bk, int B) {
+    int bi = blockIdx.y, bj = blockIdx.x;
+    if (bi == bk || bj == bk) return;       // pivot row/col handled in phase 2
+
+    int ti = threadIdx.y, tj = threadIdx.x; // cell within the tile
+    int i  = bi * B + ti, j = bj * B + tj;
+
+    __shared__ int rowTile[B][B];           // pivot-column block: D[i][kk..]
+    __shared__ int colTile[B][B];           // pivot-row block:    D[kk..][j]
+
+    rowTile[ti][tj] = D[i * n + (bk * B + tj)];
+    colTile[ti][tj] = D[(bk * B + ti) * n + j];
+    __syncthreads();                        // tiles resident in shared memory
+
+    int best = D[i * n + j];
+    for (int t = 0; t < B; t++) {           // B min-plus updates, all from SMEM
+        int via = rowTile[ti][t] + colTile[t][tj];
+        if (via < best) best = via;
+    }
+    D[i * n + j] = best;                     // single global write per cell
+}
+```
+
+The host loops `for bk in 0..blocks`, launching the three phases as separate kernels with an implicit device-wide barrier between them (one kernel finishes before the next starts), mirroring the strict layer dependency from §4.2. The win is arithmetic intensity: `B²` global reads feed `B³` min-plus operations, so larger tiles amortize bandwidth — bounded by shared-memory capacity (typically `B = 16` or `32`). Because min-plus does not map to the tensor/FMA units, peak throughput is set by integer ALU rate and shared-memory bandwidth, not FLOPs; profiling such kernels means watching occupancy and SMEM bank conflicts, not FLOP counters.
+
 ### 3.3 Distributed (multi-node)
 
 For `V` too large for one machine's `V²` RAM, partition the matrix by **row blocks** across nodes. Each `k`-round requires broadcasting the pivot **row** `k` and pivot **column** `k` to all nodes before they update their local blocks. Communication is `O(V²)` per round × `V` rounds = `O(V³)` total bytes moved — usually the bottleneck. In practice, distributed Floyd-Warshall is only worth it for the narrow band of `V` that is too big for one node but small enough that `V³` finishes in reasonable wall-clock time.
@@ -113,6 +166,10 @@ This gives near-linear speedup up to memory-bandwidth saturation. The barrier co
 
 You cannot parallelize across `k` — the layers are strictly sequential (`dp[k+1]` depends on `dp[k]`). Attempts to pipeline `k` and `k+1` require careful tiling (the blocked algorithm's phase ordering is exactly this dependency made explicit).
 
+### 4.2.1 NUMA and false sharing
+
+On a multi-socket machine, the `V²` matrix spans NUMA nodes. Partition the `i`-loop so each thread consistently owns the *same* row range across all `k` passes — this keeps a thread's working set on its local NUMA node and avoids cross-socket traffic dominating the (already bandwidth-bound) inner loop. A naive `parallel for` that re-partitions rows each pass thrashes NUMA locality. Within a thread's range, ensure row boundaries fall on cache-line (and ideally page) boundaries so two threads never write the same cache line — false sharing on the boundary cells can erase the parallel speedup entirely. The pivot row `k`, read by every thread each pass, is a natural broadcast: replicate it per-NUMA-node or rely on the cache hierarchy, since it is read-only during the pass (Lemma from `professional.md`).
+
 ### 4.3 Serving concurrency
 
 Once built, the matrix is immutable and read-only, so any number of reader threads query it lock-free. Rebuilds use a **read-copy-update** pattern: build a new matrix off to the side, then atomically swap a pointer. Readers never block; they see either the old or new matrix, never a torn one.
@@ -130,6 +187,10 @@ Once built, the matrix is immutable and read-only, so any number of reader threa
 | Hub labeling | heavy preprocess | `O(label size)` | rebuild | large | Static road networks, fastest queries. |
 
 Floyd-Warshall wins decisively only in the dense-and-small regime. Above a few thousand vertices the cubic build and quadratic memory push you to hierarchical methods.
+
+### 5.1 Reading the regime boundary in practice
+
+The decision is rarely "Floyd-Warshall vs Dijkstra" in the abstract — it is a function of three numbers: `V`, density `E/V²`, and the query pattern (all-pairs vs a hot subset). A useful heuristic: if you will query more than `~V` distinct source vertices over the matrix's lifetime, the all-pairs precompute amortizes; if fewer, on-demand Dijkstra per source is cheaper end-to-end. Crossed with density: at `E ≈ V²` (dense), Floyd-Warshall's `V³` actually *beats* `V` Dijkstra runs (`V · E log V = V³ log V`) by a log factor and is simpler, so dense + many-sources is unambiguously Floyd-Warshall territory. At `E ≈ V` (sparse), `V` Dijkstra runs cost `V² log V`, dramatically less than `V³`, so sparse pushes you off Floyd-Warshall almost regardless of query count. The remaining axis — does the graph change? — overrides both: a graph mutating faster than you can rebuild a `V²` matrix invalidates the precompute model entirely, sending you to per-query computation or a hierarchical structure with cheap updates.
 
 ---
 
@@ -164,6 +225,12 @@ This is the standard incremental-APSP trick for decreases. Increases are harder 
 ### 6.3 Tiered freshness
 
 Serve the precomputed matrix for the common case and fall back to an on-demand Dijkstra for vertices touched by very recent edge changes (a "dirty set"). This bounds staleness without paying for a full rebuild on every change.
+
+The mechanism: maintain a small set `D` of vertices whose incident edges changed since the last full build. A query `dist(i, j)` checks whether `i` or `j` (or, more conservatively, any vertex on the cached shortest path) is in `D`. If not, answer from the matrix in `O(1)`. If so, fall back to an on-demand single-source Dijkstra from `i`, which is `O(E log V)` but always fresh. When `|D|` grows past a threshold (say a few percent of `V`), trigger a full rebuild and clear `D`. This caps the worst-case staleness window at "time since `D` exceeded threshold" rather than "time since last full build," and it bounds the fraction of slow (Dijkstra-fallback) queries. The tradeoff is correctness subtlety: a cached path not touching `D` directly could still be invalidated by a change elsewhere, so this pattern is safe only when edge changes are *additions/decreases* (which can never make a non-dirty cached path wrong) or when you accept bounded staleness for the rare cross-effect.
+
+### 6.4 Build-on-write vs build-on-read
+
+Two triggering disciplines exist. **Build-on-write** rebuilds the matrix whenever the topology changes (or after a debounce window), keeping the served matrix maximally fresh at the cost of wasted rebuilds when no one queries the changed region. **Build-on-read (lazy)** marks the matrix dirty on change but rebuilds only when a query arrives and the matrix is stale, amortizing rebuild cost over actual demand. Build-on-write suits steady high-QPS services where freshness matters and changes are infrequent; build-on-read suits bursty or partial query loads where most of the matrix is never read between changes. A debounce/coalescing window on either discipline prevents a storm of edge changes from triggering a storm of `O(V³)` rebuilds — collapse N changes within the window into one rebuild.
 
 ---
 
@@ -341,6 +408,16 @@ The most useful single signal is `fw_matrix_age_seconds` versus your staleness S
 
 Log on each build: `V`, `E`, build time, whether a negative cycle was found, and the matrix version hash so clients can correlate answers to a specific build.
 
+### 8.1 Instrumenting the build itself
+
+Because the build is a fixed `Θ(V³)` march with no early exit, a *stalled* build looks identical to a *slow* one from the outside — both just take long. To distinguish them, emit progress at the `k`-loop granularity: a counter `fw_build_pivots_done` updated every, say, 64 pivots. A healthy build advances this counter at a steady rate (`V` pivots over the expected wall-clock); a wedged build (deadlock, swapping, GC death spiral) freezes it. Pairing that with `fw_build_duration_seconds` lets an alert fire on "build running but pivots not advancing," which a pure duration alert cannot catch until the whole window blows.
+
+For the parallel build, also track per-core utilization and memory bandwidth. Floyd-Warshall is memory-bandwidth bound once `V²` leaves cache, so beyond the bandwidth-saturation point adding threads raises CPU `%` without lowering wall-clock — a classic "we added cores and it got no faster" trap. The signal is rising aggregate CPU with flat `fw_build_duration_seconds`; the fix is the blocked layout (§3.1), not more threads.
+
+### 8.2 Query-side observability
+
+On the read tier, the cheap-but-vital signals are out-of-range queries (`fw_query_errors_total` for `i` or `j` outside `[0, V)`, usually a client using a stale vertex id after a rebuild shrank `V`) and the served matrix version per request, attached as a response header or trace attribute. When a downstream team reports "the path looks wrong," the version tag immediately answers "which topology snapshot produced it," collapsing a debugging session into a lookup.
+
 ---
 
 ## 9. Failure Modes
@@ -363,6 +440,12 @@ If the rebuild trigger misses an edge change, queries return paths that no longe
 ### 9.6 Torn reads during swap
 Readers observing a half-written matrix during a rebuild return garbage. Use read-copy-update: build a fresh matrix, then swap an immutable pointer atomically.
 
+### 9.7 Vertex-id remapping across rebuilds
+Floyd-Warshall indexes by dense integer `0..V-1`, but the real graph has stable vertex *identities* (node names, UUIDs). If a rebuild renumbers vertices — because a node was removed and the dense indices shifted — then a client caching index `i` from the previous build now reads a different vertex's row. Always publish the **id↔index mapping alongside the matrix**, version them together, and have clients resolve ids to indices against the *same* version they query. A mismatch should be a hard error, not a silent wrong answer. This failure is insidious because every individual lookup succeeds; only the *meaning* is wrong.
+
+### 9.8 Partial-snapshot builds
+The build worker must read a **consistent** snapshot of the topology. If it reads edges while the topology store is mid-update (some edges new, some old), the resulting matrix reflects a graph that never existed — distances that mix two topologies. Take a point-in-time snapshot (a read transaction, an event-log offset, or a frozen export) and record that snapshot marker in the artifact version. Without this, intermittent "impossible" distances appear that no single topology can reproduce, making the bug nearly impossible to diagnose after the fact.
+
 ---
 
 ## 10. Capacity Planning
@@ -377,10 +460,33 @@ Readers observing a half-written matrix during a rebuild return garbage. Use rea
 - Parallel over `C` cores: near-linear until memory-bandwidth bound, typically `4–8×` on a server.
 - GPU: another `10–50×` on top for `V` in the low thousands.
 
-### 10.3 Sizing example
+### 10.3 The V² memory table (the number to memorize)
+
+Memory is the wall you hit first and the easiest to compute. For an `int32` distance matrix, footprint is `4 · V²` bytes; double for `int64`; double again if you carry a `next` matrix for reconstruction. The table below is the one to internalize before promising a precomputed matrix:
+
+| V | `int32` dist (`4V²`) | `int64` dist (`8V²`) | dist + `next` (`8V²`, int32 each) | Build time @ 10⁹ relax/s/core |
+| --- | --- | --- | --- | --- |
+| 1,000 | 4 MB | 8 MB | 8 MB | ~1 s |
+| 5,000 | 100 MB | 200 MB | 200 MB | ~125 s |
+| 10,000 | 400 MB | 800 MB | 800 MB | ~1,000 s (~17 min) |
+| 20,000 | 1.6 GB | 3.2 GB | 3.2 GB | ~8,000 s (~2.2 h) |
+| 30,000 | 3.6 GB | 7.2 GB | 7.2 GB | ~27,000 s (~7.5 h) |
+| 50,000 | 10 GB | 20 GB | 20 GB | ~125,000 s (~35 h) |
+
+Two lessons jump out. First, **memory grows quadratically but build time grows cubically** — for small `V` you run out of patience (time) before RAM, and the crossover is around `V ≈ 10,000` where a 400 MB matrix already takes ~17 minutes single-core. Second, the `next` matrix is *free on the memory axis relative to `int64` distances* but doubles your footprint versus `int32` distances; if you only need costs, stay `int32` and you buy 2× headroom.
+
+Parallelism shifts the time column but not the memory column: 8 cores cut the 30,000-vertex build from 7.5 h to roughly 1 h (memory-bandwidth permitting), but the matrix is still 3.6 GB no matter how many cores you throw at it. That is why, past ~30,000–40,000 vertices, the move is not "more cores" but "different algorithm" (hierarchical methods, §5).
+
+### 10.4 Sizing example
 A service-mesh latency matrix over `V = 800` nodes, rebuilt every 5 minutes on topology change. `V³ ≈ 5 × 10⁸` → ~0.5 s single core; `V² · 4 B ≈ 2.6 MB` matrix — trivial. Floyd-Warshall is overwhelmingly the right call: tiny code, sub-second build, microsecond queries.
 
-### 10.4 When to leave Floyd-Warshall
+A second, cautionary sizing: a logistics planner wants APSP over `V = 40,000` warehouses with path reconstruction. `int32` dist + `int32` next = `8 · V² = 12.8 GB`, and `V³ = 6.4 × 10¹³` relaxations ≈ 18 hours single-core, ~2–3 hours on 8 cores. This is at the ragged edge: it *fits* on a big-memory node and *finishes* overnight, but any growth in `V` or a tightened freshness SLO breaks it. The senior call here is to question the premise — is the graph really dense? Warehouse networks are sparse, so Johnson's (`V·E log V`) is likely orders of magnitude cheaper, and the all-pairs requirement itself may be replaceable by on-demand Dijkstra over a hot subset.
+
+### 10.5 Artifact distribution cost
+
+The `V²` matrix is not just an in-memory cost; it is also a *transfer* cost when shipping the built artifact to query replicas. A 10,000-vertex `int32` matrix is 400 MB per replica; pushing it to 20 replicas on every rebuild is 8 GB of egress per build cycle. If rebuilds are frequent, this dominates network budget and rebuild latency more than the compute does. Mitigations: ship a **delta** (only changed rows/cells) when the topology change is local, compress the artifact (distance matrices over small integer ranges compress well), or have replicas memory-map a shared object-store copy instead of each pulling its own. The artifact-distribution time must be added to `fw_matrix_age_seconds` budgeting — a build that finishes in 1 s but takes 30 s to fan out to replicas has a 31 s freshness floor.
+
+### 10.6 When to leave Floyd-Warshall
 Move to `V × Dijkstra`, Johnson's, or a hierarchical method when any holds:
 - `V` exceeds a few thousand and the build no longer fits your window.
 - The graph is sparse (`E ≪ V²`) — `V·E log V` ≪ `V³`.
@@ -398,5 +504,17 @@ Move to `V × Dijkstra`, Johnson's, or a hierarchical method when any holds:
 - Handle **incremental edge decreases** in `O(V²)` instead of a full rebuild; treat increases and topology changes as rebuild triggers.
 - Watch the **memory wall** (`O(V²)`) and the **time wall** (`O(V³)`); both push you to hierarchical methods (Contraction Hierarchies, hub labeling) above a few thousand vertices.
 - **Never publish a matrix with a negative diagonal** — detect the negative cycle, alert, and keep the last good version.
+
+### Operational checklist before shipping a precomputed matrix
+
+- **Bound `V`.** Confirm `V` is and will remain in the dense-small regime; put an alert on `fw_vertex_count` crossing your memory and time budgets (§10.3).
+- **Separate build from serve.** Build worker writes a versioned immutable artifact; stateless query replicas load it. A failed build keeps the last good version serving.
+- **Version everything together.** Matrix, `next` matrix, and id↔index mapping share one version; clients resolve ids against the version they query (§9.7).
+- **Snapshot the topology.** Read a consistent point-in-time graph; record the snapshot marker in the artifact (§9.8).
+- **Validate before publish.** Reject any matrix with a negative diagonal; alert and retain the prior version (§9.1).
+- **Track freshness end-to-end.** `fw_matrix_age_seconds` must include artifact distribution time, not just build time (§10.5).
+- **Plan the exit.** Know the `V` at which you migrate to Johnson's or a hierarchical method, and have it scoped before you hit it (§10.6).
+- **Coalesce rebuild triggers.** Debounce bursts of topology changes into a single `O(V³)` rebuild so a change storm cannot become a rebuild storm (§6.4).
+- **Make degraded mode explicit.** Decide in advance whether stale-but-available beats fresh-but-erroring, and encode that in the fallback (tiered freshness, §6.3) rather than discovering it during an incident.
 
 References to study further: blocked/tiled Floyd-Warshall (Venkataraman et al.), GPU APSP implementations, Contraction Hierarchies (Geisberger et al.), hub labeling (Abraham et al.), and Johnson's algorithm for the sparse-with-negatives case (see `04-dijkstra`, `05-bellman-ford`).

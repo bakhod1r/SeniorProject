@@ -11,7 +11,9 @@
 8. Space–Time Trade-offs
 9. Comparison with Alternatives
 10. Open Problems (dynamic LCA, link-cut trees)
-11. Summary
+11. Reference Implementations (Go / Java / Python)
+12. Worked Traces and Diagrams
+13. Summary
 
 ---
 
@@ -207,7 +209,517 @@ The decision tree: *static, read static aggregates* → binary lifting / FCB; *s
 
 ---
 
-## 11. Summary
+## 11. Reference Implementations
+
+This section gives three load-bearing algorithms, each in **Go, Java, and Python** in that order:
+
+1. **Euler tour + sparse-table → O(1) LCA query** (the §3.1 reduction made concrete, with the idempotent two-overlap min trick of §5).
+2. **Cartesian tree from an array in O(m)** (the §3.2 RMQ→LCA direction, monotone-stack build).
+3. **k-th ancestor via binary lifting** (the same `up[][]` table answers `LCA` *and* `k_th_ancestor`, by Lemma 2.3's binary decomposition of a climb).
+
+### 11.1 Euler tour + sparse table → O(1) LCA
+
+The Euler array `eulerNode[0..2N-2]` records the vertex at each DFS step; `eulerDepth[i] = depth(eulerNode[i])`. `first[v]` is the position of `v`'s first appearance. By Theorem 3.1, `LCA(u,v)` is the vertex of minimum `eulerDepth` between `first[u]` and `first[v]`. We store **argmin positions** in the sparse table (not the depths) so the query returns the node directly.
+
+#### Go
+
+```go
+package lca
+
+import "math/bits"
+
+// EulerLCA answers LCA in O(1) after O(N log N) preprocessing.
+type EulerLCA struct {
+	eulerNode  []int32 // vertex at each Euler step, length 2N-1
+	eulerDepth []int32 // depth at each Euler step
+	first      []int32 // first[v] = first Euler index of v
+	sparse     [][]int32 // sparse[k][i] = Euler index of min-depth in [i, i+2^k)
+	logTab     []int32
+}
+
+func BuildEulerLCA(n, root int, children [][]int32) *EulerLCA {
+	e := &EulerLCA{first: make([]int32, n)}
+	for i := range e.first {
+		e.first[i] = -1
+	}
+	// Iterative DFS producing the Euler tour (append on entry and after each child return).
+	type frame struct{ v, depth, ci int }
+	stack := []frame{{root, 0, 0}}
+	for len(stack) > 0 {
+		f := &stack[len(stack)-1]
+		if e.first[f.v] == -1 {
+			e.first[f.v] = int32(len(e.eulerNode))
+		}
+		if f.ci == 0 {
+			e.eulerNode = append(e.eulerNode, int32(f.v))
+			e.eulerDepth = append(e.eulerDepth, int32(f.depth))
+		}
+		if f.ci < len(children[f.v]) {
+			c := children[f.v][f.ci]
+			f.ci++
+			stack = append(stack, frame{int(c), f.depth + 1, 0})
+			// re-append parent after we return (handled when child pops below)
+		} else {
+			stack = stack[:len(stack)-1]
+			if len(stack) > 0 { // re-visit parent on return
+				p := &stack[len(stack)-1]
+				e.eulerNode = append(e.eulerNode, int32(p.v))
+				e.eulerDepth = append(e.eulerDepth, int32(p.depth))
+			}
+		}
+	}
+	e.buildSparse()
+	return e
+}
+
+func (e *EulerLCA) buildSparse() {
+	m := len(e.eulerDepth)
+	e.logTab = make([]int32, m+1)
+	for i := 2; i <= m; i++ {
+		e.logTab[i] = e.logTab[i/2] + 1
+	}
+	K := int(e.logTab[m]) + 1
+	e.sparse = make([][]int32, K)
+	e.sparse[0] = make([]int32, m)
+	for i := range e.sparse[0] {
+		e.sparse[0][i] = int32(i) // store argmin positions
+	}
+	for k := 1; k < K; k++ {
+		size := m - (1 << k) + 1
+		e.sparse[k] = make([]int32, max(size, 0))
+		for i := 0; i+(1<<k) <= m; i++ {
+			l := e.sparse[k-1][i]
+			r := e.sparse[k-1][i+(1<<(k-1))]
+			if e.eulerDepth[l] <= e.eulerDepth[r] {
+				e.sparse[k][i] = l
+			} else {
+				e.sparse[k][i] = r
+			}
+		}
+	}
+}
+
+// Query returns LCA(u, v) in O(1) using the two-overlap idempotent min.
+func (e *EulerLCA) Query(u, v int32) int32 {
+	l, r := e.first[u], e.first[v]
+	if l > r {
+		l, r = r, l
+	}
+	k := e.logTab[r-l+1]
+	a := e.sparse[k][l]
+	b := e.sparse[k][r-(1<<k)+1]
+	if e.eulerDepth[a] <= e.eulerDepth[b] {
+		return e.eulerNode[a]
+	}
+	return e.eulerNode[b]
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+var _ = bits.Len // keep import if unused elsewhere
+```
+
+#### Java
+
+```java
+import java.util.List;
+
+public final class EulerLCA {
+    private final int[] eulerNode;   // length 2N-1
+    private final int[] eulerDepth;
+    private final int[] first;
+    private final int[][] sparse;    // sparse[k][i] = argmin position in [i, i+2^k)
+    private final int[] logTab;
+
+    public EulerLCA(int n, int root, List<int[]> children) {
+        first = new int[n];
+        java.util.Arrays.fill(first, -1);
+        int[] en = new int[2 * n - 1];
+        int[] ed = new int[2 * n - 1];
+        int[] pos = {0};
+        // Iterative DFS via an explicit stack of (vertex, depth, childIndex).
+        int[] stackV = new int[n + 1], stackD = new int[n + 1], stackC = new int[n + 1];
+        int sp = 0;
+        stackV[sp] = root; stackD[sp] = 0; stackC[sp] = 0; sp++;
+        while (sp > 0) {
+            int v = stackV[sp - 1], d = stackD[sp - 1], ci = stackC[sp - 1];
+            if (first[v] == -1) first[v] = pos[0];
+            if (ci == 0) { en[pos[0]] = v; ed[pos[0]] = d; pos[0]++; }
+            int[] ch = children.get(v);
+            if (ci < ch.length) {
+                stackC[sp - 1] = ci + 1;
+                int c = ch[ci];
+                stackV[sp] = c; stackD[sp] = d + 1; stackC[sp] = 0; sp++;
+            } else {
+                sp--;
+                if (sp > 0) { // re-append parent on return
+                    en[pos[0]] = stackV[sp - 1]; ed[pos[0]] = stackD[sp - 1]; pos[0]++;
+                }
+            }
+        }
+        eulerNode = en; eulerDepth = ed;
+        int m = pos[0];
+        logTab = new int[m + 1];
+        for (int i = 2; i <= m; i++) logTab[i] = logTab[i / 2] + 1;
+        int K = logTab[m] + 1;
+        sparse = new int[K][];
+        sparse[0] = new int[m];
+        for (int i = 0; i < m; i++) sparse[0][i] = i;
+        for (int k = 1; k < K; k++) {
+            int size = Math.max(m - (1 << k) + 1, 0);
+            sparse[k] = new int[size];
+            for (int i = 0; i + (1 << k) <= m; i++) {
+                int l = sparse[k - 1][i], r = sparse[k - 1][i + (1 << (k - 1))];
+                sparse[k][i] = (eulerDepth[l] <= eulerDepth[r]) ? l : r;
+            }
+        }
+    }
+
+    public int query(int u, int v) {
+        int l = first[u], r = first[v];
+        if (l > r) { int t = l; l = r; r = t; }
+        int k = logTab[r - l + 1];
+        int a = sparse[k][l], b = sparse[k][r - (1 << k) + 1];
+        int arg = (eulerDepth[a] <= eulerDepth[b]) ? a : b;
+        return eulerNode[arg];
+    }
+}
+```
+
+#### Python
+
+```python
+from typing import List
+
+
+class EulerLCA:
+    """O(1) LCA after O(N log N) build via Euler tour + sparse table."""
+
+    __slots__ = ("euler_node", "euler_depth", "first", "sparse", "log_tab")
+
+    def __init__(self, n: int, root: int, children: List[List[int]]):
+        self.first = [-1] * n
+        en: List[int] = []
+        ed: List[int] = []
+        # Iterative DFS: stack of [vertex, depth, child_index].
+        stack = [[root, 0, 0]]
+        while stack:
+            frame = stack[-1]
+            v, d, ci = frame
+            if self.first[v] == -1:
+                self.first[v] = len(en)
+            if ci == 0:
+                en.append(v)
+                ed.append(d)
+            if ci < len(children[v]):
+                frame[2] += 1
+                stack.append([children[v][ci], d + 1, 0])
+            else:
+                stack.pop()
+                if stack:  # re-append parent on return
+                    pv, pd, _ = stack[-1]
+                    en.append(pv)
+                    ed.append(pd)
+        self.euler_node = en
+        self.euler_depth = ed
+        self._build_sparse()
+
+    def _build_sparse(self) -> None:
+        m = len(self.euler_depth)
+        self.log_tab = [0] * (m + 1)
+        for i in range(2, m + 1):
+            self.log_tab[i] = self.log_tab[i // 2] + 1
+        K = self.log_tab[m] + 1
+        ed = self.euler_depth
+        sparse = [list(range(m))]  # level 0: argmin positions are themselves
+        for k in range(1, K):
+            prev = sparse[k - 1]
+            cur = []
+            half = 1 << (k - 1)
+            for i in range(m - (1 << k) + 1):
+                l, r = prev[i], prev[i + half]
+                cur.append(l if ed[l] <= ed[r] else r)
+            sparse.append(cur)
+        self.sparse = sparse
+
+    def query(self, u: int, v: int) -> int:
+        l, r = self.first[u], self.first[v]
+        if l > r:
+            l, r = r, l
+        k = self.log_tab[r - l + 1]
+        a = self.sparse[k][l]
+        b = self.sparse[k][r - (1 << k) + 1]
+        ed = self.euler_depth
+        arg = a if ed[a] <= ed[b] else b
+        return self.euler_node[arg]
+```
+
+### 11.2 Cartesian tree from an array in O(m)
+
+This realizes the §3.2 direction (RMQ → LCA). A left-to-right scan maintains the **right spine** on a stack: each new element pops all spine nodes with a larger value (they become its left child), then attaches under the surviving spine top. Each node is pushed and popped once → `O(m)`. The result is a min-Cartesian tree whose root is `argmin A`, and `RMQ(i,j)` equals the tree-LCA of positions `i` and `j` (Theorem 3.3).
+
+#### Go
+
+```go
+// BuildCartesian returns parent[] and root for the min-Cartesian tree of a.
+// parent[i] == -1 marks the root. Runs in O(len(a)).
+func BuildCartesian(a []int) (parent []int, root int) {
+	n := len(a)
+	parent = make([]int, n)
+	for i := range parent {
+		parent[i] = -1
+	}
+	stack := make([]int, 0, n) // indices on the right spine, increasing value bottom→top
+	for i := 0; i < n; i++ {
+		last := -1
+		for len(stack) > 0 && a[stack[len(stack)-1]] > a[i] {
+			last = stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+		}
+		if last != -1 {
+			parent[last] = i // popped subtree becomes i's left child
+		}
+		if len(stack) > 0 {
+			parent[i] = stack[len(stack)-1] // i is right child of surviving top
+		}
+		stack = append(stack, i)
+	}
+	root = stack[0]
+	return parent, root
+}
+```
+
+#### Java
+
+```java
+public final class CartesianTree {
+    public final int[] parent;
+    public final int root;
+
+    public CartesianTree(int[] a) {
+        int n = a.length;
+        parent = new int[n];
+        java.util.Arrays.fill(parent, -1);
+        int[] stack = new int[n];
+        int sp = 0;
+        for (int i = 0; i < n; i++) {
+            int last = -1;
+            while (sp > 0 && a[stack[sp - 1]] > a[i]) {
+                last = stack[--sp];
+            }
+            if (last != -1) parent[last] = i;     // popped subtree → left child of i
+            if (sp > 0) parent[i] = stack[sp - 1]; // i → right child of surviving top
+            stack[sp++] = i;
+        }
+        root = stack[0];
+    }
+}
+```
+
+#### Python
+
+```python
+from typing import List, Tuple
+
+
+def build_cartesian(a: List[int]) -> Tuple[List[int], int]:
+    """Min-Cartesian tree in O(len(a)). Returns (parent, root); parent[root] == -1."""
+    n = len(a)
+    parent = [-1] * n
+    stack: List[int] = []  # right spine, increasing value bottom→top
+    for i in range(n):
+        last = -1
+        while stack and a[stack[-1]] > a[i]:
+            last = stack.pop()
+        if last != -1:
+            parent[last] = i        # popped subtree becomes i's left child
+        if stack:
+            parent[i] = stack[-1]   # i is right child of surviving top
+        stack.append(i)
+    return parent, stack[0]
+```
+
+### 11.3 k-th ancestor via binary lifting
+
+The same `up[k][v] = par^{2^k}(v)` table answers `k_th_ancestor(v, k)` by walking the set bits of `k` (Lemma 2.3: any climb of length `k = Σ 2^{kᵢ}` is the composition of those power-of-two jumps, in any order). Returns the sentinel root (or `-1`) when `k` exceeds `depth(v)`.
+
+#### Go
+
+```go
+// KthAncestor returns the ancestor of v exactly k levels up, or -1 if k > depth(v).
+func (ix *Index) KthAncestor(v int32, k int) int32 {
+	if k > int(ix.depth[v]) {
+		return -1
+	}
+	for b := 0; k > 0; b, k = b+1, k>>1 {
+		if k&1 == 1 {
+			v = ix.up[b][v]
+		}
+	}
+	return v
+}
+```
+
+#### Java
+
+```java
+// Returns the ancestor of v exactly k levels up, or -1 if k > depth(v).
+int kthAncestor(int v, int k) {
+    if (k > depth[v]) return -1;
+    for (int b = 0; k > 0; b++, k >>= 1) {
+        if ((k & 1) == 1) v = up[b][v];
+    }
+    return v;
+}
+```
+
+#### Python
+
+```python
+def kth_ancestor(self, v: int, k: int) -> int:
+    """Ancestor of v exactly k levels up, or -1 if k > depth(v)."""
+    if k > self.depth[v]:
+        return -1
+    b = 0
+    while k:
+        if k & 1:
+            v = self.up[b][v]
+        k >>= 1
+        b += 1
+    return v
+```
+
+---
+
+## 12. Worked Traces and Diagrams
+
+### 12.1 The example tree
+
+All traces below use this rooted tree (root `0`, depth shown on the right):
+
+```
+                 0            depth 0
+               / | \
+              1  2  3         depth 1
+             /|     |
+            4 5     6         depth 2
+              |    / \
+              7   8   9       depth 3
+                      |
+                      10      depth 4
+```
+
+`par[] = [0, 0, 0, 0, 1, 1, 3, 5, 6, 6, 9]`  (par[0]=0 sentinel)
+`depth[] = [0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4]`
+
+### 12.2 Jump-pointer (binary-lifting) table
+
+`up[k][v] = par^{2^k}(v)`, so `up[0]` is the parent, `up[1]` the grandparent, `up[2]` the great-great-grandparent. With `N = 11`, `LOG = 4` (`2^4 = 16 ≥ 11`):
+
+| v  | depth | up[0] (×1) | up[1] (×2) | up[2] (×4) | up[3] (×8) |
+|----|-------|-----------|-----------|-----------|-----------|
+| 0  | 0     | 0         | 0         | 0         | 0         |
+| 1  | 1     | 0         | 0         | 0         | 0         |
+| 2  | 1     | 0         | 0         | 0         | 0         |
+| 3  | 1     | 0         | 0         | 0         | 0         |
+| 4  | 2     | 1         | 0         | 0         | 0         |
+| 5  | 2     | 1         | 0         | 0         | 0         |
+| 6  | 2     | 3         | 0         | 0         | 0         |
+| 7  | 3     | 5         | 1         | 0         | 0         |
+| 8  | 3     | 6         | 3         | 0         | 0         |
+| 9  | 3     | 6         | 3         | 0         | 0         |
+| 10 | 4     | 9         | 6         | 0         | 0         |
+
+Each column `k` is computed from column `k−1` by `up[k][v] = up[k−1][ up[k−1][v] ]` (Lemma 2.2). For example `up[1][10] = up[0][ up[0][10] ] = up[0][9] = 6`; `up[2][10] = up[1][ up[1][10] ] = up[1][6] = 0`.
+
+ASCII view of the jump pointers for node `10` (the deepest node):
+
+```
+   10 --up[0]--> 9 --up[0]--> 6 --up[0]--> 3 --up[0]--> 0
+    \            \
+     \--up[1]----> 6  (skip 2 levels: 10→9→6)
+      \--up[2]----------------------------> 0  (skip 4 levels: 10→9→6→3→0)
+```
+
+### 12.3 Worked LCA query trace: `LCA(7, 10)`
+
+Expected answer: node `7` is `0→1→5→7`; node `10` is `0→3→6→9→10`; they share only `0`, so `LCA = 0`.
+
+```
+depth[7]=3, depth[10]=4  →  10 is deeper, set u=10, v=7
+diff = depth[10] - depth[7] = 1 = binary 0001
+
+LIFT u up by diff=1:
+  bit 0 set → u = up[0][10] = 9     (now depth[9]=3 == depth[7])
+u=9, v=7, u != v → climb phase
+
+CLIMB high→low (k = 3,2,1,0):
+  k=3: up[3][9]=0, up[3][7]=0  → equal, skip (would overshoot past LCA)
+  k=2: up[2][9]=0, up[2][7]=0  → equal, skip
+  k=1: up[1][9]=3, up[1][7]=1  → differ, jump both: u=3, v=1
+  k=0: up[0][3]=0, up[0][1]=0  → equal, skip
+end loop → answer = up[0][u] = up[0][3] = 0   ✓
+```
+
+The invariant from Theorem 2.4 holds throughout: after the lift, both `u` and `v` are strict descendants of the LCA at equal depth; the climb stops them at the LCA's two distinct children (`3` and `1`), and one final parent step yields `0`.
+
+### 12.4 Worked LCA query trace: `LCA(8, 10)`
+
+Expected answer: `8` is `0→3→6→8`; `10` is `0→3→6→9→10`; deepest shared is `6`.
+
+```
+depth[8]=3, depth[10]=4 → u=10, v=8, diff=1
+LIFT: bit 0 → u = up[0][10] = 9   (depth 3 == depth[8])
+u=9, v=8, differ → climb
+  k=3: up[3][9]=0 == up[3][8]=0 → skip
+  k=2: 0 == 0 → skip
+  k=1: up[1][9]=3 == up[1][8]=3 → equal, skip (3 is the LCA's ancestor — must not jump)
+  k=0: up[0][9]=6 == up[0][8]=6 → equal, skip
+end loop → answer = up[0][u] = up[0][9] = 6   ✓
+```
+
+Note how at `k=1` the pointers were *equal* (`3`): jumping would have overshot above the LCA, so the algorithm correctly skips it. The nodes never separated below depth `depth(6)+1`, so the final parent of `u` is the LCA itself.
+
+### 12.5 Euler tour + RMQ trace for the same tree
+
+A DFS visiting children in increasing index order produces the Euler sequence (length `2·11 − 1 = 21`):
+
+```
+idx:   0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
+node:  0  1  4  1  5  7  5  1  0  2  0  3  6  8  6  9 10  9  6  3  0
+depth: 0  1  2  1  2  3  2  1  0  1  0  1  2  3  2  3  4  3  2  1  0
+first: 0→0  1→1  2→9  3→11  4→2  5→4  6→12  7→5  8→13  9→15  10→16
+```
+
+To answer `LCA(7, 10)`: `first[7]=5`, `first[10]=16`. The minimum `depth` in `euler_depth[5..16]` is `0`, attained at index `8` (and `10`), where `node = 0`. So `LCA(7,10) = 0` — matching §12.3.
+
+To answer `LCA(8, 10)`: `first[8]=13`, `first[10]=16`. The minimum depth in `euler_depth[13..16]` is `2` at index `14`, where `node = 6`. So `LCA(8,10) = 6` — matching §12.4. The `±1` property is visible: every adjacent pair in the `depth` row differs by exactly one.
+
+### 12.6 Cartesian tree trace (RMQ → LCA)
+
+Take `A = [3, 1, 4, 1, 5, 9, 2, 6]` (ties broken by earlier index, so treat the first `1` as smaller). Scanning left to right and maintaining the right spine:
+
+```
+i=0 a=3: stack=[0]
+i=1 a=1: pop 0 (3>1) → parent[0]=1; stack empty; stack=[1]
+i=2 a=4: 1<4 stop; parent[2]=1; stack=[1,2]
+i=3 a=1: pop 2 (4>1)→parent[2]=3; top=1, a[1]=1 not >1 stop; parent[3]=1; stack=[1,3]
+i=4 a=5: parent[4]=3; stack=[1,3,4]
+i=5 a=9: parent[5]=4; stack=[1,3,4,5]
+i=6 a=2: pop 5,4 (9>2,5>2)→parent[5]=6,parent[4]=6; top=3 a=1 stop; parent[6]=3; stack=[1,3,6]
+i=7 a=6: parent[7]=6; stack=[1,3,6,7]
+```
+
+Resulting `parent[] = [1, -1, 1, 1, 6, 6, 3, 6]`, root `= 1`. Tree-LCA of positions `4` and `7` is node `6` (value `2`), and indeed `RMQ(4,7)` over `A[4..7] = [5,9,2,6]` is index `6`. The Cartesian-tree LCA equals the array RMQ, as Theorem 3.3 guarantees.
+
+---
+
+## 13. Summary
 
 - **Definition.** `LCA(u,v)` is the unique maximum-depth common ancestor; it exists and is unique because ancestor sets are chains (Prop. 1.4), and it characterizes tree distance (Prop. 1.5).
 - **Binary lifting** is correct because iterated parents compose (`par^{a+b} = par^a ∘ par^b`), so any climb decomposes into power-of-two jumps; the high-to-low climb keeps both nodes strictly below the LCA until they reach its children (Thm 2.4). Build `Θ(N log N)`, query `Θ(log N)`.

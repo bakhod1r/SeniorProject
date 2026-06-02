@@ -92,6 +92,20 @@
   code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
   .legend { font-size: 11px; color: var(--muted); line-height: 1.8; }
   .swatch { display: inline-block; width: 22px; height: 4px; vertical-align: middle; border-radius: 2px; margin-right: 4px; }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-right: 4px; border: 1px solid var(--border); }
+  .select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .stat-row { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .gedge.mwoe { stroke: var(--orange); stroke-width: 6; stroke-dasharray: none; }
+  .node circle.c0 { stroke: var(--green); }
+  .node circle.c1 { stroke: var(--blue); }
+  .node circle.c2 { stroke: var(--purple); }
+  .node circle.c3 { stroke: var(--orange); }
+  .node circle.c4 { stroke: var(--yellow); }
+  .node circle.c5 { stroke: var(--red); }
+  .complabel { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 10px; fill: var(--muted); }
 </style>
 </head>
 <body>
@@ -100,6 +114,7 @@
   <div class="mode-pill">
     <button id="modeKruskal" class="active">Kruskal</button>
     <button id="modePrim">Prim</button>
+    <button id="modeBoruvka">Borůvka</button>
   </div>
 </header>
 
@@ -120,10 +135,27 @@
     </div>
 
     <div class="control-group">
+      <h2>Graph Preset</h2>
+      <select id="preset" class="select">
+        <option value="classic">Classic (6 vertices)</option>
+        <option value="dense">Dense (7 vertices)</option>
+        <option value="tie">Equal weights (tie-breaks)</option>
+        <option value="disconnected">Disconnected (forest)</option>
+      </select>
+    </div>
+
+    <div class="control-group">
       <h2>MST Total Weight</h2>
       <div class="total" id="total">0</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+      <div class="stat-row">
         Edges in tree: <span id="edgeCount">0</span> / <span id="needEdges">4</span>
+      </div>
+      <div class="stat-row">
+        Components: <span id="compCount">-</span>
+        <span id="roundWrap" style="display:none">&nbsp;·&nbsp;Round: <span id="roundCount">0</span></span>
+      </div>
+      <div class="stat-row" id="rejWrap" style="display:none">
+        Rejected (cycle): <span id="rejCount">0</span>
       </div>
     </div>
 
@@ -141,7 +173,15 @@
         <span class="swatch" style="background:var(--yellow)"></span>considering<br/>
         <span class="swatch" style="background:var(--green)"></span>accepted (in MST)<br/>
         <span class="swatch" style="background:var(--red)"></span>rejected (cycle)<br/>
-        <span class="swatch" style="background:var(--purple)"></span>frontier / crossing edge
+        <span class="swatch" style="background:var(--purple)"></span>frontier / crossing edge<br/>
+        <span class="swatch" style="background:var(--orange)"></span>MWOE (Borůvka per-component min)<br/>
+        <span style="display:block;margin-top:6px">DSU components (Kruskal/Borůvka):</span>
+        <span class="dot" style="border-color:var(--green)"></span>
+        <span class="dot" style="border-color:var(--blue)"></span>
+        <span class="dot" style="border-color:var(--purple)"></span>
+        <span class="dot" style="border-color:var(--orange)"></span>
+        <span class="dot" style="border-color:var(--yellow)"></span>
+        <span class="dot" style="border-color:var(--red)"></span>
       </div>
     </div>
   </div>
@@ -158,30 +198,71 @@
 </main>
 
 <script>
-// ---------------- fixed demo graph (6 vertices A..F) ----------------
-// Coordinates in the 720x440 viewBox.
-const NODES = [
-  { id: 0, name: "A", x: 120, y: 90 },
-  { id: 1, name: "B", x: 360, y: 60 },
-  { id: 2, name: "C", x: 600, y: 100 },
-  { id: 3, name: "D", x: 140, y: 350 },
-  { id: 4, name: "E", x: 380, y: 380 },
-  { id: 5, name: "F", x: 610, y: 330 },
-];
-// undirected edges (u, v, w)
-const EDGES = [
-  { u: 0, v: 1, w: 6 },
-  { u: 0, v: 3, w: 5 },
-  { u: 1, v: 2, w: 5 },
-  { u: 1, v: 3, w: 3 },
-  { u: 1, v: 4, w: 6 },
-  { u: 2, v: 4, w: 4 },
-  { u: 2, v: 5, w: 2 },
-  { u: 3, v: 4, w: 6 },
-  { u: 4, v: 5, w: 6 },
-];
-const N = NODES.length;
-const NEED = N - 1;
+// ---------------- graph presets (coordinates in the 720x440 viewBox) ----------------
+const PRESETS = {
+  classic: {
+    nodes: [
+      { name: "A", x: 120, y: 90 }, { name: "B", x: 360, y: 60 },
+      { name: "C", x: 600, y: 100 }, { name: "D", x: 140, y: 350 },
+      { name: "E", x: 380, y: 380 }, { name: "F", x: 610, y: 330 },
+    ],
+    edges: [
+      { u: 0, v: 1, w: 6 }, { u: 0, v: 3, w: 5 }, { u: 1, v: 2, w: 5 },
+      { u: 1, v: 3, w: 3 }, { u: 1, v: 4, w: 6 }, { u: 2, v: 4, w: 4 },
+      { u: 2, v: 5, w: 2 }, { u: 3, v: 4, w: 6 }, { u: 4, v: 5, w: 6 },
+    ],
+  },
+  dense: {
+    nodes: [
+      { name: "A", x: 360, y: 50 }, { name: "B", x: 600, y: 130 },
+      { name: "C", x: 640, y: 330 }, { name: "D", x: 400, y: 400 },
+      { name: "E", x: 130, y: 340 }, { name: "F", x: 90, y: 140 },
+      { name: "G", x: 360, y: 220 },
+    ],
+    edges: [
+      { u: 0, v: 1, w: 7 }, { u: 1, v: 2, w: 8 }, { u: 2, v: 3, w: 6 },
+      { u: 3, v: 4, w: 9 }, { u: 4, v: 5, w: 7 }, { u: 5, v: 0, w: 5 },
+      { u: 6, v: 0, w: 3 }, { u: 6, v: 1, w: 4 }, { u: 6, v: 2, w: 2 },
+      { u: 6, v: 3, w: 4 }, { u: 6, v: 4, w: 6 }, { u: 6, v: 5, w: 5 },
+    ],
+  },
+  tie: {
+    nodes: [
+      { name: "A", x: 130, y: 100 }, { name: "B", x: 380, y: 70 },
+      { name: "C", x: 620, y: 110 }, { name: "D", x: 150, y: 360 },
+      { name: "E", x: 390, y: 390 }, { name: "F", x: 620, y: 350 },
+    ],
+    edges: [
+      { u: 0, v: 1, w: 4 }, { u: 1, v: 2, w: 4 }, { u: 0, v: 3, w: 4 },
+      { u: 1, v: 4, w: 4 }, { u: 2, v: 5, w: 4 }, { u: 3, v: 4, w: 4 },
+      { u: 4, v: 5, w: 4 }, { u: 1, v: 3, w: 7 }, { u: 2, v: 4, w: 7 },
+    ],
+  },
+  disconnected: {
+    nodes: [
+      { name: "A", x: 130, y: 110 }, { name: "B", x: 340, y: 90 },
+      { name: "C", x: 250, y: 320 }, { name: "D", x: 560, y: 120 },
+      { name: "E", x: 660, y: 320 }, { name: "F", x: 480, y: 360 },
+    ],
+    edges: [
+      { u: 0, v: 1, w: 3 }, { u: 1, v: 2, w: 5 }, { u: 0, v: 2, w: 4 },
+      { u: 3, v: 4, w: 2 }, { u: 4, v: 5, w: 6 }, { u: 3, v: 5, w: 4 },
+    ],
+  },
+};
+
+let NODES = [];
+let EDGES = [];
+let N = 0, NEED = 0;
+
+function loadPreset(key) {
+  const p = PRESETS[key] || PRESETS.classic;
+  NODES = p.nodes.map((nd, i) => ({ id: i, name: nd.name, x: nd.x, y: nd.y }));
+  EDGES = p.edges.map((e) => ({ u: e.u, v: e.v, w: e.w }));
+  N = NODES.length;
+  NEED = N - 1;
+}
+loadPreset("classic");
 
 const els = {
   graph: document.getElementById("graph"),
@@ -197,6 +278,13 @@ const els = {
   speed: document.getElementById("speed"),
   modeKruskal: document.getElementById("modeKruskal"),
   modePrim: document.getElementById("modePrim"),
+  modeBoruvka: document.getElementById("modeBoruvka"),
+  preset: document.getElementById("preset"),
+  compCount: document.getElementById("compCount"),
+  roundCount: document.getElementById("roundCount"),
+  roundWrap: document.getElementById("roundWrap"),
+  rejCount: document.getElementById("rejCount"),
+  rejWrap: document.getElementById("rejWrap"),
 };
 
 let state = {};
@@ -214,18 +302,22 @@ function reset() {
     total: 0,
     treeEdges: new Set(),     // edge indices accepted
     rejected: new Set(),      // edge indices rejected
-    consider: -1,             // edge index being considered
+    consider: -1,             // edge index being considered (single)
+    mwoe: new Set(),          // edge indices = per-component MWOE (Borůvka)
     frontier: new Set(),      // edge indices on the frontier (Prim)
     inTree: new Array(N).fill(false),
-    parent: NODES.map((_, i) => i),  // DSU for Kruskal
+    parent: NODES.map((_, i) => i),  // DSU for Kruskal / Borůvka
+    comps: N,                 // live component count
+    round: 0,                 // Borůvka round
     finished: false,
     plan: [],                 // ordered list of steps
     cursor: 0,
   };
   if (state.mode === "kruskal") buildKruskalPlan();
-  else buildPrimPlan();
+  else if (state.mode === "prim") buildPrimPlan();
+  else buildBoruvkaPlan();
   els.log.innerHTML = "";
-  log(`Mode: <code>${state.mode}</code>. Press Step or Run.`, "op");
+  log(`Mode: <code>${state.mode}</code> on preset <code>${els.preset.value}</code>. Press Step or Run.`, "op");
   render();
 }
 
@@ -291,6 +383,67 @@ function buildPrimPlan() {
   state.plan = plan;
 }
 
+// ---------------- BORŮVKA plan ----------------
+// Each round: every component selects its minimum-weight outgoing edge (MWOE),
+// then all selected edges are contracted. Two step types:
+//   { boruvkaSelect: true, picks: [edgeIdx...], round }   -> highlight MWOEs
+//   { boruvkaMerge: true,  picks: [edgeIdx...], round }   -> contract them
+function buildBoruvkaPlan() {
+  const parent = NODES.map((_, i) => i);
+  const plan = [];
+  let total = 0, comps = N, round = 0;
+  // total order on edges = (w, index) for deterministic tie-breaks
+  while (comps > 1) {
+    round++;
+    const cheapest = new Array(N).fill(-1); // keyed by root
+    for (let i = 0; i < EDGES.length; i++) {
+      const e = EDGES[i];
+      const ru = findIn(parent, e.u), rv = findIn(parent, e.v);
+      if (ru === rv) continue;
+      const consider = (c) => {
+        if (cheapest[c] === -1) cheapest[c] = i;
+        else {
+          const b = EDGES[cheapest[c]];
+          if (e.w < b.w || (e.w === b.w && i < cheapest[c])) cheapest[c] = i;
+        }
+      };
+      consider(ru); consider(rv);
+    }
+    // gather distinct picks
+    const picks = [...new Set(cheapest.filter((x) => x !== -1))];
+    if (picks.length === 0) break; // disconnected -> forest
+    plan.push({
+      boruvkaSelect: true, picks: picks.slice(), round, total, comps,
+      msg: `Round ${round}: each of ${comps} components selects its cheapest outgoing edge (MWOE) — ${picks.length} highlighted.`,
+    });
+    // merge
+    let merged = 0, addedW = 0;
+    const accepted = [];
+    for (const i of picks) {
+      const e = EDGES[i];
+      const ru = findIn(parent, e.u), rv = findIn(parent, e.v);
+      if (ru !== rv) {
+        parent[ru] = rv;
+        total += e.w; addedW += e.w; merged++;
+        accepted.push(i);
+      }
+    }
+    comps -= merged;
+    plan.push({
+      boruvkaMerge: true, picks: accepted, round, total, comps, addedW, merged,
+      msg: `Round ${round}: contract ${merged} MWOE(s) (+${addedW}). Components: ${comps}. ${comps === 1 ? "Done." : ""}`,
+    });
+  }
+  if (comps > 1) {
+    plan.push({
+      boruvkaDone: true, total, comps,
+      msg: `No outgoing edges remain but ${comps} components persist — graph is DISCONNECTED. Result is a spanning forest (weight ${total}).`,
+    });
+  }
+  state.plan = plan;
+  state.order = EDGES.map((_, i) => i).sort((a, b) => EDGES[a].w - EDGES[b].w || a - b);
+}
+
 function nm(i) { return NODES[i].name; }
 
 // ---------------- stepping ----------------
@@ -304,20 +457,21 @@ function step() {
 
   if (state.mode === "kruskal") {
     state.consider = s.idx;
+    state.mwoe = new Set();
     if (s.accept) {
       state.treeEdges.add(s.idx);
       const e = EDGES[s.idx];
       const ra = findIn(state.parent, e.u), rb = findIn(state.parent, e.v);
       state.parent[ra] = rb;
       state.inTree[e.u] = true; state.inTree[e.v] = true;
+      state.comps--;
       log(s.msg, "ok");
     } else {
       state.rejected.add(s.idx);
       log(s.msg, "no");
     }
     state.total = s.total;
-  } else {
-    // prim
+  } else if (state.mode === "prim") {
     if (s.start) {
       state.inTree[s.node] = true;
       log(s.msg, "op");
@@ -329,6 +483,31 @@ function step() {
     }
     state.consider = s.idx === undefined ? -1 : s.idx;
     recomputePrimFrontier();
+  } else {
+    // borůvka
+    state.consider = -1;
+    state.frontier = new Set();
+    state.round = s.round || state.round;
+    if (s.boruvkaSelect) {
+      state.mwoe = new Set(s.picks);
+      log(s.msg, "op");
+    } else if (s.boruvkaMerge) {
+      state.mwoe = new Set();
+      for (const i of s.picks) {
+        const e = EDGES[i];
+        state.treeEdges.add(i);
+        state.inTree[e.u] = true; state.inTree[e.v] = true;
+        const ra = findIn(state.parent, e.u), rb = findIn(state.parent, e.v);
+        if (ra !== rb) state.parent[ra] = rb;
+      }
+      state.total = s.total;
+      state.comps = s.comps;
+      log(s.msg, "ok");
+    } else if (s.boruvkaDone) {
+      state.total = s.total;
+      state.comps = s.comps;
+      log(s.msg, "no");
+    }
   }
 
   if (state.cursor >= state.plan.length) finish();
@@ -352,9 +531,39 @@ function finish() {
   state.finished = true;
   state.consider = -1;
   state.frontier = new Set();
+  state.mwoe = new Set();
   stopRun();
-  log(`Done. MST weight = <b>${state.total}</b> with ${state.treeEdges.size} edges.`, "op");
+  const comps = countComponents();
+  if (state.treeEdges.size === NEED) {
+    log(`Done. MST weight = <b>${state.total}</b> with ${state.treeEdges.size} edges (connected).`, "op");
+  } else {
+    log(`Done. Graph is DISCONNECTED: ${comps} components, only ${state.treeEdges.size}/${NEED} edges. Result is a spanning FOREST of weight <b>${state.total}</b>.`, "no");
+  }
   render();
+}
+
+// Count current DSU components from the live parent array (recomputed for display).
+function countComponents() {
+  const p = state.parent.slice();
+  const find = (x) => { while (p[x] !== x) { p[x] = p[p[x]]; x = p[x]; } return x; };
+  const roots = new Set();
+  for (let i = 0; i < N; i++) roots.add(find(i));
+  return roots.size;
+}
+
+// Map each vertex to a small component index 0..k for coloring.
+function componentColors() {
+  const p = state.parent.slice();
+  const find = (x) => { while (p[x] !== x) { p[x] = p[p[x]]; x = p[x]; } return x; };
+  const order = [];
+  const idOf = new Map();
+  const out = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const r = find(i);
+    if (!idOf.has(r)) { idOf.set(r, order.length); order.push(r); }
+    out[i] = idOf.get(r) % 6;
+  }
+  return out;
 }
 
 // ---------------- rendering ----------------
@@ -371,6 +580,7 @@ function render() {
     let cls = "gedge";
     if (state.treeEdges.has(i)) cls += " accepted";
     else if (state.rejected.has(i)) cls += " rejected";
+    else if (state.mwoe.has(i)) cls += " mwoe";
     else if (state.consider === i) cls += " consider";
     else if (state.frontier.has(i)) cls += " frontier";
     line.setAttribute("class", cls);
@@ -385,6 +595,10 @@ function render() {
     svg.appendChild(t);
   });
 
+  // component coloring (Kruskal & Borůvka use the DSU)
+  const useComp = state.mode === "kruskal" || state.mode === "boruvka";
+  const colors = useComp ? componentColors() : null;
+
   // nodes
   NODES.forEach((nd) => {
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -392,24 +606,60 @@ function render() {
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", nd.x); c.setAttribute("cy", nd.y); c.setAttribute("r", 22);
     c.setAttribute("fill", state.inTree[nd.id] ? "#16301f" : "var(--bg)");
-    if (state.inTree[nd.id]) c.setAttribute("class", "intree");
+    if (useComp) {
+      // outline each node by its DSU component color
+      c.setAttribute("class", "c" + colors[nd.id]);
+    } else if (state.inTree[nd.id]) {
+      c.setAttribute("class", "intree");
+    }
     g.appendChild(c);
     const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
     t.setAttribute("x", nd.x); t.setAttribute("y", nd.y + 5);
     t.setAttribute("text-anchor", "middle");
     t.textContent = nd.name;
     g.appendChild(t);
+    // component index label (Kruskal/Borůvka) for clarity
+    if (useComp) {
+      const cl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      cl.setAttribute("x", nd.x + 24); cl.setAttribute("y", nd.y - 16);
+      cl.setAttribute("class", "complabel");
+      cl.textContent = "c" + colors[nd.id];
+      svg.appendChild(cl);
+    }
     svg.appendChild(g);
   });
 
   els.total.textContent = state.total;
   els.edgeCount.textContent = state.treeEdges.size;
 
+  // live stats
+  const comps = countComponents();
+  els.compCount.textContent = comps;
+  els.roundWrap.style.display = state.mode === "boruvka" ? "" : "none";
+  els.roundCount.textContent = state.round;
+  els.rejWrap.style.display = state.mode === "kruskal" ? "" : "none";
+  els.rejCount.textContent = state.rejected.size;
+
   renderEdgeTable();
 }
 
 function renderEdgeTable() {
   els.edgeBody.innerHTML = "";
+  if (state.mode === "boruvka") {
+    els.rightTitle.textContent = "Edges by weight (MWOE = ★)";
+    for (const idx of state.order) {
+      const e = EDGES[idx];
+      const tr = document.createElement("tr");
+      if (state.treeEdges.has(idx)) tr.className = "acc";
+      else if (state.mwoe.has(idx)) tr.className = "cur";
+      tr.innerHTML = `<td>${nm(e.u)}–${nm(e.v)}</td><td>${e.w}</td><td>${
+        state.treeEdges.has(idx) ? "✓ in MST" :
+        state.mwoe.has(idx) ? "★ MWOE" : ""
+      }</td>`;
+      els.edgeBody.appendChild(tr);
+    }
+    return;
+  }
   if (state.mode === "kruskal") {
     els.rightTitle.textContent = "Sorted Edge List";
     for (const idx of state.order) {
@@ -478,18 +728,21 @@ els.step.addEventListener("click", () => { stopRun(); step(); });
 els.run.addEventListener("click", () => { if (runTimer) stopRun(); else startRun(); });
 els.reset.addEventListener("click", reset);
 
-els.modeKruskal.addEventListener("click", () => {
-  if (state.mode === "kruskal") return;
-  state.mode = "kruskal";
-  els.modeKruskal.classList.add("active");
-  els.modePrim.classList.remove("active");
+function setMode(m) {
+  if (state.mode === m) return;
+  state.mode = m;
+  els.modeKruskal.classList.toggle("active", m === "kruskal");
+  els.modePrim.classList.toggle("active", m === "prim");
+  els.modeBoruvka.classList.toggle("active", m === "boruvka");
   reset();
-});
-els.modePrim.addEventListener("click", () => {
-  if (state.mode === "prim") return;
-  state.mode = "prim";
-  els.modePrim.classList.add("active");
-  els.modeKruskal.classList.remove("active");
+}
+els.modeKruskal.addEventListener("click", () => setMode("kruskal"));
+els.modePrim.addEventListener("click", () => setMode("prim"));
+els.modeBoruvka.addEventListener("click", () => setMode("boruvka"));
+
+els.preset.addEventListener("change", () => {
+  loadPreset(els.preset.value);
+  els.needEdges.textContent = NEED;
   reset();
 });
 

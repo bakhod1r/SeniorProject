@@ -72,6 +72,53 @@ So the single character `>` vs `>=` is the entire distinction, and it is *not* a
 
 The root `r` has no ancestors. For each child `c`, `subtree(c)` can only connect to other children's subtrees *through `r`* (there is nothing above `r` to route around it). So if `r` has two or more children, removing `r` splits those subtrees apart → cut vertex. One child → removing `r` leaves a single connected subtree → not a cut vertex.
 
+A subtle consequence: if you naively applied the non-root test `low[c] >= disc[r]` to the root, it would *always* fire, because `disc[r] = 0` is the global minimum and every `low[c] >= 0`. That would falsely flag every root. The children-count rule replaces it precisely to avoid this false positive.
+
+### A worked low-link trace
+
+Take the running example — two triangles `0-1-2` and `3-4-5` joined by the bridge `1-3`:
+
+```
+edges: 0-1, 1-2, 2-0, 1-3, 3-4, 4-5, 5-3
+```
+
+DFS from `0`, smallest neighbor first, builds this tree (`│` tree edges, `╌╌>` back edges to ancestors):
+
+```
+   0   disc=0 low=0     root, 1 child  -> NOT a cut vertex
+   │
+   1   disc=1 low=0     low pulled to 0 by back edge 2->0
+   ├──────────────╮
+   2  disc=2       3  disc=3 low=3
+   low=0           │
+   ╎ back 2->0     4  disc=4 low=3
+                   │
+                   5  disc=5 low=3
+                   ╎ back 5->3
+```
+
+Folding `low` upward in post-order:
+
+| vertex | disc | low | how low was set |
+|--------|------|-----|-----------------|
+| 0 | 0 | 0 | root |
+| 1 | 1 | 0 | min(1, low[2]=0, low[3]=3) |
+| 2 | 2 | 0 | back edge 2->0 gives disc[0]=0 |
+| 3 | 3 | 3 | min(3, low[4]=3) |
+| 4 | 4 | 3 | min(4, low[5]=3) |
+| 5 | 5 | 3 | back edge 5->3 gives disc[3]=3 |
+
+Now read off the criteria, edge by edge:
+
+| tree edge u→v | low[v] | disc[u] | `low[v] >= disc[u]`? cut | `low[v] > disc[u]`? bridge |
+|---------------|--------|---------|--------------------------|----------------------------|
+| 1→2 | 0 | 1 | 0 >= 1 — no | 0 > 1 — no |
+| 1→3 | 3 | 1 | 3 >= 1 — **yes (1 is AP)** | 3 > 1 — **yes (bridge)** |
+| 3→4 | 3 | 3 | 3 >= 3 — **yes (3 is AP)** | 3 > 3 — **no** |
+| 4→5 | 3 | 4 | 3 >= 4 — no | 3 > 4 — no |
+
+So articulation points are `{1, 3}` and the only bridge is `(1,3)`. Note vertex `3`: the back edge `5->3` makes `low[4] = disc[3]`, so the edge `3-4` is *not* a bridge (the triangle gives a detour), yet `3` *is* a cut vertex — the exact `low[v] == disc[u]` boundary that separates the `>` test from the `>=` test.
+
 ---
 
 ## Comparison with Alternatives
@@ -403,11 +450,205 @@ if __name__ == "__main__":
 
 **What it does:** pushes edges onto a stack during DFS; when `low[v] >= disc[u]` fires at vertex `u` for child `v`, pops the edges down to `(u, v)` as one biconnected component. Using the **parent edge id** (not parent vertex) makes it multi-edge safe. For the example, you get the triangle `{0,1,2}`, the bridge edge `{1-3}` as its own one-edge BCC, and the triangle `{3,4,5}`.
 
-### Building the bridge tree (sketch)
+### Building the bridge tree (2ECC labeling + contraction)
 
-1. Find all bridges with the junior-level DFS.
-2. Assign each vertex a 2ECC id by a flood fill that never crosses a bridge.
-3. For each bridge `(u, v)`, add a tree edge between `id[u]` and `id[v]`. The result is the bridge tree; distances on it count critical edges.
+The recipe is three phases: (1) find all bridges with `disc`/`low`; (2) flood-fill 2-edge-connected-component ids without crossing a bridge; (3) for each bridge, add a tree edge between the two component ids. Here it is concretely in all three languages.
+
+#### Go
+
+```go
+// Returns comp[v] = 2ECC id and the bridge-tree edges (pairs of comp ids).
+func (g *Graph) BridgeTree() ([]int, [][2]int) {
+	disc := make([]int, g.n)
+	low := make([]int, g.n)
+	for i := range disc {
+		disc[i] = -1
+	}
+	isBridge := make([]bool, g.m)
+	timer := 0
+	var dfs func(u, parentEdge int)
+	dfs = func(u, parentEdge int) {
+		disc[u], low[u] = timer, timer
+		timer++
+		for _, e := range g.adj[u] {
+			v, id := e[0], e[1]
+			if id == parentEdge {
+				continue
+			}
+			if disc[v] == -1 {
+				dfs(v, id)
+				if low[v] < low[u] {
+					low[u] = low[v]
+				}
+				if low[v] > disc[u] { // strict => bridge
+					isBridge[id] = true
+				}
+			} else if disc[v] < low[u] {
+				low[u] = disc[v]
+			}
+		}
+	}
+	for i := 0; i < g.n; i++ {
+		if disc[i] == -1 {
+			dfs(i, -1)
+		}
+	}
+
+	comp := make([]int, g.n)
+	for i := range comp {
+		comp[i] = -1
+	}
+	numComp := 0
+	for s := 0; s < g.n; s++ {
+		if comp[s] != -1 {
+			continue
+		}
+		id := numComp
+		numComp++
+		stack := []int{s}
+		comp[s] = id
+		for len(stack) > 0 {
+			u := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for _, e := range g.adj[u] {
+				if isBridge[e[1]] {
+					continue // never cross a bridge
+				}
+				if comp[e[0]] == -1 {
+					comp[e[0]] = id
+					stack = append(stack, e[0])
+				}
+			}
+		}
+	}
+
+	var tree [][2]int
+	seen := make([]bool, g.m)
+	for u := 0; u < g.n; u++ {
+		for _, e := range g.adj[u] {
+			if isBridge[e[1]] && !seen[e[1]] {
+				seen[e[1]] = true
+				tree = append(tree, [2]int{comp[u], comp[e[0]]})
+			}
+		}
+	}
+	return comp, tree
+}
+```
+
+#### Java
+
+```java
+// Phase 1: bridges; Phase 2: 2ECC flood fill; Phase 3: contract.
+int[] comp;       // comp[v] = 2ECC id
+boolean[] isBridge;
+int numComp = 0;
+
+int[][] bridgeTree() {           // assumes adj[u] holds {neighbor, edgeId}
+    int[] disc = new int[n], low = new int[n];
+    Arrays.fill(disc, -1);
+    isBridge = new boolean[m];
+    int[] t = {0};
+    // recursive bridge DFS
+    java.util.function.BiConsumer<Integer, Integer>[] dfs = new java.util.function.BiConsumer[1];
+    dfs[0] = (u, pe) -> {
+        disc[u] = low[u] = t[0]++;
+        for (int[] e : adj[u]) {
+            int v = e[0], id = e[1];
+            if (id == pe) continue;
+            if (disc[v] == -1) {
+                dfs[0].accept(v, id);
+                low[u] = Math.min(low[u], low[v]);
+                if (low[v] > disc[u]) isBridge[id] = true;
+            } else low[u] = Math.min(low[u], disc[v]);
+        }
+    };
+    for (int i = 0; i < n; i++) if (disc[i] == -1) dfs[0].accept(i, -1);
+
+    comp = new int[n];
+    Arrays.fill(comp, -1);
+    for (int s = 0; s < n; s++) {
+        if (comp[s] != -1) continue;
+        int id = numComp++;
+        Deque<Integer> q = new ArrayDeque<>();
+        q.push(s); comp[s] = id;
+        while (!q.isEmpty()) {
+            int u = q.pop();
+            for (int[] e : adj[u]) {
+                if (isBridge[e[1]] || comp[e[0]] != -1) continue;
+                comp[e[0]] = id; q.push(e[0]);
+            }
+        }
+    }
+
+    List<int[]> tree = new ArrayList<>();
+    boolean[] seen = new boolean[m];
+    for (int u = 0; u < n; u++)
+        for (int[] e : adj[u])
+            if (isBridge[e[1]] && !seen[e[1]]) {
+                seen[e[1]] = true;
+                tree.add(new int[]{comp[u], comp[e[0]]});
+            }
+    return tree.toArray(new int[0][]);
+}
+```
+
+#### Python
+
+```python
+def bridge_tree(n, adj):
+    """adj[u] = list of (neighbor, edge_id); m = number of edges.
+    Returns (comp, tree_edges)."""
+    m = sum(len(a) for a in adj) // 2
+    disc = [-1] * n
+    low = [0] * n
+    is_bridge = [False] * m
+    timer = [0]
+
+    def dfs(u, parent_edge):
+        disc[u] = low[u] = timer[0]
+        timer[0] += 1
+        for v, eid in adj[u]:
+            if eid == parent_edge:
+                continue
+            if disc[v] == -1:
+                dfs(v, eid)
+                low[u] = min(low[u], low[v])
+                if low[v] > disc[u]:          # strict => bridge
+                    is_bridge[eid] = True
+            else:
+                low[u] = min(low[u], disc[v])
+
+    for i in range(n):
+        if disc[i] == -1:
+            dfs(i, -1)
+
+    comp = [-1] * n
+    num_comp = 0
+    for s in range(n):
+        if comp[s] != -1:
+            continue
+        comp[s] = num_comp
+        stack = [s]
+        while stack:
+            u = stack.pop()
+            for v, eid in adj[u]:
+                if is_bridge[eid] or comp[v] != -1:
+                    continue
+                comp[v] = num_comp
+                stack.append(v)
+        num_comp += 1
+
+    tree, seen = [], [False] * m
+    for u in range(n):
+        for v, eid in adj[u]:
+            if is_bridge[eid] and not seen[eid]:
+                seen[eid] = True
+                tree.append((comp[u], comp[v]))
+    return comp, tree
+```
+
+For the two-triangle example this yields `comp = [0,0,0,1,1,1]` (the two triangles are the two 2ECCs) and a single bridge-tree edge `(0, 1)` — the bridge `1-3` contracted to a link between the components. Distances on this tree count critical edges between any pair of vertices.
 
 ---
 

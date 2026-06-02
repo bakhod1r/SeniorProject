@@ -62,9 +62,23 @@ The most common over-engineering mistake is reaching for Spark GraphX when the g
 
 A web crawler is BFS over the hyperlink graph. The frontier is the URL queue; the visited set is a dedup store (often a Bloom filter plus a persistent set). BFS order means you crawl "important, close-to-seed" pages first. Politeness (per-host rate limits) reshuffles strict BFS order, but the skeleton is BFS: dequeue a URL, fetch it, extract links, enqueue unseen ones.
 
+The production realities that distinguish a crawler from a textbook BFS:
+
+- **The frontier is durable, not in-RAM.** A web-scale crawl frontier holds billions of URLs and must survive restarts. It lives in a sharded, persistent priority queue (Kafka, a partitioned RocksDB, or a custom on-disk structure). The in-memory BFS queue becomes a windowed view of the top of this durable frontier.
+- **Visited dedup is two-tiered.** A front-line Bloom filter (a few bits per URL, in RAM) rejects the ~90% of links that are obvious repeats; survivors are checked against an exact persistent set (sharded KV store). The Bloom filter's false positives merely cause a few real pages to be skipped — acceptable for a crawler, fatal for a correctness-critical BFS.
+- **Politeness rewrites the dequeue order.** You cannot dequeue 10,000 URLs from `example.com` back-to-back; per-host rate limits and `robots.txt` crawl-delay mean the effective queue is *per-host*, drained round-robin. This is BFS-by-link-distance globally but rate-shaped per host — a priority on `(link_distance, host_ready_time)`.
+- **Recrawl turns it cyclic.** Pages change, so the crawl is not a one-shot BFS but a continuous re-traversal with freshness-based priorities. The "visited" set decays: a page crawled 30 days ago is eligible again.
+
 ### 2.3 Social graph: degrees of separation
 
 "How many hops between user A and user B?" is bidirectional BFS over the friendship graph. LinkedIn's classic "2nd / 3rd degree" labels are bounded-depth BFS (depth ≤ 3) from the viewing user, executed against a sharded social graph, heavily cached. The depth bound is what makes it tractable: the full BFS frontier would be the whole network, but depth-3 from one user is a manageable neighborhood.
+
+The hard part is not the algorithm but the data layout. The friendship graph is sharded across hundreds of machines (commonly by user id), so a single BFS expansion — "fetch all friends of `u`" — is an RPC fan-out to wherever `u`'s edges live. Two architectural responses dominate:
+
+- **Adjacency-as-storage (Facebook TAO, Twitter FlockDB).** A purpose-built graph store answers "friends of `u`" in one indexed lookup, replicated and cached so the hot users (celebrities) are served from RAM. Bounded-depth BFS becomes a sequence of these lookups, with the second hop fanned out in parallel.
+- **Precomputed neighborhoods.** For features that only need "is X within 2 hops of me," precompute and cache each user's 2-hop set (it changes slowly). The query is then a set-membership test, not a live BFS. The cost moves from query-time CPU to storage and cache-invalidation complexity.
+
+The degrees-of-separation query specifically wants **bidirectional BFS** (see §6.1): expand from both A and B, meet in the middle. On a graph with average degree ~300 (typical for a mature social network), unidirectional depth-3 touches ~`300³ = 2.7 × 10⁷` users; bidirectional touches ~`2 · 300^{1.5} ≈ 10⁴` — three orders of magnitude fewer RPCs, the difference between a feasible and an infeasible online query.
 
 ---
 
@@ -106,6 +120,22 @@ flowchart TB
 
 The heuristic switches based on frontier size relative to the number of unexplored edges. On real social/web graphs this gives 2-4× speedups and is the basis of the **Graph500** benchmark's reference implementation. See [`professional.md`](./professional.md) for the work/depth analysis.
 
+### 3.4 Partitioning and the straggler problem
+
+The throughput of a distributed BFS is gated by the *slowest* partition per level (the barrier waits for everyone). The naive partition — split vertices into `P` equal-count ranges — is wrong for skewed graphs: a partition that happens to own a celebrity vertex with 50M edges does 50M times the work of a partition owning only leaf vertices, and stalls the whole superstep.
+
+The standard fixes, in order of sophistication:
+
+1. **Partition by edge count, not vertex count.** Give each worker roughly `2E / P` edges. This balances the *static* work but not the dynamic frontier, which shifts level to level.
+2. **2-D (vertex-cut) partitioning.** Used by PowerGraph/GraphX for power-law graphs: split a high-degree vertex's edge list *across* multiple machines so no single machine owns a hub's full adjacency. Reduces the worst-case per-worker level cost from `O(max_deg)` to `O(max_deg / P)`.
+3. **Dynamic work-stealing within a level.** Idle workers steal frontier chunks from busy ones before the barrier. Recovers balance when the frontier concentrates on a few hot partitions mid-BFS.
+
+The interaction with diameter: more partitions cut per-level work but every partition still pays one barrier per level, so on a high-diameter graph (many levels) the barrier overhead can dominate regardless of how well you balance — the reason Pregel-style systems shine on social/web graphs and struggle on road networks.
+
+### 3.5 Multi-source frontier BFS
+
+When the question is "nearest of many sources" (nearest data center, nearest infected node, multi-seed flood fill), seed the initial frontier with *all* sources at distance 0 and run one ordinary level-synchronous BFS. The result `dist[v]` is the distance to the *closest* source. This costs the same `O(V+E)` as single-source BFS — a single pass, not one BFS per source — and parallelizes identically. It is the workhorse for "assign every node to its nearest of K facilities" at graph scale.
+
 ---
 
 ## 4. Concurrency
@@ -133,6 +163,14 @@ To avoid contention on a single shared queue, each thread keeps a **local** next
 ### 4.4 What you cannot easily do
 
 Truly lock-free, *asynchronous* (non-level-synchronous) parallel BFS is hard to make correct *and* preserve shortest-path order, because asynchrony breaks the FIFO/level invariant. Most production systems stay level-synchronous and accept the barrier cost rather than chase a lock-free async design.
+
+### 4.5 The memory-ordering subtlety
+
+The atomic test-and-set on the visited bit must use at least acquire/release ordering, not relaxed, when the winning thread also writes `dist[v]` and `parent[v]`. A reader on another core that observes the bit set must also observe the accompanying `dist`/`parent` writes; relaxed atomics permit the bit-set to be visible before the `dist` write, so a concurrent reader could see `visited[v] = 1` but a stale `dist[v]`. The pattern is: write `dist`/`parent` *first*, then publish with a release-store (or CAS) on the visited bit; readers acquire-load the bit before trusting `dist`. Getting this wrong produces a heisenbug that only manifests under load on weakly-ordered architectures (ARM, POWER) and never on x86 — the worst kind to debug.
+
+### 4.6 False sharing on the visited bitset
+
+The visited bitset packs 64 vertices per cache line. Two threads claiming vertices whose ids fall in the same 64-bit word contend on the same cache line even though they touch different bits — false sharing that can collapse parallel speedup. NUMA-aware, contiguous vertex partitioning (each thread owns a vertex range, hence a disjoint run of bitset words) is the cure: it keeps each thread's claims on cache lines it already owns, eliminating cross-socket coherence traffic for the common case where a vertex's neighbors are mostly local after a locality-improving reorder.
 
 ---
 
@@ -168,6 +206,19 @@ The crawl frontier is BFS's queue made durable: a Kafka topic or a sharded prior
 ### 6.4 Precompute vs query-time
 
 If many queries share a source (single-source shortest paths to everyone), run BFS **once** and store the distance array. If sources vary per query, run bounded bidirectional BFS at query time. The crossover is "how many queries per source."
+
+### 6.5 Vertex reordering for locality
+
+BFS is memory-bandwidth-bound: the edge scan is sequential (cache-friendly in CSR) but the `dist[v]`/`visited[v]` accesses jump to random vertex ids. Relabeling vertices so that adjacent vertices have nearby ids — via a prior BFS/DFS order, reverse Cuthill–McKee (RCM), or a community-detection-based reorder — turns many of those random accesses into local ones, often a 1.5–3× wall-clock win with zero asymptotic change. This is a *preprocessing* cost amortized over many BFS runs; it is the single highest-leverage tuning for repeated single-node BFS on the same graph, and it pairs naturally with NUMA-local partitioning (§4.6).
+
+### 6.6 Frontier representation: queue vs bitmap
+
+Two ways to materialize a frontier, chosen by density:
+
+- **Sparse (queue/array of ids):** ideal when the frontier is small (start/end of BFS, bounded-depth queries). Iteration cost is `O(|F|)`.
+- **Dense (bitmap over all `V`):** ideal when the frontier is a large fraction of `V` (the balloon's middle, and the regime where bottom-up BFS runs). Iteration is `O(V/64)` words but with perfect locality, and set-membership ("is `v` in the frontier?") — the core bottom-up test — is `O(1)` with no hashing.
+
+Direction-optimizing BFS switches *representation* alongside *direction*: sparse-queue top-down at the edges, dense-bitmap bottom-up in the middle. Storing the frontier the wrong way for its density is a common, quiet performance bug.
 
 ---
 
@@ -311,7 +362,46 @@ public final class BidirectionalBFS {
 }
 ```
 
-### 7.3 Python — Pregel-style level-synchronous BFS sketch
+### 7.3 Python — multi-source bounded BFS on a sharded social graph
+
+```python
+from collections import deque
+from typing import Callable, Iterable
+
+
+def degrees_of_separation(
+    neighbors: Callable[[int], Iterable[int]],
+    sources: Iterable[int],
+    max_depth: int = 3,
+) -> dict[int, int]:
+    """Bounded multi-source BFS.
+
+    `neighbors(u)` is the (possibly remote, possibly cached) adjacency lookup —
+    in production this is an RPC to a sharded graph store, batched per level.
+    Returns dist[v] for every v within `max_depth` of the nearest source.
+    """
+    dist: dict[int, int] = {s: 0 for s in sources}
+    frontier = deque(dist)                       # all sources at level 0
+    while frontier:
+        u = frontier.popleft()
+        if dist[u] == max_depth:                 # depth cap: do not expand further
+            continue
+        for v in neighbors(u):                   # one fan-out per frontier vertex
+            if v not in dist:                    # first time seen == shortest
+                dist[v] = dist[u] + 1
+                frontier.append(v)
+    return dist
+
+
+if __name__ == "__main__":
+    graph = {0: [1, 2], 1: [0, 3], 2: [0, 3], 3: [1, 2, 4], 4: [3]}
+    print(degrees_of_separation(graph.__getitem__, sources=[0], max_depth=2))
+    # {0: 0, 1: 1, 2: 1, 3: 2}  — node 4 is depth 3, beyond the cap
+```
+
+In production the `neighbors` callable batches the entire frontier's lookups into one round-trip per level (a "gather" RPC), so the number of network round-trips is `O(depth)`, not `O(visited)` — the single most important optimization for an online social-graph BFS. The depth cap is what keeps the frontier from exploding to the whole network.
+
+### 7.4 Python — Pregel-style level-synchronous BFS sketch
 
 ```python
 from collections import defaultdict
@@ -366,6 +456,19 @@ The most useful single metric is **frontier size over time**: it should rise, pe
 
 In a crawler, also track `frontier_queue_depth`, `dedup_false_positive_rate` (Bloom filter), and `per_host_qps` (politeness).
 
+### 8.1 Dashboards and alerts
+
+The frontier-size time series is the dashboard's centerpiece; overlay it with the historical "balloon and collapse" shape for the same graph so an on-call engineer instantly sees a deviation. Practical alerts:
+
+- **Frontier plateau:** `bfs_frontier_size` flat-and-high for longer than the expected peak duration → likely a missing visited check (re-enqueuing seen vertices), a degenerate dense region, or a hot partition. Page.
+- **Level count exceeds known diameter:** `bfs_level` climbs past the graph's known eccentricity bound → a cycle is being walked as if infinite (crawler trap, or a directed-cycle bug treating distances as unbounded).
+- **Barrier-wait skew:** `bfs_barrier_wait_seconds` p99/p50 ratio > 5 → a straggler partition; check partition balance and enable work-stealing.
+- **Memory high-water:** `bfs_peak_frontier_bytes` approaching the heap limit → imminent OOM; trip the depth cap or spill the frontier before it crashes.
+
+### 8.2 Distributed-run tracing
+
+In a Pregel/GraphX job, attach the superstep number as a span tag and record per-partition `edges_scanned` and `messages_sent` each superstep. The skew across partitions in a single superstep is the clearest load-imbalance signal; a partition consistently sending 100× the messages of its peers owns a hub and needs 2-D partitioning.
+
 ---
 
 ## 9. Failure Modes
@@ -399,6 +502,14 @@ Different partitionings or message orderings can yield different `parent` trees 
 
 Infinite/auto-generated URL spaces (calendars, session-id links) make the frontier never empty. Mitigations: depth caps, URL canonicalization, per-domain budgets, and trap-detection heuristics.
 
+### 9.7 Frontier swap-buffer aliasing
+
+A subtle in-code bug specific to the level-synchronous implementation: when swapping `frontier` and `next` buffers to reuse allocations (as in the Go example above), forgetting to truncate the reused buffer leaves stale vertex ids from two levels ago, which get re-expanded. The symptom is a frontier that grows when it should shrink and a `bfs_edges_scanned_total` that exceeds `2E`. The fix is to reset the reused slice to zero length (`next[:0]`) before refilling — cheap, but easy to drop during a refactor. This is the single-machine analogue of the distributed "stale message" bug.
+
+### 9.8 Directed-graph asymmetry
+
+Engineers who tested on undirected graphs are surprised when a directed BFS reaches far fewer vertices than expected: `dist` is only defined along edge directions, and a strongly-connected-looking graph may have a source from which most vertices are unreachable. The fix is not a BFS change but a modeling decision: if you need reachability ignoring direction, BFS the *underlying undirected* graph (or its transpose for "who can reach me"). Silent under-coverage — `bfs_visited_total` plateauing far below `V` — is the telltale sign.
+
 ---
 
 ## 10. Capacity Planning
@@ -429,6 +540,30 @@ Move to a distributed/external-memory BFS when any holds:
 - The graph is already sharded across services and centralizing it is impractical.
 
 Until then, a single fat machine with a cache-friendly CSR and multi-core frontier BFS is the right answer — and it scales further than most engineers expect.
+
+### 10.4 Worked sizing example
+
+Suppose you operate a recommendation service that runs multi-source BFS over a 200M-vertex, 4B-edge social graph to assign every user a distance to their nearest of 10,000 "seed" interest communities, refreshed hourly.
+
+- **Memory:** CSR adjacency at 4 bytes/edge ≈ 16 GB + offsets `200M × 8 B = 1.6 GB`; visited bitset `200M / 8 = 25 MB`; `dist` array `200M × 1 B = 200 MB` (distances fit in a byte since diameter ≪ 255). Total ≈ 18 GB — comfortable on a 64 GB machine, leaving headroom for the peak frontier (`Θ(V)`, up to `200M × 4 B = 800 MB` if you store frontier as ids).
+- **Time:** at ~300M edges/sec/core scanning, single-threaded ≈ `4B / 3×10⁸ ≈ 13 s`. With 32 cores near memory-bandwidth saturation (say 10× effective), ≈ 1.3 s per full run. An hourly refresh has a 3600 s budget; you are 3 orders of magnitude inside it. No cluster needed.
+- **When this flips:** double the graph to 8B edges twice more (→ 32B edges, ~130 GB CSR) and you exceed a single machine's RAM; *that* is the trigger to move to GraphX/Pregel, not the current size.
+
+The lesson repeats: size the *peak frontier* and the *CSR*, confirm both fit, and stay single-node as long as they do.
+
+### 10.5 The decision checklist
+
+```text
+Does CSR(graph) fit in one machine's RAM?      ── no ──▶ distributed/external-memory BFS
+        │ yes
+Is a full-graph BFS within the SLA single-node? ── no ──▶ add cores; still no ──▶ distributed
+        │ yes
+Is the query point-to-point (A→B distance)?     ── yes ─▶ bidirectional BFS at query time
+        │ no
+Is depth bounded (≤3 hops, product feature)?    ── yes ─▶ bounded BFS + neighborhood cache
+        │ no
+Single-source, whole graph, RAM-sized           ──────▶ multi-core frontier BFS + atomic bitset
+```
 
 ---
 

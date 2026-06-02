@@ -8,16 +8,18 @@
 
 1. [Introduction](#introduction)
 2. [Deeper Concepts](#deeper-concepts)
-3. [Comparison with Alternatives](#comparison-with-alternatives)
-4. [Advanced Patterns](#advanced-patterns)
-5. [Graph and Tree Applications](#graph-and-tree-applications)
-6. [Algorithmic Integration](#algorithmic-integration)
-7. [Code Examples](#code-examples)
-8. [Error Handling](#error-handling)
-9. [Performance Analysis](#performance-analysis)
-10. [Best Practices](#best-practices)
-11. [Visual Animation](#visual-animation)
-12. [Summary](#summary)
+3. [Worked Trace — disc/low on a DFS Tree](#worked-trace--disclow-on-a-dfs-tree)
+4. [Comparison with Alternatives](#comparison-with-alternatives)
+5. [Advanced Patterns](#advanced-patterns)
+6. [Graph and Tree Applications](#graph-and-tree-applications)
+7. [Algorithmic Integration](#algorithmic-integration)
+8. [Code Examples](#code-examples)
+9. [Iterative Tarjan + Condensation (Go/Java/Python)](#iterative-tarjan--condensation-gojavapython)
+10. [Error Handling](#error-handling)
+11. [Performance Analysis](#performance-analysis)
+12. [Best Practices](#best-practices)
+13. [Visual Animation](#visual-animation)
+14. [Summary](#summary)
 
 ---
 
@@ -74,6 +76,76 @@ If instead you used `low[v]`, you would be claiming that `u` can reach back to w
 ### The on-stack predicate
 
 A vertex leaves the stack only when its whole SCC is popped. So "on the stack" means "discovered but its SCC is not yet closed." An edge into an already-popped vertex points into a **finished** SCC and must be ignored — using it would corrupt lowlinks. This is why we keep the explicit `onStack[]` flag instead of merely "visited."
+
+### Three edge kinds, three actions
+
+Every directed edge `u → v` examined during DFS falls into exactly one of three buckets. Memorize this table — it *is* the algorithm:
+
+| Edge kind | Test at examination time | Action on `low[u]` | Why |
+|-----------|--------------------------|--------------------|-----|
+| **Tree edge** | `v` unvisited (`disc[v]` unset) | recurse, then `low[u] = min(low[u], low[v])` | `v`'s subtree is finished; its lowlink is final and fully belongs to `u`'s subtree |
+| **Back / cross to open SCC** | `v` visited **and** `onStack[v]` | `low[u] = min(low[u], disc[v])` | `v` is older and still open → `u` can close a cycle through `v`; record the *stable* fact `disc[v]` |
+| **Edge to closed SCC** | `v` visited **and not** `onStack[v]` | *do nothing* | `v`'s SCC already emitted; it is a strict predecessor in the condensation, irrelevant to `u`'s lowlink |
+
+The third row is as important as the second: forgetting the `onStack[v]` guard and updating `low[u]` for *every* visited `v` pulls lowlinks down across already-closed components and silently merges SCCs.
+
+### `low` is not "the smallest reachable disc"
+
+A frequent misconception: "`low[v]` is the minimum `disc` of anything reachable from `v`." That is false — that quantity would always be `disc[root-of-whole-graph]` for a connected graph, which is useless. The lowlink restricts to **one** non-tree edge and to vertices **inside `v`'s own subtree plus one hop back onto the open stack**. That bounded definition is what makes `low[u] == disc[u]` a *local* test the algorithm can check the instant `u` finishes, with no global recomputation.
+
+---
+
+## Worked Trace — disc/low on a DFS Tree
+
+Take this graph (the same one used in the code section):
+
+```
+0 → 1 → 2 → 0      (cycle: {0,1,2})
+        2 → 3
+        3 → 4 → 5 → 3   (cycle: {3,4,5})
+```
+
+Adjacency: `0:[1] 1:[2] 2:[0,3] 3:[4] 4:[5] 5:[3]`. DFS starts at vertex 0, counter `t` begins at 0.
+
+ASCII DFS tree (solid `│` = tree edge, dashed `‑‑>` = non-tree edge to an on-stack vertex):
+
+```
+        0  disc=0 low=0
+        │
+        1  disc=1 low=0
+        │
+        2  disc=2 low=0
+       ╱ ╲
+ (‑‑>0) 3   tree edge 2→3
+        │   (2‑‑>0 is a back edge to on-stack 0: low[2]=min(2,disc[0]=0)=0)
+        4  disc=4 low=3
+        │
+        5  disc=5 low=3
+         ╲
+          ‑‑>3   (5‑‑>3 back edge to on-stack 3: low[5]=min(5,disc[3]=3)=3)
+```
+
+Step-by-step (push order, then unwind):
+
+| Step | Event | disc | low | Stack (bottom→top) | onStack |
+|------|-------|------|-----|--------------------|---------|
+| 1 | visit 0 | d0=0 | l0=0 | [0] | {0} |
+| 2 | visit 1 | d1=1 | l1=1 | [0,1] | {0,1} |
+| 3 | visit 2 | d2=2 | l2=2 | [0,1,2] | {0,1,2} |
+| 4 | edge 2→0, 0 on stack | — | l2=min(2,d0=0)=0 | [0,1,2] | — |
+| 5 | edge 2→3, 3 unvisited → recurse | — | — | — | — |
+| 6 | visit 3 | d3=3 | l3=3 | [0,1,2,3] | +3 |
+| 7 | visit 4 | d4=4 | l4=4 | [0,1,2,3,4] | +4 |
+| 8 | visit 5 | d5=5 | l5=5 | [0,1,2,3,4,5] | +5 |
+| 9 | edge 5→3, 3 on stack | — | l5=min(5,d3=3)=3 | … | — |
+| 10 | 5 finishes: l5=3 ≠ d5=5 → not a root | — | — | … | — |
+| 11 | back in 4: l4=min(4,l5=3)=3; 4 finishes l4=3≠d4=4 → not root | — | l4=3 | … | — |
+| 12 | back in 3: l3=min(3,l4=3)=3; **l3=3 == d3=3 → ROOT** | — | l3=3 | pop 5,4,3 → SCC **{3,4,5}** | −5,−4,−3 |
+| 13 | back in 2: l2=min(0,?) already 0; 2 finishes l2=0≠d2=2 → not root | — | l2=0 | [0,1,2] | — |
+| 14 | back in 1: l1=min(1,l2=0)=0; not root | — | l1=0 | [0,1,2] | — |
+| 15 | back in 0: l0=min(0,l1=0)=0; **l0=0 == d0=0 → ROOT** | — | l0=0 | pop 2,1,0 → SCC **{0,1,2}** | empty |
+
+Output order: `{3,4,5}` then `{0,1,2}`. The condensation edge runs `{0,1,2} → {3,4,5}` (because of `2→3`), so the algorithm emitted the **sink-side** SCC first — that is the **reverse topological order** property in action. Notice low[3] stayed at 3 (never reached an older on-stack vertex), which is exactly why it was correctly flagged as a root, while low[2] dropped to 0 because of the back edge `2→0`, correctly demoting it.
 
 ---
 
@@ -374,6 +446,262 @@ if __name__ == "__main__":
     print("comp_id:", comp_id)
     print("DAG:", condensation(adj, comp_id, k))
 ```
+
+---
+
+## Iterative Tarjan + Condensation (Go/Java/Python)
+
+The Kosaraju code above is the easy-to-audit oracle. Here is **Tarjan itself**, written iteratively so it survives `O(V)` recursion depth, paired with a condensation builder. Each frame remembers which neighbor index it is processing (`pc`, a "program counter"), which is how we resume after a child returns.
+
+### Go
+
+```go
+package main
+
+import "fmt"
+
+func tarjanSCC(adj [][]int) (compID []int, numComps int) {
+	n := len(adj)
+	disc := make([]int, n)
+	low := make([]int, n)
+	onStack := make([]bool, n)
+	compID = make([]int, n)
+	for i := range disc {
+		disc[i] = -1
+		compID[i] = -1
+	}
+	timer := 0
+	var stack []int            // the SCC stack
+	type frame struct{ v, pc int } // pc = next neighbor index to scan
+
+	for s := 0; s < n; s++ {
+		if disc[s] != -1 {
+			continue
+		}
+		callStack := []frame{{s, 0}}
+		for len(callStack) > 0 {
+			f := &callStack[len(callStack)-1]
+			v := f.v
+			if f.pc == 0 { // first entry into v: discover it
+				disc[v] = timer
+				low[v] = timer
+				timer++
+				stack = append(stack, v)
+				onStack[v] = true
+			}
+			recursed := false
+			for f.pc < len(adj[v]) {
+				w := adj[v][f.pc]
+				f.pc++
+				if disc[w] == -1 { // tree edge: descend
+					callStack = append(callStack, frame{w, 0})
+					recursed = true
+					break
+				} else if onStack[w] { // back/cross to open SCC
+					if disc[w] < low[v] {
+						low[v] = disc[w]
+					}
+				}
+			}
+			if recursed {
+				continue
+			}
+			// v is finished
+			if low[v] == disc[v] { // v is an SCC root
+				for {
+					w := stack[len(stack)-1]
+					stack = stack[:len(stack)-1]
+					onStack[w] = false
+					compID[w] = numComps
+					if w == v {
+						break
+					}
+				}
+				numComps++
+			}
+			callStack = callStack[:len(callStack)-1]
+			if len(callStack) > 0 { // fold low into parent (tree-edge rule)
+				p := &callStack[len(callStack)-1]
+				if low[v] < low[p.v] {
+					low[p.v] = low[v]
+				}
+			}
+		}
+	}
+	return compID, numComps
+}
+
+func condensation(adj [][]int, compID []int, numComps int) [][]int {
+	seen := make(map[[2]int]bool)
+	dag := make([][]int, numComps)
+	for u := range adj {
+		for _, v := range adj[u] {
+			cu, cv := compID[u], compID[v]
+			if cu != cv && !seen[[2]int{cu, cv}] {
+				seen[[2]int{cu, cv}] = true
+				dag[cu] = append(dag[cu], cv)
+			}
+		}
+	}
+	return dag
+}
+
+func main() {
+	adj := [][]int{{1}, {2}, {0, 3}, {4}, {5}, {3}}
+	compID, k := tarjanSCC(adj)
+	fmt.Println("compID:", compID, "numComps:", k)
+	fmt.Println("condensation:", condensation(adj, compID, k))
+}
+```
+
+### Java
+
+```java
+import java.util.*;
+
+public class TarjanIterative {
+    public static int[] tarjan(List<List<Integer>> adj, int[] outNumComps) {
+        int n = adj.size();
+        int[] disc = new int[n], low = new int[n], compID = new int[n], pc = new int[n];
+        boolean[] onStack = new boolean[n];
+        Arrays.fill(disc, -1);
+        Arrays.fill(compID, -1);
+        int timer = 0, numComps = 0;
+        Deque<Integer> stack = new ArrayDeque<>();   // SCC stack
+        Deque<Integer> call = new ArrayDeque<>();     // explicit call stack (vertices)
+
+        for (int s = 0; s < n; s++) {
+            if (disc[s] != -1) continue;
+            call.push(s);
+            while (!call.isEmpty()) {
+                int v = call.peek();
+                if (pc[v] == 0) {        // discover v
+                    disc[v] = low[v] = timer++;
+                    stack.push(v);
+                    onStack[v] = true;
+                }
+                boolean recursed = false;
+                while (pc[v] < adj.get(v).size()) {
+                    int w = adj.get(v).get(pc[v]++);
+                    if (disc[w] == -1) { call.push(w); recursed = true; break; }
+                    else if (onStack[w]) low[v] = Math.min(low[v], disc[w]);
+                }
+                if (recursed) continue;
+                if (low[v] == disc[v]) {            // root: pop component
+                    int w;
+                    do {
+                        w = stack.pop();
+                        onStack[w] = false;
+                        compID[w] = numComps;
+                    } while (w != v);
+                    numComps++;
+                }
+                call.pop();
+                if (!call.isEmpty()) {              // fold low into parent
+                    int p = call.peek();
+                    low[p] = Math.min(low[p], low[v]);
+                }
+            }
+        }
+        outNumComps[0] = numComps;
+        return compID;
+    }
+
+    public static List<List<Integer>> condensation(
+            List<List<Integer>> adj, int[] compID, int numComps) {
+        List<List<Integer>> dag = new ArrayList<>();
+        for (int i = 0; i < numComps; i++) dag.add(new ArrayList<>());
+        Set<Long> seen = new HashSet<>();
+        for (int u = 0; u < adj.size(); u++)
+            for (int v : adj.get(u)) {
+                int cu = compID[u], cv = compID[v];
+                if (cu != cv && seen.add((long) cu << 32 | cv)) dag.get(cu).add(cv);
+            }
+        return dag;
+    }
+
+    public static void main(String[] args) {
+        List<List<Integer>> adj = List.of(
+            List.of(1), List.of(2), List.of(0, 3),
+            List.of(4), List.of(5), List.of(3));
+        int[] k = new int[1];
+        int[] comp = tarjan(adj, k);
+        System.out.println("compID: " + Arrays.toString(comp) + " numComps=" + k[0]);
+        System.out.println("condensation: " + condensation(adj, comp, k[0]));
+    }
+}
+```
+
+### Python
+
+```python
+def tarjan_scc(adj):
+    n = len(adj)
+    disc = [-1] * n
+    low = [0] * n
+    on_stack = [False] * n
+    comp_id = [-1] * n
+    timer = 0
+    num_comps = 0
+    scc_stack = []
+
+    for start in range(n):
+        if disc[start] != -1:
+            continue
+        call = [(start, 0)]                 # (vertex, next-neighbor-index)
+        while call:
+            v, pc = call[-1]
+            if pc == 0:                     # discover v
+                disc[v] = low[v] = timer
+                timer += 1
+                scc_stack.append(v)
+                on_stack[v] = True
+            recursed = False
+            while pc < len(adj[v]):
+                w = adj[v][pc]
+                pc += 1
+                if disc[w] == -1:           # tree edge
+                    call[-1] = (v, pc)
+                    call.append((w, 0))
+                    recursed = True
+                    break
+                elif on_stack[w]:           # back/cross to open SCC
+                    low[v] = min(low[v], disc[w])
+            if recursed:
+                continue
+            call[-1] = (v, pc)
+            if low[v] == disc[v]:           # root: pop the component
+                while True:
+                    w = scc_stack.pop()
+                    on_stack[w] = False
+                    comp_id[w] = num_comps
+                    if w == v:
+                        break
+                num_comps += 1
+            call.pop()
+            if call:                        # fold low into parent (tree-edge rule)
+                p = call[-1][0]
+                low[p] = min(low[p], low[v])
+    return comp_id, num_comps
+
+
+def condensation(adj, comp_id, num_comps):
+    dag = [set() for _ in range(num_comps)]
+    for u in range(len(adj)):
+        for v in adj[u]:
+            if comp_id[u] != comp_id[v]:
+                dag[comp_id[u]].add(comp_id[v])
+    return [sorted(s) for s in dag]
+
+
+if __name__ == "__main__":
+    adj = [[1], [2], [0, 3], [4], [5], [3]]
+    comp_id, k = tarjan_scc(adj)
+    print("comp_id:", comp_id, "num_comps:", k)
+    print("condensation:", condensation(adj, comp_id, k))
+```
+
+All three print two SCCs — `{0,1,2}` and `{3,4,5}` — with the condensation edge from the `{0,1,2}` component to the `{3,4,5}` component. The component ids match the **reverse topological order**: the sink-side SCC `{3,4,5}` is assigned id 0 (emitted first), the source-side `{0,1,2}` id 1.
 
 ---
 

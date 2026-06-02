@@ -13,11 +13,12 @@
 5. [Graph and Tree Applications](#graph-and-tree-applications)
 6. [Algorithmic Integration](#algorithmic-integration)
 7. [Code Examples](#code-examples)
-8. [Error Handling](#error-handling)
-9. [Performance Analysis](#performance-analysis)
-10. [Best Practices](#best-practices)
-11. [Visual Animation](#visual-animation)
-12. [Summary](#summary)
+8. [Weighted Graphs and the Edge-Object Pattern](#weighted-graphs-and-the-edge-object-pattern)
+9. [Error Handling](#error-handling)
+10. [Performance Analysis](#performance-analysis)
+11. [Best Practices](#best-practices)
+12. [Visual Animation](#visual-animation)
+13. [Summary](#summary)
 
 ---
 
@@ -90,6 +91,43 @@ Some graphs are never stored at all because the adjacency relation is a *rule*:
 - **Function graphs:** `f(x)` defines an edge `x → f(x)` (used in cycle detection, Floyd's tortoise-and-hare).
 
 Implicit graphs trade `O(V+E)` storage for `O(1)`-per-neighbor *computation*, which is the only way to handle graphs too large to materialize.
+
+### A worked conversion: edge list → CSR, traced by hand
+
+Take the directed graph `0→1, 0→2, 1→2, 2→0, 2→3, 3→3` on `V = 4`. Watch CSR fall out of a counting sort:
+
+```text
+Step 1 — count out-degrees into offset[u+1]:
+  edges from 0: two  -> offset = [0, 2, 0, 0, 0]   (offset[1]=2)
+  edges from 1: one  -> offset = [0, 2, 1, 0, 0]   (offset[2]=1)
+  edges from 2: two  -> offset = [0, 2, 1, 2, 0]   (offset[3]=2)
+  edges from 3: one  -> offset = [0, 2, 1, 2, 1]   (offset[4]=1)
+
+Step 2 — prefix sum so offset[u] = start of u's block:
+  offset = [0, 2, 3, 5, 6]
+
+Step 3 — scatter each target using a moving cursor (copy of offset[:V]):
+  cursor = [0, 2, 3, 5]
+  (0,1): target[0]=1, cursor[0]=1
+  (0,2): target[1]=2, cursor[0]=2
+  (1,2): target[3]=2, cursor[1]=4   <-- note: slot 3, not 2
+  (2,0): target[3]? no — cursor[2]=3 so target[3]=0 ... 
+```
+
+The subtle point traced above is *why a separate `cursor` is mandatory*: the scatter mutates `cursor`, never `offset`. If you scattered using `offset` directly you would destroy the block boundaries you just computed and every subsequent `Neighbors(u)` query would read garbage. The final arrays are `offset = [0,2,3,5,6]`, `target = [1,2,2,0,3,3]`, and `Neighbors(2) = target[3:5] = [0,3]`. This is the single most common CSR bug, and tracing it by hand once inoculates you against it.
+
+### Directed vs undirected storage in each form
+
+The same logical edge is stored differently depending on direction semantics:
+
+| Form | Directed edge `u→v` | Undirected edge `{u,v}` |
+|------|--------------------|------------------------|
+| Matrix | set `M[u][v]` | set both `M[u][v]` and `M[v][u]` (symmetric) |
+| Adjacency list | append `v` to `adj[u]` | append `v` to `adj[u]` **and** `u` to `adj[v]` |
+| Edge list | store `(u, v)` once | store `(u, v)` once; *iterate* knowing it is symmetric |
+| CSR | one target entry | two target entries (one per direction) |
+
+The recurring trap: an undirected adjacency list or CSR needs **both** directions materialized, so it holds `2E` entries, while an undirected edge list holds only `E` rows. Forgetting the reverse direction is the number-one cause of "BFS only reaches half my graph."
 
 ---
 
@@ -383,6 +421,128 @@ if __name__ == "__main__":
     grid = ["..#", ".#.", "..."]
     print(list(neighbors(grid, 0, 0)))  # [(0, 1), (1, 0)]
 ```
+
+---
+
+## Weighted Graphs and the Edge-Object Pattern
+
+Real algorithms — Dijkstra, Prim, Bellman-Ford — need a weight on every edge. Two clean ways to carry it:
+
+1. **Parallel arrays (weighted CSR).** Keep a `weight[]` aligned 1:1 with `target[]`: the edge ending at `target[k]` has weight `weight[k]`. This is the cache-friendliest layout — Dijkstra reads neighbor id and weight from adjacent memory.
+2. **Edge objects.** Store `(to, weight)` pairs per neighbor. More ergonomic, slightly worse locality (the weight may sit behind a pointer in boxed languages).
+
+The parallel-array form generalizes: add a `capacity[]` for flow networks, an `id[]` to recover original edge identity, etc. Each new attribute is just another array kept lockstep with `target[]`.
+
+### Weighted CSR with aligned weight array
+
+#### Go
+
+```go
+package main
+
+import "fmt"
+
+type WCSR struct {
+	offset []int
+	target []int
+	weight []int
+}
+
+func BuildWCSR(n int, edges [][3]int) *WCSR { // each edge: {u, v, w}
+	offset := make([]int, n+1)
+	for _, e := range edges {
+		offset[e[0]+1]++
+	}
+	for i := 1; i <= n; i++ {
+		offset[i] += offset[i-1]
+	}
+	target := make([]int, len(edges))
+	weight := make([]int, len(edges))
+	cursor := make([]int, n)
+	copy(cursor, offset[:n])
+	for _, e := range edges {
+		u := e[0]
+		k := cursor[u]
+		target[k] = e[1]
+		weight[k] = e[2] // stays aligned with target[k]
+		cursor[u]++
+	}
+	return &WCSR{offset, target, weight}
+}
+
+func main() {
+	edges := [][3]int{{0, 1, 5}, {0, 2, 3}, {2, 3, 2}}
+	g := BuildWCSR(4, edges)
+	for k := g.offset[0]; k < g.offset[1]; k++ {
+		fmt.Printf("0 -> %d (w=%d)\n", g.target[k], g.weight[k])
+	}
+	// 0 -> 1 (w=5)
+	// 0 -> 2 (w=3)
+}
+```
+
+#### Java
+
+```java
+import java.util.Arrays;
+
+public class WeightedCSR {
+    final int[] offset, target, weight;
+
+    WeightedCSR(int n, int[][] edges) { // each edge: {u, v, w}
+        offset = new int[n + 1];
+        for (int[] e : edges) offset[e[0] + 1]++;
+        for (int i = 1; i <= n; i++) offset[i] += offset[i - 1];
+        target = new int[edges.length];
+        weight = new int[edges.length];
+        int[] cursor = Arrays.copyOf(offset, n);
+        for (int[] e : edges) {
+            int k = cursor[e[0]]++;
+            target[k] = e[1];
+            weight[k] = e[2]; // aligned with target[k]
+        }
+    }
+
+    public static void main(String[] args) {
+        int[][] edges = {{0, 1, 5}, {0, 2, 3}, {2, 3, 2}};
+        WeightedCSR g = new WeightedCSR(4, edges);
+        for (int k = g.offset[0]; k < g.offset[1]; k++) {
+            System.out.println("0 -> " + g.target[k] + " (w=" + g.weight[k] + ")");
+        }
+    }
+}
+```
+
+#### Python
+
+```python
+def build_wcsr(n, edges):  # each edge: (u, v, w)
+    offset = [0] * (n + 1)
+    for u, _, _ in edges:
+        offset[u + 1] += 1
+    for i in range(1, n + 1):
+        offset[i] += offset[i - 1]
+    target = [0] * len(edges)
+    weight = [0] * len(edges)
+    cursor = offset[:n]
+    for u, v, w in edges:
+        k = cursor[u]
+        target[k] = v
+        weight[k] = w          # aligned with target[k]
+        cursor[u] += 1
+    return offset, target, weight
+
+
+if __name__ == "__main__":
+    edges = [(0, 1, 5), (0, 2, 3), (2, 3, 2)]
+    offset, target, weight = build_wcsr(4, edges)
+    for k in range(offset[0], offset[1]):
+        print(f"0 -> {target[k]} (w={weight[k]})")
+    # 0 -> 1 (w=5)
+    # 0 -> 2 (w=3)
+```
+
+The only new discipline versus unweighted CSR: every write that touches `target[k]` must touch `weight[k]` at the *same* `k`. An off-by-one between the two arrays is a silent wrong-answer bug — the graph traverses fine but with the wrong costs.
 
 ---
 

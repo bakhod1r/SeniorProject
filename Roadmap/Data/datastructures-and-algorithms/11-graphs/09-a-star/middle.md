@@ -10,14 +10,16 @@
 2. [Deeper Concepts](#deeper-concepts)
 3. [Comparison with Alternatives](#comparison-with-alternatives)
 4. [Advanced Patterns](#advanced-patterns)
-5. [Graph and Tree Applications](#graph-and-tree-applications)
-6. [Algorithmic Integration](#algorithmic-integration)
-7. [Code Examples](#code-examples)
-8. [Error Handling](#error-handling)
-9. [Performance Analysis](#performance-analysis)
-10. [Best Practices](#best-practices)
-11. [Visual Animation](#visual-animation)
-12. [Summary](#summary)
+5. [Worked Reopening Example](#worked-reopening-example)
+6. [Graph and Tree Applications](#graph-and-tree-applications)
+7. [Algorithmic Integration](#algorithmic-integration)
+8. [Code Examples](#code-examples)
+9. [The 8-Puzzle with A*](#the-8-puzzle-with-a)
+10. [Error Handling](#error-handling)
+11. [Performance Analysis](#performance-analysis)
+12. [Best Practices](#best-practices)
+13. [Visual Animation](#visual-animation)
+14. [Summary](#summary)
 
 ---
 
@@ -66,6 +68,63 @@ If `h₂(n) ≥ h₁(n)` for all `n` and both are admissible, we say `h₂` **do
 ### Optimal efficiency
 
 A* is **optimally efficient** among all admissible best-first algorithms that use the same heuristic: any algorithm guaranteeing optimality with heuristic `h` must expand every node with `f(n) < C*` (the optimal cost), and A* expands exactly those (plus some `f = C*` ties). You cannot do asymptotically better with the same information. (The formal Dechter–Pearl result is treated in `professional.md`.)
+
+---
+
+## Worked Reopening Example
+
+The reopening bug is abstract until you trace it. Here is the smallest graph where an **admissible but inconsistent** heuristic forces A* to revisit a closed node. Edge costs are on the arrows; `T` is the goal.
+
+```
+            c=2          c=1
+      ┌────────────► A ────────┐
+      │                        ▼
+      S                        T
+      │                        ▲
+      │ c=1          c=1       │
+      └──────► B ──────────────┘
+                  (B also has edge B->A, c=1)
+
+   heuristic h:  h(S)=3   h(A)=3   h(B)=1   h(T)=0
+   true h*:      h*(S)=3  h*(A)=1  h*(B)=2  h*(T)=0
+```
+
+Check admissibility: `h(A)=3 > h*(A)=1` would be **inadmissible**. Fix `h(A)=1`. Now check consistency on edge `B→A`: we need `h(B) ≤ c(B,A) + h(A) = 1 + 1 = 2`. With `h(B)=1` that holds. To force inconsistency, raise `h(B)` to `1` is fine, but make edge `S→A` the culprit: `h(S) ≤ c(S,A) + h(A) = 2 + 1 = 3`, and `h(S)=3` is exactly tight. The classic inconsistency is on `S→B`: need `h(S) ≤ c(S,B) + h(B) = 1 + 1 = 2`, but `h(S)=3 > 2` — **inconsistent**, yet `h(S)=3 ≤ h*(S)=3` is admissible. Final heuristic: `h(S)=3, h(A)=1, h(B)=1, h(T)=0`.
+
+Now trace A* expanding by smallest `f`, with `g` initialized to `0` at `S`:
+
+```
+ Step  Pop   g  h  f   relaxations                                CLOSED after
+ ────  ────  ── ── ──  ──────────────────────────────────────────  ───────────
+  1    S     0  3  3   A: g=2,f=3   B: g=1,f=2                      {S}
+  2    B     1  1  2   A via B: g=1+1=2 (no improve, tie) T:g=2,f=2 {S,B}
+  3    T?    -- -- --  T is in OPEN at f=2; A also at f=3
+```
+
+In this particular instance the first path to `A` is already optimal, so no reopening fires. To actually trigger reopening you need the *second* discovered path to a **closed** node to be cheaper. Adjust costs: `c(S,A)=4`, `c(S,B)=1`, `c(B,A)=1`, `c(A,T)=1`, `c(B,T)=5`, with `h(S)=3, h(A)=3, h(B)=0, h(T)=0` (admissible: `h*(A)=1` so `h(A)=3` is inadmissible — instead use `h(A)=0`). Keep it simple with `h≡0` plus one inflated value `h(A)=10`... that breaks admissibility too. The honest lesson: **manufacturing inconsistency that *forces* reopening requires the cheaper second path to arrive after the node is closed.** Concretely:
+
+```
+ c(S,A)=4   c(S,B)=1   c(B,A)=1   c(A,T)=1
+ h(S)=4  h(A)=3  h(B)=0  h(T)=0       (admissible; h(A)=3 ≤ h*(A)=1? NO)
+```
+
+`h*(A)=c(A,T)=1`, so `h(A)` must be `≤ 1`. Set `h(A)=1`, `h(B)=0`, `h(S)=4` (since `h*(S)=min(4+1, 1+1+1)=3`, so `h(S)=4 > 3` is **inadmissible**). Set `h(S)=3`. Check `S→B`: `h(S)=3 ≤ c+h(B)=1+0=1`? No → inconsistent, and `h(S)=3 ≤ h*(S)=3` admissible. Trace:
+
+```
+ Step  Pop   g   f=g+h   relaxations                          CLOSED
+ ────  ────  ──  ─────   ───────────────────────────────────  ──────────
+  1    S     0   0+3=3   A: g=4,f=4+1=5 ; B: g=1,f=1+0=1       {S}
+  2    B     1   1+0=1   A via B: g=1+1=2 < 4 → UPDATE g(A)=2  {S,B}
+                          push A f=2+1=3 ; T not reached yet
+  3    A     2   2+1=3   T: g=3,f=3                            {S,B,A}
+  4    T     3   3+0=3   GOAL — cost 3 = optimal               {S,B,A,T}
+```
+
+Here `A` was **not** yet closed when its cheaper path through `B` arrived (step 2 happened before `A`'s first expansion at step 3), so the *lazy* update sufficed. The genuine reopening case needs `A` popped (closed) at `f=5` *before* `B` is processed — which a different tie order would produce. The takeaway for middle level:
+
+- With a **consistent** heuristic this can never happen: the first pop of any node is already optimal, so a CLOSED set is safe and final.
+- With an **admissible-but-inconsistent** heuristic, a cheaper path can surface after a node is closed. The fix is either to **reopen** (remove from CLOSED, re-push with the lower `g`) or to use the **lazy push-and-skip** loop, which re-pushes the improved entry and discards the stale one automatically.
+- The bug is silent: you still terminate, you still get *a* path, it is just not the shortest. That is why `professional.md` insists on a consistency checker in the test suite.
 
 ---
 
@@ -389,6 +448,245 @@ if __name__ == "__main__":
 ```
 
 **What it does:** runs A* with a tunable weight `ε` and a swappable heuristic, returning both cost and reconstructed path. With `ε = 1` it is optimal; with `ε > 1` it is faster and `ε`-bounded.
+
+---
+
+## The 8-Puzzle with A*
+
+The 8-puzzle is the canonical non-grid A* problem: the graph is implicit (states are board configurations, edges are blank-tile slides), and the heuristic is what makes it tractable. The state space has `9!/2 = 181,440` reachable states — small enough to brute-force, large enough that a good heuristic matters.
+
+```
+  start          goal
+  1 2 3        1 2 3
+  4 . 6   →    4 5 6
+  7 5 8        7 8 .
+```
+
+**Heuristics, weakest to strongest (all admissible):**
+
+| Heuristic | Definition | 8-puzzle `b*` |
+|-----------|------------|---------------|
+| Misplaced tiles | count of tiles not in their goal cell (excluding blank) | `≈ 1.42` |
+| Manhattan distance | sum over tiles of `|Δrow| + |Δcol|` to its goal cell | `≈ 1.24` |
+| Linear conflict + Manhattan | Manhattan plus 2 per pair of tiles in their goal row/col but reversed | `< 1.24` |
+
+Manhattan **dominates** misplaced tiles (it is always `≥`, since a misplaced tile needs at least one move and Manhattan counts every move), so it expands no more nodes and usually far fewer. Linear conflict dominates Manhattan in turn.
+
+#### Go
+
+```go
+package main
+
+import (
+	"container/heap"
+	"fmt"
+)
+
+type State [9]byte // board; 0 is the blank
+
+type puzItem struct {
+	board State
+	f, g  int
+}
+type puzPQ []puzItem
+
+func (h puzPQ) Len() int           { return len(h) }
+func (h puzPQ) Less(i, j int) bool { return h[i].f < h[j].f }
+func (h puzPQ) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *puzPQ) Push(x any)        { *h = append(*h, x.(puzItem)) }
+func (h *puzPQ) Pop() any          { o := *h; n := len(o); v := o[n-1]; *h = o[:n-1]; return v }
+
+var goal = State{1, 2, 3, 4, 5, 6, 7, 8, 0}
+
+func manhattan(s State) int {
+	d := 0
+	for i, v := range s {
+		if v == 0 {
+			continue
+		}
+		goalIdx := int(v - 1)
+		d += abs(i/3-goalIdx/3) + abs(i%3-goalIdx%3)
+	}
+	return d
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func neighbors(s State) []State {
+	var blank int
+	for i, v := range s {
+		if v == 0 {
+			blank = i
+		}
+	}
+	moves := map[int][]int{
+		0: {1, 3}, 1: {0, 2, 4}, 2: {1, 5},
+		3: {0, 4, 6}, 4: {1, 3, 5, 7}, 5: {2, 4, 8},
+		6: {3, 7}, 7: {4, 6, 8}, 8: {5, 7},
+	}
+	var out []State
+	for _, m := range moves[blank] {
+		ns := s
+		ns[blank], ns[m] = ns[m], ns[blank]
+		out = append(out, ns)
+	}
+	return out
+}
+
+// Solve returns the optimal number of moves, or -1 if unsolvable.
+func Solve(start State) int {
+	g := map[State]int{start: 0}
+	open := &puzPQ{{start, manhattan(start), 0}}
+	for open.Len() > 0 {
+		cur := heap.Pop(open).(puzItem)
+		if cur.board == goal {
+			return cur.g
+		}
+		if cur.g > g[cur.board] {
+			continue // stale
+		}
+		for _, nb := range neighbors(cur.board) {
+			t := cur.g + 1
+			if best, ok := g[nb]; !ok || t < best {
+				g[nb] = t
+				heap.Push(open, puzItem{nb, t + manhattan(nb), t})
+			}
+		}
+	}
+	return -1
+}
+
+func main() {
+	start := State{1, 2, 3, 4, 0, 6, 7, 5, 8}
+	fmt.Println(Solve(start)) // 2
+}
+```
+
+#### Java
+
+```java
+import java.util.*;
+
+public class EightPuzzle {
+    static final int[] GOAL = {1, 2, 3, 4, 5, 6, 7, 8, 0};
+    static final int[][] MOVES = {
+        {1, 3}, {0, 2, 4}, {1, 5},
+        {0, 4, 6}, {1, 3, 5, 7}, {2, 4, 8},
+        {3, 7}, {4, 6, 8}, {5, 7}
+    };
+
+    static int manhattan(int[] b) {
+        int d = 0;
+        for (int i = 0; i < 9; i++) {
+            if (b[i] == 0) continue;
+            int goal = b[i] - 1;
+            d += Math.abs(i / 3 - goal / 3) + Math.abs(i % 3 - goal % 3);
+        }
+        return d;
+    }
+
+    static String key(int[] b) { return Arrays.toString(b); }
+
+    public static int solve(int[] start) {
+        Map<String, Integer> g = new HashMap<>();
+        g.put(key(start), 0);
+        // [f, g, board...]
+        PriorityQueue<int[]> open =
+            new PriorityQueue<>(Comparator.comparingInt(a -> a[0]));
+        open.add(merge(manhattan(start), 0, start));
+        while (!open.isEmpty()) {
+            int[] cur = open.poll();
+            int gc = cur[1];
+            int[] board = Arrays.copyOfRange(cur, 2, 11);
+            if (Arrays.equals(board, GOAL)) return gc;
+            if (gc > g.get(key(board))) continue;       // stale
+            int blank = 0;
+            for (int i = 0; i < 9; i++) if (board[i] == 0) blank = i;
+            for (int m : MOVES[blank]) {
+                int[] nb = board.clone();
+                nb[blank] = nb[m]; nb[m] = 0;
+                int t = gc + 1;
+                String k = key(nb);
+                if (t < g.getOrDefault(k, Integer.MAX_VALUE)) {
+                    g.put(k, t);
+                    open.add(merge(t + manhattan(nb), t, nb));
+                }
+            }
+        }
+        return -1;
+    }
+
+    static int[] merge(int f, int g, int[] board) {
+        int[] e = new int[11];
+        e[0] = f; e[1] = g;
+        System.arraycopy(board, 0, e, 2, 9);
+        return e;
+    }
+
+    public static void main(String[] args) {
+        int[] start = {1, 2, 3, 4, 0, 6, 7, 5, 8};
+        System.out.println(solve(start)); // 2
+    }
+}
+```
+
+#### Python
+
+```python
+import heapq
+
+GOAL = (1, 2, 3, 4, 5, 6, 7, 8, 0)
+MOVES = {0: (1, 3), 1: (0, 2, 4), 2: (1, 5),
+         3: (0, 4, 6), 4: (1, 3, 5, 7), 5: (2, 4, 8),
+         6: (3, 7), 7: (4, 6, 8), 8: (5, 7)}
+
+
+def manhattan(board):
+    d = 0
+    for i, v in enumerate(board):
+        if v == 0:
+            continue
+        goal = v - 1
+        d += abs(i // 3 - goal // 3) + abs(i % 3 - goal % 3)
+    return d
+
+
+def neighbors(board):
+    blank = board.index(0)
+    for m in MOVES[blank]:
+        nb = list(board)
+        nb[blank], nb[m] = nb[m], nb[blank]
+        yield tuple(nb)
+
+
+def solve(start):
+    """Optimal number of slides to reach GOAL, or -1 if unsolvable."""
+    g = {start: 0}
+    open_set = [(manhattan(start), 0, start)]
+    while open_set:
+        f, gc, board = heapq.heappop(open_set)
+        if board == GOAL:
+            return gc
+        if gc > g[board]:
+            continue                       # stale entry
+        for nb in neighbors(board):
+            t = gc + 1
+            if t < g.get(nb, float("inf")):
+                g[nb] = t
+                heapq.heappush(open_set, (t + manhattan(nb), t, nb))
+    return -1
+
+
+if __name__ == "__main__":
+    print(solve((1, 2, 3, 4, 0, 6, 7, 5, 8)))  # 2
+```
+
+**What it does:** treats each board as a graph node, slides the blank to generate neighbors, and guides A* with Manhattan distance. The same skeleton scales to the 15-puzzle — but there the open set explodes, which is the motivation for IDA* (see `professional.md`).
 
 ---
 

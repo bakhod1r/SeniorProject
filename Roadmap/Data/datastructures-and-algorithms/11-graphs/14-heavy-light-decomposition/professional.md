@@ -4,14 +4,16 @@
 1. [Formal Definition](#1-formal-definition)
 2. [The O(log N) Light-Edge Bound — Proof](#2-the-olog-n-light-edge-bound--proof)
 3. [Path-Query Complexity O(log² N) — Proof](#3-path-query-complexity-olog-n--proof)
-4. [Achieving O(log N) with the Right Base Structure](#4-achieving-olog-n-with-the-right-base-structure)
-5. [Comparison with Link-Cut Trees and Centroid Decomposition](#5-comparison-with-link-cut-trees-and-centroid-decomposition)
-6. [Cache Behavior](#6-cache-behavior)
-7. [Average-Case Analysis](#7-average-case-analysis)
-8. [Space-Time Trade-offs](#8-space-time-trade-offs)
-9. [Comparison Table (asymptotics + constants)](#9-comparison-table-asymptotics--constants)
-10. [Open Problems and Research Directions](#10-open-problems-and-research-directions)
-11. [Summary](#11-summary)
+4. [ASCII Tree With Chains, and a Worked Path-Query Trace](#4-ascii-tree-with-chains-and-a-worked-path-query-trace)
+5. [Reference Implementation (Go / Java / Python)](#5-reference-implementation-go--java--python)
+6. [Achieving O(log N) with the Right Base Structure](#6-achieving-olog-n-with-the-right-base-structure)
+7. [Comparison with Link-Cut Trees and Centroid Decomposition](#7-comparison-with-link-cut-trees-and-centroid-decomposition)
+8. [Cache Behavior](#8-cache-behavior)
+9. [Average-Case Analysis](#9-average-case-analysis)
+10. [Space-Time Trade-offs](#10-space-time-trade-offs)
+11. [Comparison Table (asymptotics + constants)](#11-comparison-table-asymptotics--constants)
+12. [Open Problems and Research Directions](#12-open-problems-and-research-directions)
+13. [Summary](#13-summary)
 
 ---
 
@@ -94,7 +96,452 @@ O(log N) segments × O(log N) per segment + O(log N) bookkeeping = O(log² N).
 
 ---
 
-## 4. Achieving O(log N) with the Right Base Structure
+## 4. ASCII Tree With Chains, and a Worked Path-Query Trace
+
+To make the abstract proofs concrete, here is a fixed `N = 11` tree (root `0`) and its full decomposition. Children of each node are written left-to-right; the **heavy** child (largest subtree, ties → smaller index) is drawn with a double line `═══`, light children with single lines `───`.
+
+```
+                         ┌─────────┐
+                         │  0  s=11│            size annotations: s = size(v)
+                         └────┬────┘
+            ═══════════════════╪════════════════
+            ║                  │                │
+       ┌────┴───┐        ┌─────┴──┐       ┌──────┴─┐
+       │ 1  s=4 │        │ 2  s=1 │       │ 3  s=4 │
+       └───┬────┘        └────────┘       └───┬────┘
+       ═════╪═══════                      ═════╪══════
+       ║          │                       ║         │
+   ┌───┴──┐   ┌───┴──┐                ┌───┴──┐  (none)
+   │4  s=2│   │5  s=2│                │6  s=3│
+   └──┬───┘   └──┬───┘                └──┬───┘
+   ════╪      ════╪                   ════╪═════
+   ║          ║                       ║        │
+ ┌─┴────┐  ┌──┴───┐                ┌──┴───┐ ┌──┴───┐
+ │8 s=1 │  │7 s=1 │                │9 s=1 │ │10 s=1│
+ └──────┘  └──────┘                └──────┘ └──────┘
+```
+
+**Heavy/light decisions (Definition 1.1–1.2).** Node `0` has children `{1(s4), 2(s1), 3(s4)}`; the largest is `1` (tie with `3`, broken to smaller index) → heavy edge `0═1`, light edges `0─2`, `0─3`. Node `1`: children `{4(s2), 5(s2)}` → heavy `1═4` (tie → 4), light `1─5`. Node `4`: only child `8` → heavy `4═8`. Node `3`: only child `6` → heavy `3═6`. Node `6`: children `{9(s1),10(s1)}` → heavy `6═9`, light `6─10`. Node `5`: only child `7` → heavy `5═7`.
+
+**Chains (Definition 1.3) and the heavy-first DFS linearization (Definition 1.4).** Recursing heavy-child-first from `0` discovers nodes in this `pos` order:
+
+| pos | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|-----|---|---|---|---|---|---|---|---|---|---|----|
+| node `v` | 0 | 1 | 4 | 8 | 5 | 7 | 2 | 3 | 6 | 9 | 10 |
+| value `φ(v)` | 5 | 3 | 2 | 7 | 4 | 9 | 8 | 1 | 6 | 2 | 6 |
+
+Reading off the contiguous heavy runs (Proposition 1.5, chain contiguity):
+
+| Chain (head → bottom) | nodes | `pos` block | color in animation |
+|-----------------------|-------|-------------|--------------------|
+| A: `0 ═ 1 ═ 4 ═ 8` | 0,1,4,8 | `[0..3]` | green |
+| B: `5 ═ 7` | 5,7 | `[4..5]` | blue |
+| C: `2` | 2 | `[6..6]` | purple |
+| D: `3 ═ 6 ═ 9` | 3,6,9 | `[7..9]` | orange |
+| E: `10` | 10 | `[10..10]` | pink |
+
+Notice chain A's heavy descent `0→1→4→8` occupies **consecutive** positions `0,1,2,3`; the light subtree at `5` (chain B) only starts at `pos 4`, *after* the entire heavy descent, exactly as the chain-contiguity proof predicts.
+
+### 4.1 Worked trace: `pathSum(8, 9)` (vertex values, include LCA)
+
+Path in the tree is `8 → 4 → 1 → 0 → 3 → 6 → 9`; the LCA is `0`. Depths: `depth = [0,1,1,1,2,2,2,3,3,3,3]` so `head` depths matter for which side lifts. The loop always lifts the endpoint whose **chain head is deeper**.
+
+```
+state: u=8 (head 0, headDepth 0), v=9 (head 3, headDepth 1)
+```
+
+| Step | u | v | head[u] | head[v] | headDepth[u] | headDepth[v] | lift side | segment emitted (pos block → nodes) | partial sum |
+|------|---|---|---------|---------|--------------|--------------|-----------|--------------------------------------|-------------|
+| 1 | 8 | 9 | 0 | 3 | 0 | 1 | v deeper → query v's chain | `query[pos[head9]=7 .. pos[9]=9]` = nodes 3,6,9 = 1+6+2 | **9** |
+|   |   |   |         |         |              |              | jump `v = parent(head[9]) = parent(3) = 0` | | |
+| 2 | 8 | 0 | 0 | 0 | 0 | 0 | heads equal → exit loop | — | 9 |
+| final | — | — | — | — | — | — | same chain, include LCA | order so `pos[u]≤pos[v]`: `u=0(pos0), v=8(pos3)` → `query[0..3]` = nodes 0,1,4,8 = 5+3+2+7 | **9 + 17 = 26** |
+
+**Verification by hand:** path nodes `{8,4,1,0,3,6,9}` have values `7+2+3+5+1+6+2 = 26`. ✓ Two segment-tree range queries answered the whole path — that is the `O(log N)` chain count (here 2) times the `O(log N)` per-range cost.
+
+### 4.2 Worked trace: `maxEdge(8, 7)` (edge values, **skip** LCA)
+
+Edge variant: store the edge `(parent(c), c)` at `pos[c]`; `pos[root]` holds the monoid identity (`−∞` for max). Suppose edge weights are `w(0,1)=4, w(1,4)=7, w(4,8)=2, w(1,5)=5, w(5,7)=9`. Path `8 → 4 → 1 → 5 → 7`, LCA = `1`.
+
+| Step | u | v | head[u] | head[v] | lift | segment (pos block, edges only) | running max |
+|------|---|---|---------|---------|------|----------------------------------|-------------|
+| 1 | 8 | 7 | 0 | 5 | head[7]=5 (depth 2) deeper than head[8]=0 (depth 0) → lift v | `query[pos[5]=4 .. pos[7]=5]` covers edges `(1,5)=5,(5,7)=9` → 9 | **9** |
+|   |   |   |   |   | jump `v = parent(5) = 1` | | |
+| 2 | 8 | 1 | 0 | 0 | heads equal → exit | — | 9 |
+| final | — | — | — | — | same chain, **skip LCA=1** | order `u=1(pos1), v=8(pos3)`; edges only ⇒ `query[pos[1]+1 .. pos[8]] = [2..3]` covers `(1,4)=7,(4,8)=2` → 7 | **max(9,7)=9** |
+
+The `[pos[lca]+1 .. pos[deeper]]` lower bound is the single line of code that separates the edge variant from the vertex variant; if `u == v` after ordering, the path has zero edges and we return the identity `−∞`. The hand-checked answer — `max{4? no, edges on path are (4,8)=2,(1,4)=7,(1,5)=5,(5,7)=9} = 9` — matches.
+
+---
+
+## 5. Reference Implementation (Go / Java / Python)
+
+A complete, self-contained HLD over a **sum** Segment Tree, with `pathSum`, `subtreeSum`, point `update`, and `LCA`-via-HLD. Vertex-value semantics (the final same-chain segment **includes** the LCA). The build is the two iterative DFS passes from Definition 1.4; the recurrence used in §3 is exactly the `path` loop here.
+
+### Go
+
+```go
+package main
+
+import "fmt"
+
+type SegTree struct {
+	n int
+	t []int64 // 1-indexed, size 2n iterative
+}
+
+func NewSegTree(base []int64) *SegTree {
+	n := len(base)
+	s := &SegTree{n: n, t: make([]int64, 2*n)}
+	copy(s.t[n:], base)
+	for i := n - 1; i >= 1; i-- {
+		s.t[i] = s.t[2*i] + s.t[2*i+1]
+	}
+	return s
+}
+func (s *SegTree) Update(i int, val int64) {
+	i += s.n
+	s.t[i] = val
+	for i >>= 1; i >= 1; i >>= 1 {
+		s.t[i] = s.t[2*i] + s.t[2*i+1]
+	}
+}
+func (s *SegTree) Query(l, r int) int64 { // inclusive [l, r]
+	var res int64
+	for l, r = l+s.n, r+s.n+1; l < r; l, r = l>>1, r>>1 {
+		if l&1 == 1 {
+			res += s.t[l]
+			l++
+		}
+		if r&1 == 1 {
+			r--
+			res += s.t[r]
+		}
+	}
+	return res
+}
+
+type HLD struct {
+	n                                int
+	parent, depth, size, heavy, head, pos, nodeAtPos []int
+	seg                              *SegTree
+	adj                              [][]int
+}
+
+func NewHLD(n, root int, adj [][]int, value []int64) *HLD {
+	h := &HLD{n: n, adj: adj,
+		parent: make([]int, n), depth: make([]int, n), size: make([]int, n),
+		heavy: make([]int, n), head: make([]int, n), pos: make([]int, n),
+		nodeAtPos: make([]int, n)}
+	for i := range h.heavy {
+		h.heavy[i] = -1
+	}
+	// Pass 1: iterative DFS for order, parent, depth; then sizes + heavy bottom-up.
+	order := make([]int, 0, n)
+	st := []int{root}
+	vis := make([]bool, n)
+	vis[root] = true
+	h.parent[root] = -1
+	for len(st) > 0 {
+		u := st[len(st)-1]
+		st = st[:len(st)-1]
+		order = append(order, u)
+		for _, w := range adj[u] {
+			if !vis[w] {
+				vis[w] = true
+				h.parent[w] = u
+				h.depth[w] = h.depth[u] + 1
+				st = append(st, w)
+			}
+		}
+	}
+	for i := len(order) - 1; i >= 0; i-- {
+		u := order[i]
+		h.size[u] = 1
+		best := 0
+		for _, w := range adj[u] {
+			if w != h.parent[u] {
+				h.size[u] += h.size[w]
+				if h.size[w] > best {
+					best = h.size[w]
+					h.heavy[u] = w
+				}
+			}
+		}
+	}
+	// Pass 2: heads + pos, heavy child first.
+	cur := 0
+	type fr struct{ node, hd int }
+	s2 := []fr{{root, root}}
+	for len(s2) > 0 {
+		f := s2[len(s2)-1]
+		s2 = s2[:len(s2)-1]
+		u := f.node
+		h.head[u] = f.hd
+		h.pos[u] = cur
+		h.nodeAtPos[cur] = u
+		cur++
+		for _, w := range adj[u] {
+			if w != h.parent[u] && w != h.heavy[u] {
+				s2 = append(s2, fr{w, w})
+			}
+		}
+		if h.heavy[u] != -1 {
+			s2 = append(s2, fr{h.heavy[u], f.hd})
+		}
+	}
+	base := make([]int64, n)
+	for v := 0; v < n; v++ {
+		base[h.pos[v]] = value[v]
+	}
+	h.seg = NewSegTree(base)
+	return h
+}
+
+func (h *HLD) Update(v int, val int64) { h.seg.Update(h.pos[v], val) }
+
+func (h *HLD) PathSum(u, v int) int64 { // vertex values, include LCA
+	var res int64
+	for h.head[u] != h.head[v] {
+		if h.depth[h.head[u]] < h.depth[h.head[v]] {
+			u, v = v, u
+		}
+		res += h.seg.Query(h.pos[h.head[u]], h.pos[u])
+		u = h.parent[h.head[u]]
+	}
+	if h.depth[u] > h.depth[v] {
+		u, v = v, u
+	}
+	res += h.seg.Query(h.pos[u], h.pos[v]) // include LCA = u
+	return res
+}
+
+func (h *HLD) SubtreeSum(v int) int64 {
+	return h.seg.Query(h.pos[v], h.pos[v]+h.size[v]-1)
+}
+
+func (h *HLD) LCA(u, v int) int {
+	for h.head[u] != h.head[v] {
+		if h.depth[h.head[u]] < h.depth[h.head[v]] {
+			u, v = v, u
+		}
+		u = h.parent[h.head[u]]
+	}
+	if h.depth[u] < h.depth[v] {
+		return u
+	}
+	return v
+}
+
+func main() {
+	n := 11
+	adj := make([][]int, n)
+	add := func(a, b int) { adj[a] = append(adj[a], b); adj[b] = append(adj[b], a) }
+	for _, e := range [][2]int{{0, 1}, {0, 2}, {0, 3}, {1, 4}, {1, 5}, {4, 8}, {3, 6}, {6, 9}, {6, 10}, {5, 7}} {
+		add(e[0], e[1])
+	}
+	val := []int64{5, 3, 8, 1, 2, 4, 6, 9, 7, 2, 6}
+	h := NewHLD(n, 0, adj, val)
+	fmt.Println("LCA(8,9)      =", h.LCA(8, 9))      // 0
+	fmt.Println("PathSum(8,9)  =", h.PathSum(8, 9))  // 7+2+3+5+1+6+2 = 26
+	fmt.Println("SubtreeSum(1) =", h.SubtreeSum(1))  // nodes 1,4,5,7,8 = 3+2+4+9+7 = 25
+}
+```
+
+### Java
+
+```java
+import java.util.*;
+
+public class HLD {
+    final int n;
+    final int[] parent, depth, size, heavy, head, pos, nodeAtPos;
+    final long[] t; // iterative segment tree, size 2n
+    final int segN;
+
+    @SuppressWarnings("unchecked")
+    public HLD(int n, int root, List<Integer>[] adj, long[] value) {
+        this.n = n; this.segN = n;
+        parent = new int[n]; depth = new int[n]; size = new int[n];
+        heavy = new int[n]; head = new int[n]; pos = new int[n]; nodeAtPos = new int[n];
+        Arrays.fill(heavy, -1);
+        int[] order = new int[n]; int c = 0; boolean[] vis = new boolean[n];
+        Deque<Integer> st = new ArrayDeque<>(); st.push(root); vis[root] = true;
+        parent[root] = -1;
+        while (!st.isEmpty()) {
+            int u = st.pop(); order[c++] = u;
+            for (int w : adj[u]) if (!vis[w]) { vis[w]=true; parent[w]=u; depth[w]=depth[u]+1; st.push(w); }
+        }
+        for (int i = c - 1; i >= 0; i--) {
+            int u = order[i]; size[u] = 1; int best = 0;
+            for (int w : adj[u]) if (w != parent[u]) {
+                size[u] += size[w];
+                if (size[w] > best) { best = size[w]; heavy[u] = w; }
+            }
+        }
+        int cur = 0; Deque<int[]> s2 = new ArrayDeque<>(); s2.push(new int[]{root, root});
+        while (!s2.isEmpty()) {
+            int[] f = s2.pop(); int u = f[0], hd = f[1];
+            head[u] = hd; pos[u] = cur; nodeAtPos[cur] = u; cur++;
+            for (int w : adj[u]) if (w != parent[u] && w != heavy[u]) s2.push(new int[]{w, w});
+            if (heavy[u] != -1) s2.push(new int[]{heavy[u], hd});
+        }
+        t = new long[2 * n];
+        for (int v = 0; v < n; v++) t[n + pos[v]] = value[v];
+        for (int i = n - 1; i >= 1; i--) t[i] = t[2*i] + t[2*i+1];
+    }
+
+    public void update(int v, long val) {
+        int i = segN + pos[v]; t[i] = val;
+        for (i >>= 1; i >= 1; i >>= 1) t[i] = t[2*i] + t[2*i+1];
+    }
+    private long query(int l, int r) { // inclusive
+        long res = 0;
+        for (l += segN, r += segN + 1; l < r; l >>= 1, r >>= 1) {
+            if ((l & 1) == 1) res += t[l++];
+            if ((r & 1) == 1) res += t[--r];
+        }
+        return res;
+    }
+    public long pathSum(int u, int v) { // vertex values, include LCA
+        long res = 0;
+        while (head[u] != head[v]) {
+            if (depth[head[u]] < depth[head[v]]) { int x=u; u=v; v=x; }
+            res += query(pos[head[u]], pos[u]);
+            u = parent[head[u]];
+        }
+        if (depth[u] > depth[v]) { int x=u; u=v; v=x; }
+        return res + query(pos[u], pos[v]);
+    }
+    public long subtreeSum(int v) { return query(pos[v], pos[v] + size[v] - 1); }
+    public int lca(int u, int v) {
+        while (head[u] != head[v]) {
+            if (depth[head[u]] < depth[head[v]]) { int x=u; u=v; v=x; }
+            u = parent[head[u]];
+        }
+        return depth[u] < depth[v] ? u : v;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) {
+        int n = 11;
+        List<Integer>[] adj = new List[n];
+        for (int i = 0; i < n; i++) adj[i] = new ArrayList<>();
+        int[][] e = {{0,1},{0,2},{0,3},{1,4},{1,5},{4,8},{3,6},{6,9},{6,10},{5,7}};
+        for (int[] x : e) { adj[x[0]].add(x[1]); adj[x[1]].add(x[0]); }
+        long[] val = {5,3,8,1,2,4,6,9,7,2,6};
+        HLD h = new HLD(n, 0, adj, val);
+        System.out.println("LCA(8,9)      = " + h.lca(8, 9));       // 0
+        System.out.println("PathSum(8,9)  = " + h.pathSum(8, 9));   // 26
+        System.out.println("SubtreeSum(1) = " + h.subtreeSum(1));   // 25
+    }
+}
+```
+
+### Python
+
+```python
+import sys
+
+class HLD:
+    def __init__(self, n, root, adj, value):
+        self.n = n
+        self.parent = [-1] * n
+        self.depth = [0] * n
+        self.size = [0] * n
+        self.heavy = [-1] * n
+        self.head = [0] * n
+        self.pos = [0] * n
+        self.node_at_pos = [0] * n
+
+        order, st, vis = [], [root], [False] * n
+        vis[root] = True
+        while st:
+            u = st.pop(); order.append(u)
+            for w in adj[u]:
+                if not vis[w]:
+                    vis[w] = True
+                    self.parent[w] = u
+                    self.depth[w] = self.depth[u] + 1
+                    st.append(w)
+        for u in reversed(order):
+            self.size[u] = 1
+            best = 0
+            for w in adj[u]:
+                if w != self.parent[u]:
+                    self.size[u] += self.size[w]
+                    if self.size[w] > best:
+                        best = self.size[w]; self.heavy[u] = w
+        cur = 0; s2 = [(root, root)]
+        while s2:
+            u, hd = s2.pop()
+            self.head[u] = hd; self.pos[u] = cur; self.node_at_pos[cur] = u; cur += 1
+            for w in adj[u]:
+                if w != self.parent[u] and w != self.heavy[u]:
+                    s2.append((w, w))
+            if self.heavy[u] != -1:
+                s2.append((self.heavy[u], hd))
+
+        # iterative segment tree (sum)
+        self.t = [0] * (2 * n)
+        for v in range(n):
+            self.t[n + self.pos[v]] = value[v]
+        for i in range(n - 1, 0, -1):
+            self.t[i] = self.t[2 * i] + self.t[2 * i + 1]
+
+    def update(self, v, val):
+        i = self.n + self.pos[v]; self.t[i] = val
+        i >>= 1
+        while i >= 1:
+            self.t[i] = self.t[2 * i] + self.t[2 * i + 1]; i >>= 1
+
+    def _query(self, l, r):  # inclusive
+        res = 0; l += self.n; r += self.n + 1
+        while l < r:
+            if l & 1: res += self.t[l]; l += 1
+            if r & 1: r -= 1; res += self.t[r]
+            l >>= 1; r >>= 1
+        return res
+
+    def path_sum(self, u, v):  # vertex values, include LCA
+        res = 0
+        while self.head[u] != self.head[v]:
+            if self.depth[self.head[u]] < self.depth[self.head[v]]:
+                u, v = v, u
+            res += self._query(self.pos[self.head[u]], self.pos[u])
+            u = self.parent[self.head[u]]
+        if self.depth[u] > self.depth[v]:
+            u, v = v, u
+        return res + self._query(self.pos[u], self.pos[v])
+
+    def subtree_sum(self, v):
+        return self._query(self.pos[v], self.pos[v] + self.size[v] - 1)
+
+    def lca(self, u, v):
+        while self.head[u] != self.head[v]:
+            if self.depth[self.head[u]] < self.depth[self.head[v]]:
+                u, v = v, u
+            u = self.parent[self.head[u]]
+        return u if self.depth[u] < self.depth[v] else v
+
+
+if __name__ == "__main__":
+    n = 11
+    adj = [[] for _ in range(n)]
+    for a, b in [(0,1),(0,2),(0,3),(1,4),(1,5),(4,8),(3,6),(6,9),(6,10),(5,7)]:
+        adj[a].append(b); adj[b].append(a)
+    val = [5, 3, 8, 1, 2, 4, 6, 9, 7, 2, 6]
+    h = HLD(n, 0, adj, val)
+    print("LCA(8,9)      =", h.lca(8, 9))        # 0
+    print("PathSum(8,9)  =", h.path_sum(8, 9))   # 26
+    print("SubtreeSum(1) =", h.subtree_sum(1))   # 25
+```
+
+All three print `LCA(8,9)=0`, `PathSum(8,9)=26`, `SubtreeSum(1)=25`, matching the §4.1 hand trace. To switch to the **edge variant**, store `value[c] = w(parent(c), c)` (and the root's slot = identity), use a max/min merge, and change the final same-chain query to `query(pos[u]+1, pos[v])` with a `u == v` guard, as derived in §4.2.
+
+---
+
+## 6. Achieving O(log N) with the Right Base Structure
 
 The `log²` factor is *not* intrinsic to the tree problem; it is the price of pairing HLD with a per-interval-`O(log N)` structure. Two routes lower it:
 
@@ -106,7 +553,7 @@ The `log²` factor is *not* intrinsic to the tree problem; it is the price of pa
 
 ---
 
-## 5. Comparison with Link-Cut Trees and Centroid Decomposition
+## 7. Comparison with Link-Cut Trees and Centroid Decomposition
 
 | Structure | Path query | Path update | Dynamic shape | Bound type | Per-op constant |
 |-----------|-----------|-------------|---------------|-----------|-----------------|
@@ -121,7 +568,7 @@ The `log²` factor is *not* intrinsic to the tree problem; it is the price of pa
 
 ---
 
-## 6. Cache Behavior
+## 8. Cache Behavior
 
 - **Build pass 1 (sizes/heavy)** processes nodes in DFS/reverse-DFS order, which on an arbitrary input adjacency layout is **cache-hostile**: parent/child indices are unrelated in memory. This pass dominates build-time cache misses.
 - **The `pos`-ordered `base[]` array is cache-friendly for chain queries.** A chain occupies a *contiguous* range, so a single chain's Segment Tree query walks a localized index range; the leaves of one chain are adjacent in memory. This is a genuine advantage over pointer-based tree representations.
@@ -132,7 +579,7 @@ The net effect: HLD's per-query cache profile is `O(log N)` scattered reads (cha
 
 ---
 
-## 7. Average-Case Analysis
+## 9. Average-Case Analysis
 
 The worst case is `2⌊log₂ N⌋` light edges per path, but typical trees do far better.
 
@@ -145,7 +592,7 @@ So across the spectrum, the *number of chains per query* ranges from `1` (path) 
 
 ---
 
-## 8. Space-Time Trade-offs
+## 10. Space-Time Trade-offs
 
 | Choice | Space | Path query | Notes |
 |--------|-------|-----------|-------|
@@ -160,7 +607,7 @@ The topology arrays (`parent, depth, size, heavy, head, pos`) are always `Θ(N)`
 
 ---
 
-## 9. Comparison Table (asymptotics + constants)
+## 11. Comparison Table (asymptotics + constants)
 
 | Operation | HLD+SegTree | HLD+Fenwick | LCT | Centroid | Euler+SegTree |
 |-----------|-------------|-------------|-----|----------|---------------|
@@ -179,7 +626,7 @@ The topology arrays (`parent, depth, size, heavy, head, pos`) are always `Θ(N)`
 
 ---
 
-## 10. Open Problems and Research Directions
+## 12. Open Problems and Research Directions
 
 - **Worst-case `O(log N)` fully-dynamic path aggregates with low constants.** LCTs give `O(log N)` *amortized*; top trees and the Frederickson topology-tree approach give `O(log N)` *worst-case* but with notoriously large constants and intricate code. A practically fast, worst-case-`O(log N)`, easy-to-implement dynamic alternative to HLD remains a moving target.
 - **Cache-oblivious / I/O-optimal tree path queries.** The `pos` layout is good but not provably I/O-optimal for arbitrary path queries; van-Emde-Boas-style recursive layouts of the chain decomposition are explored but not standard.
@@ -189,6 +636,6 @@ The topology arrays (`parent, depth, size, heavy, head, pos`) are always `Θ(N)`
 
 ---
 
-## 11. Summary
+## 13. Summary
 
 Heavy-Light Decomposition rests on a single inequality — **a light edge at least halves the subtree size** (Lemma 2.1) — from which the `⌊log₂ N⌋` light-edge bound (Theorem 2.2) and hence the `O(log N)` chains-per-path corollary follow. Combined with chain and subtree *contiguity* (Proposition 1.5), this turns path queries into `O(log N)` independent Segment Tree range queries, giving the characteristic `O(log² N)` worst-case bound (Theorem 3.1); subtree queries are a single interval and stay `O(log N)`. The two logs are independent — one structural, one from the base structure — so the second can be shaved (Fenwick prefix tricks on invertible monoids) or replaced (LCTs for `O(log N)` *amortized* and dynamic shape, top trees for `O(log N)` *worst-case* at high constant). For static, read-heavy trees with worst-case latency requirements, HLD + Segment Tree remains the pragmatic optimum: linear build, linear space, contiguous-and-cache-friendly chains, and a free `O(log N)` LCA.

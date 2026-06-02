@@ -8,15 +8,17 @@
   :root {
     --bg:        #0d1117;
     --surface:   #161b22;
+    --surface2:  #1c2230;
     --border:    #30363d;
     --text:      #e6edf3;
     --muted:     #8b949e;
-    --green:     #3fb950;  /* visited */
+    --green:     #3fb950;  /* visited / done */
     --yellow:    #d29922;  /* frontier / in queue */
     --red:       #f85149;  /* current node being expanded */
     --blue:      #58a6ff;
-    --purple:    #bc8cff;
+    --purple:    #bc8cff;  /* distance labels */
     --orange:    #ffa657;
+    --teal:      #39c5cf;
     --unvisited: #21262d;
   }
 
@@ -47,14 +49,14 @@
 
   main {
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 320px 1fr;
     gap: 16px;
     padding: 16px;
-    max-width: 1500px;
+    max-width: 1560px;
     margin: 0 auto;
   }
 
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
 
   .panel {
     background: var(--surface);
@@ -72,7 +74,7 @@
     font-weight: 600;
   }
 
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 
   button.btn {
     background: var(--bg);
@@ -85,68 +87,120 @@
     font-family: inherit;
     transition: all 0.15s ease;
     flex: 1;
-    min-width: 84px;
+    min-width: 80px;
   }
   button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
   button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
   button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
   button.btn.primary:hover:not(:disabled) { filter: brightness(1.1); background: var(--blue); }
 
+  .seg { display: flex; gap: 0; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    flex: 1; background: var(--bg); border: none; color: var(--muted);
+    padding: 8px 6px; font-size: 12px; cursor: pointer; font-family: inherit;
+    border-right: 1px solid var(--border); transition: all 0.15s ease;
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--blue); color: #fff; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--border); color: var(--text); }
+
+  label.field { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  select, .modeRow {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+    font-size: 13px; font-family: inherit; margin-bottom: 14px;
+  }
+
   .speed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--muted); }
   .speed-row input[type="range"] { flex: 1; accent-color: var(--blue); }
 
-  .legend { display: flex; flex-direction: column; gap: 8px; }
-  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-  .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
 
   .queue-box {
     display: flex; gap: 6px; flex-wrap: wrap; min-height: 44px;
     padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   }
   .qcell {
-    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
-    border-radius: 6px; background: var(--yellow); color: #1a1a1a; font-weight: 700; font-size: 14px;
+    min-width: 34px; height: 34px; padding: 0 6px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; background: var(--yellow); color: #1a1a1a; font-weight: 700; font-size: 13px;
   }
   .qcell.front { outline: 2px solid var(--red); outline-offset: 1px; }
+  .qcell.lvlsep { background: transparent; color: var(--muted); min-width: 12px; font-weight: 400; }
   .queue-empty { color: var(--muted); font-size: 13px; align-self: center; }
 
   .stat-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
   .stat-row .k { color: var(--muted); }
   .stat-row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
 
+  /* distance-layer bars */
+  .layers { display: flex; flex-direction: column; gap: 4px; }
+  .layer-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .layer-row .lk { width: 42px; color: var(--muted); }
+  .layer-bar { height: 14px; background: var(--purple); border-radius: 3px; transition: width 0.25s ease; min-width: 2px; }
+  .layer-row .lc { color: var(--text); font-variant-numeric: tabular-nums; }
+
   svg { width: 100%; height: auto; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
 
-  .node-circle { stroke: var(--border); stroke-width: 2px; transition: fill 0.25s ease, stroke 0.25s ease; }
+  .node-circle { stroke: var(--border); stroke-width: 2px; transition: fill 0.2s ease, stroke 0.2s ease; }
   .node-circle.unvisited { fill: var(--unvisited); }
   .node-circle.frontier  { fill: var(--yellow);  stroke: var(--orange); }
   .node-circle.current   { fill: var(--red);     stroke: #fff; }
   .node-circle.visited   { fill: var(--green);   stroke: #2a7d38; }
-  .node-label { fill: var(--text); font-size: 15px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
-  .node-circle.frontier + .node-label, .node-circle.current + .node-label { fill: #0d1117; }
-  .dist-badge { fill: var(--purple); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
-  .edge-line { stroke: var(--border); stroke-width: 2px; transition: stroke 0.25s ease; }
+  .node-circle.source    { stroke: var(--teal); stroke-width: 3.5px; }
+  .node-label { fill: var(--text); font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .node-circle.frontier + .node-label, .node-circle.current + .node-label, .node-circle.visited + .node-label { fill: #0d1117; }
+  .dist-badge { fill: var(--purple); font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .edge-line { stroke: var(--border); stroke-width: 2px; transition: stroke 0.2s ease; }
   .edge-line.tree { stroke: var(--green); stroke-width: 3px; }
   .edge-line.active { stroke: var(--red); stroke-width: 3px; }
 
+  /* grid mode */
+  .gcell-rect { stroke: var(--bg); stroke-width: 2px; transition: fill 0.2s ease; }
+  .gcell-rect.unvisited { fill: var(--unvisited); }
+  .gcell-rect.wall      { fill: #3d444d; }
+  .gcell-rect.frontier  { fill: var(--yellow); }
+  .gcell-rect.current   { fill: var(--red); }
+  .gcell-rect.visited   { fill: var(--green); }
+  .gcell-rect.source    { stroke: var(--teal); stroke-width: 3px; }
+  .gcell-txt { fill: #0d1117; font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+
   .log {
     background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-    padding: 10px 12px; font-size: 13px; min-height: 40px; color: var(--text); line-height: 1.5;
+    padding: 10px 12px; font-size: 13px; min-height: 38px; color: var(--text); line-height: 1.5;
+    max-height: 120px; overflow-y: auto;
   }
   .log .hl { color: var(--orange); font-weight: 600; }
+  .log .line { padding: 1px 0; }
+  .log .line.cur { color: var(--text); }
+  .log .line.old { color: var(--muted); }
+
+  .hint { font-size: 11px; color: var(--muted); margin-top: -8px; margin-bottom: 14px; line-height: 1.45; }
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>Breadth-First Search — Interactive Visualization</h1>
-    <div class="sub">FIFO queue • enqueue-time visited mark • distance labels per level</div>
+    <div class="sub">FIFO queue • visited-on-enqueue • distance = level • top-down expansion</div>
   </div>
-  <div class="sub">Source = node 0</div>
+  <div class="sub" id="modeSub">Graph mode • single source</div>
 </header>
 
 <main>
-  <!-- LEFT: controls + legend + queue + stats -->
+  <!-- LEFT: controls + queue + layers + stats + legend -->
   <section class="panel">
+    <h2>Mode</h2>
+    <div class="seg" id="modeSeg">
+      <button data-mode="graph" class="active">Graph</button>
+      <button data-mode="grid">Grid</button>
+    </div>
+
+    <h2>Preset</h2>
+    <select id="presetSel"></select>
+    <div class="hint" id="presetHint"></div>
+
     <h2>Controls</h2>
     <div class="controls">
       <button class="btn primary" id="stepBtn">Step ▶</button>
@@ -156,180 +210,301 @@
 
     <div class="speed-row">
       <span>Slow</span>
-      <input type="range" id="speed" min="120" max="1400" value="650" />
+      <input type="range" id="speed" min="120" max="1400" value="720" />
       <span>Fast</span>
     </div>
 
-    <h2>Queue (front → back)</h2>
+    <h2>Queue (front → back, by level)</h2>
     <div class="queue-box" id="queueBox">
       <span class="queue-empty">empty</span>
     </div>
 
+    <h2 style="margin-top:16px;">Distance layers</h2>
+    <div class="layers" id="layers"></div>
+
     <h2 style="margin-top:16px;">Step Log</h2>
-    <div class="log" id="log">Press <span class="hl">Step</span> to begin BFS from node 0.</div>
+    <div class="log" id="log"></div>
 
     <h2 style="margin-top:16px;">Stats</h2>
     <div class="stat-row"><span class="k">Current level</span><span class="v" id="statLevel">—</span></div>
-    <div class="stat-row"><span class="k">Visited</span><span class="v" id="statVisited">1 / 8</span></div>
-    <div class="stat-row"><span class="k">Frontier size</span><span class="v" id="statFrontier">1</span></div>
+    <div class="stat-row"><span class="k">Discovered</span><span class="v" id="statVisited">—</span></div>
+    <div class="stat-row"><span class="k">Frontier size</span><span class="v" id="statFrontier">—</span></div>
     <div class="stat-row"><span class="k">Edges scanned</span><span class="v" id="statEdges">0</span></div>
+    <div class="stat-row"><span class="k">Sources</span><span class="v" id="statSources">1</span></div>
 
     <h2 style="margin-top:16px;">Legend</h2>
     <div class="legend">
       <div class="legend-item"><span class="swatch" style="background:var(--unvisited)"></span> Unvisited</div>
-      <div class="legend-item"><span class="swatch" style="background:var(--yellow)"></span> In queue (frontier)</div>
-      <div class="legend-item"><span class="swatch" style="background:var(--red)"></span> Current (being expanded)</div>
-      <div class="legend-item"><span class="swatch" style="background:var(--green)"></span> Done (dequeued)</div>
-      <div class="legend-item"><span class="swatch" style="background:var(--purple);border:none"></span> Distance label</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--yellow)"></span> In queue</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--red)"></span> Current</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--green)"></span> Done</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--unvisited);border-color:var(--teal);border-width:3px"></span> Source</div>
+      <div class="legend-item"><span class="swatch" style="background:#3d444d"></span> Wall (grid)</div>
     </div>
   </section>
 
-  <!-- RIGHT: graph -->
+  <!-- RIGHT: visualization -->
   <section class="panel" style="padding:0;">
-    <svg id="graph" viewBox="0 0 720 520" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="canvas" viewBox="0 0 760 560" preserveAspectRatio="xMidYMid meet"></svg>
   </section>
 </main>
 
 <script>
 "use strict";
 
-// ---- Graph definition (undirected adjacency list) ----
-// Layout chosen so BFS rings are visually clear from source = 0.
-const NODES = [
-  { id: 0, x: 110, y: 260 },
-  { id: 1, x: 270, y: 130 },
-  { id: 2, x: 270, y: 390 },
-  { id: 3, x: 440, y:  70 },
-  { id: 4, x: 440, y: 220 },
-  { id: 5, x: 440, y: 400 },
-  { id: 6, x: 610, y: 150 },
-  { id: 7, x: 610, y: 330 },
-];
-
-const ADJ = [
-  [1, 2],       // 0
-  [0, 3, 4],    // 1
-  [0, 4, 5],    // 2
-  [1, 6],       // 3
-  [1, 2, 6, 7], // 4
-  [2, 7],       // 5
-  [3, 4],       // 6
-  [4, 5],       // 7
-];
-
-const N = NODES.length;
-const SOURCE = 0;
-
-// ---- Build the full event timeline up front (deterministic) ----
-// Each event mutates a snapshot of state; we replay them on Step/Run.
-function buildEvents() {
-  const events = [];
-  const dist = new Array(N).fill(-1);
-  const parent = new Array(N).fill(-1);
-  const state = new Array(N).fill("unvisited"); // unvisited|frontier|current|visited
-  let queue = [];
-  let edgesScanned = 0;
-
-  function snap(msg, activeEdge) {
-    events.push({
-      dist: dist.slice(),
-      parent: parent.slice(),
-      state: state.slice(),
-      queue: queue.slice(),
-      edgesScanned,
-      msg,
-      activeEdge: activeEdge || null,
-    });
-  }
-
-  // init
-  dist[SOURCE] = 0;
-  state[SOURCE] = "frontier";
-  queue.push(SOURCE);
-  snap(`Enqueue source <span class="hl">0</span>, dist[0] = 0.`);
-
-  while (queue.length > 0) {
-    const u = queue.shift();
-    state[u] = "current";
-    snap(`Dequeue <span class="hl">${u}</span> (dist ${dist[u]}). Scan its neighbors.`);
-
-    for (const v of ADJ[u]) {
-      edgesScanned++;
-      if (dist[v] === -1) {
-        dist[v] = dist[u] + 1;
-        parent[v] = u;
-        state[v] = "frontier";
-        queue.push(v);
-        snap(`Discover <span class="hl">${v}</span> from ${u}: dist[${v}] = ${dist[v]}, enqueue.`, [u, v]);
-      } else {
-        snap(`Neighbor <span class="hl">${v}</span> already seen — skip.`, [u, v]);
-      }
-    }
-
-    state[u] = "visited";
-    snap(`Done expanding <span class="hl">${u}</span>. Mark visited.`);
-  }
-
-  snap(`Queue empty — BFS complete. Distances: [${dist.join(", ")}].`);
-  return events;
-}
-
-const EVENTS = buildEvents();
-let cursor = -1;       // index into EVENTS; -1 = before first event
-let timer = null;
-
-// ---- SVG rendering ----
-const svg = document.getElementById("graph");
 const SVGNS = "http://www.w3.org/2000/svg";
-
 function el(tag, attrs) {
   const e = document.createElementNS(SVGNS, tag);
   for (const k in attrs) e.setAttribute(k, attrs[k]);
   return e;
 }
 
-// Pre-render edges (so tree/active highlighting can reuse them).
-const edgeEls = {}; // key "min-max" -> line element
+// =====================================================================
+//  GRAPH PRESETS
+//  Each preset: nodes [{id,x,y}], adj [[...]], sources [..], hint.
+// =====================================================================
+const GRAPH_PRESETS = {
+  classic: {
+    name: "Classic (single source)",
+    hint: "8-node graph, source = 0. Watch the queue hold at most two distance levels at once.",
+    sources: [0],
+    nodes: [
+      { id: 0, x: 110, y: 280 }, { id: 1, x: 270, y: 150 }, { id: 2, x: 270, y: 410 },
+      { id: 3, x: 450, y:  90 }, { id: 4, x: 450, y: 240 }, { id: 5, x: 450, y: 420 },
+      { id: 6, x: 630, y: 170 }, { id: 7, x: 630, y: 360 },
+    ],
+    adj: [[1,2],[0,3,4],[0,4,5],[1,6],[1,2,6,7],[2,7],[3,4],[4,5]],
+  },
+  multisource: {
+    name: "Multi-source (3 seeds)",
+    hint: "Sources = 0, 5, 9 all start at distance 0. dist[v] = hops to the NEAREST source. Note how layers meet.",
+    sources: [0, 5, 9],
+    nodes: [
+      { id: 0, x:  90, y: 110 }, { id: 1, x: 240, y:  90 }, { id: 2, x: 390, y: 110 },
+      { id: 3, x:  90, y: 280 }, { id: 4, x: 240, y: 280 }, { id: 5, x: 390, y: 280 },
+      { id: 6, x:  90, y: 450 }, { id: 7, x: 240, y: 450 }, { id: 8, x: 390, y: 450 },
+      { id: 9, x: 600, y: 280 }, { id:10, x: 600, y: 110 }, { id:11, x: 600, y: 450 },
+    ],
+    adj: [
+      [1,3],[0,2,4],[1,5,10],[0,4,6],[1,3,5,7],[2,4,8,9],
+      [3,7],[4,6,8],[5,7,11],[5,10,11],[2,9],[8,9],
+    ],
+  },
+  wide: {
+    name: "Wide frontier (hub)",
+    hint: "A hub at node 1 makes level 1 explode — the 'wide frontier' that causes OOM at scale.",
+    sources: [0],
+    nodes: [
+      { id: 0, x:  90, y: 280 }, { id: 1, x: 250, y: 280 },
+      { id: 2, x: 430, y:  70 }, { id: 3, x: 430, y: 160 }, { id: 4, x: 430, y: 250 },
+      { id: 5, x: 430, y: 340 }, { id: 6, x: 430, y: 430 }, { id: 7, x: 430, y: 510 },
+      { id: 8, x: 620, y: 200 }, { id: 9, x: 620, y: 380 },
+    ],
+    adj: [[1],[0,2,3,4,5,6,7],[1,8],[1,8],[1,8],[1,9],[1,9],[1,9],[2,3,4],[5,6,7]],
+  },
+  chain: {
+    name: "Long chain (high diameter)",
+    hint: "A path graph: diameter = V-1. Each level has one node — the worst case for parallel/level-synchronous BFS.",
+    sources: [0],
+    nodes: Array.from({ length: 9 }, (_, i) => ({ id: i, x: 80 + i * 75, y: 280 })),
+    adj: Array.from({ length: 9 }, (_, i) => {
+      const a = []; if (i > 0) a.push(i - 1); if (i < 8) a.push(i + 1); return a;
+    }),
+  },
+};
+
+// =====================================================================
+//  GRID PRESETS  (4-neighbour BFS on a tile map; '#' = wall, 'S' = source)
+// =====================================================================
+const GRID_PRESETS = {
+  open: {
+    name: "Open grid (single source)",
+    hint: "4-directional BFS from the corner. Distance rings form a diamond (Manhattan metric).",
+    rows: ["S........",
+           ".........",
+           ".........",
+           ".........",
+           ".........",
+           "........."],
+  },
+  maze: {
+    name: "Maze with walls",
+    hint: "Walls block expansion. BFS finds the shortest wall-free path; dead ends never reach the far side.",
+    rows: ["S..#.....",
+           "##.#.###.",
+           "...#.#...",
+           ".###.#.##",
+           ".....#...",
+           "####.###."],
+  },
+  multi: {
+    name: "Multi-source flood",
+    hint: "Two sources flood simultaneously; each cell gets distance to its NEAREST source — a Voronoi partition.",
+    rows: ["S...#...S",
+           "....#....",
+           ".........",
+           "....#....",
+           "....#....",
+           "S...#...."],
+  },
+};
+
+// =====================================================================
+//  STATE / EVENT MODEL  (build a deterministic timeline, replay it)
+// =====================================================================
+let mode = "graph";       // "graph" | "grid"
+let G = null;             // active graph model (nodes/adj/sources/N)
+let GRID = null;          // active grid model
+let EVENTS = [];
+let cursor = -1;
+let timer = null;
+
+// ---- GRAPH event builder ----
+function buildGraphEvents(model) {
+  const { adj, sources } = model;
+  const N = model.nodes.length;
+  const events = [];
+  const dist = new Array(N).fill(-1);
+  const parent = new Array(N).fill(-1);
+  const state = new Array(N).fill("unvisited");
+  let queue = [];
+  let edgesScanned = 0;
+
+  function snap(msg, activeEdge) {
+    events.push({
+      kind: "graph",
+      dist: dist.slice(), parent: parent.slice(), state: state.slice(),
+      queue: queue.slice(), edgesScanned, msg, activeEdge: activeEdge || null,
+    });
+  }
+
+  for (const s of sources) { dist[s] = 0; state[s] = "frontier"; queue.push(s); }
+  snap(`Seed ${sources.length > 1 ? "sources" : "source"} <span class="hl">${sources.join(", ")}</span> at dist 0, enqueue.`);
+
+  while (queue.length > 0) {
+    const u = queue.shift();
+    state[u] = "current";
+    snap(`Dequeue <span class="hl">${u}</span> (dist ${dist[u]}). Scan neighbors.`);
+    for (const v of adj[u]) {
+      edgesScanned++;
+      if (dist[v] === -1) {
+        dist[v] = dist[u] + 1; parent[v] = u; state[v] = "frontier"; queue.push(v);
+        snap(`Discover <span class="hl">${v}</span> via ${u}: dist[${v}] = ${dist[v]}, enqueue.`, [u, v]);
+      } else {
+        snap(`Neighbor <span class="hl">${v}</span> already seen (dist ${dist[v]}) — skip.`, [u, v]);
+      }
+    }
+    state[u] = "visited";
+    snap(`Finished <span class="hl">${u}</span>. Mark done.`);
+  }
+  snap(`Queue empty — BFS complete. Distances: [${dist.join(", ")}].`);
+  return events;
+}
+
+// ---- GRID event builder ----
+function parseGrid(rows) {
+  const R = rows.length, C = rows[0].length;
+  const wall = [], sources = [];
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      const ch = rows[r][c];
+      if (ch === "#") wall.push(r * C + c);
+      if (ch === "S") sources.push(r * C + c);
+    }
+  }
+  return { R, C, wall: new Set(wall), sources };
+}
+
+function buildGridEvents(grid) {
+  const { R, C, wall, sources } = grid;
+  const N = R * C;
+  const events = [];
+  const dist = new Array(N).fill(-1);
+  const state = new Array(N).fill("unvisited");
+  for (const w of wall) state[w] = "wall";
+  let queue = [];
+  let edgesScanned = 0;
+  const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+  function snap(msg, cur) {
+    events.push({
+      kind: "grid",
+      dist: dist.slice(), state: state.slice(), queue: queue.slice(),
+      edgesScanned, msg, cur: cur ?? null, R, C,
+    });
+  }
+
+  for (const s of sources) { dist[s] = 0; state[s] = "frontier"; queue.push(s); }
+  snap(`Seed ${sources.length > 1 ? "sources" : "source"} at dist 0, enqueue.`);
+
+  while (queue.length > 0) {
+    const u = queue.shift();
+    state[u] = "current";
+    const ur = Math.floor(u / C), uc = u % C;
+    snap(`Dequeue cell (${ur},${uc}) dist ${dist[u]}. Try 4 neighbors.`, u);
+    for (const [dr, dc] of DIRS) {
+      const nr = ur + dr, nc = uc + dc;
+      if (nr < 0 || nr >= R || nc < 0 || nc >= C) continue;
+      const v = nr * C + nc;
+      edgesScanned++;
+      if (state[v] === "wall") continue;
+      if (dist[v] === -1) {
+        dist[v] = dist[u] + 1; state[v] = "frontier"; queue.push(v);
+        snap(`Reach (${nr},${nc}): dist = ${dist[v]}, enqueue.`, u);
+      }
+    }
+    state[u] = "visited";
+    snap(`Finished (${ur},${uc}). Mark done.`, u);
+  }
+  snap(`Queue empty — grid BFS complete.`);
+  return events;
+}
+
+// =====================================================================
+//  RENDERING — GRAPH
+// =====================================================================
+const svg = document.getElementById("canvas");
+const edgeEls = {};
 function edgeKey(a, b) { return Math.min(a, b) + "-" + Math.max(a, b); }
 
-function renderStatic() {
+function renderGraphStatic() {
   svg.innerHTML = "";
-  // edges first (behind nodes)
+  const { nodes, adj, sources } = G;
+  const N = nodes.length;
+  const srcSet = new Set(sources);
+  for (const k in edgeEls) delete edgeEls[k];
   for (let u = 0; u < N; u++) {
-    for (const v of ADJ[u]) {
+    for (const v of adj[u]) {
       if (u < v) {
         const line = el("line", {
-          x1: NODES[u].x, y1: NODES[u].y,
-          x2: NODES[v].x, y2: NODES[v].y,
-          class: "edge-line",
+          x1: nodes[u].x, y1: nodes[u].y, x2: nodes[v].x, y2: nodes[v].y, class: "edge-line",
         });
         svg.appendChild(line);
         edgeEls[edgeKey(u, v)] = line;
       }
     }
   }
-  // nodes
-  for (const node of NODES) {
+  for (const node of nodes) {
     const g = el("g", {});
-    const c = el("circle", { cx: node.x, cy: node.y, r: 26, class: "node-circle unvisited", id: "node-" + node.id });
+    const cls = "node-circle unvisited" + (srcSet.has(node.id) ? " source" : "");
+    const c = el("circle", { cx: node.x, cy: node.y, r: 24, class: cls, id: "node-" + node.id });
     const lbl = el("text", { x: node.x, y: node.y, class: "node-label", id: "lbl-" + node.id });
     lbl.textContent = node.id;
-    const badge = el("text", { x: node.x + 30, y: node.y - 28, class: "dist-badge", id: "dist-" + node.id });
-    badge.textContent = "";
+    const badge = el("text", { x: node.x + 28, y: node.y - 26, class: "dist-badge", id: "dist-" + node.id });
     g.appendChild(c); g.appendChild(lbl); g.appendChild(badge);
     svg.appendChild(g);
   }
 }
 
-function paint(ev) {
-  // node states + distances
+function paintGraph(ev) {
+  const { nodes, adj, sources } = G;
+  const N = nodes.length;
+  const srcSet = new Set(sources);
   for (let i = 0; i < N; i++) {
     const c = document.getElementById("node-" + i);
-    c.setAttribute("class", "node-circle " + ev.state[i]);
-    const badge = document.getElementById("dist-" + i);
-    badge.textContent = ev.dist[i] >= 0 ? "d=" + ev.dist[i] : "";
+    c.setAttribute("class", "node-circle " + ev.state[i] + (srcSet.has(i) ? " source" : ""));
+    document.getElementById("dist-" + i).textContent = ev.dist[i] >= 0 ? "d=" + ev.dist[i] : "";
   }
-  // edges: tree edges (parent links) + active edge highlight
   for (const key in edgeEls) edgeEls[key].setAttribute("class", "edge-line");
   for (let v = 0; v < N; v++) {
     if (ev.parent[v] !== -1) {
@@ -341,51 +516,172 @@ function paint(ev) {
     const e = edgeEls[edgeKey(ev.activeEdge[0], ev.activeEdge[1])];
     if (e) e.setAttribute("class", "edge-line active");
   }
+}
 
-  // queue
+// =====================================================================
+//  RENDERING — GRID
+// =====================================================================
+let gridGeom = null;
+function renderGridStatic() {
+  svg.innerHTML = "";
+  const { R, C } = GRID;
+  const pad = 16, cw = (760 - pad * 2) / C, ch = (560 - pad * 2) / R;
+  const cell = Math.min(cw, ch);
+  const offX = (760 - cell * C) / 2, offY = (560 - cell * R) / 2;
+  gridGeom = { cell, offX, offY, C };
+  const srcSet = GRID.sources;
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      const id = r * C + c;
+      const g = el("g", {});
+      const isSrc = srcSet.includes(id);
+      const rect = el("rect", {
+        x: offX + c * cell + 1, y: offY + r * cell + 1,
+        width: cell - 2, height: cell - 2, rx: 4,
+        class: "gcell-rect unvisited" + (isSrc ? " source" : ""),
+        id: "g-" + id,
+      });
+      const txt = el("text", {
+        x: offX + c * cell + cell / 2, y: offY + r * cell + cell / 2,
+        class: "gcell-txt", id: "gt-" + id,
+      });
+      g.appendChild(rect); g.appendChild(txt);
+      svg.appendChild(g);
+    }
+  }
+}
+
+function paintGrid(ev) {
+  const N = ev.R * ev.C;
+  const srcSet = GRID.sources;
+  for (let i = 0; i < N; i++) {
+    const rect = document.getElementById("g-" + i);
+    let st = ev.state[i];
+    rect.setAttribute("class", "gcell-rect " + st + (srcSet.includes(i) && st !== "wall" ? " source" : ""));
+    const txt = document.getElementById("gt-" + i);
+    txt.textContent = (st !== "wall" && ev.dist[i] >= 0) ? ev.dist[i] : "";
+  }
+}
+
+// =====================================================================
+//  SHARED HUD — queue, layers, stats, log
+// =====================================================================
+function renderQueue(ev) {
   const qbox = document.getElementById("queueBox");
   qbox.innerHTML = "";
   if (ev.queue.length === 0) {
-    const span = document.createElement("span");
-    span.className = "queue-empty";
-    span.textContent = "empty";
-    qbox.appendChild(span);
-  } else {
-    ev.queue.forEach((id, idx) => {
-      const cell = document.createElement("div");
-      cell.className = "qcell" + (idx === 0 ? " front" : "");
-      cell.textContent = id;
-      qbox.appendChild(cell);
-    });
+    const s = document.createElement("span");
+    s.className = "queue-empty"; s.textContent = "empty";
+    qbox.appendChild(s);
+    return;
   }
-
-  // log + stats
-  document.getElementById("log").innerHTML = ev.msg;
-  const visited = ev.state.filter(s => s === "visited").length;
-  const discovered = ev.dist.filter(d => d >= 0).length;
-  const curLevel = Math.max(...ev.dist.filter(d => d >= 0), 0);
-  document.getElementById("statLevel").textContent = curLevel;
-  document.getElementById("statVisited").textContent = discovered + " / " + N;
-  document.getElementById("statFrontier").textContent = ev.queue.length;
-  document.getElementById("statEdges").textContent = ev.edgesScanned;
+  // Show level separators so the "queue spans ≤2 levels" invariant is visible.
+  let prevLevel = null;
+  ev.queue.forEach((id, idx) => {
+    const lvl = ev.dist[id];
+    if (prevLevel !== null && lvl !== prevLevel) {
+      const sep = document.createElement("div");
+      sep.className = "qcell lvlsep";
+      sep.textContent = "│";
+      qbox.appendChild(sep);
+    }
+    prevLevel = lvl;
+    const cell = document.createElement("div");
+    cell.className = "qcell" + (idx === 0 ? " front" : "");
+    cell.textContent = (mode === "grid")
+      ? `${Math.floor(id / ev.C)},${id % ev.C}`
+      : id;
+    qbox.appendChild(cell);
+  });
 }
 
-function blankState() {
-  return {
-    dist: new Array(N).fill(-1),
-    parent: new Array(N).fill(-1),
-    state: new Array(N).fill("unvisited"),
-    queue: [],
-    edgesScanned: 0,
-    msg: 'Press <span class="hl">Step</span> to begin BFS from node 0.',
-    activeEdge: null,
-  };
+function renderLayers(ev) {
+  const box = document.getElementById("layers");
+  box.innerHTML = "";
+  const counts = {};
+  let maxd = 0;
+  for (let i = 0; i < ev.dist.length; i++) {
+    const d = ev.dist[i];
+    if (d >= 0) { counts[d] = (counts[d] || 0) + 1; if (d > maxd) maxd = d; }
+  }
+  const maxCount = Math.max(1, ...Object.values(counts));
+  if (Object.keys(counts).length === 0) {
+    box.innerHTML = '<span class="hint">No layers discovered yet.</span>';
+    return;
+  }
+  for (let d = 0; d <= maxd; d++) {
+    const cnt = counts[d] || 0;
+    const row = document.createElement("div");
+    row.className = "layer-row";
+    row.innerHTML =
+      `<span class="lk">L${d}</span>` +
+      `<span class="layer-bar" style="width:${Math.max(2, (cnt / maxCount) * 150)}px"></span>` +
+      `<span class="lc">${cnt}</span>`;
+    box.appendChild(row);
+  }
+}
+
+let logHistory = [];
+function renderLog(ev, fresh) {
+  const log = document.getElementById("log");
+  if (fresh) { logHistory = []; }
+  logHistory.push(ev.msg);
+  if (logHistory.length > 6) logHistory = logHistory.slice(-6);
+  log.innerHTML = logHistory
+    .map((m, i) => `<div class="line ${i === logHistory.length - 1 ? "cur" : "old"}">${m}</div>`)
+    .join("");
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderStats(ev) {
+  const discovered = ev.dist.filter(d => d >= 0).length;
+  const curLevel = Math.max(0, ...ev.dist.filter(d => d >= 0));
+  const total = (mode === "grid") ? ev.dist.length - ev.state.filter(s => s === "wall").length : ev.dist.length;
+  const sources = (mode === "grid") ? GRID.sources.length : G.sources.length;
+  document.getElementById("statLevel").textContent = curLevel;
+  document.getElementById("statVisited").textContent = discovered + " / " + total;
+  document.getElementById("statFrontier").textContent = ev.queue.length;
+  document.getElementById("statEdges").textContent = ev.edgesScanned;
+  document.getElementById("statSources").textContent = sources;
+}
+
+function paint(ev, fresh) {
+  if (ev.kind === "graph") paintGraph(ev); else paintGrid(ev);
+  renderQueue(ev);
+  renderLayers(ev);
+  renderStats(ev);
+  renderLog(ev, fresh);
+}
+
+// =====================================================================
+//  PLAYBACK
+// =====================================================================
+function blankEvent() {
+  if (mode === "graph") {
+    const N = G.nodes.length;
+    return {
+      kind: "graph",
+      dist: new Array(N).fill(-1), parent: new Array(N).fill(-1),
+      state: new Array(N).fill("unvisited"), queue: [], edgesScanned: 0,
+      msg: 'Press <span class="hl">Step</span> to begin BFS.', activeEdge: null,
+    };
+  } else {
+    const N = GRID.R * GRID.C;
+    const state = new Array(N).fill("unvisited");
+    for (const w of GRID.wall) state[w] = "wall";
+    return {
+      kind: "grid",
+      dist: new Array(N).fill(-1), state, queue: [], edgesScanned: 0,
+      msg: 'Press <span class="hl">Step</span> to begin grid BFS.', cur: null,
+      R: GRID.R, C: GRID.C,
+    };
+  }
 }
 
 function step() {
   if (cursor >= EVENTS.length - 1) { stopRun(); return false; }
   cursor++;
-  paint(EVENTS[cursor]);
+  paint(EVENTS[cursor], cursor === 0);
   if (cursor >= EVENTS.length - 1) {
     document.getElementById("stepBtn").disabled = true;
     stopRun();
@@ -393,40 +689,81 @@ function step() {
   return true;
 }
 
-function reset() {
-  stopRun();
+function loadActive() {
+  if (mode === "graph") {
+    renderGraphStatic();
+    EVENTS = buildGraphEvents(G);
+  } else {
+    renderGridStatic();
+    EVENTS = buildGridEvents(GRID);
+  }
   cursor = -1;
-  renderStatic();
-  paint(blankState());
+  logHistory = [];
+  paint(blankEvent(), true);
   document.getElementById("stepBtn").disabled = false;
 }
 
+function reset() { stopRun(); loadActive(); }
+
 function startRun() {
   if (timer) return;
-  const runBtn = document.getElementById("runBtn");
-  runBtn.textContent = "Pause ⏸";
+  document.getElementById("runBtn").textContent = "Pause ⏸";
   const speed = +document.getElementById("speed").value;
-  timer = setInterval(() => {
-    if (!step()) stopRun();
-  }, 1520 - speed); // higher slider value => shorter interval => faster
+  timer = setInterval(() => { if (!step()) stopRun(); }, 1520 - speed);
 }
-
 function stopRun() {
   if (timer) { clearInterval(timer); timer = null; }
   document.getElementById("runBtn").textContent = "Run ⏩";
 }
 
-document.getElementById("stepBtn").addEventListener("click", step);
-document.getElementById("runBtn").addEventListener("click", () => {
-  if (timer) stopRun(); else startRun();
-});
-document.getElementById("resetBtn").addEventListener("click", reset);
-document.getElementById("speed").addEventListener("input", () => {
-  if (timer) { stopRun(); startRun(); } // re-arm at new speed
+// =====================================================================
+//  PRESET / MODE WIRING
+// =====================================================================
+function populatePresets() {
+  const sel = document.getElementById("presetSel");
+  sel.innerHTML = "";
+  const presets = (mode === "graph") ? GRAPH_PRESETS : GRID_PRESETS;
+  for (const key in presets) {
+    const o = document.createElement("option");
+    o.value = key; o.textContent = presets[key].name;
+    sel.appendChild(o);
+  }
+  applyPreset(sel.value);
+}
+
+function applyPreset(key) {
+  if (mode === "graph") {
+    G = GRAPH_PRESETS[key];
+    document.getElementById("presetHint").textContent = G.hint;
+    document.getElementById("modeSub").textContent =
+      `Graph mode • ${G.sources.length > 1 ? G.sources.length + " sources" : "single source"}`;
+  } else {
+    const p = GRID_PRESETS[key];
+    GRID = parseGrid(p.rows);
+    document.getElementById("presetHint").textContent = p.hint;
+    document.getElementById("modeSub").textContent =
+      `Grid mode • ${GRID.sources.length > 1 ? GRID.sources.length + " sources" : "single source"}`;
+  }
+  reset();
+}
+
+document.getElementById("modeSeg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  document.querySelectorAll("#modeSeg button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  mode = btn.dataset.mode;
+  populatePresets();
 });
 
+document.getElementById("presetSel").addEventListener("change", (e) => applyPreset(e.target.value));
+document.getElementById("stepBtn").addEventListener("click", step);
+document.getElementById("runBtn").addEventListener("click", () => { if (timer) stopRun(); else startRun(); });
+document.getElementById("resetBtn").addEventListener("click", reset);
+document.getElementById("speed").addEventListener("input", () => { if (timer) { stopRun(); startRun(); } });
+
 // boot
-reset();
+populatePresets();
 </script>
 </body>
 </html>

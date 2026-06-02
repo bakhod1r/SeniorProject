@@ -4,14 +4,16 @@
 1. Formal Definition
 2. Correctness Proof (induction on edge count)
 3. Negative-Cycle Detection Proof
-4. Complexity: O(VE) and SPFA Average/Worst Analysis
-5. Yen's and Other Constant-Factor Improvements
-6. Cache Behavior
-7. Average-Case Analysis
-8. Space-Time Trade-offs
-9. Comparison with Alternatives
-10. Open Problems (near-linear negative-weight SSSP — BNW 2022)
-11. Summary
+4. Worked Round-by-Round Trace
+5. Complexity: O(VE) and SPFA Average/Worst Analysis
+6. Yen's and Other Constant-Factor Improvements
+7. Reference Implementations (negative-cycle extraction, DAG relaxation, Johnson reweighting)
+8. Cache Behavior
+9. Average-Case Analysis
+10. Space-Time Trade-offs
+11. Comparison with Alternatives
+12. Open Problems (near-linear negative-weight SSSP — BNW 2022)
+13. Summary
 
 ---
 
@@ -86,17 +88,80 @@ Because the cycle is closed, `Σ d[v_i] = Σ d[v_{i-1}]` (same multiset of verti
 
 ---
 
-## 4. Complexity: O(VE) and SPFA Average/Worst Analysis
+## 4. Worked Round-by-Round Trace
 
-### 4.1 Standard bound
+A concrete trace makes the induction of Section 2 tangible and shows the tightness of the `|V|−1` bound and the role of edge order.
+
+### 4.1 Graph
+
+Five vertices `s,a,b,c,d`; one negative edge (`c→b = −3`); no negative cycle.
+
+```text
+        4         -3
+   s ------> a        c ------> b
+   |  \                ^        ^
+ 5 |   \ 8             |3       |
+   v    v             |        | 2
+   c <-- (s->c = 2)   a ------>+
+   (edges, weight):
+     s->a = 4    s->c = 2
+     a->b = 8    a->c = 3
+     c->b = -3   b->d = 2
+```
+
+Edge list (the order matters for how fast it converges):
+
+```text
+e1: s->a (4)   e2: s->c (2)   e3: a->b (8)
+e4: a->c (3)   e5: c->b (-3)  e6: b->d (2)
+```
+
+### 4.2 Relaxation rounds
+
+Initialize `d = [s:0, a:∞, b:∞, c:∞, d:∞]`. Each round scans `e1..e6` in order.
+
+```text
+            d[s]  d[a]  d[b]  d[c]  d[d]   relaxations this round
+init          0    inf   inf   inf   inf
+round 1       0     4     ?     2     ?
+  e1 s->a:           4 (0+4)
+  e2 s->c:                       2 (0+2)
+  e3 a->b:                12 (4+8)
+  e4 a->c:           (4+3=7 >= 2, no change)
+  e5 c->b:        b = min(12, 2-3) = -1
+  e6 b->d:        d = -1+2 = 1
+round 1 end   0     4    -1     2     1
+round 2       0     4    -1     2     1     (scan finds no improvement)
+```
+
+After round 1 every shortest path here already has its final value because the longest shortest-path has few hops and the edges happened to be in a favorable order. Round 2 changes nothing → **early termination** fires. The detection pass also relaxes nothing → return `TRUE` (no negative cycle). Final `δ`: `s=0, a=4, b=−1, c=2, d=1`.
+
+### 4.3 Adversarial order shows the tight bound
+
+If the same path graph `s→v₁→…→v_{n-1}` is fed with edges listed in *reverse* (`v_{n-2}→v_{n-1}` first, `s→v₁` last), each round propagates the correct distance exactly **one hop**, forcing all `|V|−1` rounds. This is the worst-case witness referenced in Theorem 2.2:
+
+```text
+round 1: only d[v1] becomes correct
+round 2: d[v2] becomes correct
+...
+round n-1: d[v_{n-1}] becomes correct   <- needs the full V-1 rounds
+```
+
+The lesson for implementations: edge ordering is a free constant-factor lever (Yen's method, Section 6, exploits it), but the asymptotic `Θ(VE)` worst case is unavoidable without changing the algorithm.
+
+---
+
+## 5. Complexity: O(VE) and SPFA Average/Worst Analysis
+
+### 5.1 Standard bound
 
 Initialization is `Θ(V)`. The main loop is `|V| − 1` rounds, each scanning all `|E|` edges with `Θ(1)` work per edge: `Θ(VE)`. The detection pass is `Θ(E)`. Total: **`Θ(VE)`**, `Θ(V)` extra space beyond the graph. On a connected graph `E ≥ V − 1`, so this is also `O(E²)` in the worst dense case `Θ(V³)`.
 
-### 4.2 Early termination
+### 5.2 Early termination
 
 If a round performs no relaxation, the fixpoint `d[v] ≤ d[u] + w(u,v)` holds for all edges, so by Theorem 2.2's reasoning the answer is final. Let `k` be the maximum number of edges on any shortest path actually realized; the algorithm halts after `k + 1 ≤ |V|` rounds. On graphs with small shortest-path "hop diameter," this is far below `V`.
 
-### 4.3 SPFA average and worst case
+### 5.3 SPFA average and worst case
 
 SPFA (Bellman-Ford-Moore with a FIFO queue of active vertices) relaxes only edges out of vertices whose estimate just improved.
 
@@ -108,11 +173,11 @@ The takeaway proved by the worst-case family: **SPFA is a heuristic, not an asym
 
 ---
 
-## 5. Yen's and Other Constant-Factor Improvements
+## 6. Yen's and Other Constant-Factor Improvements
 
 These reduce the *constant* on `O(VE)`, not the asymptotics.
 
-### 5.1 Yen's improvement (1970)
+### 6.1 Yen's improvement (1970)
 
 Jin Y. Yen observed two optimizations:
 
@@ -122,18 +187,298 @@ Jin Y. Yen observed two optimizations:
 
 Yen's halving is the standard "fast Bellman-Ford" taught in competitive programming as the safe alternative to SPFA — deterministic and never worse than `O(VE)`.
 
-### 5.2 Bannister–Eppstein (2012)
+### 6.2 Bannister–Eppstein (2012)
 
 Refined the random-vertex-order analysis of Yen's method, showing the expected number of rounds is `(V/3) + O(1)` under a random order, improving the constant further while staying `O(VE)` worst case.
 
-### 5.3 Other practical tweaks
+### 6.3 Other practical tweaks
 
 - **SLF (Smallest Label First) / LLL (Large Label Last)** queue disciplines for SPFA: insert improved vertices at the front if their label is below the queue average; defer large labels to the back. These cut constants on many graphs but do not change the `Θ(VE)` worst case.
 - **Distance flagging:** maintain a boolean "in current frontier" to skip stale edges (the SPFA `inQueue` flag generalized).
 
 ---
 
-## 6. Cache Behavior
+## 7. Reference Implementations
+
+Three production-shaped routines that recur in the proofs above: negative-cycle **extraction** (Corollary 3.2 made executable), **DAG relaxation** (the linear special case), and **Johnson's reweighting step** (Bellman-Ford as a potentials front-end).
+
+### 7.1 Negative-cycle extraction
+
+#### Go
+
+```go
+package main
+
+import "fmt"
+
+type Edge struct{ From, To, W int }
+
+// FindNegativeCycle runs |V| rounds (init dist=0 to catch any reachable cycle),
+// then chases pred |V| steps to land on the cycle. Returns nil if none.
+func FindNegativeCycle(n int, edges []Edge) []int {
+	dist := make([]int, n)
+	pred := make([]int, n)
+	for i := range pred {
+		pred[i] = -1
+	}
+	x := -1
+	for i := 0; i < n; i++ {
+		x = -1
+		for _, e := range edges {
+			if dist[e.From]+e.W < dist[e.To] {
+				dist[e.To] = dist[e.From] + e.W
+				pred[e.To] = e.From
+				x = e.To
+			}
+		}
+	}
+	if x == -1 {
+		return nil
+	}
+	for i := 0; i < n; i++ { // guarantee x is inside the cycle
+		x = pred[x]
+	}
+	cycle := []int{x}
+	for v := pred[x]; v != x; v = pred[v] {
+		cycle = append(cycle, v)
+	}
+	for i, j := 0, len(cycle)-1; i < j; i, j = i+1, j-1 {
+		cycle[i], cycle[j] = cycle[j], cycle[i]
+	}
+	return cycle
+}
+
+func main() {
+	edges := []Edge{{0, 1, 1}, {1, 2, -1}, {2, 0, -1}} // cycle weight -1
+	fmt.Println("cycle:", FindNegativeCycle(3, edges))
+}
+```
+
+#### Java
+
+```java
+import java.util.*;
+
+public class NegCycle {
+    // edges as {from,to,w}. dist starts at 0 to catch ANY reachable cycle.
+    static List<Integer> find(int n, int[][] edges) {
+        long[] dist = new long[n];
+        int[] pred = new int[n];
+        Arrays.fill(pred, -1);
+        int x = -1;
+        for (int i = 0; i < n; i++) {
+            x = -1;
+            for (int[] e : edges) {
+                if (dist[e[0]] + e[2] < dist[e[1]]) {
+                    dist[e[1]] = dist[e[0]] + e[2];
+                    pred[e[1]] = e[0];
+                    x = e[1];
+                }
+            }
+        }
+        if (x == -1) return null;
+        for (int i = 0; i < n; i++) x = pred[x];
+        List<Integer> cycle = new ArrayList<>();
+        int v = x;
+        do { cycle.add(v); v = pred[v]; } while (v != x);
+        Collections.reverse(cycle);
+        return cycle;
+    }
+
+    public static void main(String[] args) {
+        int[][] edges = {{0, 1, 1}, {1, 2, -1}, {2, 0, -1}};
+        System.out.println("cycle: " + find(3, edges));
+    }
+}
+```
+
+#### Python
+
+```python
+def find_negative_cycle(n, edges):
+    """edges: (u, v, w). dist starts at 0 to catch any reachable cycle."""
+    dist = [0] * n
+    pred = [-1] * n
+    x = -1
+    for _ in range(n):
+        x = -1
+        for u, v, w in edges:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                pred[v] = u
+                x = v
+    if x == -1:
+        return None
+    for _ in range(n):          # land inside the cycle
+        x = pred[x]
+    cycle, v = [x], pred[x]
+    while v != x:
+        cycle.append(v)
+        v = pred[v]
+    cycle.reverse()
+    return cycle
+
+
+if __name__ == "__main__":
+    print("cycle:", find_negative_cycle(3, [(0, 1, 1), (1, 2, -1), (2, 0, -1)]))
+```
+
+### 7.2 DAG relaxation (linear special case)
+
+On an acyclic graph, relaxing edges in topological order finalizes every distance in **one** pass: when a vertex is processed, all its in-neighbors are already final. This is `Θ(V+E)` and handles negative weights for free (there can be no negative cycle in a DAG).
+
+#### Go
+
+```go
+// DAGShortestPath assumes adj is acyclic; topo is a valid topological order.
+func DAGShortestPath(n int, adj map[int][][2]int, topo []int, src int) []int {
+	const INF = int(1e18)
+	dist := make([]int, n)
+	for i := range dist {
+		dist[i] = INF
+	}
+	dist[src] = 0
+	for _, u := range topo {
+		if dist[u] == INF {
+			continue
+		}
+		for _, e := range adj[u] { // e = {to, w}
+			if dist[u]+e[1] < dist[e[0]] {
+				dist[e[0]] = dist[u] + e[1]
+			}
+		}
+	}
+	return dist
+}
+```
+
+#### Java
+
+```java
+static long[] dagShortestPath(int n, List<int[]>[] adj, int[] topo, int src) {
+    final long INF = Long.MAX_VALUE / 4;
+    long[] dist = new long[n];
+    Arrays.fill(dist, INF);
+    dist[src] = 0;
+    for (int u : topo) {
+        if (dist[u] == INF) continue;
+        for (int[] e : adj[u])              // e = {to, w}
+            if (dist[u] + e[1] < dist[e[0]])
+                dist[e[0]] = dist[u] + e[1];
+    }
+    return dist;
+}
+```
+
+#### Python
+
+```python
+def dag_shortest_path(n, adj, topo, src):
+    """adj[u] = list of (v, w); topo = topological order. O(V+E)."""
+    INF = float("inf")
+    dist = [INF] * n
+    dist[src] = 0
+    for u in topo:
+        if dist[u] == INF:
+            continue
+        for v, w in adj[u]:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+    return dist
+```
+
+### 7.3 Johnson's reweighting step
+
+Johnson's algorithm adds a super-source `q` with 0-weight edges to all vertices, runs **Bellman-Ford** to get potentials `h[v] = δ(q, v)`, then reweights every edge to `w'(u,v) = w(u,v) + h[u] − h[v] ≥ 0`. The non-negativity follows directly from the triangle inequality `h[v] ≤ h[u] + w(u,v)`. After reweighting, Dijkstra runs from each source; true distances are recovered as `δ(u,v) = d'(u,v) − h[u] + h[v]`. Below is just the reweighting front-end.
+
+#### Go
+
+```go
+// JohnsonReweight returns potentials h and reweighted edges, or ok=false on neg cycle.
+func JohnsonReweight(n int, edges []Edge) (h []int, rew []Edge, ok bool) {
+	// Vertices 0..n-1; add virtual source n with 0-edge to all.
+	aug := make([]Edge, 0, len(edges)+n)
+	aug = append(aug, edges...)
+	for v := 0; v < n; v++ {
+		aug = append(aug, Edge{n, v, 0})
+	}
+	const INF = int(1e18)
+	h = make([]int, n+1)
+	for i := range h {
+		h[i] = INF
+	}
+	h[n] = 0
+	for i := 0; i < n; i++ { // n+1 vertices => n rounds
+		for _, e := range aug {
+			if h[e.From] != INF && h[e.From]+e.W < h[e.To] {
+				h[e.To] = h[e.From] + e.W
+			}
+		}
+	}
+	for _, e := range aug { // detection
+		if h[e.From] != INF && h[e.From]+e.W < h[e.To] {
+			return nil, nil, false
+		}
+	}
+	rew = make([]Edge, len(edges))
+	for i, e := range edges {
+		rew[i] = Edge{e.From, e.To, e.W + h[e.From] - h[e.To]} // >= 0
+	}
+	return h[:n], rew, true
+}
+```
+
+#### Java
+
+```java
+// Returns potentials h[0..n-1] and reweighted edges; null if negative cycle.
+static Object[] johnsonReweight(int n, int[][] edges) {
+    int m = edges.length;
+    int[][] aug = new int[m + n][3];
+    System.arraycopy(edges, 0, aug, 0, m);
+    for (int v = 0; v < n; v++) aug[m + v] = new int[]{n, v, 0}; // source = n
+    final long INF = Long.MAX_VALUE / 4;
+    long[] h = new long[n + 1];
+    Arrays.fill(h, INF);
+    h[n] = 0;
+    for (int i = 0; i < n; i++)
+        for (int[] e : aug)
+            if (h[e[0]] != INF && h[e[0]] + e[2] < h[e[1]])
+                h[e[1]] = h[e[0]] + e[2];
+    for (int[] e : aug)
+        if (h[e[0]] != INF && h[e[0]] + e[2] < h[e[1]]) return null;
+    int[][] rew = new int[m][3];
+    for (int i = 0; i < m; i++)
+        rew[i] = new int[]{edges[i][0], edges[i][1],
+                           (int) (edges[i][2] + h[edges[i][0]] - h[edges[i][1]])};
+    return new Object[]{Arrays.copyOf(h, n), rew};
+}
+```
+
+#### Python
+
+```python
+def johnson_reweight(n, edges):
+    """edges: (u, v, w). Returns (h, reweighted_edges) or (None, None) on neg cycle."""
+    INF = float("inf")
+    src = n
+    aug = list(edges) + [(src, v, 0) for v in range(n)]
+    h = [INF] * (n + 1)
+    h[src] = 0
+    for _ in range(n):                         # n+1 vertices => n rounds
+        for u, v, w in aug:
+            if h[u] != INF and h[u] + w < h[v]:
+                h[v] = h[u] + w
+    for u, v, w in aug:                         # detection
+        if h[u] != INF and h[u] + w < h[v]:
+            return None, None
+    rew = [(u, v, w + h[u] - h[v]) for (u, v, w) in edges]  # all weights >= 0
+    return h[:n], rew
+```
+
+---
+
+## 8. Cache Behavior
 
 Bellman-Ford's inner loop is a **streaming scan over the edge list** with random-access reads/writes into `d[]` (and `π[]`). Cache analysis:
 
@@ -145,23 +490,23 @@ In the external-memory model (block size `B`), a round costs `Θ(E/B)` I/Os for 
 
 ---
 
-## 7. Average-Case Analysis
+## 9. Average-Case Analysis
 
-### 7.1 Rounds to convergence
+### 9.1 Rounds to convergence
 
 With early termination, the number of rounds equals one plus the maximum *hop length* of any realized shortest path (the "shortest-path hop diameter" from `s`). On `G(n, p)` Erdős–Rényi random graphs above the connectivity threshold, the hop diameter is `Θ(log n / log(np))` with high probability, so Bellman-Ford with early stop runs in `O(E · log n / log(np))` expected time — exponentially fewer rounds than the `V−1` worst case.
 
-### 7.2 SPFA expected relaxations
+### 9.2 SPFA expected relaxations
 
 On random weighted graphs, the expected number of times a vertex is dequeued is `O(1)`, giving `O(E)` expected relaxations. This is the formal counterpart of "SPFA is usually near-linear." The variance, however, is high, and the worst-case family of Section 4.3 sits in the tail.
 
-### 7.3 Smoothed view
+### 9.3 Smoothed view
 
 There is no quicksort-style smoothed collapse here: the worst-case zigzag instances are robust to small perturbations of weights (the *combinatorial* re-enqueue structure persists), so SPFA's smoothed complexity remains `Θ(VE)` on those families. This mirrors heap sort's lack of smoothed improvement and is the rigorous reason "SPFA is dead" (a well-known competitive-programming verdict) on adversarial judges.
 
 ---
 
-## 8. Space-Time Trade-offs
+## 10. Space-Time Trade-offs
 
 | Variant | Time | Space | Notes |
 |---------|------|-------|-------|
@@ -177,7 +522,7 @@ The `π[]` array (`Θ(V)`) is the only space beyond `d[]`; dropping it saves spa
 
 ---
 
-## 9. Comparison with Alternatives
+## 11. Comparison with Alternatives
 
 | Algorithm | Time | Negative weights | Negative-cycle detection | Model |
 |-----------|------|-------------------|--------------------------|-------|
@@ -194,11 +539,11 @@ The defining cell is the intersection of "negative weights" and "single source w
 
 ---
 
-## 10. Open Problems (Near-Linear Negative-Weight SSSP — BNW 2022)
+## 12. Open Problems (Near-Linear Negative-Weight SSSP — BNW 2022)
 
 For decades the central open question was: **can single-source shortest paths with negative weights be solved in near-linear time**, closing the gap between Bellman-Ford's `O(VE)` and Dijkstra's `O(E log V)`?
 
-### 10.1 The BNW breakthrough
+### 12.1 The BNW breakthrough
 
 **Bernstein, Nanongkai & Wulff-Nilsen (FOCS 2022, "Negative-Weight Single-Source Shortest Paths in Near-Linear Time")** gave a randomized algorithm running in
 ```text
@@ -211,7 +556,7 @@ Key ideas (high level):
 - A recursive "scaling + reweighting" framework reminiscent of Johnson's potentials, but applied to a hierarchy of subgraphs so that Dijkstra-like steps dominate.
 - Handles negative-cycle detection within the same bound (it reports a cycle or returns valid distances/potentials).
 
-### 10.2 Follow-up and remaining questions
+### 12.2 Follow-up and remaining questions
 
 - **Bringmann, Cassis & Fischer (2023)** and others simplified and de-randomized parts of BNW, reducing log factors and removing randomness in cases. The race toward a clean `O(E log V)` continues.
 - **Deterministic near-linear** negative-weight SSSP matching the randomized bound is still being refined.
@@ -219,14 +564,14 @@ Key ideas (high level):
 - **Dynamic / incremental** negative-weight SSSP under edge updates remains far from the static near-linear bound.
 - **Parallel / distributed** near-linear negative-weight SSSP with low depth is open.
 
-### 10.3 Other directions
+### 12.3 Other directions
 
 - **All-pairs negative-weight** shortest paths: the best general bound remains `Õ(V³ / 2^{Ω(√log V)})` (Williams-style) or Johnson's `O(VE + V²log V)` for sparse graphs; whether truly subcubic combinatorial APSP exists is the famous APSP conjecture, tied to fine-grained complexity.
 - **Online negative-cycle detection** under edge insertions (the basis of incremental difference-constraint solvers) has amortized bounds that are still being improved.
 
 ---
 
-## 11. Summary
+## 13. Summary
 
 - **Formally**, Bellman-Ford computes `δ(s, v)` for all `v` via repeated relaxation, with the upper-bound invariant `d[v] ≥ δ(s, v)` as its backbone.
 - **Correctness** follows from the path-relaxation lemma: after `i` rounds, every shortest path of `≤ i` edges is realized; since simple paths use `≤ V−1` edges, `V−1` rounds suffice and are tight.

@@ -6,12 +6,14 @@
 3. Optimal Efficiency of A* (Dechter–Pearl)
 4. Complexity, Heuristic Accuracy, and Effective Branching Factor
 5. Space-Bounded Variants — IDA* and SMA*
-6. Cache Behavior
-7. Average-Case and Phase Transitions
-8. Space–Time Trade-offs
-9. Comparison with Alternatives
-10. Open Problems and Research Directions
-11. Summary
+6. Worked Expansion Trace (f = g + h)
+7. Reference Implementations (IDA*, Weighted A*, Consistency Checker)
+8. Cache Behavior
+9. Average-Case and Phase Transitions
+10. Space–Time Trade-offs
+11. Comparison with Alternatives
+12. Open Problems and Research Directions
+13. Summary
 
 ---
 
@@ -162,7 +164,498 @@ With `f = g + w·h`, `w ≥ 1`, the returned solution cost is at most `w · C*` 
 
 ---
 
-## 6. Cache Behavior
+## 6. Worked Expansion Trace (f = g + h)
+
+Theory becomes concrete when you watch `f = g + h` drive the frontier. Consider the 4-connected grid below. `S` is the start at `(0,0)`, `T` the goal at `(3,4)`, and `#` are walls. Movement cost is `1` per step; the heuristic is Manhattan distance, which is **consistent** on a 4-connected unit grid.
+
+```
+        col 0  1  2  3  4
+ row 0   S  .  .  .  .
+ row 1   .  #  #  #  .
+ row 2   .  .  .  #  .
+ row 3   .  .  .  .  T
+```
+
+`h(n) = |n.row − 3| + |n.col − 4|`. We track the OPEN priority queue keyed by `f`, breaking ties toward **larger g** (closer to goal). Each row shows the node popped, its `g/h/f`, and the successors pushed.
+
+```
+ Pop  node    g  h  f   action / successors pushed (f)
+ ───  ─────  ── ── ──  ─────────────────────────────────────────────
+  1   (0,0)   0  7  7   push (0,1)f7  (1,0)f7
+  2   (1,0)   1  6  7   push (2,0)f7                 [(0,1) is a tie]
+  3   (2,0)   2  5  7   push (2,1)f7  (3,0)f7
+  4   (3,0)   3  4  7   push (3,1)f7
+  5   (3,1)   4  3  7   push (2,1) already g=3? no → push (3,2)f7
+  6   (3,2)   5  2  7   push (3,3)f7
+  7   (3,3)   6  1  7   push (3,4)=T f7
+  8   (3,4)=T 7  0  7   GOAL — return cost 7
+```
+
+Two facts the trace makes visible:
+
+1. **`f` is constant at 7 along the optimal corridor.** Because the heuristic is consistent and tight on this open corridor, every node on a shortest path has `f = C* = 7`. The f-monotonicity lemma (Lemma 2.1) says `f` never *decreases*; here it never even increases, so A* walks straight to the goal expanding 8 nodes and zero detours.
+
+2. **Ties decided the shape.** Nodes `(0,1)`, `(2,1)`, `(3,1)` all sat at `f = 7` alongside the corridor nodes. The "larger g" tie-break popped corridor nodes first, so the off-path ties were never expanded. With a "smaller g" rule A* would have fanned sideways into the `f = 7` band before committing — the same optimal cost, more expansions. This is the §4 tie-band in action: A* must expand all `f* < C*` nodes (none here) but only *some* of the `f* = C*` band, and tie-breaking chooses which.
+
+Now contrast with `h ≡ 0` (Dijkstra) on the same grid: every reachable cell with `g ≤ 7` enters the band `f = g ≤ 7`, so Dijkstra expands the entire connected region within radius 7 — roughly every open cell — before reaching `T`. The heuristic's only job is to *bias* the otherwise-uniform `g`-expansion toward the goal, and the trace shows it doing exactly that.
+
+### 6.1 An inconsistent-heuristic trace (forced reopening)
+
+To see reopening, take a tiny graph with an admissible-but-inconsistent `h`:
+
+```
+        c=1        c=1
+   S ───────► A ───────► T
+   │                     ▲
+   │ c=1                 │ c=1
+   └──────► B ───────────┘
+        h: h(S)=4 h(A)=1 h(B)=4 h(T)=0
+        (admissible: h*(S)=2,h*(A)=1,h*(B)=1,h*(T)=0 → h(B)=4 > h*(B)=1? )
+```
+
+`h(B) = 4 > h*(B) = 1` would be *inadmissible*; instead set `h(B)=0`, `h(A)=1`, `h(S)=2`, but lower `h(A)` to `0` to break consistency: edge `(S,A)` needs `h(S) ≤ c(S,A)+h(A) = 1+0 = 1`, yet `h(S)=2 > 1` — inconsistent, still admissible since `h(S)=2 ≤ h*(S)=2`. A* pops `S(f=2)`, relaxes `A(g=1,f=1)` and `B(g=1,f=1)`. It pops `A(f=1)`, closes it, relaxes `T(g=2,f=2)`. It pops `B(f=1)`, finds `A` reachable at `g=1` (no improvement) — but on graphs where the second path to a *closed* node is cheaper, A* must pull that node back out of CLOSED and re-push it. Corollary 2.2 guarantees this never happens under consistency; here it can, which is exactly why the inconsistent case voids the "closed is final" invariant.
+
+---
+
+## 7. Reference Implementations (IDA*, Weighted A*, Consistency Checker)
+
+The three algorithms a professional reaches for beyond textbook A*: **IDA\*** for `O(d)` space, **weighted A\*** for bounded-suboptimal speed, and a **consistency checker** to validate that a heuristic earns the "no reopening" guarantee before you rely on it.
+
+### 7.1 IDA* — iterative-deepening A*
+
+#### Go
+
+```go
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+// Graph as adjacency with unit-or-weighted edges.
+type Edge struct {
+	to   int
+	cost float64
+}
+
+// IDAStar finds an optimal path cost from start to goal using O(depth) memory.
+// h must be admissible. Returns (cost, found).
+func IDAStar(adj [][]Edge, start, goal int, h func(int) float64) (float64, bool) {
+	threshold := h(start)
+	path := []int{start}
+	for {
+		// dfs returns the smallest f that EXCEEDED the threshold, or -1 on success.
+		next := math.Inf(1)
+		var dfs func(node int, g float64) float64
+		dfs = func(node int, g float64) float64 {
+			f := g + h(node)
+			if f > threshold {
+				return f // prune; report this f as a candidate next threshold
+			}
+			if node == goal {
+				return -1 // sentinel: found
+			}
+			localMin := math.Inf(1)
+			for _, e := range adj[node] {
+				if contains(path, e.to) {
+					continue // avoid cycles on the current DFS stack
+				}
+				path = append(path, e.to)
+				t := dfs(e.to, g+e.cost)
+				if t == -1 {
+					return -1
+				}
+				if t < localMin {
+					localMin = t
+				}
+				path = path[:len(path)-1]
+			}
+			return localMin
+		}
+		next = dfs(start, 0)
+		if next == -1 {
+			return threshold, true // threshold equals C* at success
+		}
+		if math.IsInf(next, 1) {
+			return math.Inf(1), false // exhausted
+		}
+		threshold = next
+	}
+}
+
+func contains(s []int, v int) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func main() {
+	// 0 ->1 ->3 (goal); 0 ->2 ->3
+	adj := [][]Edge{
+		{{1, 1}, {2, 4}}, {{3, 5}}, {{3, 1}}, {},
+	}
+	h := func(n int) float64 { // admissible lower bounds to node 3
+		return []float64{2, 5, 1, 0}[n]
+	}
+	cost, ok := IDAStar(adj, 0, 3, h)
+	fmt.Println(cost, ok) // 5 true  (0->2->3 = 4+1=5)
+}
+```
+
+#### Java
+
+```java
+import java.util.*;
+
+public class IDAStar {
+    record Edge(int to, double cost) {}
+
+    static double threshold;
+    static List<Edge>[] adj;
+    static int goal;
+    static double[] h;
+    static Deque<Integer> path = new ArrayDeque<>();
+
+    // Returns optimal cost, or Double.POSITIVE_INFINITY if unreachable.
+    public static double search(List<Edge>[] graph, int start, int g, double[] heur) {
+        adj = graph; goal = g; h = heur;
+        threshold = h[start];
+        path.push(start);
+        while (true) {
+            double next = dfs(start, 0.0);
+            if (next == -1) return threshold;          // found; threshold == C*
+            if (next == Double.POSITIVE_INFINITY) return next; // exhausted
+            threshold = next;
+        }
+    }
+
+    // -1 sentinel = goal found; otherwise smallest f exceeding the threshold.
+    static double dfs(int node, double g) {
+        double f = g + h[node];
+        if (f > threshold) return f;
+        if (node == goal) return -1;
+        double localMin = Double.POSITIVE_INFINITY;
+        for (Edge e : adj[node]) {
+            if (path.contains(e.to())) continue;       // no repeats on stack
+            path.push(e.to());
+            double t = dfs(e.to(), g + e.cost());
+            if (t == -1) return -1;
+            localMin = Math.min(localMin, t);
+            path.pop();
+        }
+        return localMin;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) {
+        List<Edge>[] adj = new List[]{
+            List.of(new Edge(1, 1), new Edge(2, 4)),
+            List.of(new Edge(3, 5)),
+            List.of(new Edge(3, 1)),
+            List.of()
+        };
+        double[] h = {2, 5, 1, 0};
+        System.out.println(search(adj, 0, 3, h)); // 5.0
+    }
+}
+```
+
+#### Python
+
+```python
+import math
+
+
+def ida_star(adj, start, goal, h):
+    """Iterative-deepening A*. adj[u] = list of (v, cost). h must be admissible.
+    Returns the optimal cost or math.inf. Uses O(depth) memory."""
+    threshold = h[start]
+    path = [start]
+
+    def dfs(node, g):
+        f = g + h[node]
+        if f > threshold:
+            return f                       # prune; candidate next threshold
+        if node == goal:
+            return -1                      # sentinel: found
+        local_min = math.inf
+        for nxt, cost in adj[node]:
+            if nxt in path:
+                continue                   # avoid cycles on the DFS stack
+            path.append(nxt)
+            t = dfs(nxt, g + cost)
+            if t == -1:
+                return -1
+            local_min = min(local_min, t)
+            path.pop()
+        return local_min
+
+    while True:
+        nxt = dfs(start, 0)
+        if nxt == -1:
+            return threshold               # threshold == C* at success
+        if nxt is math.inf:
+            return math.inf                # exhausted
+        threshold = nxt
+
+
+if __name__ == "__main__":
+    adj = {0: [(1, 1), (2, 4)], 1: [(3, 5)], 2: [(3, 1)], 3: []}
+    h = {0: 2, 1: 5, 2: 1, 3: 0}
+    print(ida_star(adj, 0, 3, h))          # 5  (0->2->3)
+```
+
+### 7.2 Weighted A* with explicit suboptimality bound
+
+The key property to enforce in code: with `f = g + w·h`, the returned cost is `≤ w·C*`. The implementation below also *reports* the bound so a caller can decide whether the path is acceptable.
+
+#### Go
+
+```go
+package main
+
+import (
+	"container/heap"
+	"fmt"
+	"math"
+)
+
+type wItem struct {
+	node int
+	f    float64
+}
+type wpq []wItem
+
+func (h wpq) Len() int            { return len(h) }
+func (h wpq) Less(i, j int) bool  { return h[i].f < h[j].f }
+func (h wpq) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h *wpq) Push(x any)         { *h = append(*h, x.(wItem)) }
+func (h *wpq) Pop() any           { o := *h; n := len(o); v := o[n-1]; *h = o[:n-1]; return v }
+
+type WEdge struct {
+	to   int
+	cost float64
+}
+
+// WeightedAStar with w >= 1. Returned cost <= w * optimal.
+func WeightedAStar(adj [][]WEdge, start, goal int, w float64, h func(int) float64) float64 {
+	g := map[int]float64{start: 0}
+	open := &wpq{{start, w * h(start)}}
+	for open.Len() > 0 {
+		cur := heap.Pop(open).(wItem)
+		if cur.node == goal {
+			return g[goal]
+		}
+		if cur.f > g[cur.node]+w*h(cur.node) {
+			continue // stale
+		}
+		for _, e := range adj[cur.node] {
+			t := g[cur.node] + e.cost
+			best, ok := g[e.to]
+			if !ok {
+				best = math.Inf(1)
+			}
+			if t < best {
+				g[e.to] = t
+				heap.Push(open, wItem{e.to, t + w*h(e.to)})
+			}
+		}
+	}
+	return math.Inf(1)
+}
+
+func main() {
+	adj := [][]WEdge{{{1, 1}, {2, 4}}, {{3, 5}}, {{3, 1}}, {}}
+	h := func(n int) float64 { return []float64{2, 5, 1, 0}[n] }
+	fmt.Println(WeightedAStar(adj, 0, 3, 1.0, h)) // 5 optimal
+	fmt.Println(WeightedAStar(adj, 0, 3, 2.0, h)) // <= 10, often the same path
+}
+```
+
+#### Java
+
+```java
+import java.util.*;
+
+public class WeightedAStarBounded {
+    record Edge(int to, double cost) {}
+
+    public static double search(List<Edge>[] adj, int start, int goal,
+                                double w, double[] h) {
+        Map<Integer, Double> g = new HashMap<>();
+        g.put(start, 0.0);
+        PriorityQueue<double[]> open =
+            new PriorityQueue<>(Comparator.comparingDouble(a -> a[0]));
+        open.add(new double[]{w * h[start], start});
+        while (!open.isEmpty()) {
+            double[] cur = open.poll();
+            int u = (int) cur[1];
+            if (u == goal) return g.get(u);             // cost <= w * C*
+            if (cur[0] > g.get(u) + w * h[u]) continue; // stale
+            for (Edge e : adj[u]) {
+                double t = g.get(u) + e.cost();
+                if (t < g.getOrDefault(e.to(), Double.POSITIVE_INFINITY)) {
+                    g.put(e.to(), t);
+                    open.add(new double[]{t + w * h[e.to()], e.to()});
+                }
+            }
+        }
+        return Double.POSITIVE_INFINITY;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) {
+        List<Edge>[] adj = new List[]{
+            List.of(new Edge(1, 1), new Edge(2, 4)),
+            List.of(new Edge(3, 5)), List.of(new Edge(3, 1)), List.of()
+        };
+        double[] h = {2, 5, 1, 0};
+        System.out.println(search(adj, 0, 3, 1.0, h)); // 5.0
+        System.out.println(search(adj, 0, 3, 2.0, h)); // <= 10.0
+    }
+}
+```
+
+#### Python
+
+```python
+import heapq
+import math
+import itertools
+
+
+def weighted_a_star(adj, start, goal, w=1.0, h=None):
+    """f = g + w*h. With w >= 1 the returned cost is <= w * optimal."""
+    g = {start: 0.0}
+    counter = itertools.count()
+    open_set = [(w * h[start], next(counter), start)]
+    while open_set:
+        f, _, u = heapq.heappop(open_set)
+        if u == goal:
+            return g[u]                 # bounded: cost <= w * C*
+        if f > g[u] + w * h[u]:
+            continue                    # stale entry
+        for v, cost in adj[u]:
+            t = g[u] + cost
+            if t < g.get(v, math.inf):
+                g[v] = t
+                heapq.heappush(open_set, (t + w * h[v], next(counter), v))
+    return math.inf
+
+
+if __name__ == "__main__":
+    adj = {0: [(1, 1), (2, 4)], 1: [(3, 5)], 2: [(3, 1)], 3: []}
+    h = {0: 2, 1: 5, 2: 1, 3: 0}
+    print(weighted_a_star(adj, 0, 3, 1.0, h))  # 5 optimal
+    print(weighted_a_star(adj, 0, 3, 2.0, h))  # <= 10
+```
+
+### 7.3 Consistency checker
+
+Before trusting the "closed is final, never reopen" optimization (Corollary 2.2), verify the heuristic is consistent: `h(u) ≤ c(u,v) + h(v)` for every edge, and `h(goal) = 0`. This is an `O(E)` scan and belongs in your test suite.
+
+#### Go
+
+```go
+package main
+
+import "fmt"
+
+type CEdge struct {
+	to   int
+	cost float64
+}
+
+// CheckConsistency returns the first violating edge, or ok=true if consistent.
+func CheckConsistency(adj [][]CEdge, goals map[int]bool, h func(int) float64) (u, v int, ok bool) {
+	for g := range goals {
+		if h(g) != 0 {
+			return g, g, false // h(goal) must be 0
+		}
+	}
+	for u := range adj {
+		for _, e := range adj[u] {
+			if h(u) > e.cost+h(e.to)+1e-9 { // tolerance for float noise
+				return u, e.to, false
+			}
+		}
+	}
+	return 0, 0, true
+}
+
+func main() {
+	adj := [][]CEdge{{{1, 1}}, {{2, 1}}, {}}
+	goals := map[int]bool{2: true}
+	consistent := func(n int) float64 { return []float64{2, 1, 0}[n] }
+	inconsistent := func(n int) float64 { return []float64{2, 0, 0}[n] } // h(0)>c+h(1)
+	fmt.Println(CheckConsistency(adj, goals, consistent))   // 0 0 true
+	fmt.Println(CheckConsistency(adj, goals, inconsistent)) // 0 1 false
+}
+```
+
+#### Java
+
+```java
+import java.util.*;
+
+public class ConsistencyChecker {
+    record Edge(int to, double cost) {}
+
+    // Returns null if consistent; otherwise the offending [u, v].
+    public static int[] check(List<Edge>[] adj, Set<Integer> goals, double[] h) {
+        for (int g : goals)
+            if (h[g] != 0) return new int[]{g, g};       // h(goal) must be 0
+        for (int u = 0; u < adj.length; u++)
+            for (Edge e : adj[u])
+                if (h[u] > e.cost() + h[e.to()] + 1e-9)  // triangle inequality
+                    return new int[]{u, e.to()};
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) {
+        List<Edge>[] adj = new List[]{
+            List.of(new Edge(1, 1)), List.of(new Edge(2, 1)), List.of()
+        };
+        Set<Integer> goals = Set.of(2);
+        System.out.println(Arrays.toString(check(adj, goals, new double[]{2, 1, 0}))); // null
+        System.out.println(Arrays.toString(check(adj, goals, new double[]{2, 0, 0}))); // [0, 1]
+    }
+}
+```
+
+#### Python
+
+```python
+def check_consistency(adj, goals, h, tol=1e-9):
+    """Return None if h is consistent, else the first offending (u, v) edge.
+    Consistency: h(u) <= c(u,v) + h(v) for every edge, and h(goal) == 0."""
+    for g in goals:
+        if h[g] != 0:
+            return (g, g)                      # h(goal) must be 0
+    for u in adj:
+        for v, cost in adj[u]:
+            if h[u] > cost + h[v] + tol:       # triangle-inequality violation
+                return (u, v)
+    return None
+
+
+if __name__ == "__main__":
+    adj = {0: [(1, 1)], 1: [(2, 1)], 2: []}
+    goals = {2}
+    print(check_consistency(adj, goals, {0: 2, 1: 1, 2: 0}))  # None (consistent)
+    print(check_consistency(adj, goals, {0: 2, 1: 0, 2: 0}))  # (0, 1) violation
+```
+
+**Why this matters in practice:** if the checker passes, you may keep a CLOSED set and skip closed nodes unconditionally — the most impactful constant-factor optimization in A*. If it fails, you must either (a) reopen improved closed nodes, (b) switch to the lazy push-and-skip variant, or (c) apply a consistency-restoring transform such as **pathmax** / BPMX (`h(child) := max(h(child), h(parent) − c)`), which raises child estimates to recover monotonicity without breaking admissibility.
+
+---
+
+## 8. Cache Behavior
 
 A*'s memory access pattern is dominated by two structures: the priority queue (OPEN) and the hash maps (`g`, parent, CLOSED).
 
@@ -172,7 +665,7 @@ A*'s memory access pattern is dominated by two structures: the priority queue (O
 
 ---
 
-## 7. Average-Case and Phase Transitions
+## 9. Average-Case and Phase Transitions
 
 ### 7.1 Random graphs and grids
 
@@ -188,7 +681,7 @@ Pearl (*Heuristics*, 1984) gives the canonical average-case treatment: under a u
 
 ---
 
-## 8. Space–Time Trade-offs
+## 10. Space–Time Trade-offs
 
 | Variant | Time | Space | Optimality | Lever traded |
 |---|---|---|---|---|
@@ -204,7 +697,7 @@ The fundamental tension: A* must remember the frontier to guarantee optimal effi
 
 ---
 
-## 9. Comparison with Alternatives
+## 11. Comparison with Alternatives
 
 | Algorithm | Frontier key | Optimal | Memory | Notes |
 |---|---|---|---|---|
@@ -222,7 +715,7 @@ The defining facts: A* is the *unique* point in this table that is both **optima
 
 ---
 
-## 10. Open Problems and Research Directions
+## 12. Open Problems and Research Directions
 
 1. **Tight reopening bounds for inconsistent admissible heuristics.** Martelli's exponential re-expansion example is worst-case; characterizing realistic heuristics where reopening is benign (and designing cheap consistency-restoring transforms like BPMX) remains active.
 
@@ -240,7 +733,7 @@ The defining facts: A* is the *unique* point in this table that is both **optima
 
 ---
 
-## 11. Summary
+## 13. Summary
 
 - **Definition.** A* expands nodes by `f = g + h`; with `h ≡ 0` it is Dijkstra, with `g ≡ 0` it is greedy best-first.
 - **Optimality.** An **admissible** heuristic (`h ≤ h*`) makes A* return an optimal path (HNR 1968); a **consistent** heuristic additionally makes `f` non-decreasing along expanded paths, so each node is optimal at first expansion and **never reopened** (Corollary 2.2).

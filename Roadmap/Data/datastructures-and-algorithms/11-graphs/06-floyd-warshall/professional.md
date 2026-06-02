@@ -11,7 +11,12 @@
 8. Space-Time Trade-offs
 9. Comparison with Alternatives (asymptotics + constants)
 10. Open Problems — Subcubic APSP
-11. Summary
+11. Worked k-Step Trace and Matrix Evolution
+12. Reference Implementations
+    - 12.1 Go — blocked/tiled Floyd-Warshall
+    - 12.2 Java — path reconstruction via the next-matrix
+    - 12.3 Python — bitset transitive closure
+13. Summary
 
 ---
 
@@ -266,7 +271,253 @@ Floyd-Warshall remains the practical champion for exact, dense, general-weight A
 
 ---
 
-## 11. Summary
+## 11. Worked k-Step Trace and Matrix Evolution
+
+Concretely tracing the closure makes Lemma 3.1 (pivot row/column invariance) tangible. Take the 4-vertex directed graph with weight matrix `W` (rows = from, columns = to, `∞` for no edge, `0` on the diagonal):
+
+```text
+        to:  0    1    2    3
+from 0:  [   0,   3,   ∞,   7 ]
+from 1:  [   8,   0,   2,   ∞ ]
+from 2:  [   5,   ∞,   0,   1 ]
+from 3:  [   2,   ∞,   ∞,   0 ]
+```
+
+We compute `d_{k+1} = min(d_k, d_k(·,k) + d_k(k,·))` four times. Each table below is `D` *after* the pass for that `k`. The pivot row and column for the pass are framed with `|…|` to show they do not change during that pass (Lemma 3.1).
+
+**Pass k = 0** (route through vertex 0; pivot = row 0 and column 0). Updated cells: `D[1][3] = D[1][0]+D[0][3] = 8+7 = 15`; `D[3][1] = D[3][0]+D[0][1] = 2+3 = 5`; `D[2][1] = D[2][0]+D[0][1] = 5+3 = 8`; `D[3][3]` stays 0.
+
+```text
+            k=0 pivot col
+        to:  0    1    2    3
+from 0: |   0|   3,   ∞,   7      <- pivot row 0 (unchanged)
+from 1: |   8|   0,   2,  15
+from 2: |   5|   8,   0,   1
+from 3: |   2|   5,   ∞,   0
+```
+
+**Pass k = 1** (route through vertex 1). `D[0][2] = D[0][1]+D[1][2] = 3+2 = 5`; `D[3][2] = D[3][1]+D[1][2] = 5+2 = 7`; `D[2][2]` stays 0.
+
+```text
+        to:  0    1    2    3
+from 0:     0,   3,   5,   7
+from 1:  -- pivot row 1 (unchanged) ----
+from 2:     5,   8,   0,   1
+from 3:     2,   5,   7,   0
+```
+
+**Pass k = 2** (route through vertex 2). `D[0][3] = min(7, D[0][2]+D[2][3]) = min(7, 5+1) = 6`; `D[1][3] = min(15, D[1][2]+D[2][3]) = min(15, 2+1) = 3`; `D[3][3]` stays 0.
+
+```text
+        to:  0    1    2    3
+from 0:     0,   3,   5,   6
+from 1:     8,   0,   2,   3
+from 2:  -- pivot row 2 (unchanged) ----
+from 3:     2,   5,   7,   0
+```
+
+**Pass k = 3** (route through vertex 3). `D[2][0] = min(5, D[2][3]+D[3][0]) = min(5, 1+2) = 3`; `D[1][0] = min(8, D[1][3]+D[3][0]) = min(8, 3+2) = 5`; `D[0][0]` stays 0.
+
+```text
+        to:  0    1    2    3
+from 0:     0,   3,   5,   6
+from 1:     5,   0,   2,   3
+from 2:     3,   6,   0,   1
+from 3:     2,   5,   7,   0
+```
+
+This final matrix is `W* = δ`. Verify one entry by hand: `δ(1,0) = 5` realized by the walk `1 → 2 → 3 → 0` with weight `2 + 1 + 2 = 5`, beating the direct edge `1 → 0` of weight 8. The diagonal stayed `0` throughout, confirming Proposition 3.4 found no negative cycle.
+
+The monotone-decrease picture (Lemma 3.2) is visible column by column: `D[1][3]` went `∞ → 15 → 3 → 3 → 3`, never rising; `D[2][0]` went `5 → 5 → 5 → 5 → 3`. No entry ever increased — every relaxation is a `min` that can only tighten.
+
+---
+
+## 12. Reference Implementations
+
+All three implementations target the same `Θ(n³)` work with the constant-factor and reconstruction techniques discussed above. Code order is Go, Java, Python.
+
+### 12.1 Go — blocked/tiled Floyd-Warshall
+
+The blocked variant (Proposition 6.1) processes the matrix in `β × β` tiles in three dependency phases per pivot block, reusing each tile `β` times in cache before eviction.
+
+```go
+package main
+
+import "fmt"
+
+const INF = 1 << 30
+
+// blockedFW computes APSP in place on a flat n*n matrix using tile side b.
+// n must be a multiple of b (pad with INF rows/cols otherwise).
+func blockedFW(dist []int, n, b int) {
+	at := func(i, j int) int { return i*n + j }
+
+	// relaxTile relaxes destination tile rooted at (di,dj) using pivots
+	// drawn from k in [kk, kk+b). Reads tile (di,kk..) and (kk.., dj).
+	relaxTile := func(di, dj, kk int) {
+		for k := kk; k < kk+b; k++ {
+			for i := di; i < di+b; i++ {
+				dik := dist[at(i, k)]
+				if dik >= INF {
+					continue
+				}
+				krow := k * n
+				irow := i * n
+				for j := dj; j < dj+b; j++ {
+					if v := dik + dist[krow+j]; v < dist[irow+j] {
+						dist[irow+j] = v
+					}
+				}
+			}
+		}
+	}
+
+	blocks := n / b
+	for bk := 0; bk < blocks; bk++ {
+		kk := bk * b
+		// Phase 1: the pivot diagonal tile depends only on itself.
+		relaxTile(kk, kk, kk)
+		// Phase 2: pivot row and pivot column tiles depend on the pivot tile.
+		for bj := 0; bj < blocks; bj++ {
+			if bj != bk {
+				relaxTile(kk, bj*b, kk) // pivot row block
+				relaxTile(bj*b, kk, kk) // pivot column block
+			}
+		}
+		// Phase 3: every remaining tile depends on its row & column pivots.
+		for bi := 0; bi < blocks; bi++ {
+			if bi == bk {
+				continue
+			}
+			for bj := 0; bj < blocks; bj++ {
+				if bj != bk {
+					relaxTile(bi*b, bj*b, kk)
+				}
+			}
+		}
+	}
+}
+
+func main() {
+	n, b := 4, 2
+	d := []int{
+		0, 3, INF, 7,
+		8, 0, 2, INF,
+		5, INF, 0, 1,
+		2, INF, INF, 0,
+	}
+	blockedFW(d, n, b)
+	fmt.Println(d[1*n+0]) // 5  (1->2->3->0)
+}
+```
+
+The three-phase ordering encodes the layer dependency made explicit: Phase 2 may begin only after Phase 1, and Phase 3 only after Phase 2, but all tiles *within* a phase are independent and parallelizable.
+
+### 12.2 Java — path reconstruction via the next-matrix
+
+To recover the actual path (not just its cost), keep a `next[i][j]` matrix: the first hop on a shortest `i→j` path. On each improving relaxation, inherit `next[i][j] = next[i][k]`.
+
+```java
+import java.util.*;
+
+public final class FloydWarshallPaths {
+    static final int INF = 1 << 30;
+
+    // dist and next are n*n; next[i][j] = first vertex after i on a shortest i->j path, or -1.
+    static void run(int[] dist, int[] next, int n) {
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                next[i * n + j] = (dist[i * n + j] < INF && i != j) ? j
+                                : (i == j ? i : -1);
+            }
+        }
+        for (int k = 0; k < n; k++) {
+            int krow = k * n;
+            for (int i = 0; i < n; i++) {
+                int dik = dist[i * n + k];
+                if (dik >= INF) continue;
+                int irow = i * n;
+                for (int j = 0; j < n; j++) {
+                    int v = dik + dist[krow + j];
+                    if (v < dist[irow + j]) {
+                        dist[irow + j] = v;
+                        next[irow + j] = next[irow + k]; // route i->...->k->...->j
+                    }
+                }
+            }
+        }
+    }
+
+    static List<Integer> path(int[] next, int n, int u, int v) {
+        if (next[u * n + v] == -1) return Collections.emptyList();
+        List<Integer> p = new ArrayList<>();
+        p.add(u);
+        while (u != v) {
+            u = next[u * n + v];
+            p.add(u);
+        }
+        return p;
+    }
+
+    public static void main(String[] args) {
+        int n = 4;
+        int[] dist = {
+            0, 3, INF, 7,
+            8, 0, 2, INF,
+            5, INF, 0, 1,
+            2, INF, INF, 0
+        };
+        int[] next = new int[n * n];
+        run(dist, next, n);
+        System.out.println(path(next, n, 1, 0)); // [1, 2, 3, 0]
+    }
+}
+```
+
+Reconstruction is `O(path length)` per query and the `next` matrix doubles memory but keeps both build and query within the `Θ(n²)` space class (Table in §8). After a negative cycle the `next` chain can loop forever, so reconstruction must be gated on `D[i][i] >= 0` (Proposition 3.4).
+
+### 12.3 Python — bitset transitive closure
+
+For pure reachability, pack each row of the Boolean matrix into a Python integer (an arbitrary-width bitset). The inner `j` loop collapses to one bitwise `OR` over the whole word, giving the `Θ(n³ / w)` constant-factor win from §8.
+
+```python
+def transitive_closure_bitset(adj):
+    """adj: list of n integers; bit j of adj[i] set iff edge i->j exists.
+    Returns reachability rows (i can reach itself by convention)."""
+    n = len(adj)
+    reach = [adj[i] | (1 << i) for i in range(n)]  # include self
+    for k in range(n):
+        bit_k = 1 << k
+        row_k = reach[k]
+        for i in range(n):
+            # If i reaches k, then i reaches everything k reaches.
+            if reach[i] & bit_k:
+                reach[i] |= row_k
+    return reach
+
+
+def reaches(reach, i, j):
+    return (reach[i] >> j) & 1 == 1
+
+
+if __name__ == "__main__":
+    # 0 -> 1 -> 2 -> 3 (a chain)
+    adj = [
+        0b0010,  # 0 -> 1
+        0b0100,  # 1 -> 2
+        0b1000,  # 2 -> 3
+        0b0000,  # 3 -> (none)
+    ]
+    r = transitive_closure_bitset(adj)
+    print(reaches(r, 0, 3))  # True (0 reaches 3 via the chain)
+    print(reaches(r, 3, 0))  # False
+```
+
+The whole `for j` dimension vanishes into one machine-word `OR` per `(i, k)` pair: the dominant cost becomes `n²` word operations, each covering `w` columns, so the effective work is `Θ(n³ / w)` with `w` the word width (64 on a typical machine, or arbitrary for Python big-ints amortized at `n/64` words). This is the standard way to push transitive closure on `n` in the low thousands into the millisecond range, and is the Boolean-semiring specialization of Kleene's algorithm from §5.
+
+---
+
+## 13. Summary
 
 - **Definition.** Floyd-Warshall computes the min-plus closure `W*` of the weight matrix; `δ(i,j) = (W*)[i][j]`.
 - **Correctness.** Induction over the intermediate set `S_k = {0,…,k-1}`: the recurrence `d_{k+1}(i,j) = min(d_k(i,j), d_k(i,k)+d_k(k,j))` is exact because, absent negative cycles, a shortest walk uses `k` at most once and splits into two `S_k`-restricted sub-walks.

@@ -133,6 +133,18 @@ for k:
       reach[i][j] = reach[i][j] OR (reach[i][k] AND reach[k][j])
 ```
 
+This is **Warshall's original 1962 algorithm** — historically it predates the shortest-path version and is where the family gets half its name. The structure rewards a key optimization: hoist the `reach[i][k]` test out of the `j` loop, because if `i` cannot reach `k`, routing `i→k→j` is impossible for *every* `j`, so the whole inner loop can be skipped:
+
+```
+for k:
+  for i:
+    if reach[i][k]:                 # only then can k help any j
+      for j:
+        reach[i][j] |= reach[k][j]
+```
+
+Even better, pack each row into machine words (a bitset): the inner `for j` collapses to a single `reach[i] |= reach[k]` word-OR covering 64 columns at a time, turning the constant factor from `n` down to `n/64`. For reachability on graphs with `n` in the low thousands this is the difference between milliseconds and a noticeable pause — and it is *only* available because the Boolean semiring's combine step (`OR`) maps directly onto a hardware bitwise op. The `(min, +)` shortest-path version cannot be bit-packed this way because `min` and `+` are not bitwise.
+
 ### Pattern: Widest / Bottleneck Path (Maximin)
 
 The *bottleneck* of a path is its minimum edge capacity; the *widest path* maximizes that bottleneck. Use `(max, min)`:
@@ -146,6 +158,8 @@ for k:
 
 This answers "what is the maximum-capacity route from `i` to `j`?" — useful in network bandwidth and the Maximum-Capacity-Path problem. The dual (minimax: minimize the maximum edge) swaps the operators to `(min, max)`.
 
+Why does swapping the operators *still produce correct answers*? The intermediate-set induction from the shortest-path derivation goes through unchanged: the widest `i→j` path with intermediates in `{0,…,k}` either avoids `k` (width `width[i][j]`) or routes through it (width `min(width[i][k], width[k][j])`, since a path is only as wide as its narrowest of the two halves), and we take the `max` of the two options. The `(max, min)` pair plays the role `(min, +)` played for distances — this is the closed-semiring generality made concrete (see `professional.md`). Worked example on a small capacity graph `0→1 (cap 4)`, `1→2 (cap 5)`, `2→3 (cap 6)`, `0→3 (cap 2)`: the widest `0→3` route is `0→1→2→3` with bottleneck `min(4,5,6) = 4`, beating the direct edge of capacity `2`. The minimax dual is exactly how you find the route that minimizes the worst (largest) edge — used for "minimize the maximum latency hop" routing and for the minimum-spanning-tree bottleneck property.
+
 ### Pattern: Counting Paths / Number of Shortest Paths
 
 To **count** the number of shortest paths, keep a `cnt[i][j]` matrix alongside `dist`:
@@ -155,9 +169,13 @@ To **count** the number of shortest paths, keep a `cnt[i][j]` matrix alongside `
 
 For *all* paths (not shortest) in a DAG-reachability sense, use `(+, ×)` on a boolean/integer adjacency to count walks — but beware cycles make counts infinite.
 
+The multiply-then-add rule for shortest-path counts is worth internalizing with a tiny example. Suppose there are two equally-short ways to get from `i` to `k` (`cnt[i][k] = 2`) and three from `k` to `j` (`cnt[k][j] = 3`), and routing through `k` ties the current best `dist[i][j]`. Then there are `2 × 3 = 6` new shortest paths to add (`cnt[i][j] += 6`) — every way of reaching `k` combines with every way of leaving it. If routing through `k` *beats* the old best, the previous count is obsolete and we *replace* it (`cnt[i][j] = 6`) rather than add. Getting the strict-`<` (replace) versus `==` (accumulate) distinction right is the entire subtlety; a common bug is using `<=` and double-counting. Counts grow exponentially, so take everything modulo a prime like `1e9+7`.
+
 ### Pattern: Negative-Cycle Detection and Affected Pairs
 
 After running, `dist[i][i] < 0` flags vertices on a negative cycle. To mark **every pair whose shortest path is undefined** (passes through a negative cycle), do a second pass: `dist[i][j] = -INF` if there exists `t` with `dist[i][t] < INF`, `dist[t][t] < 0`, and `dist[t][j] < INF`.
+
+The intuition for the second pass: a negative cycle means you can loop arbitrarily many times to drive the cost to `-∞`. So *any* pair `(i, j)` where you can reach a negative-cycle vertex `t` from `i`, and reach `j` from `t`, has an undefined (`-∞`) shortest path — you would detour into the cycle, spin to `-∞`, then continue to `j`. Pairs that cannot route through any negative-cycle vertex keep their finite distances. This distinction matters: naively reporting `dist[i][i] < 0` as "the graph has a negative cycle" is correct, but blindly trusting the *finite* entries without the second pass can hand back wrong (too-large) distances for pairs that should be `-∞`. For arbitrage detection in currency graphs (weights `= -log(rate)`), the mere existence of any `dist[i][i] < 0` is the signal that a profitable loop exists; the affected-pairs pass tells you which conversions are unboundedly profitable.
 
 ---
 
@@ -174,8 +192,8 @@ graph TD
     A --> H[Minimax / maximin routing]
 ```
 
-- **Graph diameter** — `max over all i,j of dist[i][j]` after running once.
-- **Graph center / radius** — the vertex minimizing its eccentricity `max_j dist[i][j]`.
+- **Graph diameter** — `max over all i,j of dist[i][j]` after running once. (Ignore `∞` entries, or the diameter is "infinite" because the graph is disconnected.) This is a one-liner over the finished matrix and is why Floyd-Warshall is the go-to for diameter on small dense graphs: you already paid for all pairs, so the diameter, radius, and center fall out for free.
+- **Graph center / radius** — the **eccentricity** of vertex `i` is `ecc(i) = max_j dist[i][j]` (its distance to the farthest reachable vertex). The **radius** is `min_i ecc(i)`, and a **center** is any vertex achieving it. The center is the optimal place to put a facility that minimizes worst-case distance to any node — a classic application of the all-pairs matrix.
 - **Reachability for small DAGs / dependency graphs** — Warshall's closure.
 - **Routing tables** — precompute once, answer "next hop" queries in `O(1)` via the `next` matrix.
 - **Detecting arbitrage** — a negative cycle in `-log(exchange_rate)` weights means a profitable currency loop.
@@ -401,6 +419,37 @@ if __name__ == "__main__":
 
 **What it does:** computes reachability (boolean closure) and the widest/bottleneck path capacity matrix using the same triple-loop skeleton with different operators.
 
+### Counting Shortest Paths (Python)
+
+To make the `<` (replace) vs `==` (accumulate) rule concrete, here is the count-augmented loop:
+
+```python
+def count_shortest_paths(W, MOD=10**9 + 7):
+    """W: n x n weight matrix, float('inf') for no edge, 0 on diagonal.
+    Returns (dist, cnt): shortest distances and the number of shortest paths."""
+    n = len(W)
+    dist = [row[:] for row in W]
+    cnt = [[1 if (W[i][j] != float("inf")) else 0 for j in range(n)]
+           for i in range(n)]
+    for i in range(n):
+        cnt[i][i] = 1
+    for k in range(n):
+        for i in range(n):
+            dik = dist[i][k]
+            if dik == float("inf"):
+                continue
+            for j in range(n):
+                through = dik + dist[k][j]
+                if through < dist[i][j]:          # strictly better: replace
+                    dist[i][j] = through
+                    cnt[i][j] = (cnt[i][k] * cnt[k][j]) % MOD
+                elif through == dist[i][j] and through != float("inf"):
+                    cnt[i][j] = (cnt[i][j] + cnt[i][k] * cnt[k][j]) % MOD
+    return dist, cnt
+```
+
+The only difference from the plain distance loop is the parallel `cnt` matrix and the strict/equal branch — the same skeleton, the same `k`-outermost requirement.
+
 ---
 
 ## Error Handling
@@ -464,6 +513,13 @@ Pure Python is ~50–100× slower than Go/Java here; for large `V` push the inne
 - **Always pair a `next`/`pred` matrix** if paths (not just costs) are needed.
 - **Check density first:** if `E ≪ V²`, prefer `V × Dijkstra` or Johnson's.
 - **Detect negative cycles** before trusting or reconstructing any path.
+- **Match the semiring to the problem, not the code.** Reaching for shortest-path code and post-processing is a smell; if you need reachability, bottleneck, or counts, swap the operators directly — it is the same loop, correct by the same induction, and usually faster (bitset closure, no overflow guards).
+- **Initialize the base matrix carefully.** The diagonal is `0` for distances, `true` for closure, and the vertex's own capacity (often `+∞` or "unlimited") for widest path. A wrong base case silently corrupts every derived entry. Make the initialization a named helper, not inline magic.
+- **Prefer `int` sentinels over floating `inf`** in compiled code: `INF = MAX/4` keeps arithmetic branch-light and avoids the `inf + inf` and `inf - inf` traps, while still being recognizably "unreachable" in output.
+
+### When NOT to reach for Floyd-Warshall
+
+Even at middle level the instinct to use the three-loop hammer should be checked. If you only ever query a handful of source-destination pairs, computing the full `V²` matrix is wasteful — a couple of Dijkstra runs answer the actual question in a fraction of the time and memory. If the graph is a tree or a DAG, simpler linear-time methods (LCA-based distances, DAG relaxation in topological order) beat `V³`. And if `V` is genuinely large and the graph sparse, the `V³` term is a trap that passes small tests and times out in production. Floyd-Warshall earns its keep specifically when you need *most or all* pairs, the graph is *dense or small*, and *negative edges* may be present — outside that envelope, prefer a targeted single-source algorithm.
 
 ---
 

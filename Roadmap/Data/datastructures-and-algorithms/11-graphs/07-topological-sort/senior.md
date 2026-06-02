@@ -109,6 +109,50 @@ When tasks run on different machines (Spark stages, Argo pods, CI runners):
 
 The topological structure is global; only execution is distributed.
 
+### 3.4 How real schedulers map onto Kahn
+
+Every production DAG engine is a thin policy layer over the parallel-Kahn loop. The vocabulary changes; the algorithm does not.
+
+| System | "Vertex" | "Edge" | "In-degree 0 / ready" | Cycle handling |
+|---|---|---|---|---|
+| **Make / `make -j`** | a target (file) | prerequisite relation | all prereqs up-to-date | "Circular dependency dropped" warning, edge ignored |
+| **Bazel (Skyframe)** | an action / SkyValue | input → output dep | all inputs evaluated | error at analysis time, build rejected |
+| **Apache Airflow** | a task instance | `t1 >> t2` upstream link | all upstream tasks `success` | DagBag import error (cycle), DAG not scheduled |
+| **Argo Workflows** | a workflow step (pod) | `dependencies:` field | all deps `Succeeded` | controller rejects the workflow spec |
+| **Spark DAGScheduler** | a stage | shuffle/narrow dependency | parent stages computed | n/a (lineage is acyclic by construction) |
+
+The common shape: **construct DAG → validate acyclic → seed ready set with sources → as each task succeeds, decrement successors, enqueue new zeros → finish when the completed count equals the task count.** Airflow's scheduler loop literally re-evaluates "which task instances have all upstream dependencies met" on each heartbeat — a Kahn frontier scan, just persisted in a database so it survives a scheduler restart.
+
+### 3.5 Worked level-execution trace
+
+Take a 7-task pipeline (`E=extract, T=transform, L=load`):
+
+```text
+   E1     E2
+   | \   / |
+   v  v v  v
+   T1   T2   T3
+     \  |   /
+      v v  v
+       L (load)
+
+edges: E1→T1 E1→T2 E2→T2 E2→T3 T1→L T2→L T3→L
+durations(s): E1=10 E2=8 T1=20 T2=15 T3=5 L=12
+```
+
+Level-by-level execution with enough workers:
+
+```text
+level 0 (sources):  {E1, E2}   run in parallel, finishes at max(10,8)=10s
+level 1:            {T1,T2,T3} all upstream done at 10s; run in parallel,
+                    finishes at 10 + max(20,15,5) = 30s
+level 2:            {L}        upstream done at 30s; finishes at 30+12 = 42s
+
+barrier makespan = 42s
+```
+
+With **parallel-Kahn (no barriers)** the result is the same here because `L` waits on the slowest of `T1/T2/T3` regardless. But if a fourth task `T4` (duration 2s) depended only on `E2`, the barrier model would still hold it until the whole `T` level cleared at 30s, whereas parallel-Kahn would run it at 10s. That gap — fast tasks stuck behind a slow sibling at a barrier — is the central reason high-throughput engines (Bazel, Argo) use parallel-Kahn rather than level barriers.
+
 ---
 
 ## 4. Concurrency: Parallel Kahn with Atomic In-Degrees
@@ -412,7 +456,11 @@ A retried task reports completion twice, decrementing successors' in-degrees twi
 
 A worker finishes but its "done" message is lost; the successor's in-degree never reaches 0 and the DAG stalls. **Mitigation:** at-least-once delivery + idempotent decrement, plus a watchdog that alerts when `ready_set == 0 && completed < total` for longer than a threshold.
 
-### 9.6 Dynamic edges arriving mid-run
+### 9.6 Frontier starvation (under-provisioned workers)
+
+The DAG is valid and acyclic, but the ready set holds far more runnable tasks than there are workers, so wall-clock balloons while the *available* parallelism goes unused. This is not a correctness bug — it is a capacity bug that looks like slowness. **Mitigation:** alert when `dag_ready_set_size` stays well above `dag_inflight` for a sustained window (runnable work is queued but unstarted), and size the pool toward the knee `P* = ceil(total_work / critical_path)` from §10.
+
+### 9.7 Dynamic edges arriving mid-run
 
 A task discovers a new dependency at runtime (common in data pipelines). Adding an edge into an already-scheduled vertex can violate an order already in flight. **Mitigation:** only allow new edges into *not-yet-started* vertices, or use an online topological order algorithm and pause affected successors.
 
@@ -437,6 +485,19 @@ A CI build has 4,000 targets, total CPU-work 2,000 seconds, critical path 90 sec
 - `W / P = 90` requires `P ≈ 22` workers.
 - Beyond ~22 workers, wall-clock stays pinned at the 90-second critical path; extra cores are wasted.
 - To go below 90s you must *shorten the critical path* (split the longest targets, cache them, or remove edges) — not add workers.
+
+The diminishing-returns curve, where `W=2000s` and `critical_path=90s`:
+
+| Workers `P` | `W / P` | `makespan = max(90, W/P)` | Marginal benefit |
+|---|---|---|---|
+| 4 | 500s | 500s | — |
+| 8 | 250s | 250s | halves wall-clock |
+| 16 | 125s | 125s | still helping |
+| 22 | 91s | 91s | last useful worker |
+| 32 | 62s | **90s** | pinned at critical path |
+| 64 | 31s | **90s** | pure waste |
+
+The knee is at `P* = ceil(W / critical_path) = ceil(2000/90) ≈ 23`. Provisioning beyond `P*` buys idle cores; the only lever left is the critical path itself.
 
 ### 10.3 Graph size
 

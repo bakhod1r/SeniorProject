@@ -88,6 +88,50 @@ The biggest design lever is **how much per-vertex/per-centroid data you material
 
 Key scaling distinction: **centroid decomposition assumes a static tree.** If edges are inserted/deleted, the centroid tree must be rebuilt (`O(N log N)`) — there is no cheap incremental update. For dynamic topology, LCT or top-trees win. For *static topology with dynamic vertex marks*, centroid decomposition is excellent.
 
+### Workload-by-workload: CD vs HLD vs LCT
+
+The three "tree decomposition" structures a senior is asked to choose between solve **different query algebras**. The table below maps a concrete workload to the right tool and the wrong-but-tempting one.
+
+| Workload | Centroid Decomposition | Heavy-Light Decomposition (14) | Link-Cut Tree |
+|----------|------------------------|--------------------------------|---------------|
+| "Count nodes within R hops of x" | **Native.** `O(log²N)` per query. | Not designed for it; would need per-path scans. | No native support. |
+| "Nearest marked node to x, marks toggle" | **Native.** `O(log²N)` update/query. | Awkward; no distance-radius primitive. | No. |
+| "Count paths in the whole tree with length ≤ K" | **Native**, one offline pass `O(N log N)`. | No global-path-set primitive. | No. |
+| "Sum of edge weights on path u→v" | Possible but clumsy. | **Native**, `O(log²N)`. | **Native**, `O(log N)` amortized. |
+| "Add δ to every edge on path u→v, then max-query a path" | No. | **Native** with lazy segtree. | **Native**. |
+| "link(u,v) / cut(u,v) then path-sum" | **No** — forces full rebuild. | No (static topology). | **Native** — the only one. |
+| "k-th ancestor / LCA only" | Overkill. | Fine. | Fine; but use 13-lca index. |
+
+The decision rule a senior internalizes: **CD answers questions about the *set of all paths* and about *distance/radius*; HLD/LCT answer questions about *one specified path*; only LCT tolerates *topology mutation*.** Mixing these up is the single most common design error in this space — e.g. reaching for HLD to count distance-≤-R neighborhoods, or reaching for CD to do path-sum updates.
+
+A second axis is **mutability of what changes**:
+- *Topology fixed, weights/values on a path change* → HLD (offline-friendly, simple).
+- *Topology fixed, vertex marks/colors change* → CD (per-centroid min/count structures).
+- *Topology itself changes (link/cut)* → LCT or top-trees; CD and HLD both require rebuild.
+
+### Immutable centroid tree + parallel per-subtree work
+
+The build has a recursion structure that maps cleanly onto fork-join parallelism, and the *served* index is immutable, which is the property that makes the parallelism safe and the reads lock-free.
+
+**Build parallelism.** After the root centroid `c₀` is found and `removed[c₀]=true`, each child component is a **disjoint vertex set**. Recursing into them touches non-overlapping regions of `adj`, `size`, `cparent`, and the per-vertex ancestor-distance tables — so sibling recursions can run on different workers with no synchronization, *provided* writes are partitioned by vertex ownership (each vertex is written by exactly the recursion that owns its component at that level).
+
+```
+                 build(root)            worker W0
+                /     |      \
+        comp A    comp B    comp C      → fork to W1, W2, W3
+        /  \        |        / \
+      ...  ...     ...     ... ...      → recursively fork until
+                                          components are small enough
+                                          to finish inline (cutoff)
+```
+
+Practical recipe:
+- Use a **size cutoff** (e.g. components below ~10⁴ vertices) below which a worker recurses sequentially — fork overhead dominates for tiny components.
+- The only truly shared writes are `removed[]` and `cparent[]`. `removed[c]` is written once, before the fork, by the owning level; `cparent[c]` is written once when `c` becomes a centroid. No two workers write the same index, so plain arrays without locks are correct under a happens-before fork-join fence.
+- Convert the size/record DFS to an **explicit stack** before parallelizing — a native `O(N)`-deep recursion on a path-shaped component will overflow a worker-pool thread's small stack.
+
+**Serve parallelism.** Once built, the index is read-only for the *distance/count* query classes: lock-free, replicate freely. Only the **marked-set** (use case B) mutates; isolate that mutable state into per-centroid structures (see Concurrency) so the immutable backbone stays shareable.
+
 ---
 
 ## 6. Architecture Patterns
@@ -449,6 +493,27 @@ if __name__ == "__main__":
 - **Query throughput:** each query is `O(log N)` ancestor visits × per-structure cost. With `height ≈ 20` and `O(log N)` per centroid, expect microseconds per query in compiled languages — millions of QPS per core on warm caches.
 - **Update rate (use case B):** each update is `O(log N)` centroid touches × `O(log N)` structure op = `O(log² N)`; comfortably handles high update rates as long as marked-set structures are efficient.
 - **Rebuild budget:** since topology changes force rebuilds, plan rebuild cadence (e.g. nightly) against build cost and the double-buffer memory (need room for two indexes during swap).
+
+### Sizing table (4-byte entries, ancestor-distance index materialized)
+
+| N | height ≈ ⌊log₂N⌋ | distance entries ≈ N·height | memory @4B | typical build (1 core) | double-buffer peak |
+|---|------------------|-----------------------------|-----------|------------------------|--------------------|
+| 10⁴ | 13 | 1.3×10⁵ | ~0.5 MB | < 10 ms | ~1 MB |
+| 10⁵ | 16 | 1.6×10⁶ | ~6 MB | ~50–100 ms | ~12 MB |
+| 10⁶ | 19 | 1.9×10⁷ | ~76 MB | ~1 s | ~150 MB |
+| 10⁷ | 23 | 2.3×10⁸ | ~0.9 GB | ~15 s | ~1.8 GB |
+
+Notes on reading the table:
+- The "distance entries" column equals the total per-vertex ancestor count `Σ_v (level(v)+1)`, which is bounded by `N·(⌊log₂N⌋+1)`. The real value is usually a bit *below* the bound because not every vertex reaches maximum depth.
+- If you only need *distance between two nodes* (no counting), skip this index entirely and use the **13-lca** sparse table — `O(N)` extra memory, not `O(N log N)`.
+- Build is parallelizable across sibling components; with `P` cores expect roughly `build_time / min(P, fanout-at-top-levels)` wall-clock, bounded below by the sequential descent along the deepest centroid chain.
+- The double-buffer peak applies only during a rebuild swap; steady-state memory is a single index.
+
+### Throughput sizing
+
+- A radius/count query visits `≤ height` centroid ancestors, each doing one binary search over a sorted distance array (`O(log component-size)`). On warm caches in a compiled language, that is typically **single-digit microseconds** for `N ≤ 10⁶`, i.e. order **10⁵–10⁶ QPS/core**.
+- Nearest-marked updates are `O(log N)` centroid touches × `O(log N)` per balanced-multiset op; at `N = 10⁶` (height ≈ 19) that is a few hundred structure operations per update — comfortably **10⁴–10⁵ updates/sec/core**.
+- Because reads are lock-free against the immutable backbone, query throughput scales near-linearly with cores until memory bandwidth (streaming the sorted arrays) saturates.
 
 ---
 

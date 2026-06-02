@@ -4,14 +4,17 @@
 1. Formal Definition
 2. Correctness Proof — the Lowlink Invariant and Root-Pop Correctness
 3. Complexity O(V + E)
-4. Comparison with Kosaraju and Gabow (constants, passes)
-5. Parallel SCC Complexity
-6. Cache Behavior
-7. Average-Case and Random-Graph Analysis
-8. Space–Time Trade-offs
-9. Comparison with Alternatives (asymptotics + constants)
-10. Open Problems (parallel and dynamic SCC)
-11. Summary
+4. Worked Trace — DFS Tree with disc/low
+5. Comparison with Kosaraju and Gabow (constants, passes)
+6. Parallel SCC Complexity
+7. Cache Behavior
+8. Average-Case and Random-Graph Analysis
+9. Space–Time Trade-offs
+10. Comparison with Alternatives (asymptotics + constants)
+11. Reference Implementations — Gabow, Iterative Tarjan, Condensation
+12. Condensation-DAG Properties
+13. Open Problems (parallel and dynamic SCC)
+14. Summary
 
 ---
 
@@ -110,9 +113,68 @@ The lowlink definition counts paths with **at most one** non-tree edge. Rule (R2
 
 **Remark 3.2.** Each vertex is pushed onto and popped from the explicit stack exactly once over the whole run; each edge is relaxed exactly once. There is no hidden logarithmic factor — unlike Dijkstra, Tarjan has no priority queue.
 
+### 3.3 The amortization argument, made precise
+
+The only super-constant-looking step is the inner `while` that pops the stack at a root. Let `p_r` be the number of pops performed when root `r` finishes. Then
+
+```
+Σ_r p_r = Σ_r |[r]| = Σ over all SCCs of their sizes = |V| = n,
+```
+
+because the SCCs partition `V` and each vertex is popped exactly in the pop-burst of its own root. So although a *single* root event can pop `Θ(n)` vertices (one giant SCC), the **sum** over the whole execution is exactly `n` pops. Charging each pop `O(1)`, the total pop work is `O(n)`, not `O(n)` per root. This is a textbook aggregate-amortization argument: a potential function `Φ = |stack|` rises by 1 on each push (`n` pushes total) and falls by 1 on each pop (`n` pops total), giving amortized `O(1)` per vertex for all stack manipulation. Edge work is `O(1)` per edge by direct counting. Hence `Θ(V + E)`. ∎
+
 ---
 
-## 4. Comparison with Kosaraju and Gabow
+## 4. Worked Trace — DFS Tree with disc/low
+
+Concrete instance (two interlocking cycles joined by a bridge edge):
+
+```
+adjacency:  0:[1]   1:[2]   2:[0,3]   3:[4]   4:[5]   5:[3]
+cycles:     {0,1,2} via 0→1→2→0       {3,4,5} via 3→4→5→3
+bridge:     2 → 3   (the only cross-component edge)
+```
+
+DFS tree rooted at 0; `‑‑>` marks a non-tree edge to an on-stack vertex; the annotation shows the (R2) contribution it makes:
+
+```
+   0  disc=0  low=0
+   │  (tree)
+   1  disc=1  low=0          low[1] ← min via child = low[2]=0
+   │  (tree)
+   2  disc=2  low=0          2‑‑>0 back edge: low[2] ← min(2, disc[0]=0)=0
+   │  (tree 2→3)             2‑‑>3 is a TREE edge (3 unvisited when scanned)
+   3  disc=3  low=3          ROOT of {3,4,5}: low[3]==disc[3]==3
+   │  (tree)
+   4  disc=4  low=3          low[4] ← min via child = low[5]=3
+   │  (tree)
+   5  disc=5  low=3          5‑‑>3 back edge: low[5] ← min(5, disc[3]=3)=3
+```
+
+Event log (D = discover, F = finish, the stack grows left→right):
+
+| t | event | disc | low | SCC stack | onStack | emit |
+|---|-------|------|-----|-----------|---------|------|
+| 0 | D 0 | d0=0 | l0=0 | 0 | {0} | |
+| 1 | D 1 | d1=1 | l1=1 | 0 1 | {0,1} | |
+| 2 | D 2 | d2=2 | l2=2 | 0 1 2 | {0,1,2} | |
+| — | 2→0 (R2) | | l2=min(2,0)=0 | 0 1 2 | | |
+| 3 | D 3 (tree 2→3) | d3=3 | l3=3 | 0 1 2 3 | +3 | |
+| 4 | D 4 | d4=4 | l4=4 | 0 1 2 3 4 | +4 | |
+| 5 | D 5 | d5=5 | l5=5 | 0 1 2 3 4 5 | +5 | |
+| — | 5→3 (R2) | | l5=min(5,3)=3 | … | | |
+| 6 | F 5 | | l5=3≠d5 | … | | (no pop) |
+| 7 | F 4 (R1: l4←l5) | | l4=3≠d4 | … | | (no pop) |
+| 8 | F 3 (R1: l3←l4) | | **l3=3==d3** | pop 5,4,3 | −5,−4,−3 | **{3,4,5}** id=0 |
+| 9 | F 2 (R1: l2←0) | | l2=0≠d2 | 0 1 2 | | (no pop) |
+| 10 | F 1 (R1: l1←l2) | | l1=0≠d1 | 0 1 2 | | (no pop) |
+| 11 | F 0 (R1: l0←l1) | | **l0=0==d0** | pop 2,1,0 | empty | **{0,1,2}** id=1 |
+
+**Invariant check.** At every `F` event, the proof's claim holds: `low[v] == disc[v]` fires *exactly* at the two true roots (3 and 0) and never at the four non-roots (5,4,2,1) — each of which had its `low` pulled strictly below its `disc` by a path leading to an older on-stack vertex (Theorem 2.5, ⇒ direction). The emission order `{3,4,5}` then `{0,1,2}` is the **reverse topological order** of the condensation `id1 → id0` (Theorem 2.6 + Prop. 1.6): the sink component gets the smaller id. Total pops across both bursts = 3 + 3 = 6 = `|V|`, confirming the amortization of §3.3.
+
+---
+
+## 5. Comparison with Kosaraju and Gabow
 
 | Algorithm | DFS passes | Aux structures | Transpose | Comparisons/edge | Worst-case time | Space |
 |---|---|---|---|---|---|---|
@@ -130,7 +192,7 @@ The lowlink definition counts paths with **at most one** non-tree edge. Rule (R2
 
 ---
 
-## 5. Parallel SCC Complexity
+## 6. Parallel SCC Complexity
 
 Tarjan is inherently sequential: its correctness depends on a total DFS order and a single shared stack, and DFS is **P-complete** (lexicographically-first DFS is not known to parallelize). So parallel SCC uses different algorithms.
 
@@ -146,7 +208,7 @@ Tarjan is inherently sequential: its correctness depends on a total DFS order an
 
 ---
 
-## 6. Cache Behavior
+## 7. Cache Behavior
 
 SCC is a graph traversal, so its memory pattern is dominated by **pointer-chasing** through the adjacency structure.
 
@@ -159,7 +221,7 @@ The external-memory cost of DFS-based SCC is essentially that of DFS itself: `Θ
 
 ---
 
-## 7. Average-Case and Random-Graph Analysis
+## 8. Average-Case and Random-Graph Analysis
 
 **SCC structure of `G(n, p)` (directed Erdős–Rényi).** A sharp threshold governs the emergence of a giant SCC:
 
@@ -172,7 +234,7 @@ The external-memory cost of DFS-based SCC is essentially that of DFS itself: `Θ
 
 ---
 
-## 8. Space–Time Trade-offs
+## 9. Space–Time Trade-offs
 
 | Variant | Time | Space | Trade-off |
 |---|---|---|---|
@@ -186,7 +248,7 @@ The `low[]` array (one int per vertex) is the price Tarjan pays to do one pass. 
 
 ---
 
-## 9. Comparison with Alternatives (asymptotics + constants)
+## 10. Comparison with Alternatives (asymptotics + constants)
 
 | Task | Best approach | Complexity |
 |---|---|---|
@@ -202,7 +264,408 @@ For the special question "is the whole graph one SCC?", you do **not** need full
 
 ---
 
-## 10. Open Problems
+## 11. Reference Implementations — Gabow, Iterative Tarjan, Condensation
+
+Three implementations that exercise the theory above: **Gabow's path-based SCC** (no `low[]` array — the boundary stack *is* the lowlink, §5), **iterative Tarjan** (overflow-proof, §3.3 amortization), and a **condensation builder** (§12). Go, then Java, then Python.
+
+### 11.1 Gabow's path-based SCC
+
+Gabow keeps two stacks: `S` (all open vertices) and `B` (candidate SCC boundaries, holding `disc` indices). On an edge to an on-stack vertex `w`, pop `B` while its top exceeds `disc[w]` — collapsing every tentative boundary newer than `w`. When `v` finishes and `B.top == disc[v]`, `v` is a root: pop `S` down to `v`.
+
+#### Go
+
+```go
+package main
+
+import "fmt"
+
+func gabowSCC(adj [][]int) (compID []int, numComps int) {
+	n := len(adj)
+	preorder := make([]int, n) // 1-based discovery index; 0 = unvisited
+	compID = make([]int, n)
+	for i := range compID {
+		compID[i] = -1
+	}
+	var S, B []int // S: vertices, B: boundary preorder indices
+	counter := 1
+
+	var dfs func(v int)
+	dfs = func(v int) {
+		preorder[v] = counter
+		counter++
+		S = append(S, v)
+		B = append(B, preorder[v]) // open a new tentative boundary
+		for _, w := range adj[v] {
+			if preorder[w] == 0 {
+				dfs(w)
+			} else if compID[w] == -1 { // w still open: collapse boundaries
+				for len(B) > 0 && B[len(B)-1] > preorder[w] {
+					B = B[:len(B)-1]
+				}
+			}
+		}
+		if B[len(B)-1] == preorder[v] { // v is an SCC root
+			B = B[:len(B)-1]
+			for {
+				w := S[len(S)-1]
+				S = S[:len(S)-1]
+				compID[w] = numComps
+				if w == v {
+					break
+				}
+			}
+			numComps++
+		}
+	}
+	for v := 0; v < n; v++ {
+		if preorder[v] == 0 {
+			dfs(v)
+		}
+	}
+	return compID, numComps
+}
+
+func main() {
+	adj := [][]int{{1}, {2}, {0, 3}, {4}, {5}, {3}}
+	comp, k := gabowSCC(adj)
+	fmt.Println("compID:", comp, "numComps:", k)
+}
+```
+
+#### Java
+
+```java
+import java.util.*;
+
+public class GabowSCC {
+    static List<List<Integer>> adj;
+    static int[] preorder, compID;
+    static Deque<Integer> S = new ArrayDeque<>();   // vertices
+    static Deque<Integer> B = new ArrayDeque<>();    // boundary preorders
+    static int counter = 1, numComps = 0;
+
+    static void dfs(int v) {
+        preorder[v] = counter++;
+        S.push(v);
+        B.push(preorder[v]);
+        for (int w : adj.get(v)) {
+            if (preorder[w] == 0) dfs(w);
+            else if (compID[w] == -1)             // w open: collapse boundaries
+                while (B.peek() > preorder[w]) B.pop();
+        }
+        if (B.peek() == preorder[v]) {            // root
+            B.pop();
+            int w;
+            do { w = S.pop(); compID[w] = numComps; } while (w != v);
+            numComps++;
+        }
+    }
+
+    public static int[] run(List<List<Integer>> g) {
+        adj = g;
+        int n = g.size();
+        preorder = new int[n];
+        compID = new int[n];
+        Arrays.fill(compID, -1);
+        for (int v = 0; v < n; v++) if (preorder[v] == 0) dfs(v);
+        return compID;
+    }
+
+    public static void main(String[] args) {
+        List<List<Integer>> adj = List.of(
+            List.of(1), List.of(2), List.of(0, 3),
+            List.of(4), List.of(5), List.of(3));
+        System.out.println(Arrays.toString(run(adj)) + " comps=" + numComps);
+    }
+}
+```
+
+#### Python
+
+```python
+import sys
+
+
+def gabow_scc(adj):
+    sys.setrecursionlimit(1 << 25)
+    n = len(adj)
+    preorder = [0] * n          # 1-based; 0 means unvisited
+    comp_id = [-1] * n
+    S, B = [], []               # S: vertices, B: boundary preorder indices
+    counter = [1]
+    num_comps = [0]
+
+    def dfs(v):
+        preorder[v] = counter[0]
+        counter[0] += 1
+        S.append(v)
+        B.append(preorder[v])
+        for w in adj[v]:
+            if preorder[w] == 0:
+                dfs(w)
+            elif comp_id[w] == -1:          # w open: collapse tentative boundaries
+                while B and B[-1] > preorder[w]:
+                    B.pop()
+        if B[-1] == preorder[v]:            # v is a root
+            B.pop()
+            while True:
+                w = S.pop()
+                comp_id[w] = num_comps[0]
+                if w == v:
+                    break
+            num_comps[0] += 1
+
+    for v in range(n):
+        if preorder[v] == 0:
+            dfs(v)
+    return comp_id, num_comps[0]
+
+
+if __name__ == "__main__":
+    adj = [[1], [2], [0, 3], [4], [5], [3]]
+    print(gabow_scc(adj))   # ([1, 1, 1, 0, 0, 0], 2)
+```
+
+Gabow on the trace graph produces the identical partition `{0,1,2}` (id 1) and `{3,4,5}` (id 0) as the disc/low trace in §4 — but without ever materializing a `low[]` array. The boundary stack `B` ends each root-burst by popping a single boundary entry, mirroring the moment `low[v] == disc[v]` fired for Tarjan.
+
+### 11.2 Iterative Tarjan (overflow-proof, single pass)
+
+The recursion in §11.1 risks native-stack overflow at depth `Θ(V)` (the giant-SCC regime of §8). Below is an explicit-stack Tarjan; each frame stores the next neighbor index to resume from.
+
+#### Go
+
+```go
+func tarjanIter(adj [][]int) (compID []int, numComps int) {
+	n := len(adj)
+	disc := make([]int, n)
+	low := make([]int, n)
+	onStack := make([]bool, n)
+	compID = make([]int, n)
+	for i := range disc {
+		disc[i], compID[i] = -1, -1
+	}
+	timer := 0
+	var stk []int
+	type frame struct{ v, i int }
+	for s := 0; s < n; s++ {
+		if disc[s] != -1 {
+			continue
+		}
+		call := []frame{{s, 0}}
+		for len(call) > 0 {
+			f := &call[len(call)-1]
+			v := f.v
+			if f.i == 0 {
+				disc[v], low[v] = timer, timer
+				timer++
+				stk = append(stk, v)
+				onStack[v] = true
+			}
+			descend := false
+			for f.i < len(adj[v]) {
+				w := adj[v][f.i]
+				f.i++
+				if disc[w] == -1 {
+					call = append(call, frame{w, 0})
+					descend = true
+					break
+				} else if onStack[w] && disc[w] < low[v] {
+					low[v] = disc[w]
+				}
+			}
+			if descend {
+				continue
+			}
+			if low[v] == disc[v] {
+				for {
+					w := stk[len(stk)-1]
+					stk = stk[:len(stk)-1]
+					onStack[w] = false
+					compID[w] = numComps
+					if w == v {
+						break
+					}
+				}
+				numComps++
+			}
+			call = call[:len(call)-1]
+			if len(call) > 0 {
+				if p := &call[len(call)-1]; low[v] < low[p.v] {
+					low[p.v] = low[v]
+				}
+			}
+		}
+	}
+	return compID, numComps
+}
+```
+
+#### Java
+
+```java
+static int[] tarjanIter(List<List<Integer>> adj, int[] out) {
+    int n = adj.size();
+    int[] disc = new int[n], low = new int[n], comp = new int[n], idx = new int[n];
+    boolean[] on = new boolean[n];
+    Arrays.fill(disc, -1); Arrays.fill(comp, -1);
+    int timer = 0, k = 0;
+    Deque<Integer> stk = new ArrayDeque<>(), call = new ArrayDeque<>();
+    for (int s = 0; s < n; s++) {
+        if (disc[s] != -1) continue;
+        call.push(s);
+        while (!call.isEmpty()) {
+            int v = call.peek();
+            if (idx[v] == 0) { disc[v] = low[v] = timer++; stk.push(v); on[v] = true; }
+            boolean descend = false;
+            while (idx[v] < adj.get(v).size()) {
+                int w = adj.get(v).get(idx[v]++);
+                if (disc[w] == -1) { call.push(w); descend = true; break; }
+                else if (on[w]) low[v] = Math.min(low[v], disc[w]);
+            }
+            if (descend) continue;
+            if (low[v] == disc[v]) {
+                int w; do { w = stk.pop(); on[w] = false; comp[w] = k; } while (w != v);
+                k++;
+            }
+            call.pop();
+            if (!call.isEmpty()) { int p = call.peek(); low[p] = Math.min(low[p], low[v]); }
+        }
+    }
+    out[0] = k;
+    return comp;
+}
+```
+
+#### Python
+
+```python
+def tarjan_iter(adj):
+    n = len(adj)
+    disc = [-1] * n
+    low = [0] * n
+    on = [False] * n
+    comp = [-1] * n
+    timer = k = 0
+    stk = []
+    for s in range(n):
+        if disc[s] != -1:
+            continue
+        call = [(s, 0)]
+        while call:
+            v, i = call[-1]
+            if i == 0:
+                disc[v] = low[v] = timer
+                timer += 1
+                stk.append(v)
+                on[v] = True
+            descend = False
+            while i < len(adj[v]):
+                w = adj[v][i]
+                i += 1
+                if disc[w] == -1:
+                    call[-1] = (v, i)
+                    call.append((w, 0))
+                    descend = True
+                    break
+                elif on[w]:
+                    low[v] = min(low[v], disc[w])
+            if descend:
+                continue
+            call[-1] = (v, i)
+            if low[v] == disc[v]:
+                while True:
+                    w = stk.pop()
+                    on[w] = False
+                    comp[w] = k
+                    if w == v:
+                        break
+                k += 1
+            call.pop()
+            if call:
+                p = call[-1][0]
+                low[p] = min(low[p], low[v])
+    return comp, k
+```
+
+### 11.3 Condensation builder (deduplicated cross-edges)
+
+Given `compID` from any SCC routine, contract each component and emit the simple DAG. Because Tarjan/Gabow number components in reverse topological order, the resulting adjacency only ever points from higher ids to lower ids — a free topological order (§12).
+
+#### Go
+
+```go
+func condense(adj [][]int, compID []int, k int) [][]int {
+	dag := make([][]int, k)
+	seen := make(map[[2]int]bool)
+	for u := range adj {
+		for _, v := range adj[u] {
+			a, b := compID[u], compID[v]
+			if a != b && !seen[[2]int{a, b}] {
+				seen[[2]int{a, b}] = true
+				dag[a] = append(dag[a], b)
+			}
+		}
+	}
+	return dag
+}
+```
+
+#### Java
+
+```java
+static List<List<Integer>> condense(List<List<Integer>> adj, int[] comp, int k) {
+    List<List<Integer>> dag = new ArrayList<>();
+    for (int i = 0; i < k; i++) dag.add(new ArrayList<>());
+    Set<Long> seen = new HashSet<>();
+    for (int u = 0; u < adj.size(); u++)
+        for (int v : adj.get(u)) {
+            int a = comp[u], b = comp[v];
+            if (a != b && seen.add((long) a << 32 | (b & 0xffffffffL))) dag.get(a).add(b);
+        }
+    return dag;
+}
+```
+
+#### Python
+
+```python
+def condense(adj, comp, k):
+    dag = [set() for _ in range(k)]
+    for u in range(len(adj)):
+        for v in adj[u]:
+            if comp[u] != comp[v]:
+                dag[comp[u]].add(comp[v])
+    return [sorted(s) for s in dag]
+```
+
+---
+
+## 12. Condensation-DAG Properties
+
+Let `G^{SCC}` be the condensation (Def. 1.5), with `k` nodes and `m'` deduplicated edges.
+
+**Property 12.1 (Acyclic).** `G^{SCC}` is a DAG (Prop. 1.6). Therefore it has a topological order, a well-defined set of sources (in-degree 0) and sinks (out-degree 0), and supports linear-time DAG-DP.
+
+**Property 12.2 (Tarjan/Gabow id = reverse topological order).** If components are numbered in the order their roots finish, then every condensation edge `[u] → [w]` satisfies `id([u]) > id([w])`. *Proof.* An edge `[u] → [w]` comes from some `x → y` with `x ∈ [u]`, `y ∈ [w]`, `[u] ≠ [w]`. Since `[w]` is reachable from `[u]` but not vice versa (acyclicity), DFS finishes the root of `[w]` before the root of `[u]` (the sink-side component closes first), so it receives a smaller id. ∎ Hence iterating components in **increasing** id is a topological order on the *reverse* condensation, and **decreasing** id is a topological order on `G^{SCC}` itself — no separate topological sort needed.
+
+**Property 12.3 (Size bounds).** `1 ≤ k ≤ |V|`; `k = |V|` iff `G` is a DAG (every SCC trivial); `k = 1` iff `G` is strongly connected. The condensation has `m' ≤ |E|` edges and `m' ≤ k(k−1)/2` after dedup.
+
+**Property 12.4 (Strong-connectivity augmentation).** For a condensation with `k ≥ 2`, let `s` = number of source nodes and `t` = number of sink nodes. The minimum number of edges to add to `G` to make it strongly connected is `max(s, t)` (Eswaran–Tarjan 1976). For `k = 1` the answer is 0. This is a direct, classic application of the condensation structure.
+
+**Property 12.5 (Unique-sink reachability).** A vertex `r` can reach all of `G` iff `[r]` is the unique source of `G^{SCC}`; symmetrically all of `G` can reach `r` iff `[r]` is the unique sink. This drives "is there a universal vertex / mother vertex" queries in `Θ(V+E)`.
+
+| Condensation feature | Graph-level meaning | Linear-time use |
+|----------------------|---------------------|-----------------|
+| node | one maximal mutual-reachability class | quotient of `G` |
+| edge `[u]→[w]` | some original edge crosses `[u]` into `[w]` | DAG-DP transition |
+| source (in-deg 0) | SCC reached by nothing else | candidate "mother" SCC |
+| sink (out-deg 0) | SCC reaching nothing else | absorbing set / deadlock terminus |
+| longest path | longest dependency chain | DAG longest-path DP |
+| `max(sources, sinks)` | augmentation deficiency | Eswaran–Tarjan strong-connectivity |
+
+---
+
+## 13. Open Problems
 
 1. **Work-optimal parallel SCC.** No algorithm achieves `O(V+E)` work with `polylog(V)` span. FB and coloring pay extra `log` or worse factors. Closing this gap (or proving it cannot be closed) is open and tied to whether reachability/DFS has an efficient parallel solution.
 
@@ -216,7 +679,7 @@ For the special question "is the whole graph one SCC?", you do **not** need full
 
 ---
 
-## 11. Summary
+## 14. Summary
 
 - **SCCs are the equivalence classes of mutual reachability** `≈`; they partition `V` uniquely and the condensation is always a DAG (Prop. 1.6).
 - **Correctness** rests on two facts: `low[u]` computed by rules (R1)–(R3) equals the lowlink of Definition 2.1 (Lemma 2.2), and `low[u] == disc[u]` holds **iff** `u` is its SCC's root (Theorem 2.5), via the white-path subtree-containment lemma. Popping at a root yields exactly the component (Theorem 2.6). The rule (R2) must use `disc[w]`, not `low[w]`, to count exactly one back edge and avoid merging components.

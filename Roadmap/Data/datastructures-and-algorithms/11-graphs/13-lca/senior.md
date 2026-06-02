@@ -10,10 +10,12 @@
 5. [Comparison at Scale](#5-comparison-at-scale)
 6. [Architecture Patterns](#6-architecture-patterns)
 7. [Code Examples](#7-code-examples)
-8. [Observability](#8-observability)
-9. [Failure Modes](#9-failure-modes)
-10. [Capacity Planning](#10-capacity-planning)
-11. [Summary](#11-summary)
+8. [A Worked Hierarchy Service](#8-a-worked-hierarchy-service)
+9. [Out-of-Core and Sharded Trees](#9-out-of-core-and-sharded-trees)
+10. [Observability](#10-observability)
+11. [Failure Modes](#11-failure-modes)
+12. [Capacity Planning](#12-capacity-planning)
+13. [Summary](#13-summary)
 
 ---
 
@@ -352,7 +354,90 @@ Under CPython the GIL makes the attribute rebind atomic, so readers observe eith
 
 ---
 
-## 8. Observability
+## 8. A Worked Hierarchy Service
+
+Make the abstractions concrete with an e-commerce **category service**. The tree is the category taxonomy; products hang off leaf (or any) categories; the API must answer "given two products, what is their most-specific shared category?" for breadcrumbs and related-item rules.
+
+### 8.1 The taxonomy as a tree
+
+```
+                 root (0)
+            /       |        \
+      Electronics  Home     Clothing
+        /   \       |         /   \
+   Phones  Laptops Kitchen  Men   Women
+    / \                       |
+ iOS Android                 Shoes
+```
+
+A product tagged `Android` and another tagged `Laptops` share `Electronics`; a product in `Shoes` and one in `iOS` share only `root`. That "shared category" *is* the LCA of the two products' category nodes. The taxonomy has thousands to low-millions of nodes and changes a handful of times per day — squarely the "rarely mutated, read-dominated" regime of §2.2.
+
+### 8.2 End-to-end request path
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as Category API
+    participant IX as Immutable LCA index (mmap)
+    participant DB as Taxonomy DB
+    participant J as Indexer job
+
+    DB->>J: change event (category edited)
+    J->>J: load tree, validate (one rooted tree)
+    J->>IX: build new artifact, atomic publish (pointer swap)
+    C->>API: GET /shared-category?a=P123&b=P456
+    API->>API: map products → category node ids
+    API->>IX: Query(catA, catB)  (lock-free read)
+    IX-->>API: node id of shared category
+    API-->>C: {"category": "Electronics", "path": "/0/1/"}
+```
+
+The query path never touches the DB or the indexer — it is a pure in-memory read of the immutable artifact. Product→category resolution is a separate cache lookup; the LCA index only knows category-tree topology, keeping it small and stable even when the (much larger) product catalog churns.
+
+### 8.3 Why LCA and not a recursive CTE
+
+A SQL recursive CTE that walks two ancestor chains and intersects them is `O(depth)` per query with a DB round-trip — fine at low QPS, ruinous at the thousands-of-QPS a faceting/breadcrumb endpoint sees. The precomputed index turns each query into a sub-microsecond array read. The DB remains the **source of truth**; the index is a derived, disposable read replica of the *shape* of that truth.
+
+---
+
+## 9. Out-of-Core and Sharded Trees
+
+### 9.1 When the tree does not fit in RAM
+
+Most hierarchy trees (categories, geo, org charts) are small enough to keep the whole index resident. The hard cases are **filesystem-scale** trees (billions of inodes) and **comment/social graphs** (billions of replies). For those the `O(N log N)` binary-lifting table is the first thing to drop:
+
+| Tactic | What you keep resident | Per-query cost | Best when |
+| --- | --- | --- | --- |
+| FCB `O(N)` index | the linear ±1-RMQ tables | `O(1)` | tree fits once you remove the `log N` factor |
+| `tin`/`tout` only | `2N` ints (Euler in/out times) | `O(1)` ancestor test, no full LCA | you mostly ask "is A under B?" |
+| Materialized path | a string per node | `O(depth)` longest-common-prefix | DB-backed, shard by path prefix |
+| Hot-subtree index | index of the hot region only | `O(1)` hot / `O(depth)` cold disk climb | queries cluster on a small part of a huge tree |
+
+### 9.2 Memory-mapped immutable artifacts
+
+Because the index is immutable (§4.1), it is an ideal `mmap` candidate. Serialize `up[][]`, `depth[]`, and `first[]` as flat little-endian `int32` arrays into a single file; the query process `mmap`s it read-only and shares the physical pages across every worker process on the box. The OS page cache handles eviction of cold pages for out-of-core trees — you pay disk I/O only on the rare cold-page fault, and hot rows of `up[][]` stay resident. This is the same trick search engines use to serve postings lists larger than RAM.
+
+### 9.3 Two-level (top-tree + shard) LCA, worked
+
+For a tree partitioned across `S` shards: replicate the **top tree** (everything within depth `d₀` of the root) to every node, and shard the deep subtrees by their attach point.
+
+```
+        [ replicated top tree, depth 0..d0 ]
+        /         |          \
+   shard A     shard B      shard C
+   (subtree)   (subtree)    (subtree)
+```
+
+Query `LCA(u, v)`:
+
+1. If `u, v` live in the **same** shard, the shard answers locally with its own index.
+2. If they live in **different** shards, their LCA is at or above the shards' attach points, hence inside the replicated top tree — any node answers it from the local replica using the two attach-point ids.
+
+The only cross-shard data needed is each shard's **attach-point id** in the top tree, which is tiny and rarely changes. This mirrors hierarchical routing and keeps every query to at most one local index.
+
+---
+
+## 10. Observability
 
 An LCA index is invisible until it goes stale or runs out of memory. Wire these from day one.
 
@@ -371,31 +456,31 @@ The most useful one is **`lca_index_age_seconds`**: a hierarchy service that sil
 
 ---
 
-## 9. Failure Modes
+## 11. Failure Modes
 
-### 9.1 Stale index
+### 11.1 Stale index
 The tree changed but the rebuild failed or was skipped. Queries return *valid-looking but wrong* ancestors. Mitigate with `index_age` alerts and a version check between source and artifact.
 
-### 9.2 OOM during rebuild
+### 11.2 OOM during rebuild
 Building a fresh `N log N` table while the old one is still live doubles memory momentarily. A growing tree can OOM exactly at publish time. Mitigate by sizing for `2×` the index, building incrementally, or switching to the `O(N)` Farach-Colton–Bender index.
 
-### 9.3 Wrong root / re-rooting
+### 11.3 Wrong root / re-rooting
 LCA is defined relative to a root. If an upstream process re-roots the tree (e.g., a category is promoted to top level) and the index is not rebuilt, every answer is wrong. Treat root changes as a forced rebuild.
 
-### 9.4 Non-tree input
+### 11.4 Non-tree input
 A cycle or a second parent slips into the source (data-quality bug). The DFS may loop or produce an inconsistent `depth[]`. Validate that the input is a single rooted tree (exactly `N − 1` edges, connected, acyclic) before building.
 
-### 9.5 Recursion overflow on build
+### 11.5 Recursion overflow on build
 A deep, path-like tree overflows a recursive DFS during indexing. Always build with an **iterative** traversal in production indexers.
 
-### 9.6 Sentinel corruption
+### 11.6 Sentinel corruption
 Root's parent left as a real node id, so overshooting jumps read a valid-but-wrong node and produce subtly wrong LCAs near the root. Always set `up[0][root] = root`.
 
 ---
 
-## 10. Capacity Planning
+## 12. Capacity Planning
 
-### 10.1 Memory model
+### 12.1 Memory model
 
 Binary lifting: `up[][]` is `N × LOG` integers, `LOG = ceil(log2 N)`.
 
@@ -408,15 +493,38 @@ Binary lifting: `up[][]` is `N × LOG` integers, `LOG = ceil(log2 N)`.
 
 Use 32-bit indices (`int32`) when `N < 2^31` to halve memory. Euler+RMQ has comparable memory (`2N` Euler entries × `LOG`); Farach-Colton–Bender cuts it to roughly `O(N)`.
 
-### 10.2 Build time
+### 12.2 Build time
 
 Roughly `N × LOG` simple operations: ~`10^7` ops for `N = 10^5`, ~`2×10^8` for `N = 10^7`. Expect tens of milliseconds at `10^5`, a few seconds at `10^7`. If build time approaches your change interval, you have outgrown copy-on-rebuild.
 
-### 10.3 Query throughput
+### 12.3 Query throughput
 
 A lock-free `O(log N)` query on an in-RAM table runs in well under a microsecond; a single core sustains millions of QPS, and it scales linearly with cores because reads share immutable memory. The bottleneck is cache misses into `up[][]` for large `N`, which the `O(1)` Euler+RMQ variant reduces.
 
-### 10.4 When to leave the single-node, precomputed model
+### 12.4 The O(N log N) memory math, derived
+
+The binary-lifting table stores `LOG = ⌈log₂ N⌉` rows of `N` indices. With `B` bytes per index the table is exactly
+
+```
+bytes(up) = N · ⌈log₂ N⌉ · B
+```
+
+plus `depth[]` at `N · B` and (for the Euler variant) `first[]` at another `N · B`. The `log₂ N` factor grows *slowly*, which is why the table stays manageable far longer than people expect: going from `N = 10^5` to `N = 10^8` (a 1000× node increase) raises `LOG` only from 17 to 27 — about 1.6×. So index memory scales essentially **linearly in N with a slowly-creeping multiplier**, and you can budget it as `≈ N · LOG · 4 bytes` for `int32`.
+
+Worked budget for a category-style tree of `N = 2·10^6` nodes (`LOG = 21`, `int32`):
+
+```
+up[][]  = 2e6 · 21 · 4 B = 168 MB
+depth[] = 2e6 · 4 B       =   8 MB
+first[] = 2e6 · 4 B       =   8 MB   (Euler variant only)
+-----------------------------------
+resident ≈ 176–184 MB     → fits comfortably in a 1 GB container
+peak during rebuild ≈ 2×  → size the pod for ≥ 400 MB headroom (see §11.2)
+```
+
+The rebuild-peak doubling is the line item people forget: the new artifact is built while the old one still serves reads, so provision for `2 ×` resident plus the source-tree working set, not `1 ×`.
+
+### 12.5 When to leave the single-node, precomputed model
 
 Move off it when any of these holds:
 
@@ -427,7 +535,7 @@ Move off it when any of these holds:
 
 ---
 
-## 11. Summary
+## 13. Summary
 
 - An LCA index is a **precomputed, immutable, read-optimized** structure: build once, query forever, swap atomically on change.
 - Its defining tension is **memory vs query speed vs freshness**. Binary lifting (`O(N log N)` memory, `O(log N)` query) is the default; Euler+RMQ buys `O(1)` queries; Farach-Colton–Bender cuts memory to `O(N)`.

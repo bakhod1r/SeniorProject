@@ -8,16 +8,17 @@
 
 1. [Introduction](#introduction)
 2. [Deeper Concepts](#deeper-concepts)
-3. [Comparison with Alternatives](#comparison-with-alternatives)
-4. [Advanced Patterns](#advanced-patterns)
-5. [Graph and Tree Applications](#graph-and-tree-applications)
-6. [Algorithmic Integration](#algorithmic-integration)
-7. [Code Examples](#code-examples)
-8. [Error Handling](#error-handling)
-9. [Performance Analysis](#performance-analysis)
-10. [Best Practices](#best-practices)
-11. [Visual Animation](#visual-animation)
-12. [Summary](#summary)
+3. [Kahn vs DFS — a decision guide](#kahn-vs-dfs--a-decision-guide)
+4. [Comparison with Alternatives](#comparison-with-alternatives)
+5. [Advanced Patterns](#advanced-patterns)
+6. [Graph and Tree Applications](#graph-and-tree-applications)
+7. [Algorithmic Integration](#algorithmic-integration)
+8. [Code Examples](#code-examples)
+9. [Error Handling](#error-handling)
+10. [Performance Analysis](#performance-analysis)
+11. [Best Practices](#best-practices)
+12. [Visual Animation](#visual-animation)
+13. [Summary](#summary)
 
 ---
 
@@ -127,6 +128,60 @@ for u in topo:                 # u's predecessors are all processed already
 
 Because `u` precedes `w` in topo order, `dist[u]` is final before it is ever used to update `dist[w]`. The maximum `dist[v]` is the longest path; with edge weights = task durations it is the **critical path** of a project schedule.
 
+#### Worked trace of the longest-path sweep
+
+Take this weighted DAG (edge labels are weights):
+
+```text
+   (0)
+  3/   \1
+  v     v
+ (1)   (2)
+  4\   /5  \2
+    v v     v
+    (3)    (4)
+      \1   /3
+       v  v
+       (5)
+
+edges:  0→1 (3)  0→2 (1)  1→3 (4)  2→3 (5)  2→4 (2)  3→5 (1)  4→5 (3)
+topo order: 0 1 2 3 4 5
+```
+
+Initialize `dist = [0,0,0,0,0,0]` and relax in topo order:
+
+```text
+u=0: 0→1: dist[1]=max(0, 0+3)=3
+     0→2: dist[2]=max(0, 0+1)=1          dist=[0,3,1,0,0,0]
+u=1: 1→3: dist[3]=max(0, 3+4)=7          dist=[0,3,1,7,0,0]
+u=2: 2→3: dist[3]=max(7, 1+5)=7  (no change, 1+5=6 < 7)
+     2→4: dist[4]=max(0, 1+2)=3          dist=[0,3,1,7,3,0]
+u=3: 3→5: dist[5]=max(0, 7+1)=8          dist=[0,3,1,7,3,8]
+u=4: 4→5: dist[5]=max(8, 3+3)=8  (no change, 3+3=6 < 8)
+u=5: no outgoing edges
+```
+
+Longest path length = `max(dist) = 8`, ending at vertex `5`. Following the relaxations that *set* each value backwards (`5 ← 3 ← 1 ← 0`) recovers the critical path **0 → 1 → 3 → 5** with weights `3 + 4 + 1 = 8`.
+
+#### Recovering the path, not just its length
+
+Track a `parent[]` array updated whenever a relaxation improves `dist`:
+
+```
+for u in topo:
+    for edge u → w with weight wt:
+        if dist[u] + wt > dist[w]:
+            dist[w] = dist[u] + wt
+            parent[w] = u            # remember who gave w its best value
+# then walk parent[] back from argmax(dist) to reconstruct the path
+```
+
+This is the same predecessor-reconstruction trick used in shortest-path algorithms; on a DAG it costs nothing extra because each edge is still relaxed exactly once.
+
+#### Earliest-start / latest-start and slack
+
+In project scheduling the longest-path sweep gives the **earliest finish** `EF[v]` of every task. A second sweep in *reverse* topo order gives the **latest finish** `LF[v]` that still meets the deadline. The difference `slack[v] = LF[v] − EF[v]` is how long task `v` may slip without delaying the whole project; tasks with `slack = 0` are exactly the **critical-path** tasks. This two-sweep forward/backward pattern (the Critical Path Method, CPM) is pure DAG DP over a topological order.
+
 ### Pattern: Counting paths between two vertices in a DAG
 
 ```
@@ -154,6 +209,32 @@ answer = dp[full]
 ```
 
 `O(2^V · V)` time — only feasible for `V ≲ 20`. The exact count being expensive is fundamental (#P-complete).
+
+---
+
+## Kahn vs DFS — a decision guide
+
+Both algorithms are `O(V + E)` and both detect cycles, so the choice is about *what else you need from the run*. Use this decision table when you reach for one.
+
+| If you need… | Prefer | Why |
+|---|---|---|
+| Just *any* valid order, simplest code | **Kahn (queue)** | Iterative, no recursion, no stack-depth worry. |
+| The lexicographically smallest order | **Kahn (min-heap)** | The frontier structure controls the tie-break; a heap gives smallest-first. |
+| To *report the cycle path* to a user | **DFS** | The gray ancestor + recursion stack reconstruct the cycle for free. |
+| Finish times for SCC / other algorithms | **DFS** | Reverse-postorder is a by-product of the finish ordering DFS already computes. |
+| To run on a graph that may be millions deep | **Kahn (queue)** | Recursive DFS overflows the call stack at depth `Θ(V)`; Kahn has no recursion. |
+| Priority/criticality-driven scheduling | **Kahn (priority queue)** | Swap the frontier for a PQ keyed by deadline or critical-path slack. |
+
+### The mechanics that drive the choice
+
+**Kahn is "pull from the front of the wave".** It maintains a *set of currently-ready vertices* (in-degree 0) and repeatedly drains it. Because that set is materialized explicitly, you can:
+
+- pick the ready vertex with any policy (FIFO, smallest id, highest priority), and
+- detect a cycle by a simple count: if you emit fewer than `V` vertices, the un-emitted ones are exactly the vertices trapped in or behind a cycle.
+
+**DFS is "emit on the way back up".** It does not track a ready set; it recurses to the deepest reachable vertex and appends each vertex when its whole subtree is finished. Because the recursion stack *is* the current path, a back edge (an edge into a gray, on-stack vertex) directly names a cycle. The cost: you do not control the order beyond "children visitation order", and the stack can get as deep as the longest path.
+
+A useful mental model: **Kahn processes the DAG top-down by layers; DFS processes it bottom-up by finish time.** They meet at the same set of valid orders but expose different "extra" information — frontier control for Kahn, cycle witness for DFS.
 
 ---
 

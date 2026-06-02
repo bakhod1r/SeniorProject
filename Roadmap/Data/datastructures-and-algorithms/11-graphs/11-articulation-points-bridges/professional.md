@@ -6,12 +6,14 @@
 3. Complexity O(V + E)
 4. Biconnected-Component Decomposition Theorem and Block-Cut Tree
 5. Connection to Menger's Theorem
-6. Cache Behavior
-7. Average-Case Analysis
-8. Space–Time Trade-offs
-9. Comparison with Alternatives
-10. Open Problems
-11. Summary
+6. Worked Trace — DFS Tree with disc/low
+7. Reference Implementations (Go / Java / Python)
+8. Cache Behavior
+9. Average-Case Analysis
+10. Space–Time Trade-offs
+11. Comparison with Alternatives
+12. Fully-Dynamic 2-Connectivity and Open Problems
+13. Summary
 
 ---
 
@@ -124,7 +126,335 @@ This places cut vertices and bridges at the base of the connectivity hierarchy. 
 
 ---
 
-## 6. Cache Behavior
+## 6. Worked Trace — DFS Tree with disc/low
+
+Take the canonical "two triangles joined by a bridge" graph, the running example used across all levels of this topic:
+
+```
+edges: 0-1, 1-2, 2-0, 1-3, 3-4, 4-5, 5-3
+```
+
+A DFS started at vertex `0`, always taking the smallest unvisited neighbor first, produces this DFS tree (solid lines `│` are tree edges, the dashed `╌` arrows are back edges to ancestors):
+
+```
+            disc / low
+   0   ──────  0 / 0          root
+   │
+   1   ──────  1 / 0          1's subtree escapes to 0 via back edge 2->0
+   ├───────────────╮
+   2   ─ 2 / 0      3 ─ 3 / 3 child of 1; low[3]=3
+   ╎ (back 2->0)    │
+   (closes 0-1-2)   4 ─ 4 / 3
+                    │
+                    5 ─ 5 / 3
+                    ╎ (back 5->3)
+                    (closes 3-4-5)
+
+back edges:  2 ╌╌> 0   (disc 0)      5 ╌╌> 3   (disc 3)
+```
+
+**Step-by-step `disc`/`low` computation** (post-order, i.e. values finalize as DFS returns):
+
+| step | vertex | event | disc | low after | reason |
+|------|--------|-------|------|-----------|--------|
+| 1 | 0 | enter | 0 | 0 | root |
+| 2 | 1 | enter | 1 | 1 | tree edge 0→1 |
+| 3 | 2 | enter | 2 | 2 | tree edge 1→2 |
+| 4 | 2 | back edge 2→0 | 2 | **0** | `min(2, disc[0]=0)` |
+| 5 | 2 | return to 1 | — | — | fold: `low[1]=min(1,low[2]=0)=0` |
+| 6 | 3 | enter | 3 | 3 | tree edge 1→3 |
+| 7 | 4 | enter | 4 | 4 | tree edge 3→4 |
+| 8 | 5 | enter | 5 | 5 | tree edge 4→5 |
+| 9 | 5 | back edge 5→3 | 5 | **3** | `min(5, disc[3]=3)` |
+| 10 | 5 | return to 4 | — | — | fold: `low[4]=min(4,low[5]=3)=3` |
+| 11 | 4 | return to 3 | — | — | fold: `low[3]=min(3,low[4]=3)=3` |
+| 12 | 3 | return to 1 | — | — | fold: `low[1]=min(0,low[3]=3)=0` |
+| 13 | 1 | return to 0 | — | — | fold: `low[0]=min(0,low[1]=0)=0` |
+
+**Final arrays:**
+
+| vertex | 0 | 1 | 2 | 3 | 4 | 5 |
+|--------|---|---|---|---|---|---|
+| `disc` | 0 | 1 | 2 | 3 | 4 | 5 |
+| `low`  | 0 | 0 | 0 | 3 | 3 | 3 |
+
+**Applying the criteria:**
+
+- Tree edge `1→3`, child `3`: `low[3] = 3`, `disc[1] = 1`. Cut test `low[3] ≥ disc[1]` → `3 ≥ 1` **true** → vertex `1` is an articulation point. Bridge test `low[3] > disc[1]` → `3 > 1` **true** → edge `(1,3)` is a **bridge**.
+- Tree edge `1→2`, child `2`: `low[2] = 0`, `disc[1] = 1`. Cut test `0 ≥ 1` **false**; bridge test `0 > 1` **false`. The triangle edge is neither.
+- Tree edge `3→4`, child `4`: `low[4] = 3`, `disc[3] = 3`. Cut test `3 ≥ 3` **true** → vertex `3` is an articulation point. Bridge test `3 > 3` **false** → not a bridge (the back edge `5→3` saves it). This is exactly the boundary case `low[v] = disc[u]` of Theorem 2.3.
+- Root `0`: has exactly **one** child (`1`) in the DFS tree → by Theorem 2.2 **not** an articulation point, even though `disc[0]=0` is the global minimum.
+
+**Result:** articulation points `{1, 3}`; bridges `{(1,3)}`; biconnected components `{0-1, 1-2, 2-0}`, `{1-3}`, `{3-4, 4-5, 5-3}`. The single bridge `(1,3)` is its own one-edge block; the two triangles are two-vertex-connected blocks sharing the cut vertices `1` and `3` respectively. This matches Theorem 4.2 (each cut vertex lies in ≥ 2 blocks).
+
+---
+
+## 7. Reference Implementations (Go / Java / Python)
+
+Three production-grade variants follow, in the canonical Go → Java → Python order:
+
+1. **Biconnected components via an edge stack** (Go) — pops edges into a block when `low[v] ≥ disc[u]` fires.
+2. **Bridge tree / 2-edge-connected components** (Java) — finds bridges, contracts 2ECCs, and emits the bridge forest.
+3. **Iterative articulation-point + bridge finder** (Python) — explicit stack, no recursion-depth limit.
+
+All three are multi-edge safe (they skip the *parent edge id*, never the parent vertex), per Corollary 2.5.
+
+### 7.1 Go — biconnected components (edge stack)
+
+```go
+package main
+
+import "fmt"
+
+type Graph struct {
+	n   int
+	adj [][][2]int // adj[u] = list of {neighbor, edgeId}
+	m   int
+}
+
+func NewGraph(n int) *Graph { return &Graph{n: n, adj: make([][][2]int, n)} }
+
+func (g *Graph) AddEdge(u, v int) {
+	g.adj[u] = append(g.adj[u], [2]int{v, g.m})
+	g.adj[v] = append(g.adj[v], [2]int{u, g.m})
+	g.m++
+}
+
+// BiconnectedComponents returns, for each block, its list of edge ids.
+func (g *Graph) BiconnectedComponents() [][]int {
+	disc := make([]int, g.n)
+	low := make([]int, g.n)
+	for i := range disc {
+		disc[i] = -1
+	}
+	timer := 0
+	var edgeStack []int
+	var blocks [][]int
+
+	var dfs func(u, parentEdge int)
+	dfs = func(u, parentEdge int) {
+		disc[u], low[u] = timer, timer
+		timer++
+		for _, e := range g.adj[u] {
+			v, id := e[0], e[1]
+			if id == parentEdge {
+				continue // skip the exact edge we arrived on
+			}
+			if disc[v] == -1 {
+				edgeStack = append(edgeStack, id)
+				dfs(v, id)
+				if low[v] < low[u] {
+					low[u] = low[v]
+				}
+				if low[v] >= disc[u] { // cut condition: close a block
+					var comp []int
+					for {
+						top := edgeStack[len(edgeStack)-1]
+						edgeStack = edgeStack[:len(edgeStack)-1]
+						comp = append(comp, top)
+						if top == id {
+							break
+						}
+					}
+					blocks = append(blocks, comp)
+				}
+			} else if disc[v] < disc[u] { // back edge going up
+				edgeStack = append(edgeStack, id)
+				if disc[v] < low[u] {
+					low[u] = disc[v]
+				}
+			}
+		}
+	}
+
+	for i := 0; i < g.n; i++ {
+		if disc[i] == -1 {
+			dfs(i, -1)
+		}
+	}
+	return blocks
+}
+
+func main() {
+	g := NewGraph(6)
+	for _, e := range [][2]int{{0, 1}, {1, 2}, {2, 0}, {1, 3}, {3, 4}, {4, 5}, {5, 3}} {
+		g.AddEdge(e[0], e[1])
+	}
+	for i, b := range g.BiconnectedComponents() {
+		fmt.Printf("block %d: edge ids %v\n", i, b) // 3 blocks
+	}
+}
+```
+
+### 7.2 Java — bridge tree / 2-edge-connected components
+
+```java
+import java.util.*;
+
+// Computes bridges, labels each vertex with its 2-edge-connected-component id,
+// and builds the bridge tree (a forest whose edges are exactly the bridges).
+public class BridgeTree {
+    int n, m = 0;
+    List<int[]>[] adj;          // {neighbor, edgeId}
+    int[] disc, low, comp;      // comp[v] = 2ECC id
+    boolean[] isBridge;
+    int timer = 0, numComp = 0;
+
+    @SuppressWarnings("unchecked")
+    BridgeTree(int n) {
+        this.n = n;
+        adj = new List[n];
+        for (int i = 0; i < n; i++) adj[i] = new ArrayList<>();
+    }
+
+    void addEdge(int u, int v) {
+        adj[u].add(new int[]{v, m});
+        adj[v].add(new int[]{u, m});
+        m++;
+    }
+
+    // Phase 1: find bridges with disc/low.
+    void findBridges() {
+        disc = new int[n]; low = new int[n];
+        Arrays.fill(disc, -1);
+        isBridge = new boolean[m];
+        for (int i = 0; i < n; i++) if (disc[i] == -1) dfsBridge(i, -1);
+    }
+
+    void dfsBridge(int u, int parentEdge) {
+        disc[u] = low[u] = timer++;
+        for (int[] e : adj[u]) {
+            int v = e[0], id = e[1];
+            if (id == parentEdge) continue;       // multi-edge safe
+            if (disc[v] == -1) {
+                dfsBridge(v, id);
+                low[u] = Math.min(low[u], low[v]);
+                if (low[v] > disc[u]) isBridge[id] = true;   // strict => bridge
+            } else {
+                low[u] = Math.min(low[u], disc[v]);
+            }
+        }
+    }
+
+    // Phase 2: flood fill not crossing bridges => 2ECC ids.
+    void labelComponents() {
+        comp = new int[n];
+        Arrays.fill(comp, -1);
+        for (int s = 0; s < n; s++) {
+            if (comp[s] != -1) continue;
+            int id = numComp++;
+            Deque<Integer> q = new ArrayDeque<>();
+            q.push(s); comp[s] = id;
+            while (!q.isEmpty()) {
+                int u = q.pop();
+                for (int[] e : adj[u]) {
+                    if (isBridge[e[1]]) continue;            // never cross a bridge
+                    if (comp[e[0]] == -1) { comp[e[0]] = id; q.push(e[0]); }
+                }
+            }
+        }
+    }
+
+    // Phase 3: contract; bridges become the tree edges.
+    List<int[]> bridgeTree() {
+        List<int[]> tree = new ArrayList<>();
+        boolean[] seen = new boolean[m];
+        for (int u = 0; u < n; u++)
+            for (int[] e : adj[u]) {
+                int v = e[0], id = e[1];
+                if (isBridge[id] && !seen[id]) {
+                    seen[id] = true;
+                    tree.add(new int[]{comp[u], comp[v]});
+                }
+            }
+        return tree;
+    }
+
+    public static void main(String[] args) {
+        BridgeTree g = new BridgeTree(6);
+        int[][] edges = {{0, 1}, {1, 2}, {2, 0}, {1, 3}, {3, 4}, {4, 5}, {5, 3}};
+        for (int[] e : edges) g.addEdge(e[0], e[1]);
+        g.findBridges();
+        g.labelComponents();
+        System.out.println("2ECC ids:   " + Arrays.toString(g.comp)); // [0,0,0,1,1,1]
+        for (int[] t : g.bridgeTree())
+            System.out.println("bridge-tree edge: " + t[0] + " - " + t[1]); // 0 - 1
+    }
+}
+```
+
+### 7.3 Python — iterative articulation points + bridges
+
+```python
+import sys
+
+
+def analyze(n, edges):
+    """Iterative disc/low. Returns (articulation_points, bridges).
+    edges: list of (u, v). Multi-edge safe via parent edge id."""
+    adj = [[] for _ in range(n)]   # adj[u] = list of (neighbor, edge_id)
+    for eid, (u, v) in enumerate(edges):
+        adj[u].append((v, eid))
+        adj[v].append((u, eid))
+
+    disc = [-1] * n
+    low = [0] * n
+    parent_edge = [-1] * n
+    it = [0] * n
+    timer = 0
+    aps = set()
+    bridges = []
+
+    for s in range(n):
+        if disc[s] != -1:
+            continue
+        disc[s] = low[s] = timer
+        timer += 1
+        stack = [s]
+        root_children = 0
+        while stack:
+            u = stack[-1]
+            if it[u] < len(adj[u]):
+                v, eid = adj[u][it[u]]
+                it[u] += 1
+                if eid == parent_edge[u]:
+                    continue                      # skip the exact arriving edge
+                if disc[v] == -1:
+                    parent_edge[v] = eid
+                    disc[v] = low[v] = timer
+                    timer += 1
+                    if u == s:
+                        root_children += 1
+                    stack.append(v)
+                else:
+                    low[u] = min(low[u], disc[v])  # back edge relax
+            else:
+                stack.pop()
+                if stack:
+                    p = stack[-1]
+                    low[p] = min(low[p], low[u])
+                    if p != s and low[u] >= disc[p]:   # non-strict => cut vertex
+                        aps.add(p)
+                    if low[u] > disc[p]:               # strict => bridge
+                        bridges.append((p, u))
+        if root_children >= 2:
+            aps.add(s)
+    return aps, bridges
+
+
+if __name__ == "__main__":
+    sys.setrecursionlimit(1 << 20)  # belt-and-suspenders; this code is iterative
+    edges = [(0, 1), (1, 2), (2, 0), (1, 3), (3, 4), (4, 5), (5, 3)]
+    aps, bridges = analyze(6, edges)
+    print("articulation points:", sorted(aps))  # [1, 3]
+    print("bridges:", bridges)                   # [(1, 3)]
+```
+
+All three terminate in `Θ(V + E)` (Theorem 3.1) and reproduce the result of the Section 6 trace: cut vertices `{1, 3}`, bridge `(1,3)`, three blocks, two 2ECCs.
+
+---
+
+## 8. Cache Behavior
 
 The DFS's memory access pattern has two parts:
 
@@ -136,7 +466,7 @@ So the realistic cost model is `Θ(V + E)` *cache misses* in the worst case (ran
 
 ---
 
-## 7. Average-Case Analysis
+## 9. Average-Case Analysis
 
 On a uniformly random connected graph `G(n, m)`:
 
@@ -148,7 +478,7 @@ The *running time* is `Θ(V + E)` regardless of the input distribution — there
 
 ---
 
-## 8. Space–Time Trade-offs
+## 10. Space–Time Trade-offs
 
 | Variant | Time | Aux space | Note |
 |---------|------|-----------|------|
@@ -162,7 +492,7 @@ The fundamental space lower bound is `Ω(V)` simply to remember which vertices a
 
 ---
 
-## 9. Comparison with Alternatives
+## 11. Comparison with Alternatives
 
 | Method | Cuts | Bridges | Time | Model | Comment |
 |--------|------|---------|------|-------|---------|
@@ -177,7 +507,24 @@ Schmidt's **chain decomposition** (2013) deserves note: it computes the same cut
 
 ---
 
-## 10. Open Problems
+## 12. Fully-Dynamic 2-Connectivity and Open Problems
+
+### 12.1 The dynamic model
+
+In the **fully-dynamic** setting the graph undergoes an intermixed sequence of `insert(e)`, `delete(e)`, and query operations (`is e a bridge?`, `are u, v 2-edge-connected?`, `is w an articulation point?`, `are u, v 2-vertex-connected?`). Recomputing the static `Θ(V+E)` DFS after every update is correct but costs `Θ(V+E)` per operation; the goal is **polylogarithmic amortized** time per update, sharing structure across updates.
+
+The state of the art for fully-dynamic **2-edge-connectivity** is the Holm–de Lichtenberg–Thorup (HDT, 2001) framework, which maintains a hierarchy of spanning forests in **Euler-tour trees** with edge "levels": a tree edge is promoted to a higher level when it is found to be replaceable, bounding the total promotion work. HDT achieves `O(log²n)` amortized time per update and `O(log n / log log n)` per query for connectivity, and `O(log⁴n)` amortized for 2-edge-connectivity / bridge queries. The crucial invariant — each edge's level only increases, and there are `O(log n)` levels — is what amortizes the otherwise expensive replacement-edge search.
+
+### 12.2 Insertion-only (incremental) is much easier
+
+If edges are only **inserted**, never deleted, the bridge set shrinks monotonically (inserting an edge can only destroy bridges by creating cycles, never create new ones). This is the **incremental 2-edge-connectivity** problem, solvable with a DSU over 2ECCs plus a "small-to-large" or link-cut-tree merge, giving near-`O(α(V))` amortized per insertion. This insertion-only case is the subject of `30-online-bridges`; the contrast with the fully-dynamic `O(log⁴n)` shows how much harder deletions make the problem.
+
+### 12.3 The decremental and vertex cases
+
+- **Decremental (delete-only) bridges** can also be handled more cheaply than the fully-dynamic bound in some regimes, but no clean `O(α)` analogue exists; deletions split 2ECCs and the splitting work resists union-find's monotonicity.
+- **Fully-dynamic 2-vertex-connectivity** (articulation points, block-cut tree) is genuinely harder than the edge case: the block-cut tree is not a simple partition of vertices (cut vertices are shared), so the Euler-tour-tree machinery does not transfer directly. Polylog bounds exist but with larger exponents, and tightening them remains open.
+
+### 12.4 Open problems
 
 1. **Fully-dynamic 2-edge-connectivity / bridges.** Maintaining the bridge set (and answering "is `e` a bridge now?") under **both** edge insertions and deletions in polylogarithmic amortized time per update is solved (Holm–de Lichtenberg–Thorup achieve `O(log²n)` amortized), but the constants and worst-case (vs amortized) bounds remain an active area. The insertion-only case is simpler (`30-online-bridges`).
 2. **Fully-dynamic biconnectivity.** Maintaining articulation points and the block-cut tree under fully dynamic updates with optimal bounds is harder than the edge case; improving the polylog factors is open.
@@ -187,7 +534,7 @@ Schmidt's **chain decomposition** (2013) deserves note: it computes the same cut
 
 ---
 
-## 11. Summary
+## 13. Summary
 
 - **Definitions.** A cut vertex `u` satisfies `c(G − u) > c(G)`; a bridge `e` satisfies `c(G − e) > c(G)`. They are the `k = 1` cases of vertex- and edge-connectivity (`κ = 1`, `λ = 1`).
 - **Criteria (exact inequalities).** With `disc`/`low` from a DFS: a non-root `u` is a cut vertex iff some child `v` has `low[v] ≥ disc[u]` (**non-strict**); the root is a cut vertex iff it has ≥ 2 DFS children; a tree edge `(u, v)` is a bridge iff `low[v] > disc[u]` (**strict**). The boundary `low[v] = disc[u]` is exactly where `u` is a cut vertex but `(u, v)` is *not* a bridge.

@@ -5,13 +5,16 @@
 2. Euler's Theorem — Necessity and Sufficiency (Undirected)
 3. The Directed Analogue
 4. Hierholzer's Algorithm — Correctness and O(E) Proof
-5. The BEST Theorem — Counting Eulerian Circuits
-6. Cache Behavior and Memory Layout
-7. Average-Case and Randomized Aspects
-8. Space–Time Trade-offs
-9. Comparison: Eulerian (P) vs Hamiltonian (NP-complete)
-10. Open Problems and Research Directions
-11. Summary
+5. Worked Hierholzer Trace — Cycle Stitching Step by Step
+6. The BEST Theorem — Counting Eulerian Circuits
+7. Reference Implementations (Go / Java / Python)
+8. De Bruijn Sequence Construction via Euler Circuits
+9. Cache Behavior and Memory Layout
+10. Average-Case and Randomized Aspects
+11. Space–Time Trade-offs
+12. Comparison: Eulerian (P) vs Hamiltonian (NP-complete)
+13. Open Problems and Research Directions
+14. Summary
 
 ---
 
@@ -114,15 +117,80 @@ HIERHOLZER(G, start):
 
 **Proof.** Building adjacency and degree arrays is `Θ(V + E)`. In the main loop, every iteration either advances some `iter[v]` (a *push*) or pops a vertex. There are at most `|E|` pushes total, because `iter[v]` advances at most `deg_out(v)` times and `Σ deg_out(v) = |E|`. The number of pops equals the number of pushes plus one (for `start`), so at most `|E| + 1`. Each push/pop is `O(1)` (amortized for dynamic arrays). Thus the loop is `Θ(E)`, and total is `Θ(V + E)`. The stack and trail hold at most `|E| + 1` entries: `Θ(V + E)` space. The reversal is `Θ(E)`. ∎
 
-The constant is tiny — essentially one comparison, one pointer bump, and one array append per edge. This linearity is what cleanly separates Eulerian construction from the exponential Hamiltonian search (§9).
+The constant is tiny — essentially one comparison, one pointer bump, and one array append per edge. This linearity is what cleanly separates Eulerian construction from the exponential Hamiltonian search (§12).
 
 ---
 
-## 5. The BEST Theorem — Counting Eulerian Circuits
+## 5. Worked Hierholzer Trace — Cycle Stitching Step by Step
+
+The proof of §4 is abstract; here is a concrete trace that makes the "implicit splicing" visible. Take this directed graph (a classic small Eulerian digraph):
+
+```
+        ┌─────────────► 1 ──────────┐
+        │               │           ▼
+        0               │           2
+        ▲               ▼           │
+        │               3 ◄─────────┘
+        └───────────────┘
+Arcs:  0→1, 1→2, 2→3, 3→0, 1→3, 3→1
+```
+
+Out-degrees and in-degrees:
+
+| vertex | out | in | balanced? |
+|--------|-----|----|-----------|
+| 0 | 1 (→1) | 1 (3→0) | yes |
+| 1 | 2 (→2, →3) | 2 (0→1, 3→1) | yes |
+| 2 | 1 (→3) | 1 (1→2) | yes |
+| 3 | 2 (→0, →1) | 2 (2→3, 1→3) | yes |
+
+All balanced and the edge-bearing vertices are strongly connected, so an Eulerian **circuit** exists (Theorem 3.1). `|E| = 6`, so the final trail must have `|E| + 1 = 7` vertices.
+
+Adjacency lists (in the order the algorithm will consume them):
+
+```
+adj[0] = [1]
+adj[1] = [2, 3]
+adj[2] = [3]
+adj[3] = [0, 1]
+```
+
+We run the iterative stack form from `start = 0`. Columns: the action, the `stack` (bottom→top), the `iter[]` pointers, and the emitted `trail`.
+
+| step | action | stack (bottom→top) | iter[0,1,2,3] | trail (emitted on pop) |
+|------|--------|--------------------|---------------|------------------------|
+| 0 | init | `0` | `0,0,0,0` | — |
+| 1 | push adj[0][0]=1 | `0 1` | `1,0,0,0` | — |
+| 2 | push adj[1][0]=2 | `0 1 2` | `1,1,0,0` | — |
+| 3 | push adj[2][0]=3 | `0 1 2 3` | `1,1,1,0` | — |
+| 4 | push adj[3][0]=0 | `0 1 2 3 0` | `1,1,1,1` | — |
+| 5 | top=0, iter exhausted → pop 0 | `0 1 2 3` | `1,1,1,1` | `0` |
+| 6 | push adj[3][1]=1 | `0 1 2 3 1` | `1,1,1,2` | `0` |
+| 7 | push adj[1][1]=3 | `0 1 2 3 1 3` | `1,2,1,2` | `0` |
+| 8 | top=3, iter exhausted → pop 3 | `0 1 2 3 1` | `1,2,1,2` | `0 3` |
+| 9 | top=1, iter exhausted → pop 1 | `0 1 2 3` | `1,2,1,2` | `0 3 1` |
+| 10 | top=3, iter exhausted → pop 3 | `0 1 2` | `1,2,1,2` | `0 3 1 3` |
+| 11 | top=2, iter exhausted → pop 2 | `0 1` | `1,2,1,2` | `0 3 1 3 2` |
+| 12 | top=1, iter exhausted → pop 1 | `0` | `1,2,1,2` | `0 3 1 3 2 1` |
+| 13 | top=0, iter exhausted → pop 0 | (empty) | `1,2,1,2` | `0 3 1 3 2 1 0` |
+
+The emitted `trail` is `[0, 3, 1, 3, 2, 1, 0]`. Reversing gives the Eulerian circuit:
+
+```
+0 → 1 → 2 → 3 → 1 → 3 → 0
+```
+
+Check: arcs used are `0→1, 1→2, 2→3, 3→1, 1→3, 3→0` — all six, each exactly once, closing at `0`. Length is 7 = `|E| + 1`. ✓
+
+**Where the stitching happened.** The first dead-end (steps 1–5) traced the cycle `0→1→2→3→0` and popped `0`. But vertex `3` still had an unused out-arc (`3→1`), so on the way back up (step 6) the algorithm *descended again from 3*, tracing the sub-cycle `3→1→3` and weaving it in. The reversal turns "deepest-finished-first" into "natural traversal order," and the splice point (vertex `3`) is exactly where the proof's induction reattaches a residual component. No explicit splice code exists — the stack discipline performs it for free. This is the single most important intuition for reading Hierholzer code.
+
+---
+
+## 6. The BEST Theorem — Counting Eulerian Circuits
 
 Deciding existence and building *one* circuit is easy. **Counting** Eulerian circuits is a striking case where directed and undirected diverge sharply.
 
-**Theorem 5.1 (BEST theorem — de Bruijn, van Aardenne-Ehrenfest, Smith, Tutte).** Let `G` be a connected directed graph with `in(v) = out(v)` for all `v`. The number of Eulerian circuits is
+**Theorem 6.1 (BEST theorem — de Bruijn, van Aardenne-Ehrenfest, Smith, Tutte).** Let `G` be a connected directed graph with `in(v) = out(v)` for all `v`. The number of Eulerian circuits is
 
 ```
 ec(G) = tw(G) · Π_{v ∈ V} ( out(v) − 1 )!
@@ -134,11 +202,466 @@ This is remarkable: for *directed* graphs, counting Euler tours — a #P-flavore
 
 **Contrast (undirected).** Counting Eulerian circuits of an *undirected* graph is **#P-complete** (Brightwell & Winkler, 2005). The clean BEST formula has no undirected analogue. So directedness, which barely changes the *existence* test, completely changes the *counting* complexity.
 
-**Corollary 5.2.** The number of de Bruijn sequences `B(k, n)` equals `(k!)^{k^{n-1}} / k^{n}` — derivable by applying BEST to the de Bruijn graph, whose arborescence count and out-degrees are uniform.
+**Corollary 6.2.** The number of de Bruijn sequences `B(k, n)` equals `(k!)^{k^{n-1}} / k^{n}` — derivable by applying BEST to the de Bruijn graph, whose arborescence count and out-degrees are uniform.
 
 ---
 
-## 6. Cache Behavior and Memory Layout
+## 7. Reference Implementations (Go / Java / Python)
+
+All three implement (a) an **Eulerian-existence checker** for directed graphs and (b) a **directed Hierholzer** that returns the circuit/trail or reports failure. Code order is Go, Java, Python.
+
+### 7.1 Go — existence checker + iterative Hierholzer
+
+```go
+package euler
+
+// Classify returns whether a directed graph (adjacency lists) admits an
+// Eulerian circuit, trail, or neither, along with a valid start vertex.
+type Kind int
+
+const (
+	None Kind = iota
+	Circuit
+	Trail
+)
+
+func Classify(adj [][]int) (Kind, int) {
+	n := len(adj)
+	out := make([]int, n)
+	in := make([]int, n)
+	edges := 0
+	for u := 0; u < n; u++ {
+		out[u] = len(adj[u])
+		edges += len(adj[u])
+		for _, v := range adj[u] {
+			in[v]++
+		}
+	}
+	// degree classification
+	start, plus, minus := -1, 0, 0
+	for v := 0; v < n; v++ {
+		switch out[v] - in[v] {
+		case 0:
+		case 1:
+			plus++
+			start = v
+		case -1:
+			minus++
+		default:
+			return None, -1
+		}
+	}
+	if start == -1 {
+		for v := 0; v < n; v++ {
+			if out[v] > 0 {
+				start = v
+				break
+			}
+		}
+	}
+	if edges == 0 {
+		return Circuit, 0
+	}
+	// connectivity: every edge must be reachable from start, and the
+	// underlying graph must be connected on edge-bearing vertices.
+	if !reachableCoversEdges(adj, start, edges) {
+		return None, -1
+	}
+	switch {
+	case plus == 0 && minus == 0:
+		return Circuit, start
+	case plus == 1 && minus == 1:
+		return Trail, start
+	default:
+		return None, -1
+	}
+}
+
+func reachableCoversEdges(adj [][]int, start, edges int) bool {
+	seen := make([]bool, len(adj))
+	seenEdges := 0
+	stack := []int{start}
+	seen[start] = true
+	for len(stack) > 0 {
+		v := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		seenEdges += len(adj[v])
+		for _, w := range adj[v] {
+			if !seen[w] {
+				seen[w] = true
+				stack = append(stack, w)
+			}
+		}
+	}
+	return seenEdges == edges
+}
+
+// Hierholzer returns the Eulerian vertex sequence or ok=false.
+func Hierholzer(adj [][]int) (trail []int, ok bool) {
+	kind, start := Classify(adj)
+	if kind == None {
+		return nil, false
+	}
+	n := len(adj)
+	edges := 0
+	for u := 0; u < n; u++ {
+		edges += len(adj[u])
+	}
+	iter := make([]int, n)
+	stack := make([]int, 0, edges+1)
+	trail = make([]int, 0, edges+1)
+	stack = append(stack, start)
+	for len(stack) > 0 {
+		v := stack[len(stack)-1]
+		if iter[v] < len(adj[v]) {
+			w := adj[v][iter[v]]
+			iter[v]++
+			stack = append(stack, w)
+		} else {
+			trail = append(trail, v)
+			stack = stack[:len(stack)-1]
+		}
+	}
+	if len(trail) != edges+1 {
+		return nil, false
+	}
+	for i, j := 0, len(trail)-1; i < j; i, j = i+1, j-1 {
+		trail[i], trail[j] = trail[j], trail[i]
+	}
+	return trail, true
+}
+```
+
+### 7.2 Java — existence checker + iterative Hierholzer
+
+```java
+import java.util.*;
+
+public final class DirectedEuler {
+
+    public enum Kind { NONE, CIRCUIT, TRAIL }
+
+    public static final class Result {
+        public final Kind kind;
+        public final int start;
+        Result(Kind k, int s) { kind = k; start = s; }
+    }
+
+    public static Result classify(List<List<Integer>> adj) {
+        int n = adj.size();
+        int[] out = new int[n], in = new int[n];
+        int edges = 0;
+        for (int u = 0; u < n; u++) {
+            out[u] = adj.get(u).size();
+            edges += out[u];
+            for (int v : adj.get(u)) in[v]++;
+        }
+        int start = -1, plus = 0, minus = 0;
+        for (int v = 0; v < n; v++) {
+            int d = out[v] - in[v];
+            if (d == 0) continue;
+            else if (d == 1) { plus++; start = v; }
+            else if (d == -1) { minus++; }
+            else return new Result(Kind.NONE, -1);
+        }
+        if (start == -1)
+            for (int v = 0; v < n; v++) if (out[v] > 0) { start = v; break; }
+        if (edges == 0) return new Result(Kind.CIRCUIT, 0);
+        if (!reachableCoversEdges(adj, start, edges))
+            return new Result(Kind.NONE, -1);
+        if (plus == 0 && minus == 0) return new Result(Kind.CIRCUIT, start);
+        if (plus == 1 && minus == 1) return new Result(Kind.TRAIL, start);
+        return new Result(Kind.NONE, -1);
+    }
+
+    private static boolean reachableCoversEdges(
+            List<List<Integer>> adj, int start, int edges) {
+        boolean[] seen = new boolean[adj.size()];
+        Deque<Integer> st = new ArrayDeque<>();
+        st.push(start); seen[start] = true;
+        int seenEdges = 0;
+        while (!st.isEmpty()) {
+            int v = st.pop();
+            seenEdges += adj.get(v).size();
+            for (int w : adj.get(v))
+                if (!seen[w]) { seen[w] = true; st.push(w); }
+        }
+        return seenEdges == edges;
+    }
+
+    public static int[] hierholzer(List<List<Integer>> adj) {
+        Result r = classify(adj);
+        if (r.kind == Kind.NONE) return null;
+        int n = adj.size(), edges = 0;
+        for (List<Integer> l : adj) edges += l.size();
+        int[] iter = new int[n];
+        Deque<Integer> stack = new ArrayDeque<>();
+        int[] trail = new int[edges + 1];
+        int tlen = 0;
+        stack.push(r.start);
+        while (!stack.isEmpty()) {
+            int v = stack.peek();
+            if (iter[v] < adj.get(v).size()) {
+                int w = adj.get(v).get(iter[v]++);
+                stack.push(w);
+            } else {
+                trail[tlen++] = stack.pop();
+            }
+        }
+        if (tlen != edges + 1) return null;
+        for (int i = 0, j = tlen - 1; i < j; i++, j--) {
+            int t = trail[i]; trail[i] = trail[j]; trail[j] = t;
+        }
+        return trail;
+    }
+}
+```
+
+### 7.3 Python — existence checker + iterative Hierholzer
+
+```python
+from collections import defaultdict
+
+def classify(adj):
+    """adj: dict v -> list of successors. Returns ('circuit'|'trail'|'none', start)."""
+    out_deg = {v: len(adj[v]) for v in adj}
+    in_deg = defaultdict(int)
+    edges = 0
+    for u in adj:
+        edges += len(adj[u])
+        for v in adj[u]:
+            in_deg[v] += 1
+    vertices = set(adj) | set(in_deg)
+    start, plus, minus = None, 0, 0
+    for v in vertices:
+        d = out_deg.get(v, 0) - in_deg.get(v, 0)
+        if d == 0:
+            continue
+        elif d == 1:
+            plus += 1
+            start = v
+        elif d == -1:
+            minus += 1
+        else:
+            return "none", None
+    if start is None:
+        start = next((v for v in adj if out_deg.get(v, 0) > 0), None)
+    if edges == 0:
+        return "circuit", start
+    if not _reachable_covers_edges(adj, start, edges):
+        return "none", None
+    if plus == 0 and minus == 0:
+        return "circuit", start
+    if plus == 1 and minus == 1:
+        return "trail", start
+    return "none", None
+
+def _reachable_covers_edges(adj, start, edges):
+    seen, stack, seen_edges = {start}, [start], 0
+    while stack:
+        v = stack.pop()
+        seen_edges += len(adj.get(v, ()))
+        for w in adj.get(v, ()):
+            if w not in seen:
+                seen.add(w)
+                stack.append(w)
+    return seen_edges == edges
+
+def hierholzer(adj):
+    kind, start = classify(adj)
+    if kind == "none":
+        return None
+    edges = sum(len(adj[u]) for u in adj)
+    it = {v: 0 for v in adj}
+    stack, trail = [start], []
+    while stack:
+        v = stack[-1]
+        succ = adj.get(v, ())
+        if it.get(v, 0) < len(succ):
+            w = succ[it[v]]
+            it[v] += 1
+            stack.append(w)
+        else:
+            trail.append(stack.pop())
+    if len(trail) != edges + 1:
+        return None
+    trail.reverse()
+    return trail
+```
+
+All three share the same contract: classify first (degree + a single reachability pass), then run the stack-based traversal, then assert `len(trail) == |E| + 1` to catch a disconnected graph that passed the local degree test (Lemma 4.2). The reject test is non-negotiable: the degree condition alone is necessary but not sufficient without connectivity.
+
+---
+
+## 8. De Bruijn Sequence Construction via Euler Circuits
+
+A **de Bruijn sequence** `B(k, n)` is a cyclic string over an alphabet of size `k` in which every length-`n` string appears exactly once as a substring. There are `k^n` such substrings, so the sequence has length `k^n`. The classic construction is an Eulerian circuit on the **de Bruijn graph**:
+
+- **Vertices:** all `k^{n-1}` strings of length `n-1`.
+- **Arcs:** for each length-`n` string `a₁a₂…aₙ`, an arc from `a₁…aₙ₋₁` to `a₂…aₙ` labeled `aₙ`.
+
+Every vertex has `in = out = k` (append any symbol to leave, prepend any symbol to enter), so the graph is balanced and strongly connected — an Eulerian circuit exists. Reading the arc labels along the circuit yields a de Bruijn sequence.
+
+```
+B(2, 3): vertices are length-2 binary strings {00,01,10,11}
+Each vertex has out-degree 2 (append 0 or 1).
+
+  00 ─0→ 00      (loop)
+  00 ─1→ 01
+  01 ─0→ 10
+  01 ─1→ 11
+  10 ─0→ 00
+  10 ─1→ 01
+  11 ─0→ 10
+  11 ─1→ 11      (loop)
+
+An Euler circuit's arc labels give e.g. 00010111 (length 2³ = 8),
+which cyclically contains all eight 3-bit strings exactly once.
+```
+
+### 8.1 Go — build de Bruijn graph and emit the sequence
+
+```go
+package debruijn
+
+import (
+	"strconv"
+	"strings"
+)
+
+// DeBruijn returns a B(k, n) sequence as a string of digits 0..k-1.
+func DeBruijn(k, n int) string {
+	if n == 1 { // every single symbol once
+		var b strings.Builder
+		for d := 0; d < k; d++ {
+			b.WriteString(strconv.Itoa(d))
+		}
+		return b.String()
+	}
+	numV := pow(k, n-1)
+	// adj[v] holds successors in append-symbol order; arc s appends symbol s.
+	iter := make([]int, numV)
+	// We don't materialize adjacency: successor for symbol s is (v*k+s)%numV.
+	type frame struct{ v, label int }
+	stack := []frame{{0, -1}}
+	var labels []int // emitted on pop (excluding the synthetic root label -1)
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		if iter[top.v] < k {
+			s := iter[top.v]
+			iter[top.v]++
+			w := (top.v*k + s) % numV
+			stack = append(stack, frame{w, s})
+		} else {
+			f := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if f.label != -1 {
+				labels = append(labels, f.label)
+			}
+		}
+	}
+	// labels are in reverse traversal order; reverse to read the sequence.
+	var b strings.Builder
+	for i := len(labels) - 1; i >= 0; i-- {
+		b.WriteString(strconv.Itoa(labels[i]))
+	}
+	return b.String()
+}
+
+func pow(a, b int) int {
+	r := 1
+	for ; b > 0; b-- {
+		r *= a
+	}
+	return r
+}
+```
+
+### 8.2 Java — recursive (Sawada-style) de Bruijn generator
+
+```java
+import java.util.*;
+
+public final class DeBruijn {
+    private final int k, n;
+    private final int[] a;       // current necklace prefix
+    private final StringBuilder seq = new StringBuilder();
+
+    private DeBruijn(int k, int n) {
+        this.k = k; this.n = n;
+        this.a = new int[k * n];
+    }
+
+    // Standard FKM/Prefer-largest style recursion that is equivalent to an
+    // Euler circuit on the de Bruijn graph; emits a B(k,n) sequence.
+    private void db(int t, int p) {
+        if (t > n) {
+            if (n % p == 0)
+                for (int i = 1; i <= p; i++) seq.append(a[i]);
+        } else {
+            a[t] = a[t - p];
+            db(t + 1, p);
+            for (int j = a[t - p] + 1; j < k; j++) {
+                a[t] = j;
+                db(t + 1, t);
+            }
+        }
+    }
+
+    public static String of(int k, int n) {
+        DeBruijn d = new DeBruijn(k, n);
+        d.db(1, 1);
+        return d.seq.toString();
+    }
+}
+```
+
+### 8.3 Python — de Bruijn via explicit Euler circuit
+
+```python
+def de_bruijn(k, n):
+    """Return a B(k, n) sequence over the alphabet 0..k-1 as a string."""
+    if n == 1:
+        return "".join(str(d) for d in range(k))
+    num_v = k ** (n - 1)
+    # adjacency: arcs ordered by appended symbol; store (next_vertex, label)
+    adj = [[((v * k + s) % num_v, s) for s in range(k)] for v in range(num_v)]
+    it = [0] * num_v
+    stack = [(0, -1)]   # (vertex, incoming label)
+    labels = []
+    while stack:
+        v, _ = stack[-1]
+        if it[v] < k:
+            w, lbl = adj[v][it[v]]
+            it[v] += 1
+            stack.append((w, lbl))
+        else:
+            _, lbl = stack.pop()
+            if lbl != -1:
+                labels.append(lbl)
+    labels.reverse()
+    return "".join(str(x) for x in labels)
+
+
+# Smoke check: every length-n window (cyclic) appears exactly once.
+def _verify(k, n):
+    s = de_bruijn(k, n)
+    assert len(s) == k ** n
+    seen = set()
+    for i in range(len(s)):
+        w = "".join(s[(i + j) % len(s)] for j in range(n))
+        seen.add(w)
+    assert len(seen) == k ** n
+    return s
+
+assert _verify(2, 3)  # e.g. "00010111"
+```
+
+The connection is exact: **constructing a de Bruijn sequence is the same problem as finding an Eulerian circuit on the de Bruijn graph**, and the BEST theorem (§6, Corollary 6.2) tells you *how many distinct* such sequences exist. This is the historical bridge to genome assembly (covered in `senior.md`): reads become arcs of a de Bruijn graph, and the assembly is an Euler path.
+
+---
+
+## 9. Cache Behavior and Memory Layout
 
 Hierholzer's access pattern is determined by the graph, not the algorithm, so locality depends entirely on adjacency layout.
 
@@ -147,13 +670,13 @@ Hierholzer's access pattern is determined by the graph, not the algorithm, so lo
 - **The stack and trail** are append-only contiguous arrays — cache-friendly.
 - **`used[edge_id]`** (undirected) is a random-access bit/byte array; for graphs exceeding cache it incurs a miss per edge, but only once per edge.
 
-**Proposition 6.1.** With CSR layout the cache-miss count is `Θ(E / B + V)` for cache-line size `B` words, because each edge is read once in near-sequential order. The `used[]` random accesses add at most `Θ(E)` misses in the worst case but typically far fewer due to spatial reuse.
+**Proposition 9.1.** With CSR layout the cache-miss count is `Θ(E / B + V)` for cache-line size `B` words, because each edge is read once in near-sequential order. The `used[]` random accesses add at most `Θ(E)` misses in the worst case but typically far fewer due to spatial reuse.
 
 For external-memory (graph exceeds RAM), the relevant model is I/O complexity; a well-ordered CSR on disk yields `Θ(E / B)` I/Os for the edge scan, near-optimal.
 
 ---
 
-## 7. Average-Case and Randomized Aspects
+## 10. Average-Case and Randomized Aspects
 
 ### 7.1 Cost is input-shape-independent
 
@@ -169,7 +692,7 @@ For random regular digraphs satisfying balance, an Eulerian circuit almost surel
 
 ---
 
-## 8. Space–Time Trade-offs
+## 11. Space–Time Trade-offs
 
 | Representation | Existence test | Construct | Space | Notes |
 |---|---|---|---|---|
@@ -183,7 +706,7 @@ The dominant trade-off is **iterative vs recursive**: same `Θ(V+E)` asymptotics
 
 ---
 
-## 9. Comparison: Eulerian (P) vs Hamiltonian (NP-complete)
+## 12. Comparison: Eulerian (P) vs Hamiltonian (NP-complete)
 
 | | Eulerian circuit | Hamiltonian circuit |
 |--|------------------|---------------------|
@@ -191,14 +714,14 @@ The dominant trade-off is **iterative vs recursive**: same `Θ(V+E)` asymptotics
 | Existence | `Θ(V + E)` (degree/balance + connectivity) | **NP-complete** (Karp 1972) |
 | Construction | `Θ(V + E)` (Hierholzer) | NP-hard; no poly algorithm known |
 | Characterization | local degree condition (Theorem 2.1/3.1) | no known efficient characterization |
-| Counting | directed: poly (BEST, §5); undirected: #P-complete | #P-complete |
+| Counting | directed: poly (BEST, §6); undirected: #P-complete | #P-complete |
 | Optimization variant | Chinese Postman (poly via matching) | Travelling Salesman (NP-hard) |
 
-**Why the asymmetry?** Eulerian existence has a *local certificate*: a vertex-by-vertex degree check (plus global connectivity) is necessary and sufficient. Hamiltonicity has **no known local certificate** — knowing each vertex's degree tells you almost nothing about whether a vertex-covering cycle exists. The matching-based duplication that makes Chinese Postman polynomial has no analogue that tames TSP. This single distinction — edges vs vertices — is among the cleanest illustrations of the P vs NP boundary in graph theory. The genome-assembly history (§ middle.md) is the practical embodiment: reframing assembly from a Hamiltonian path on an overlap graph to an Eulerian path on a de Bruijn graph moved it from intractable to linear-time. See *28-np-hard-tsp-hamiltonian*.
+**Why the asymmetry?** Eulerian existence has a *local certificate*: a vertex-by-vertex degree check (plus global connectivity) is necessary and sufficient. Hamiltonicity has **no known local certificate** — knowing each vertex's degree tells you almost nothing about whether a vertex-covering cycle exists. The matching-based duplication that makes Chinese Postman polynomial has no analogue that tames TSP. This single distinction — edges vs vertices — is among the cleanest illustrations of the P vs NP boundary in graph theory. The genome-assembly history (see `senior.md`) is the practical embodiment: reframing assembly from a Hamiltonian path on an overlap graph to an Eulerian path on a de Bruijn graph moved it from intractable to linear-time. See *28-np-hard-tsp-hamiltonian*.
 
 ---
 
-## 10. Open Problems and Research Directions
+## 13. Open Problems and Research Directions
 
 1. **Approximate counting of undirected Eulerian circuits.** Exact counting is #P-complete; whether there is an FPRAS (fully polynomial randomized approximation scheme) for all undirected graphs remains open, with positive results only for special classes.
 
@@ -214,7 +737,7 @@ The dominant trade-off is **iterative vs recursive**: same `Θ(V+E)` asymptotics
 
 ---
 
-## 11. Summary
+## 14. Summary
 
 - **Definitions.** An Eulerian trail uses every edge once; a circuit also closes. Self-loops count as degree 2 (undirected) or 1 in/1 out (directed); isolated vertices are ignored for connectivity.
 - **Euler's theorem.** Undirected: circuit ⇔ all even; trail ⇔ exactly two odd. Both halves proven — necessity by the in/out pairing argument, sufficiency by Hierholzer's constructive cycle-splicing.

@@ -399,6 +399,181 @@ if __name__ == "__main__":
 
 ---
 
+### 7.2 The mutable value layer + an instrumented path query
+
+The topology above never changes; the value layer is the only mutable part and the only place a path query spends `O(log² N)`. Below the value layer is a Fenwick over `pos[]` (lowest constant for sums), and the path query is *instrumented* to emit the `chain_segments_per_query` signal §8 relies on. The same loop is the recurrence proved `O(log² N)` in `professional.md`.
+
+#### Go
+
+```go
+package main
+
+import "fmt"
+
+// ValueLayer is the only mutable component; guard it with an RW lock or
+// swap it copy-on-write per the concurrency notes in §4.
+type ValueLayer struct {
+	bit  []int64 // Fenwick over pos[], 1-indexed
+	n    int
+	segs int64 // observability: total chain segments touched (atomic in prod)
+	qs   int64 // observability: total path queries
+}
+
+func NewValueLayer(base []int64) *ValueLayer { // base indexed by pos
+	n := len(base)
+	v := &ValueLayer{bit: make([]int64, n+1), n: n}
+	for i, x := range base {
+		v.add(i, x)
+	}
+	return v
+}
+func (v *ValueLayer) add(i int, d int64) {
+	for i++; i <= v.n; i += i & (-i) {
+		v.bit[i] += d
+	}
+}
+func (v *ValueLayer) sum(i int) int64 {
+	var s int64
+	for i++; i > 0; i -= i & (-i) {
+		s += v.bit[i]
+	}
+	return s
+}
+func (v *ValueLayer) rng(l, r int) int64 { return v.sum(r) - v.sum(l-1) }
+
+// PathSum reads only the immutable topology + the mutable value layer.
+func (t *Topology) PathSum(v *ValueLayer, u, w int) (int64, int) {
+	var res int64
+	segments := 0
+	for t.Head[u] != t.Head[w] {
+		if t.Depth[t.Head[u]] < t.Depth[t.Head[w]] {
+			u, w = w, u
+		}
+		res += v.rng(t.Pos[t.Head[u]], t.Pos[u])
+		segments++
+		u = t.Parent[t.Head[u]]
+	}
+	if t.Depth[u] > t.Depth[w] {
+		u, w = w, u
+	}
+	res += v.rng(t.Pos[u], t.Pos[w]) // include LCA (vertex values)
+	segments++
+	v.segs += int64(segments)
+	v.qs++
+	return res, segments // emit `segments` to the histogram
+}
+
+func main() {
+	n := 8
+	adj := make([][]int, n)
+	add := func(a, b int) { adj[a] = append(adj[a], b); adj[b] = append(adj[b], a) }
+	for _, e := range [][2]int{{0, 1}, {0, 2}, {0, 3}, {1, 4}, {1, 5}, {3, 6}, {4, 7}} {
+		add(e[0], e[1])
+	}
+	t := BuildTopology(n, 0, adj)
+	base := make([]int64, n)
+	vals := []int64{5, 3, 8, 1, 2, 4, 6, 9}
+	for node := 0; node < n; node++ {
+		base[t.Pos[node]] = vals[node]
+	}
+	vl := NewValueLayer(base)
+	sum, segs := t.PathSum(vl, 7, 6)
+	fmt.Printf("PathSum(7,6)=%d touched %d chain segments\n", sum, segs)
+}
+```
+
+#### Java
+
+```java
+// Mutable value layer; the immutable Topology of §7.1 supplies pos/head/parent/depth.
+final class ValueLayer {
+    final long[] bit; final int n;
+    long segs, qs; // observability counters (use LongAdder in prod)
+    ValueLayer(long[] base) {
+        n = base.length; bit = new long[n + 1];
+        for (int i = 0; i < n; i++) add(i, base[i]);
+    }
+    void add(int i, long d) { for (i++; i <= n; i += i & (-i)) bit[i] += d; }
+    long sum(int i) { long s = 0; for (i++; i > 0; i -= i & (-i)) s += bit[i]; return s; }
+    long rng(int l, int r) { return sum(r) - sum(l - 1); }
+}
+
+// In Topology:
+//   long[] result = pathSum(vl, u, w);  // {sum, chainSegments}
+long[] pathSum(ValueLayer vl, int u, int w) {
+    long res = 0; int segments = 0;
+    while (head[u] != head[w]) {
+        if (depth[head[u]] < depth[head[w]]) { int t = u; u = w; w = t; }
+        res += vl.rng(pos[head[u]], pos[u]); segments++;
+        u = parent[head[u]];
+    }
+    if (depth[u] > depth[w]) { int t = u; u = w; w = t; }
+    res += vl.rng(pos[u], pos[w]); segments++; // include LCA
+    vl.segs += segments; vl.qs++;
+    return new long[]{res, segments};
+}
+```
+
+#### Python
+
+```python
+class ValueLayer:
+    """Only mutable component; topology stays immutable and lock-free."""
+    def __init__(self, base):                # base indexed by pos
+        self.n = len(base)
+        self.bit = [0] * (self.n + 1)
+        self.segs = 0                         # observability: chain segments
+        self.qs = 0                           # observability: path queries
+        for i, x in enumerate(base):
+            self.add(i, x)
+
+    def add(self, i, d):
+        i += 1
+        while i <= self.n:
+            self.bit[i] += d; i += i & (-i)
+
+    def _sum(self, i):
+        i += 1; s = 0
+        while i > 0:
+            s += self.bit[i]; i -= i & (-i)
+        return s
+
+    def rng(self, l, r):
+        return self._sum(r) - self._sum(l - 1)
+
+
+def path_sum(topo, vl, u, w):                 # returns (sum, chain_segments)
+    res = 0; segments = 0
+    while topo.head[u] != topo.head[w]:
+        if topo.depth[topo.head[u]] < topo.depth[topo.head[w]]:
+            u, w = w, u
+        res += vl.rng(topo.pos[topo.head[u]], topo.pos[u]); segments += 1
+        u = topo.parent[topo.head[u]]
+    if topo.depth[u] > topo.depth[w]:
+        u, w = w, u
+    res += vl.rng(topo.pos[u], topo.pos[w]); segments += 1   # include LCA
+    vl.segs += segments; vl.qs += 1
+    return res, segments
+```
+
+The returned `segments` is the per-query value you push into the `chain_segments_per_query` histogram. On a healthy tree it stays a small single-digit number even for `N` in the millions; a sustained climb toward `2·log₂ N` is the early warning that someone fed you a caterpillar-shaped tree.
+
+### 7.3 Workload comparison — choosing HLD vs LCT vs centroid
+
+The senior decision is rarely "is HLD correct" (it is) but "is HLD the *cheapest correct* option for this workload." Map your workload onto the dominant axis:
+
+| Workload signature | Dominant cost driver | Choose | Why |
+|--------------------|----------------------|--------|-----|
+| Fixed tree, billions of path/subtree reads, rare value writes | per-read latency + read concurrency | **HLD + Fenwick/SegTree** | immutable topology → lock-free reads; `O(log² N)` worst-case latency you can SLO |
+| Tree shape changes many times/sec (link/cut) | rebuild cost would dominate | **Link-Cut Tree** | `O(log N)` amortized per link/cut/query; rebuilding HLD is `O(N)` each change |
+| "How many pairs `(u,v)` with `dist ≤ K`" / aggregate over all paths | total work over all pairs | **Centroid decomposition (sibling `15`)** | decomposes into `O(log N)` centroid levels; not a single-path query class |
+| Subtree-only aggregates, never path | interval simplicity | **Euler tour + Segment Tree** | one contiguous interval per subtree; lower constant than full HLD |
+| Static path-min/max, **no updates** | preprocessing once | **binary lifting / sparse table (sibling `13`)** | `O(log N)` path-min directly, no `log²`, no value layer |
+
+Two heuristics resolve most real cases. First, **count structural mutations per second**: zero or rare → HLD (rebuild on the rare change via the double-buffer of §6.2); frequent → LCT. Second, **count the query class**: one given path → HLD/LCT; all pairs within a distance → centroid; subtree only → Euler. The `log²` of HLD is almost never the deciding factor — read concurrency and worst-case latency are.
+
+---
+
 ## 8. Observability
 
 What to emit so you catch trouble before it pages you:

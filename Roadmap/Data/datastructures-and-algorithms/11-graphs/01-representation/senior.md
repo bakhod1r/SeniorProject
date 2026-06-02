@@ -13,7 +13,11 @@
 8. [Observability](#8-observability)
 9. [Failure Modes](#9-failure-modes)
 10. [Capacity Planning — Bytes per Edge](#10-capacity-planning--bytes-per-edge)
-11. [Summary](#11-summary)
+11. [Serialization, Loading, and Versioning](#11-serialization-loading-and-versioning)
+12. [Incremental and Streaming Updates](#12-incremental-and-streaming-updates)
+13. [Zero-Copy mmap Load — Full Implementation](#13-zero-copy-mmap-load--full-implementation)
+14. [Capacity Planning Worked End-to-End](#14-capacity-planning-worked-end-to-end)
+15. [Summary](#15-summary)
 
 ---
 
@@ -396,7 +400,347 @@ Until then, one big box with a compressed immutable CSR beats a cluster on both 
 
 ---
 
-## 11. Summary
+## 11. Serialization, Loading, and Versioning
+
+A graph that lives only in RAM is one process crash away from a multi-minute rebuild. At scale you persist the *built* representation, not just the raw edges, so a restart is a `mmap`, not a recompute.
+
+### 11.1 On-disk CSR layout
+
+Persist CSR as a self-describing binary blob: a fixed header (`magic`, `version`, `n`, `m`, `id_width`, `flags`) followed by the `offset[]` array and the `target[]` array, both little-endian and naturally aligned. Because both are flat, the file is a byte-for-byte image of the in-memory arrays:
+
+```text
+[ header 64 B ][ offset: (n+1) * 4 B ][ target: m * 4 B ][ optional weight: m * 4 B ]
+```
+
+The payoff is **zero-copy load**: `mmap` the file and reinterpret the bytes as `int32` slices — no parsing, no allocation, no rebuild. A 160 GB social-graph CSR loads in the time it takes the OS to set up page tables; pages fault in lazily as traversals touch them. A pointer-based adjacency list cannot do this — its heap pointers are meaningless across processes — which is another reason CSR dominates the read-mostly tier.
+
+### 11.2 Versioning and schema evolution
+
+Bake a `version` byte and an `id_width` (4 vs 8) into the header so a reader can reject or up-convert an incompatible file rather than silently misinterpret offsets. When you cross the `2³¹`-vertex boundary you flip `id_width` to 8 and double the file; readers branch on the header. Treat the format like any wire protocol: never reuse a field meaning, always add new fields after the existing ones, and validate `n`, `m`, and `offset[n] == m` on load before trusting a single byte.
+
+### 11.3 Snapshot distribution
+
+For a fleet of read replicas, the rebuild-and-swap pattern (§4.2) extends across machines: a builder node produces a new immutable CSR file, writes it to object storage (S3/GCS) under a content-addressed key, and replicas atomically `mmap` the new blob and swap their snapshot pointer. This is the same copy-on-write story at cluster granularity — replicas serve lock-free reads from an immutable mapped file while the next snapshot is built out of band. Staleness equals the build-plus-distribute interval, which you expose as a metric (`csr_snapshot_staleness_seconds`).
+
+---
+
+## 12. Incremental and Streaming Updates
+
+The snapshot-swap model assumes you can afford a periodic full rebuild. For a fast-changing hot region or a true streaming graph, a full `Θ(n + m)` rebuild per batch is wasteful. Three escalating strategies:
+
+### 12.1 Delta overlay on an immutable base
+
+Keep the immutable CSR base plus a small mutable **overlay** (a per-vertex hash map of added/removed neighbors). A neighbor query reads the base block and applies the overlay diff:
+
+```text
+neighbors(u) = (base.Neighbors(u) \ removed[u]) ∪ added[u]
+```
+
+Reads stay lock-free against the base and take a cheap lock (or a second atomic snapshot) only on the overlay. When the overlay grows past a threshold (say 5–10% of `m`), fold it into the base with one background rebuild and clear it. This bounds both staleness and the per-query overlay cost.
+
+### 12.2 Slotted / gap CSR
+
+Allocate each vertex's neighbor block with slack (a `cap[u] ≥ deg[u]`), so an insertion writes into a free slot in place instead of shifting the whole `target[]`. This is the **CSR-with-gaps** used by GPU dynamic-graph frameworks (Hornet, faimGraph). Inserts are `O(1)` until a block overflows, at which point that single block is relocated to a fresh region (amortized `O(1)` with doubling). It sacrifices a little space and perfect locality for in-place mutation without a global rebuild.
+
+### 12.3 Log-structured merge for graphs
+
+Borrowing from LSM trees: writes land in a small in-memory level (an adjacency hash map); when it fills it is flushed to an immutable sorted CSR run; runs are periodically merged. Reads consult the in-memory level plus the runs, newest-wins. This gives high write throughput and bounded read fan-out, and is essentially how transactional graph databases (and time-evolving graph stores) keep both writes cheap and full scans CSR-fast. The trade-off mirrors the LSM read-amplification story: more runs means more blocks to merge per neighbor query until compaction catches up.
+
+### 12.4 Choosing a strategy
+
+| Write rate | Read latency need | Strategy |
+| --- | --- | --- |
+| Low (hourly batches) | Microsecond, lock-free | Full rebuild + atomic swap |
+| Moderate, bursty | Low, slightly stale OK | Delta overlay on immutable base |
+| High, in-place | Microsecond, GPU/many-core | Slotted (gap) CSR |
+| Very high, durable | Millisecond, durable | LSM-structured CSR runs |
+
+The unifying principle: keep the *bulk* of the graph in immutable, cache-friendly CSR and confine mutation to a small, separately-managed delta — never mutate the shared flat arrays in place under concurrent readers.
+
+---
+
+## 13. Zero-Copy mmap Load — Full Implementation
+
+Section 11 argued that persisting the *built* CSR lets a restart be a `mmap` rather than a multi-minute rebuild. This section shows the actual mechanics in all three languages, including the header validation that keeps a corrupt or version-skewed file from being silently misinterpreted as offsets and targets.
+
+The on-disk layout is the one from §11.1: a 64-byte header followed by the two flat arrays.
+
+```text
+offset 0    [ magic "CSRG" | u32 version | u32 idWidth | u64 n | u64 m | u32 flags | pad ]  64 B
+offset 64   [ offset[]:  (n+1) * 4 B  little-endian int32 ]
+offset ...  [ target[]:   m    * 4 B  little-endian int32 ]
+```
+
+### 13.1 Go — mmap a CSR file and reinterpret bytes with no copy
+
+```go
+package graph
+
+import (
+	"encoding/binary"
+	"fmt"
+	"os"
+	"unsafe"
+
+	"golang.org/x/sys/unix"
+)
+
+const headerSize = 64
+const magic = 0x47525343 // "CSRG" little-endian
+
+// MappedCSR is a read-only CSR backed directly by an mmap'd file.
+// No parsing, no allocation: the arrays alias the mapped pages.
+type MappedCSR struct {
+	data   []byte  // the whole mmap region (kept alive so the GC won't unmap)
+	offset []int32 // aliases data[64 : 64+(n+1)*4]
+	target []int32 // aliases the remainder
+	n, m   int64
+}
+
+func OpenCSR(path string) (*MappedCSR, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	fi, _ := f.Stat()
+	data, err := unix.Mmap(int(f.Fd()), 0, int(fi.Size()),
+		unix.PROT_READ, unix.MAP_SHARED)
+	if err != nil {
+		return nil, err
+	}
+	// Validate the header before trusting a single offset.
+	if binary.LittleEndian.Uint32(data[0:4]) != magic {
+		return nil, fmt.Errorf("bad magic, not a CSR file")
+	}
+	if v := binary.LittleEndian.Uint32(data[4:8]); v != 1 {
+		return nil, fmt.Errorf("unsupported version %d", v)
+	}
+	if w := binary.LittleEndian.Uint32(data[8:12]); w != 4 {
+		return nil, fmt.Errorf("id width %d unsupported (need int64 path)", w)
+	}
+	n := int64(binary.LittleEndian.Uint64(data[16:24]))
+	m := int64(binary.LittleEndian.Uint64(data[24:32]))
+
+	// Reinterpret the mapped bytes as []int32 slices — the zero-copy step.
+	offBytes := data[headerSize : headerSize+(n+1)*4]
+	tgtBase := headerSize + (n+1)*4
+	tgtBytes := data[tgtBase : tgtBase+m*4]
+	off := unsafe.Slice((*int32)(unsafe.Pointer(&offBytes[0])), n+1)
+	tgt := unsafe.Slice((*int32)(unsafe.Pointer(&tgtBytes[0])), m)
+
+	// Cheap integrity check: the last offset must equal the edge count.
+	if int64(off[n]) != m {
+		return nil, fmt.Errorf("offset[n]=%d != m=%d, file corrupt", off[n], m)
+	}
+	return &MappedCSR{data: data, offset: off, target: tgt, n: n, m: m}, nil
+}
+
+func (c *MappedCSR) Neighbors(u int32) []int32 {
+	return c.target[c.offset[u]:c.offset[u+1]]
+}
+
+func (c *MappedCSR) Close() error { return unix.Munmap(c.data) }
+```
+
+The traversal then faults pages in lazily: a BFS that touches only a small neighborhood pays for only the pages it reads, not the whole 160 GB file. `MAP_SHARED` + `PROT_READ` means many processes on one box share the same physical pages — N replicas of a read-only graph cost one copy of RAM.
+
+### 13.2 Java — `MappedByteBuffer` as an `IntBuffer` view
+
+```java
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+
+public final class MappedCSR implements AutoCloseable {
+    private static final int MAGIC = 0x47525343; // "CSRG"
+    private final IntBuffer offset; // (n+1) ints, view into the map
+    private final IntBuffer target; // m ints
+    private final long n, m;
+    private final FileChannel channel;
+
+    public MappedCSR(String path) throws IOException {
+        RandomAccessFile raf = new RandomAccessFile(path, "r");
+        channel = raf.getChannel();
+        long size = channel.size();
+        MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_ONLY, 0, size);
+        buf.order(ByteOrder.LITTLE_ENDIAN);
+
+        if (buf.getInt(0) != MAGIC) throw new IOException("bad magic");
+        if (buf.getInt(4) != 1)     throw new IOException("unsupported version");
+        if (buf.getInt(8) != 4)     throw new IOException("id width != 4");
+        n = buf.getLong(16);
+        m = buf.getLong(24);
+
+        // Slice off the header, then expose the two regions as IntBuffers.
+        buf.position(64);
+        offset = buf.slice().asIntBuffer();
+        offset.limit((int) (n + 1));
+        buf.position(64 + (int) (n + 1) * 4);
+        target = buf.slice().asIntBuffer();
+        target.limit((int) m);
+
+        if (offset.get((int) n) != m) throw new IOException("offset[n] != m");
+    }
+
+    public int degree(int u) { return offset.get(u + 1) - offset.get(u); }
+
+    public int neighbor(int u, int k) { return target.get(offset.get(u) + k); }
+
+    @Override public void close() throws IOException { channel.close(); }
+}
+```
+
+`MappedByteBuffer` keeps the bytes in the OS page cache, outside the Java heap — so a 160 GB graph does not inflate the heap or pressure the garbage collector, and the GC never scans it. This is the standard trick for serving graphs larger than a sane heap.
+
+### 13.3 Python — `mmap` + `memoryview.cast` for a parse-free load
+
+```python
+import mmap
+import struct
+from typing import List
+
+
+class MappedCSR:
+    """Read-only CSR backed by an mmap; arrays are zero-copy memoryviews."""
+
+    MAGIC = 0x47525343  # "CSRG"
+    HEADER = 64
+
+    def __init__(self, path: str) -> None:
+        self._file = open(path, "rb")
+        self._mm = mmap.mmap(self._file.fileno(), 0, prot=mmap.PROT_READ)
+        magic, version, id_width = struct.unpack_from("<III", self._mm, 0)
+        if magic != self.MAGIC:
+            raise ValueError("not a CSR file")
+        if version != 1:
+            raise ValueError(f"unsupported version {version}")
+        if id_width != 4:
+            raise ValueError("id width != 4")
+        self.n, self.m = struct.unpack_from("<QQ", self._mm, 16)
+
+        view = memoryview(self._mm)
+        off_end = self.HEADER + (self.n + 1) * 4
+        # cast() reinterprets the bytes as int32 with no copy.
+        self.offset = view[self.HEADER:off_end].cast("i")
+        self.target = view[off_end:off_end + self.m * 4].cast("i")
+        if self.offset[self.n] != self.m:
+            raise ValueError("offset[n] != m, file corrupt")
+
+    def neighbors(self, u: int) -> List[int]:
+        return self.target[self.offset[u]:self.offset[u + 1]].tolist()
+
+    def degree(self, u: int) -> int:
+        return self.offset[u + 1] - self.offset[u]
+
+    def close(self) -> None:
+        self.offset.release()
+        self.target.release()
+        self._mm.close()
+        self._file.close()
+```
+
+`memoryview.cast("i")` gives an `int32` view over the mapped bytes with zero copying; slicing it never materializes a list until `.tolist()` is called. Even in Python — where everything is usually boxed — the bulk graph stays as raw mapped pages, so a multi-gigabyte CSR loads in milliseconds and shares the page cache across worker processes.
+
+### 13.4 The architecture this unlocks
+
+```text
+                     ┌─────────────────────────┐
+                     │  builder node           │
+                     │  edges → sorted CSR      │
+                     │  → write CSRG blob       │
+                     └────────────┬────────────┘
+                                  │  PUT  graph-<contenthash>.csr
+                                  ▼
+                     ┌─────────────────────────┐
+                     │  object storage (S3/GCS) │
+                     │  content-addressed blobs │
+                     └────────────┬────────────┘
+                  GET (lazy/range)│
+        ┌─────────────────┬───────┴────────┬─────────────────┐
+        ▼                 ▼                ▼                 ▼
+   ┌─────────┐       ┌─────────┐      ┌─────────┐       ┌─────────┐
+   │replica 0│       │replica 1│      │replica 2│       │replica 3│
+   │ mmap +  │       │ mmap +  │      │ mmap +  │       │ mmap +  │
+   │ atomic  │       │ atomic  │      │ atomic  │       │ atomic  │
+   │ swap ptr│       │ swap ptr│      │ swap ptr│       │ swap ptr│
+   └─────────┘       └─────────┘      └─────────┘       └─────────┘
+   lock-free reads from the immutable mapped snapshot; next blob built out of band
+```
+
+Each replica does exactly what §13.1–§13.3 implement: `mmap` the new blob, validate its header, atomically swap the snapshot pointer (the §4.2 pattern, now at fleet scale). The content-addressed key means a replica that already holds blob `<hash>` skips the download entirely; rollback is "point at the previous hash." Staleness equals the build-plus-distribute interval, exported as `csr_snapshot_staleness_seconds`.
+
+---
+
+## 14. Capacity Planning Worked End-to-End
+
+§10 gave the bytes-per-edge numbers; this section walks a single realistic sizing decision from requirements to an instance choice, the way it would happen in a design review.
+
+### 14.1 The requirement
+
+> Serve 2-hop neighborhood queries for a follow graph. `V = 5×10⁸` accounts, mean out-degree 150, p99 latency budget 5 ms, read QPS 200k, write QPS 20k (new follows), durability handled separately by the source-of-truth database. The in-memory graph is a *read accelerator*, rebuildable from the DB.
+
+### 14.2 Step 1 — raw size
+
+```text
+E_directed = V * mean_out_degree = 5e8 * 150 = 7.5e10 directed edges
+target[]   = E * 4 B   (int32 ids)            = 7.5e10 * 4  = 300 GB
+offset[]   = (V + 1) * 4 B                     ≈ 5e8 * 4     = 2 GB
+            ----------------------------------------------------------
+primitive CSR resident                          ≈ 302 GB
+```
+
+`V = 5×10⁸ < 2³¹ = 2.1×10⁹`, so `int32` ids are safe — no need for the 8-byte id path that would double everything to ~600 GB.
+
+### 14.3 Step 2 — does it fit, and at what cost?
+
+| Option | Resident | Fits one box? | Note |
+|---|---|---|---|
+| Primitive CSR, int32 | ~302 GB | Yes (memory-optimized 512 GB–1 TB instance) | Headroom for the OS, page cache, query state. |
+| Boxed `List<List<Integer>>` | ~1.2 TB (16 B/edge) | Barely / no | GC pressure makes p99 unachievable; rejected. |
+| Gap+varint compressed CSR | ~75–150 GB (1–2 B/edge) | Comfortably | Adds varint decode per neighbor — check the latency budget. |
+
+### 14.4 Step 3 — latency check against the budget
+
+A 2-hop query touches `≈ deg + Σ_{first hop} deg ≈ 150 + 150·150 = 22,650` edges in the worst typical case. Each neighbor read is a likely cache miss (~100 ns on a random `target[]`/`offset[]` access):
+
+```text
+primitive CSR:   22,650 misses * 100 ns           ≈ 2.3 ms   (within 5 ms budget) ✓
+compressed CSR:  22,650 * (100 ns + ~20 ns decode) ≈ 2.7 ms   (still within budget) ✓
+```
+
+Both meet 5 ms. The decision hinges on RAM cost versus instance availability, not latency — so pick primitive CSR if a 512 GB instance is cheap and available, compressed CSR if you want to run on a 256 GB instance or pack more replicas per host.
+
+### 14.5 Step 4 — write path and rebuild cadence
+
+20k follows/s into a 7.5×10¹⁰-edge base is `1.7×10⁹` new edges/day — about 2.3% growth/day. Using the delta-overlay strategy (§12.1) with a 5% overlay threshold, a full rebuild is needed roughly every two days. Rebuild cost:
+
+```text
+rebuild = counting-sort over (E + delta) ≈ 7.7e10 edges
+parallel build at ~2e9 edges/s/core * 32 cores ≈ 6.4e10 edges/s
+rebuild wall time ≈ 7.7e10 / 6.4e10 ≈ 1.2 s of CPU-bound scatter
+                  + sort + I/O ≈ tens of seconds total
+```
+
+Comfortably under the every-two-day cadence, so the overlay never overflows and `csr_rebuild_seconds` stays well below the inter-rebuild interval — the §9.3 failure mode (rebuild falling behind writes) does not trigger.
+
+### 14.6 Step 5 — replica fleet sizing
+
+```text
+read QPS 200k, per-query CPU ≈ 2.3 ms (cache-miss bound, single thread)
+per-core throughput ≈ 1 / 2.3 ms ≈ 435 q/s
+cores needed ≈ 200,000 / 435 ≈ 460 cores
+at 64 cores/replica ≈ 8 replicas for compute
+```
+
+Memory says one replica per ~512 GB box; compute says ~8 boxes. Compute dominates here, so provision ~8 replicas (plus 1–2 for redundancy), each `mmap`-ing the shared blob (§13). The conclusion: a fleet of ten 512 GB / 64-core instances serves a 75-billion-edge follow graph at 200k QPS within a 5 ms budget — no cluster graph engine required, vindicating the §5 "reach for distribution later than instinct suggests" rule.
+
+---
+
+## 15. Summary
 
 - The representation is a system-design decision: size, mutability, and access pattern dictate it more than asymptotics do.
 - Materialize an in-memory CSR when the graph fits in RAM and is read-mostly; query a graph database when durability and transactions matter; reach for a distributed engine only when the graph truly does not fit on one large machine.
@@ -404,5 +748,7 @@ Until then, one big box with a compressed immutable CSR beats a cluster on both 
 - Immutable CSR plus atomic snapshot swap gives lock-free concurrent reads with bounded staleness — the cleanest concurrency story for a read-heavy graph.
 - Plan in bytes-per-edge: primitive CSR is ~4 B/edge, boxed Java lists ~16 B/edge, compressed web graphs under 1 B/edge. The break point is predictable; compute it before you allocate.
 - Watch `graph_bytes_resident`, `csr_snapshot_staleness`, super-hub degree, and `partition_cross_edge_ratio` — these catch the failures (OOM, stale reads, message storms) that throughput metrics miss.
+- Persist the *built* CSR as a flat, versioned binary blob so a restart is a zero-copy `mmap` rather than a multi-minute rebuild; distribute snapshots to read replicas via content-addressed object storage and atomic pointer swap.
+- For fast-changing graphs, confine mutation to a small delta — a delta overlay on an immutable base, a slotted (gap) CSR for in-place inserts, or LSM-structured CSR runs — and never mutate the shared flat arrays in place under concurrent readers.
 
 References to study further: Pregel (Malewicz et al. 2010), PowerGraph vertex-cut partitioning (Gonzalez et al. 2012), GraphChi out-of-core (Kyrola et al. 2012), the WebGraph compression framework (Boldi & Vigna), and Neo4j's native graph storage internals.

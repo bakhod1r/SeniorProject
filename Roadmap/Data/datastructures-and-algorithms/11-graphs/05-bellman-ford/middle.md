@@ -10,14 +10,18 @@
 2. [Deeper Concepts](#deeper-concepts)
 3. [Comparison with Alternatives](#comparison-with-alternatives)
 4. [Advanced Patterns](#advanced-patterns)
-5. [Graph and Tree Applications](#graph-and-tree-applications)
-6. [Algorithmic Integration](#algorithmic-integration)
-7. [Code Examples](#code-examples)
-8. [Error Handling](#error-handling)
-9. [Performance Analysis](#performance-analysis)
-10. [Best Practices](#best-practices)
-11. [Visual Animation](#visual-animation)
-12. [Summary](#summary)
+5. [Difference Constraints — Worked End to End](#difference-constraints--worked-end-to-end)
+6. [Graph and Tree Applications](#graph-and-tree-applications)
+7. [Algorithmic Integration](#algorithmic-integration)
+8. [Code Examples](#code-examples)
+9. [Difference-Constraints Code](#difference-constraints-code)
+10. [SPFA Internals — Deeper Look](#spfa-internals--deeper-look)
+11. [Arbitrage — Deeper Look](#arbitrage--deeper-look)
+12. [Error Handling](#error-handling)
+13. [Performance Analysis](#performance-analysis)
+14. [Best Practices](#best-practices)
+15. [Visual Animation](#visual-animation)
+16. [Summary](#summary)
 
 ---
 
@@ -103,6 +107,43 @@ A system of constraints of the form `x_j - x_i ≤ c` can be solved with Bellman
 ### Pattern: Early Stop + Round Counter
 
 Combine the `changed` flag with a round counter; if you ever reach round `V` and still changed, you have a negative cycle without a separate detection pass.
+
+---
+
+## Difference Constraints — Worked End to End
+
+A **system of difference constraints** is a set of inequalities each of the form `x_j − x_i ≤ c`. These show up constantly: task scheduling ("job B starts at least 3 units after job A" is `x_A − x_B ≤ −3`), clock-skew analysis in chip design, temporal reasoning, and image segmentation. The beautiful fact is that *the entire feasibility question reduces to a single Bellman-Ford run.*
+
+### The reduction, step by step
+
+1. **One vertex per variable.** Variable `x_i` becomes vertex `i`.
+2. **One edge per constraint.** The inequality `x_j − x_i ≤ c` becomes a directed edge `i → j` with weight `c`. Read it as: "the distance to `j` is at most the distance to `i` plus `c`," which is exactly the triangle inequality Bellman-Ford enforces.
+3. **A super-source.** Add vertex `s` with a 0-weight edge to every variable vertex. This guarantees every variable is reachable and gives a common reference point.
+4. **Run Bellman-Ford from `s`.** Set `x_i = dist[i]`.
+
+### Why the assignment is feasible
+
+After convergence, every edge satisfies `dist[j] ≤ dist[i] + w(i,j)`, i.e. `dist[j] − dist[i] ≤ c`. That is precisely the constraint `x_j − x_i ≤ c`. So the distance array *is* a feasible solution — Bellman-Ford does not merely check feasibility, it constructs a witness. A useful corollary: if `x` is any feasible solution then so is `x + k` for any constant `k` (constraints only involve differences), which matches the freedom in choosing the super-source distance.
+
+### Why a negative cycle means infeasibility
+
+Sum the constraints around a directed cycle `i₁ → i₂ → … → i₁`. The left sides telescope to 0 (every variable appears once with `+` and once with `−`), so summing gives `0 ≤ Σ c`. If the corresponding edge weights sum to a *negative* value, we would need `0 ≤ (negative)` — impossible. So a negative-weight cycle in the constraint graph is exactly an unsatisfiable subset of constraints. Bellman-Ford's negative-cycle detection becomes an **infeasibility certificate**, and cycle extraction names the conflicting constraints.
+
+### A concrete instance
+
+```text
+Constraints:                Edges (i -> j, weight c):
+  x1 - x2 <=  0               2 -> 1 :  0
+  x1 - x5 <= -1               5 -> 1 : -1
+  x2 - x5 <=  1               5 -> 2 :  1
+  x3 - x1 <=  5               1 -> 3 :  5
+  x4 - x1 <=  4               1 -> 4 :  4
+  x4 - x3 <= -1               3 -> 4 : -1
+  x5 - x3 <= -3               3 -> 5 : -3
+  x5 - x4 <= -3               4 -> 5 : -3
+```
+
+Add super-source `s` (vertex 0) with 0-weight edges to 1..5. Bellman-Ford yields one feasible assignment such as `x = (-5, -3, 0, -1, -4)` (values may shift by a constant). You can verify each inequality holds; if you flip, say, `x5 − x3 <= -3` to `<= -5`, a negative cycle `3 → 5 → 3` appears (weights `-5 + 1`? — depends on the exact edges) and the system becomes infeasible, with detection firing in the extra round.
 
 ---
 
@@ -391,6 +432,196 @@ def find_negative_cycle(n, edges):
     cycle.reverse()
     return cycle
 ```
+
+---
+
+## Difference-Constraints Code
+
+Each example takes a list of constraints `(j, i, c)` meaning `x_j − x_i ≤ c`, adds a super-source, runs Bellman-Ford, and returns a feasible assignment or reports infeasibility.
+
+### Go
+
+```go
+package main
+
+import "fmt"
+
+// Constraint x[j] - x[i] <= c.
+type Constraint struct{ J, I, C int }
+
+// SolveDiffConstraints returns (assignment, feasible).
+// Variables are 1..n; vertex 0 is the super-source.
+func SolveDiffConstraints(n int, cs []Constraint) ([]int, bool) {
+	type edge struct{ from, to, w int }
+	edges := make([]edge, 0, len(cs)+n)
+	for v := 1; v <= n; v++ { // super-source -> every variable, weight 0
+		edges = append(edges, edge{0, v, 0})
+	}
+	for _, c := range cs { // x_j - x_i <= c  ==>  edge i -> j weight c
+		edges = append(edges, edge{c.I, c.J, c.C})
+	}
+
+	const INF = int(1e18)
+	dist := make([]int, n+1)
+	for i := 1; i <= n; i++ {
+		dist[i] = INF
+	}
+	dist[0] = 0
+	for round := 0; round <= n; round++ { // n+1 vertices => n rounds
+		changed := false
+		for _, e := range edges {
+			if dist[e.from] != INF && dist[e.from]+e.w < dist[e.to] {
+				dist[e.to] = dist[e.from] + e.w
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	for _, e := range edges { // detection pass => infeasible
+		if dist[e.from] != INF && dist[e.from]+e.w < dist[e.to] {
+			return nil, false
+		}
+	}
+	return dist[1:], true // x_i = dist[i]
+}
+
+func main() {
+	cs := []Constraint{
+		{1, 2, 0}, {1, 5, -1}, {2, 5, 1}, {3, 1, 5},
+		{4, 1, 4}, {4, 3, -1}, {5, 3, -3}, {5, 4, -3},
+	}
+	x, ok := SolveDiffConstraints(5, cs)
+	fmt.Println("feasible:", ok, "x:", x)
+}
+```
+
+### Java
+
+```java
+import java.util.*;
+
+public class DiffConstraints {
+    // x[j] - x[i] <= c
+    record Constraint(int j, int i, int c) {}
+    static final long INF = Long.MAX_VALUE / 4;
+
+    // Variables 1..n; vertex 0 is the super-source. Returns null if infeasible.
+    static long[] solve(int n, List<Constraint> cs) {
+        int[][] edges = new int[cs.size() + n][3];
+        int k = 0;
+        for (int v = 1; v <= n; v++) edges[k++] = new int[]{0, v, 0};
+        for (Constraint c : cs) edges[k++] = new int[]{c.i(), c.j(), c.c()};
+
+        long[] dist = new long[n + 1];
+        Arrays.fill(dist, INF);
+        dist[0] = 0;
+        for (int round = 0; round <= n; round++) {
+            boolean changed = false;
+            for (int[] e : edges) {
+                if (dist[e[0]] != INF && dist[e[0]] + e[2] < dist[e[1]]) {
+                    dist[e[1]] = dist[e[0]] + e[2];
+                    changed = true;
+                }
+            }
+            if (!changed) break;
+        }
+        for (int[] e : edges)
+            if (dist[e[0]] != INF && dist[e[0]] + e[2] < dist[e[1]]) return null;
+        return Arrays.copyOfRange(dist, 1, n + 1);
+    }
+
+    public static void main(String[] args) {
+        List<Constraint> cs = List.of(
+            new Constraint(1, 2, 0), new Constraint(1, 5, -1),
+            new Constraint(2, 5, 1), new Constraint(3, 1, 5),
+            new Constraint(4, 1, 4), new Constraint(4, 3, -1),
+            new Constraint(5, 3, -3), new Constraint(5, 4, -3));
+        long[] x = solve(5, cs);
+        System.out.println(x == null ? "infeasible" : "x: " + Arrays.toString(x));
+    }
+}
+```
+
+### Python
+
+```python
+INF = float("inf")
+
+
+def solve_diff_constraints(n, constraints):
+    """constraints: list of (j, i, c) meaning x_j - x_i <= c.
+    Variables 1..n; vertex 0 is the super-source.
+    Returns (assignment_list, True) or (None, False) if infeasible."""
+    edges = [(0, v, 0) for v in range(1, n + 1)]          # super-source
+    edges += [(i, j, c) for (j, i, c) in constraints]      # i -> j weight c
+
+    dist = [INF] * (n + 1)
+    dist[0] = 0
+    for _ in range(n):                                     # n+1 vertices => n rounds
+        changed = False
+        for u, v, w in edges:
+            if dist[u] != INF and dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                changed = True
+        if not changed:
+            break
+    for u, v, w in edges:                                  # detection pass
+        if dist[u] != INF and dist[u] + w < dist[v]:
+            return None, False
+    return dist[1:], True
+
+
+if __name__ == "__main__":
+    cs = [(1, 2, 0), (1, 5, -1), (2, 5, 1), (3, 1, 5),
+          (4, 1, 4), (4, 3, -1), (5, 3, -3), (5, 4, -3)]
+    x, ok = solve_diff_constraints(5, cs)
+    print("feasible:", ok, "x:", x)
+```
+
+---
+
+## SPFA Internals — Deeper Look
+
+SPFA's correctness is just Bellman-Ford's: it performs the same relaxations, only it *skips* relaxing edges whose source did not change since the last time it was processed. The queue is a worklist of "dirty" vertices. Three implementation details decide whether it is fast or buggy:
+
+1. **The `inQueue` flag is for de-duplication, not correctness.** A vertex may be re-improved while already queued; the flag prevents inserting it twice (which would waste work but not corrupt the answer). Forgetting it still produces correct distances — just slower.
+2. **The relax counter is the only safe termination guard.** With a reachable negative cycle there is no fixpoint; the queue never empties. Counting how many times each vertex is relaxed *into* and bailing at `≥ V` is what turns an infinite loop into a clean "negative cycle" return. Some implementations count dequeues instead — both bound the work at `O(VE)`.
+3. **Queue discipline changes the constant, never the worst case.** Plain FIFO is the baseline. **SLF (Smallest Label First)** pushes an improved vertex to the *front* if its new distance beats the current front's; **LLL (Large Label Last)** rotates large-distance vertices to the back. Both are heuristics that help on many graphs and are powerless against the adversarial zigzag families that force `O(VE)`.
+
+A subtle trap: SPFA's average-case speed makes it tempting as a "faster Bellman-Ford" everywhere, but on graphs engineered to defeat it (and these occur naturally in grid/lattice structures) it degrades to the full `O(VE)` with a *worse* constant than plain Bellman-Ford because of queue overhead. The professional file proves this with an explicit worst-case family.
+
+---
+
+## Arbitrage — Deeper Look
+
+Currency arbitrage is the most quoted Bellman-Ford application, and it is worth understanding precisely why the transform works.
+
+### From products to sums
+
+An arbitrage opportunity is a cycle of conversions whose **product of exchange rates exceeds 1** — start with 1 unit, trade around the cycle, end with more than 1 unit. Bellman-Ford works with *sums*, not products, so take logarithms:
+
+```text
+product over cycle of rate(i->j) > 1
+  <=>  sum over cycle of log(rate(i->j)) > 0
+  <=>  sum over cycle of (-log(rate(i->j))) < 0
+```
+
+So define edge weight `w(i→j) = -log(rate[i][j])`. A profitable cycle becomes a **negative-weight cycle** — exactly what Bellman-Ford detects.
+
+### Setup that catches arbitrage anywhere
+
+Because arbitrage can start from any currency, initialize `dist[v] = 0` for *all* `v` (equivalent to a super-source with 0-weight edges). Run `V−1` rounds, then one detection round; any relaxation means a negative cycle — i.e. arbitrage — exists. Extract the cycle to print the trade sequence: each `pred` edge is one conversion.
+
+### Numerical care
+
+Logs introduce floating-point error. Two safeguards:
+
+- Compare relaxations against a small epsilon, not bare `<`, so rounding noise does not fabricate a cycle.
+- For high-stakes use, scale rates to integers (fixed-point) or use exact rational arithmetic; a "profit" smaller than transaction costs is not real arbitrage anyway, so a sensible epsilon doubles as a profitability threshold.
+
+The same `−log` trick reappears in maximum-reliability paths (multiply success probabilities → add `−log`) and in any "multiplicative shortest path" problem.
 
 ---
 

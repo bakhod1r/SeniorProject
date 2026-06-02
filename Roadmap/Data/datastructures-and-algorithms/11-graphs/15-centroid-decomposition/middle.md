@@ -73,6 +73,52 @@ When counting with the centroid included, give the centroid itself distance 0 so
 
 For most problems you need, per centroid `c`, the multiset of distances `dist(c, x)` for every `x` in `c`'s component. You collect these with a single DFS from `c` over the residual tree, *grouping by branch* so you can do the per-branch subtraction.
 
+### Why inclusion–exclusion is exactly right (worked on a star)
+
+The inclusion–exclusion step is the part people get wrong, so let's make it concrete on a tiny example: a star with center `c` and three leaves `a, b, e`, all at distance 1 from `c`.
+
+```
+        a
+        |
+   b -- c -- e
+```
+
+Distances from `c` (component including `c` itself at 0): `[0, 1, 1, 1]` (for `c, a, b, e`).
+
+Suppose `K = 2` and we count pairs with `dist == K`. A pair `(x, y)` passing through `c` has total distance `dist(c,x) + dist(c,y)`. The "whole component" count of ordered pairs summing to 2:
+- `a–b`: 1+1 = 2 ✓
+- `a–e`: 2 ✓
+- `b–e`: 2 ✓
+- `a–a, b–b, e–e`: self-pairs, excluded
+- pairs with `c` (distance 0): need partner at distance 2, none exists.
+
+So the whole-component pass finds 3 unordered pairs: `{a,b}, {a,e}, {b,e}`. **All three genuinely pass through `c`** because each leaf is its own branch — there is no same-branch over-count to subtract. The per-branch subtraction subtracts 0 from each singleton branch. Correct answer: 3 paths of length 2.
+
+Now glue two leaves into the same branch — path `c – a – f` (so `a` at distance 1, `f` at distance 2), plus leaf `b` at distance 1:
+
+```
+   b -- c -- a -- f
+```
+
+Distances from `c`: `[0(c), 1(b), 1(a), 2(f)]`. Whole-component pairs summing to `K=2`:
+- `b–a`: 2 ✓ (different branches — real path `b–c–a`)
+- `b–f` would be 1+2 = 3, not 2.
+- `a–f`: 1+2 = 3, not 2.
+- the pair making `2` *within* the `a`-branch: `c–f` gives 0+2 = 2 — but that path is `c–a–f`, which is real and **does** pass through (ends at) `c`.
+
+Here the only `K=2` pair is `{b,a}`, plus `{c,f}` which is a leg ending at `c`. The branch-only pass on branch `{a, f}` (distances `1, 2`) finds pairs summing to 2: none (`1+1` needs two copies of distance-1, but there's only one; `a–f` is 3). So subtraction removes 0, and we keep `{b,a}` and `{c,f}` — both correct. The over-count only appears when a branch contains **two** vertices whose distances sum to `K`; then those two are in the same branch, their "path" would bounce off `c`, and the subtraction removes exactly that spurious pair.
+
+**Rule:** the whole-component pass over-counts precisely the pairs `(x, y)` in the *same* branch whose `dist(c,x)+dist(c,y)` hits the target; subtracting the same computation restricted to each branch cancels them, with no path counted twice because each real path lives in exactly one centroid (the path-LCA theorem).
+
+### Ordered vs unordered, and the factor of 2
+
+Two clean ways to count:
+
+1. **All-then-subtract (frequency array).** For each vertex at distance `d`, add `freq[K − d]`. This counts every ordered pair twice and self-matches once (when `2d = K`). Easiest fix: build `freq` first, exclude self (`if need == d: cnt -= 1`), sum, then divide the final answer by 2.
+2. **Incremental per branch.** Maintain a running `freq` of *previously processed* branches; for each new branch, first query it against `freq` (this gives unordered cross-branch pairs directly, no double count), then merge the new branch into `freq`. This avoids the divide-by-2 and never forms same-branch pairs in the first place.
+
+Both are `O(n)` per centroid when the distance domain is bounded by `K`; the incremental form is what competitive solutions usually ship.
+
 ---
 
 ## Comparison with Alternatives
@@ -98,6 +144,38 @@ For each centroid `c`, count pairs `(u, v)` with `dist(u, c) + dist(v, c) = K`, 
 ### Pattern B — Count paths with length ≤ K (or in a range)
 
 Replace the exact-match `cnt[K − d]` lookup with a **prefix-sum / sorted-two-pointer** count of distances `≤ K − d`. Sorting the distance list per centroid gives `O(n log n)` per centroid, `O(N log² N)` overall. This is the structure behind the IOI **Race**-style "≤ K" variants.
+
+#### Worked trace — count pairs at distance ≤ K
+
+Tree (5 vertices), `K = 2`:
+```
+   2 -- 1 -- 0
+        |
+        3 -- 4
+```
+edges `0–1, 1–2, 1–3, 3–4`.
+
+**Level 0 — centroid is 1** (removing 1 leaves `{0}`,`{2}`,`{3,4}`, max size 2 = ⌊5/2⌋).
+Distances from `1` over whole component: `1:0, 0:1, 2:1, 3:1, 4:2` → list `[0,1,1,1,2]`.
+Sort → `[0,1,1,1,2]`. Two-pointer count of pairs `(i<j)` with sum ≤ 2:
+
+| lo | hi | d[lo]+d[hi] | action | added |
+|----|----|-------------|--------|-------|
+| 0 | 4 | 0+2=2 ≤ 2 | add `hi−lo`=4, lo→1 | 4 |
+| 1 | 4 | 1+2=3 > 2 | hi→3 | — |
+| 1 | 3 | 1+1=2 ≤ 2 | add `hi−lo`=2, lo→2 | 2 |
+| 2 | 3 | 1+1=2 ≤ 2 | add `hi−lo`=1, lo→3 | 1 |
+| 3 | 3 | lo==hi stop | | |
+
+Whole-component count = 4+2+1 = **7**.
+Now subtract same-branch over-counts. Branches of `1`: `{0}` (dist `[1]`), `{2}` (dist `[1]`), `{3,4}` (dist `[1,2]`).
+- branch `[1]`: 0 pairs. branch `[1]`: 0 pairs.
+- branch `[1,2]`: pairs ≤ 2? `1+2=3 > 2` → 0 pairs.
+Subtraction total = 0. Contribution of centroid 1 = **7**.
+
+**Level 1 — recurse on `{3,4}` (centroid 3 or 4).** Distances from centroid `3`: `[0,1]` (for `3,4`). Pairs ≤ 2: `0+1=1 ≤ 2` → 1. Branch `{4}` = `[1]`, 0 pairs. Contribution = **1**. Components `{0}, {2}` contribute 0.
+
+**Total = 7 + 1 = 8.** Brute force: enumerate all `C(5,2)=10` pairs; distances are `01:1, 02:2, 03:2, 04:3, 12:1, 13:1, 14:2, 23:2, 24:3, 34:1`. Pairs with distance ≤ 2: all except `04` and `24` → 8. ✓ This is the exact value the `countPairs`-based code below prints.
 
 ### Pattern C — Distance-based / radius queries
 

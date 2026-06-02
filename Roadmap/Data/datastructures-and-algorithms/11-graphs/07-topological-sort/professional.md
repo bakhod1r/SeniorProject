@@ -7,12 +7,16 @@
 4. Existence Theorem — DAG ⟺ Has a Topological Order
 5. Complexity O(V + E)
 6. Counting Linear Extensions is #P-Complete
-7. Cache Behavior and Memory Layout
-8. Average-Case Analysis on Random DAGs
-9. Space-Time Trade-offs
-10. Comparison with Alternatives
-11. Open Problems — Online / Dynamic Topological Order
-12. Summary
+7. Worked Example — ASCII DAG and Kahn Trace
+8. Reference Implementations (Go / Java / Python)
+9. Lattice and Partial-Order Framing
+10. Online / Dynamic Topological Order (Pearce–Kelly)
+11. Cache Behavior and Memory Layout
+12. Average-Case Analysis on Random DAGs
+13. Space-Time Trade-offs
+14. Comparison with Alternatives
+15. Open Problems — Online / Dynamic Topological Order
+16. Summary
 
 ---
 
@@ -155,7 +159,437 @@ The gap — trivial to find one extension, #P-hard to count them — is the head
 
 ---
 
-## 7. Cache Behavior and Memory Layout
+## 7. Worked Example — ASCII DAG and Kahn Trace
+
+Take a concrete DAG of 6 vertices labeled `0..5` (a classic "course prerequisite" shape). An edge `u → v` means *u must come before v*.
+
+```text
+            (0)
+           /   \
+          v     v
+        (1)     (2)
+          \     / \
+           v   v   v
+            (3)    (4)
+              \   /
+               v v
+               (5)
+
+Edges:  0→1   0→2   1→3   2→3   2→4   3→5   4→5
+```
+
+**In-degrees** (count of incoming arrows):
+
+```text
+vertex :  0   1   2   3   4   5
+indeg  :  0   1   1   2   1   2
+```
+
+### 7.1 Kahn FIFO trace
+
+We run `KAHN` with a FIFO queue. `Q` holds the current in-degree-0 frontier; `L` is the output.
+
+```text
+init:   indeg = [0,1,1,2,1,2]    Q = [0]            L = []
+step 1: pop 0 -> L=[0]
+        relax 0→1: indeg[1]=0 -> push 1
+        relax 0→2: indeg[2]=0 -> push 2
+        Q = [1,2]                indeg=[_,0,0,2,1,2]
+step 2: pop 1 -> L=[0,1]
+        relax 1→3: indeg[3]=1   (still blocked by 2)
+        Q = [2]
+step 3: pop 2 -> L=[0,1,2]
+        relax 2→3: indeg[3]=0 -> push 3
+        relax 2→4: indeg[4]=0 -> push 4
+        Q = [3,4]
+step 4: pop 3 -> L=[0,1,2,3]
+        relax 3→5: indeg[5]=1   (still blocked by 4)
+        Q = [4]
+step 5: pop 4 -> L=[0,1,2,3,4]
+        relax 4→5: indeg[5]=0 -> push 5
+        Q = [5]
+step 6: pop 5 -> L=[0,1,2,3,4,5]
+        Q = []  ->  done
+
+Output (FIFO):  0 1 2 3 4 5     (|L| = 6 = |V|  ⇒  DAG, valid)
+```
+
+### 7.2 Lexicographically-smallest trace (min-heap frontier)
+
+Same graph, but the frontier is a **min-heap** so we always emit the smallest ready vertex. On this graph the heap and FIFO agree, but consider step 3: when both `3` and `4` become ready the heap pops `3` first because `3 < 4`. The output `0 1 2 3 4 5` is the lexicographically smallest of the several valid orders (e.g. `0 2 1 4 3 5` and `0 1 2 4 3 5` are also valid but larger).
+
+### 7.3 DFS reverse-postorder trace
+
+Running recursive DFS from vertex `0` (children visited in ascending order), appending each vertex at *finish*:
+
+```text
+visit 0
+  visit 1
+    visit 3
+      visit 5  -> finish 5      L=[5]
+    finish 3                    L=[5,3]
+  finish 1                      L=[5,3,1]
+  visit 2
+    (3 already black)
+    visit 4
+      (5 already black)
+    finish 4                    L=[5,3,1,4]
+  finish 2                      L=[5,3,1,4,2]
+finish 0                        L=[5,3,1,4,2,0]
+
+reverse(L) = 0 2 4 1 3 5        (a different — but equally valid — order)
+```
+
+Both Kahn and DFS produce *legal* orders; they differ because the in-degree-0 frontier admits a choice (§6: many linear extensions exist).
+
+### 7.4 Counting the linear extensions of this DAG
+
+Using the subset DP of §6, this particular poset has **exactly 5** linear extensions. The constraints are: `0` first, `5` last, `3` after both `1` and `2`, `4` after `2`. Enumerating the legal interleavings of the middle `{1,2,3,4}`:
+
+```text
+0 1 2 3 4 5
+0 1 2 4 3 5
+0 2 1 3 4 5
+0 2 1 4 3 5
+0 2 4 1 3 5
+e(P) = 5
+```
+
+---
+
+## 8. Reference Implementations (Go / Java / Python)
+
+Three production-shaped routines, in the required order, each with cycle handling:
+**(a)** DFS-based topological sort with explicit cycle detection,
+**(b)** lexicographically-smallest order via a heap-backed Kahn,
+**(c)** exact count of linear extensions via subset (bitmask) DP.
+
+### 8.1 Go
+
+```go
+package toposort
+
+import (
+	"container/heap"
+	"errors"
+)
+
+var ErrCycle = errors.New("graph has a cycle: no topological order exists")
+
+// (a) DFS-based topological sort with cycle detection via 3-coloring.
+// Returns the order, or ErrCycle if a back edge (gray target) is found.
+func DFSTopo(n int, adj [][]int) ([]int, error) {
+	const (
+		white = 0
+		gray  = 1
+		black = 2
+	)
+	color := make([]int, n)
+	order := make([]int, 0, n)
+
+	var visit func(u int) error
+	visit = func(u int) error {
+		color[u] = gray
+		for _, w := range adj[u] {
+			switch color[w] {
+			case gray:
+				return ErrCycle // back edge
+			case white:
+				if err := visit(w); err != nil {
+					return err
+				}
+			}
+		}
+		color[u] = black
+		order = append(order, u) // finish
+		return nil
+	}
+
+	for v := 0; v < n; v++ {
+		if color[v] == white {
+			if err := visit(v); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// order holds finish times ascending; reverse for topo order.
+	for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
+		order[i], order[j] = order[j], order[i]
+	}
+	return order, nil
+}
+
+// (b) Lexicographically smallest topological order via Kahn + min-heap.
+type minHeap []int
+
+func (h minHeap) Len() int            { return len(h) }
+func (h minHeap) Less(i, j int) bool  { return h[i] < h[j] }
+func (h minHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h *minHeap) Push(x any)         { *h = append(*h, x.(int)) }
+func (h *minHeap) Pop() any           { o := *h; n := len(o); v := o[n-1]; *h = o[:n-1]; return v }
+
+func LexTopo(n int, adj [][]int) ([]int, error) {
+	indeg := make([]int, n)
+	for u := 0; u < n; u++ {
+		for _, w := range adj[u] {
+			indeg[w]++
+		}
+	}
+	h := &minHeap{}
+	for v := 0; v < n; v++ {
+		if indeg[v] == 0 {
+			heap.Push(h, v)
+		}
+	}
+	order := make([]int, 0, n)
+	for h.Len() > 0 {
+		u := heap.Pop(h).(int)
+		order = append(order, u)
+		for _, w := range adj[u] {
+			indeg[w]--
+			if indeg[w] == 0 {
+				heap.Push(h, w)
+			}
+		}
+	}
+	if len(order) != n {
+		return nil, ErrCycle
+	}
+	return order, nil
+}
+
+// (c) Exact number of linear extensions via subset DP. n <= ~22.
+func CountLinearExtensions(n int, adj [][]int) uint64 {
+	// pred[v] = bitmask of v's predecessors.
+	pred := make([]int, n)
+	for u := 0; u < n; u++ {
+		for _, w := range adj[u] {
+			pred[w] |= 1 << uint(u)
+		}
+	}
+	full := (1 << uint(n)) - 1
+	dp := make([]uint64, 1<<uint(n))
+	dp[0] = 1
+	for mask := 0; mask <= full; mask++ {
+		if dp[mask] == 0 {
+			continue
+		}
+		for v := 0; v < n; v++ {
+			if mask&(1<<uint(v)) != 0 {
+				continue // v already emitted
+			}
+			if pred[v]&mask == pred[v] { // all preds present
+				dp[mask|(1<<uint(v))] += dp[mask]
+			}
+		}
+	}
+	return dp[full]
+}
+```
+
+### 8.2 Java
+
+```java
+import java.util.*;
+
+public final class TopoProfessional {
+
+    public static final class CycleException extends RuntimeException {
+        public CycleException() { super("graph has a cycle"); }
+    }
+
+    // (a) DFS-based topological sort with cycle detection (3-color).
+    public static int[] dfsTopo(int n, List<List<Integer>> adj) {
+        int[] color = new int[n];      // 0=white 1=gray 2=black
+        int[] order = new int[n];
+        int[] idx = {n - 1};           // fill from the back = reverse postorder
+        for (int v = 0; v < n; v++)
+            if (color[v] == 0) visit(v, adj, color, order, idx);
+        return order;
+    }
+
+    private static void visit(int u, List<List<Integer>> adj,
+                              int[] color, int[] order, int[] idx) {
+        color[u] = 1;
+        for (int w : adj.get(u)) {
+            if (color[w] == 1) throw new CycleException(); // back edge
+            if (color[w] == 0) visit(w, adj, color, order, idx);
+        }
+        color[u] = 2;
+        order[idx[0]--] = u;          // place at finish, growing backwards
+    }
+
+    // (b) Lexicographically smallest topological order via Kahn + min-heap.
+    public static int[] lexTopo(int n, List<List<Integer>> adj) {
+        int[] indeg = new int[n];
+        for (int u = 0; u < n; u++)
+            for (int w : adj.get(u)) indeg[w]++;
+        PriorityQueue<Integer> pq = new PriorityQueue<>();
+        for (int v = 0; v < n; v++) if (indeg[v] == 0) pq.add(v);
+        int[] order = new int[n];
+        int k = 0;
+        while (!pq.isEmpty()) {
+            int u = pq.poll();
+            order[k++] = u;
+            for (int w : adj.get(u))
+                if (--indeg[w] == 0) pq.add(w);
+        }
+        if (k != n) throw new CycleException();
+        return order;
+    }
+
+    // (c) Exact count of linear extensions via subset DP. n <= ~22.
+    public static long countLinearExtensions(int n, List<List<Integer>> adj) {
+        int[] pred = new int[n];
+        for (int u = 0; u < n; u++)
+            for (int w : adj.get(u)) pred[w] |= 1 << u;
+        int full = (1 << n) - 1;
+        long[] dp = new long[1 << n];
+        dp[0] = 1;
+        for (int mask = 0; mask <= full; mask++) {
+            if (dp[mask] == 0) continue;
+            for (int v = 0; v < n; v++) {
+                if ((mask & (1 << v)) != 0) continue;
+                if ((pred[v] & mask) == pred[v])
+                    dp[mask | (1 << v)] += dp[mask];
+            }
+        }
+        return dp[full];
+    }
+}
+```
+
+### 8.3 Python
+
+```python
+import heapq
+
+
+class CycleError(Exception):
+    """Raised when the graph is not a DAG."""
+
+
+def dfs_topo(n, adj):
+    """(a) DFS-based topological sort with 3-color cycle detection."""
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = [WHITE] * n
+    order = []
+
+    def visit(u):
+        color[u] = GRAY
+        for w in adj[u]:
+            if color[w] == GRAY:
+                raise CycleError(f"back edge {u}->{w}")
+            if color[w] == WHITE:
+                visit(w)
+        color[u] = BLACK
+        order.append(u)          # finish
+
+    for v in range(n):
+        if color[v] == WHITE:
+            visit(v)
+    order.reverse()              # reverse postorder = topo order
+    return order
+
+
+def lex_topo(n, adj):
+    """(b) Lexicographically smallest topological order (Kahn + heap)."""
+    indeg = [0] * n
+    for u in range(n):
+        for w in adj[u]:
+            indeg[w] += 1
+    heap = [v for v in range(n) if indeg[v] == 0]
+    heapq.heapify(heap)
+    order = []
+    while heap:
+        u = heapq.heappop(heap)
+        order.append(u)
+        for w in adj[u]:
+            indeg[w] -= 1
+            if indeg[w] == 0:
+                heapq.heappush(heap, w)
+    if len(order) != n:
+        raise CycleError("graph has a cycle")
+    return order
+
+
+def count_linear_extensions(n, adj):
+    """(c) Exact count of linear extensions via subset DP. n <= ~22."""
+    pred = [0] * n
+    for u in range(n):
+        for w in adj[u]:
+            pred[w] |= 1 << u
+    full = (1 << n) - 1
+    dp = [0] * (1 << n)
+    dp[0] = 1
+    for mask in range(full + 1):
+        if dp[mask] == 0:
+            continue
+        for v in range(n):
+            if mask & (1 << v):
+                continue
+            if pred[v] & mask == pred[v]:   # all predecessors present
+                dp[mask | (1 << v)] += dp[mask]
+    return dp[full]
+
+
+if __name__ == "__main__":
+    n = 6
+    adj = [[] for _ in range(n)]
+    for u, v in [(0, 1), (0, 2), (1, 3), (2, 3), (2, 4), (3, 5), (4, 5)]:
+        adj[u].append(v)
+    print("dfs  :", dfs_topo(n, adj))           # e.g. 0 2 4 1 3 5
+    print("lex  :", lex_topo(n, adj))           # 0 1 2 3 4 5
+    print("count:", count_linear_extensions(n, adj))  # 5
+```
+
+All three count routines implement the same recurrence and agree on `e(P) = 5` for the §7 graph; the DFS and lexicographic routines return different but equally valid orders.
+
+---
+
+## 9. Lattice and Partial-Order Framing
+
+The topological-sort problem lives inside order theory, and several deep facts follow from that framing.
+
+- **The poset of down-sets is a distributive lattice.** Let `D(P)` be the set of all *down-closed* subsets (order ideals) of the poset `P` induced by the DAG — exactly the sets `mask` that appear with `dp[mask] > 0` in §8's DP. Ordered by inclusion, `D(P)` is a **distributive lattice** (Birkhoff's representation theorem: every finite distributive lattice arises this way). The DP of §6/§8 is a walk over this lattice from `∅` (bottom) to `V` (top); `e(P)` counts the **maximal chains** from bottom to top in `D(P)`.
+- **Linear extensions = maximal chains in the ideal lattice.** Each topological order corresponds bijectively to one maximal chain `∅ ⊂ S₁ ⊂ S₂ ⊂ ⋯ ⊂ V` where each step adds one element. This is why counting them is the same as counting maximal chains, and why it is hard.
+- **Dilworth / Mirsky decompositions.** Mirsky's theorem says the minimum number of antichains covering `P` equals the longest chain — that is exactly the **level count / critical-path length** used by the layered scheduler in [`senior.md`](./senior.md). Dilworth's theorem dually relates the minimum chain cover to the largest antichain — the maximum parallelism available at one moment.
+- **Order polytope.** Stanley's order polytope `O(P) ⊂ [0,1]^V` (points `x` with `x_u ≤ x_v` whenever `u ≺ v`) has volume `e(P)/n!`. This geometric identity is what makes the FPRAS of §6 possible: approximate the volume by a random walk, multiply by `n!`.
+
+So "find one order" is "find one maximal chain", "count orders" is "count all maximal chains / compute a polytope volume", and "layer for parallelism" is "Mirsky antichain decomposition". The partial-order language unifies the whole topic.
+
+---
+
+## 10. Online / Dynamic Topological Order (Pearce–Kelly)
+
+In incremental settings (build systems that add edges as files reference each other, IDE dependency graphs, streaming pipelines) we want to maintain a valid topological order *as edges arrive*, without re-sorting from scratch.
+
+**Setup.** Each vertex `v` carries an integer **ordinal** `ord[v]` such that `u → v ⟹ ord[u] < ord[v]` (a valid topological numbering). On inserting an edge `u → v`:
+
+- If `ord[u] < ord[v]` already, the order is still valid — do nothing.
+- If `ord[u] > ord[v]`, the new edge is a back edge in the current numbering; we must **reorder** the affected region.
+
+**Pearce–Kelly (2007) idea.** Only the vertices whose ordinals lie *between* `ord[v]` and `ord[u]` can be affected. The algorithm:
+
+```text
+INSERT(u → v):
+  if ord[u] < ord[v]: return            # already consistent
+  DFS forward from v, visiting only vertices with ord < ord[u]  -> set F (reachable forward)
+  DFS backward from u, visiting only vertices with ord > ord[v] -> set B (reaches u)
+  if F and B intersect (we reached u from v): report CYCLE
+  else: reassign ordinals so all of B come before all of F,
+        keeping each side's relative order
+```
+
+**Cost.** The work is proportional to the size of the affected region `K = |F| + |B|` (vertices and their incident edges), not the whole graph. Pearce–Kelly bound the *total* work over a sequence of `m` insertions empirically near-linear and prove good amortized behavior; the worst case for `n` insertions is `O(n^{2.5})` (Bender–Fineman–Gilbert–Tarjan, 2016), still far better than re-running an `O(V+E)` sort after every edge.
+
+**Cycle detection comes for free.** If the backward search from `u` reaches `v` (equivalently `F ∩ B ≠ ∅`), the inserted edge closes a cycle — the executor rejects it and reports the loop, exactly the pre-flight check of [`senior.md`](./senior.md) but done incrementally.
+
+This is the algorithm behind incremental build invalidation: changing one file touches only the dependency-region it actually perturbs.
+
+---
+
+## 11. Cache Behavior and Memory Layout
 
 Topological sort is **memory-bound**, not compute-bound: it does `Θ(1)` arithmetic per edge but one (often cache-missing) pointer-chase per adjacency traversal.
 
@@ -168,7 +602,7 @@ In the external-memory model, topological sort of a DAG costs `Θ(sort(E))` I/Os
 
 ---
 
-## 8. Average-Case Analysis on Random DAGs
+## 12. Average-Case Analysis on Random DAGs
 
 Consider a random DAG model where vertices are labeled `1..n` and each forward edge `(i, j)` with `i < j` is included independently with probability `p` (this guarantees acyclicity).
 
@@ -181,7 +615,7 @@ These averages explain why real build graphs (sparse, shallow critical paths, wi
 
 ---
 
-## 9. Space-Time Trade-offs
+## 13. Space-Time Trade-offs
 
 | Variant | Time | Aux space | Note |
 |---|---|---|---|
@@ -197,7 +631,7 @@ The dominant trade-off is **lexicographic ordering costs a `log V` factor**, and
 
 ---
 
-## 10. Comparison with Alternatives
+## 14. Comparison with Alternatives
 
 | Task | Tool | Complexity | Note |
 |---|---|---|---|
@@ -213,9 +647,9 @@ Topological order is unusual: it is the cheap (`Θ(V+E)`) enabler that makes sev
 
 ---
 
-## 11. Open Problems — Online / Dynamic Topological Order
+## 15. Open Problems — Online / Dynamic Topological Order
 
-The static problem is solved (linear, optimal). The frontier is **maintenance under change**.
+The static problem is solved (linear, optimal); §10 covered the practical Pearce–Kelly maintenance algorithm. The research frontier is the *worst-case* complexity of **maintenance under change**.
 
 1. **Online topological ordering.** Maintain a topological order while edges are inserted one at a time (as in incremental build systems). The Pearce–Kelly algorithm (2007) achieves good practical amortized bounds; Bender, Fineman, Gilbert & Tarjan (2016) gave `O(n^{2.5})` total for `n` edge insertions in the worst case. The tight worst-case bound for incremental topological order remains an active question.
 
@@ -229,7 +663,7 @@ The static problem is solved (linear, optimal). The frontier is **maintenance un
 
 ---
 
-## 12. Summary
+## 16. Summary
 
 - **Order theory.** A topological order is precisely a **linear extension** of the reachability partial order; ordering every edge correctly is equivalent to ordering every reachable pair correctly.
 - **Existence.** A finite digraph has a topological order **iff** it is acyclic; both Kahn's algorithm (emitted `< V` ⟺ cycle) and DFS reverse-postorder (back edge ⟺ cycle) prove this constructively.
