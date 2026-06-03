@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Meet in the Middle — Split, Enumerate, Combine</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-left: rgba(88, 166, 255, 0.22);
+    --hi-right: rgba(210, 153, 34, 0.22);
+    --hi-match: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 86px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .arrayRow {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 6px 0 4px;
+  }
+  .cell {
+    min-width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+  .cell.left { border-color: var(--accent); }
+  .cell.right { border-color: var(--accent-2); }
+  .cell.sel-left { background: var(--hi-left); color: #fff; font-weight: 700; }
+  .cell.sel-right { background: var(--hi-right); color: #fff; font-weight: 700; }
+  .splitMark {
+    width: 2px;
+    align-self: stretch;
+    background: var(--good);
+    margin: 0 4px;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card.full { grid-column: 1 / -1; }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .card h2.right { color: var(--accent-2); }
+  .sums {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .chip {
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    transition: all 0.18s ease;
+  }
+  .chip.leftc { border-color: rgba(88,166,255,0.5); }
+  .chip.rightc { border-color: rgba(210,153,34,0.5); }
+  .chip.cursor { box-shadow: 0 0 0 2px var(--accent) inset; color: #fff; }
+  .chip.cursorR { box-shadow: 0 0 0 2px var(--accent-2) inset; color: #fff; }
+  .chip.match { background: var(--hi-match); color: #fff; font-weight: 700; border-color: var(--good); }
+  .chip.dim { opacity: 0.35; }
+  .chip .mask { color: var(--muted); font-size: 10px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .r { color: var(--accent-2); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .phaseTag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Meet in the Middle — Split, Enumerate, Combine</h1>
+  <p>Split the array into two halves, enumerate all 2<sup>n/2</sup> subset sums of each, sort one side, and two-pointer / binary-search until the two halves <b>meet</b>: a + b = S.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Array:
+      <select id="arrSel">
+        <option value="a">[3, 34, 4, 12, 5, 2]</option>
+        <option value="b">[7, 2, 5, 10, 8, 1]</option>
+        <option value="c">[1, 2, 3, 4, 5, 6]</option>
+        <option value="d">[15, 34, 4, 5, 12, 2]</option>
+      </select>
+    </label>
+    <label>S = <input type="number" id="sInput" value="9" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card full">
+    <h2>The array &amp; the split <span class="phaseTag" id="phaseTag">split</span></h2>
+    <div class="arrayRow" id="arrRow"></div>
+    <div class="interp" id="splitInterp">
+      Split at <b>mid</b>: left half (blue) and right half (gold). Every subset of the whole = (a left subset) &cup; (a right subset).
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Left half &mdash; 2<sup id="leftExp">3</sup> subset sums (sorted)</h2>
+      <div class="sums" id="leftSums"></div>
+    </div>
+    <div class="card">
+      <h2 class="right">Right half &mdash; 2<sup id="rightExp">3</sup> subset sums</h2>
+      <div class="sums" id="rightSums"></div>
+    </div>
+  </div>
+
+  <div class="card full" style="margin-top:18px;">
+    <h2>Combine: for each right b, look for S &minus; b in the sorted left list</h2>
+    <div class="interp" id="combineInterp">
+      Press <b>Step</b> to begin combining.
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--hi-left)"></span> left subset</span>
+      <span><span class="swatch" style="background:var(--hi-right)"></span> right subset</span>
+      <span><span class="swatch" style="background:var(--hi-match)"></span> match: a + b = S</span>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We split the array, enumerate each half's subset sums, sort the left list, then scan the right list looking for the complement S &minus; b.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Brute force would enumerate all 2<sup>n</sup> subsets; meet-in-the-middle enumerates only 2<sup>n/2</sup> per half (the square root) and combines.
+    See <code>junior.md</code> and <code>professional.md</code> for the split-and-combine correctness proof and the O(2<sup>n/2</sup>) derivation.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Array definitions ----------
+const ARRAYS = {
+  a: [3, 34, 4, 12, 5, 2],
+  b: [7, 2, 5, 10, 8, 1],
+  c: [1, 2, 3, 4, 5, 6],
+  d: [15, 34, 4, 5, 12, 2]
+};
+
+// ---------- Subset-sum enumeration ----------
+// Returns array of {sum, mask} for all 2^m subsets of items.
+function enumerate(items) {
+  const out = [{ sum: 0, mask: 0 }];
+  for (let i = 0; i < items.length; i++) {
+    const cur = out.slice();
+    for (const e of cur) {
+      out.push({ sum: e.sum + items[i], mask: e.mask | (1 << i) });
+    }
+  }
+  return out;
+}
+
+function maskToIndices(mask, base, len) {
+  const idx = [];
+  for (let i = 0; i < len; i++) {
+    if (mask & (1 << i)) idx.push(base + i);
+  }
+  return idx;
+}
+
+// ---------- Build the step plan ----------
+// Phases:
+//  0  -> split announcement
+//  1  -> enumerate left (one step per subset)
+//  2  -> enumerate right (one step per subset)
+//  3  -> sort left
+//  4..-> combine: for each right value b, binary-search left for S-b
+function buildPlan(arr, S) {
+  const steps = [];
+  const mid = Math.floor(arr.length / 2);
+  const leftItems = arr.slice(0, mid);
+  const rightItems = arr.slice(mid);
+  const leftSubs = enumerate(leftItems);   // {sum,mask}
+  const rightSubs = enumerate(rightItems);
+
+  // sorted copy of left for the combine
+  const leftSorted = leftSubs.slice().sort((p, q) => p.sum - q.sum);
+
+  // Step 0: split
+  steps.push({
+    phase: "split",
+    desc: "Split the array at mid = " + mid + ". Left half has " + leftItems.length +
+      " items (2^" + leftItems.length + " = " + leftSubs.length + " subset sums); right half has " +
+      rightItems.length + " items (" + rightSubs.length + " subset sums).",
+    selLeft: -1, selRight: -1,
+    leftRevealed: 0, rightRevealed: 0,
+    leftSorted: false, cursorL: -1, cursorR: -1, matchL: -1, matchR: -1
+  });
+
+  // Phase 1: reveal left subsets one by one
+  for (let i = 0; i < leftSubs.length; i++) {
+    const e = leftSubs[i];
+    steps.push({
+      phase: "enumL",
+      desc: "Left subset " + (i + 1) + "/" + leftSubs.length + ": indices {" +
+        maskToIndices(e.mask, 0, leftItems.length).join(",") + "} sum to " + e.sum + ".",
+      selLeftMask: e.mask, selRight: -1,
+      leftRevealed: i + 1, rightRevealed: 0,
+      leftSorted: false, cursorL: -1, cursorR: -1, matchL: -1, matchR: -1,
+      highlightLeftIdx: i
+    });
+  }
+
+  // Phase 2: reveal right subsets one by one
+  for (let i = 0; i < rightSubs.length; i++) {
+    const e = rightSubs[i];
+    steps.push({
+      phase: "enumR",
+      desc: "Right subset " + (i + 1) + "/" + rightSubs.length + ": indices {" +
+        maskToIndices(e.mask, mid, rightItems.length).join(",") + "} sum to " + e.sum + ".",
+      selRightMask: e.mask, selLeft: -1,
+      leftRevealed: leftSubs.length, rightRevealed: i + 1,
+      leftSorted: false, cursorL: -1, cursorR: -1, matchL: -1, matchR: -1,
+      highlightRightIdx: i
+    });
+  }
+
+  // Phase 3: sort left
+  steps.push({
+    phase: "sort",
+    desc: "Sort the left list ascending so we can binary-search it. Sorted left sums: [" +
+      leftSorted.map(e => e.sum).join(", ") + "].",
+    leftRevealed: leftSubs.length, rightRevealed: rightSubs.length,
+    leftSorted: true, cursorL: -1, cursorR: -1, matchL: -1, matchR: -1
+  });
+
+  // Phase 4: combine. For each right value b, binary-search left for S - b.
+  let found = false;
+  for (let r = 0; r < rightSubs.length && !found; r++) {
+    const b = rightSubs[r].sum;
+    const need = S - b;
+    // binary search in leftSorted for need
+    let lo = 0, hi = leftSorted.length - 1, hit = -1;
+    while (lo <= hi) {
+      const m = (lo + hi) >> 1;
+      if (leftSorted[m].sum === need) { hit = m; break; }
+      if (leftSorted[m].sum < need) lo = m + 1; else hi = m - 1;
+    }
+    if (hit >= 0) {
+      steps.push({
+        phase: "combine",
+        desc: "Right b = " + b + " (sum of right subset). Need left = S - b = " + S + " - " + b +
+          " = " + need + ". Found " + need + " in the sorted left list — the halves MEET! Subset exists.",
+        leftRevealed: leftSubs.length, rightRevealed: rightSubs.length,
+        leftSorted: true, cursorL: hit, cursorR: r, matchL: hit, matchR: r,
+        b: b, need: need, found: true,
+        witnessLeftMask: leftSorted[hit].mask, witnessRightMask: rightSubs[r].mask,
+        leftItemsLen: leftItems.length, rightItemsLen: rightItems.length, mid: mid
+      });
+      found = true;
+    } else {
+      steps.push({
+        phase: "combine",
+        desc: "Right b = " + b + ". Need left = S - b = " + need +
+          (need < 0 ? " (negative — no non-negative subset matches)." : " — not in the left list. Move on."),
+        leftRevealed: leftSubs.length, rightRevealed: rightSubs.length,
+        leftSorted: true, cursorL: -1, cursorR: r, matchL: -1, matchR: -1,
+        b: b, need: need, found: false
+      });
+    }
+  }
+
+  if (!found) {
+    steps.push({
+      phase: "done",
+      desc: "Scanned every right value; no complement S - b was found in the left list. No subset sums to " + S + ".",
+      leftRevealed: leftSubs.length, rightRevealed: rightSubs.length,
+      leftSorted: true, cursorL: -1, cursorR: -1, matchL: -1, matchR: -1, found: false
+    });
+  } else {
+    steps.push({
+      phase: "done",
+      desc: "Done. A subset summing to " + S + " exists — found where the left and right halves meet.",
+      leftRevealed: leftSubs.length, rightRevealed: rightSubs.length,
+      leftSorted: true, cursorL: -1, cursorR: -1, matchL: -1, matchR: -1, found: true
+    });
+  }
+
+  return { steps, mid, leftItems, rightItems, leftSubs, rightSubs, leftSorted, S };
+}
+
+// ---------- Render helpers ----------
+function renderArray(plan, step) {
+  const row = document.getElementById("arrRow");
+  row.innerHTML = "";
+  const arr = state.arr;
+  const mid = plan.mid;
+  const selLeftMask = step.selLeftMask || 0;
+  const selRightMask = step.selRightMask || 0;
+  // witness masks (on match) take priority
+  const wL = step.witnessLeftMask || 0;
+  const wR = step.witnessRightMask || 0;
+  for (let i = 0; i < arr.length; i++) {
+    if (i === mid) {
+      const sm = document.createElement("div");
+      sm.className = "splitMark";
+      row.appendChild(sm);
+    }
+    const c = document.createElement("div");
+    c.className = "cell " + (i < mid ? "left" : "right");
+    let selected = false;
+    if (i < mid) {
+      if ((selLeftMask >> i) & 1) { c.classList.add("sel-left"); selected = true; }
+      if (step.found && ((wL >> i) & 1)) { c.classList.add("sel-left"); selected = true; }
+    } else {
+      const bit = i - mid;
+      if ((selRightMask >> bit) & 1) { c.classList.add("sel-right"); selected = true; }
+      if (step.found && ((wR >> bit) & 1)) { c.classList.add("sel-right"); selected = true; }
+    }
+    c.textContent = arr[i];
+    row.appendChild(c);
+  }
+}
+
+function renderSums(plan, step) {
+  const leftEl = document.getElementById("leftSums");
+  const rightEl = document.getElementById("rightSums");
+  leftEl.innerHTML = "";
+  rightEl.innerHTML = "";
+
+  const leftList = step.leftSorted ? plan.leftSorted : plan.leftSubs;
+  for (let i = 0; i < leftList.length; i++) {
+    const chip = document.createElement("div");
+    chip.className = "chip leftc";
+    if (i >= step.leftRevealed && !step.leftSorted) chip.classList.add("dim");
+    if (step.highlightLeftIdx === i) chip.classList.add("cursor");
+    if (step.cursorL === i) chip.classList.add("cursor");
+    if (step.matchL === i) { chip.classList.remove("cursor"); chip.classList.add("match"); }
+    chip.innerHTML = leftList[i].sum + "<div class='mask'>{" +
+      maskToIndices(leftList[i].mask, 0, plan.leftItems.length).join(",") + "}</div>";
+    leftEl.appendChild(chip);
+  }
+
+  for (let i = 0; i < plan.rightSubs.length; i++) {
+    const chip = document.createElement("div");
+    chip.className = "chip rightc";
+    if (i >= step.rightRevealed) chip.classList.add("dim");
+    if (step.highlightRightIdx === i) chip.classList.add("cursorR");
+    if (step.cursorR === i) chip.classList.add("cursorR");
+    if (step.matchR === i) { chip.classList.remove("cursorR"); chip.classList.add("match"); }
+    chip.innerHTML = plan.rightSubs[i].sum + "<div class='mask'>{" +
+      maskToIndices(plan.rightSubs[i].mask, plan.mid, plan.rightItems.length).join(",") + "}</div>";
+    rightEl.appendChild(chip);
+  }
+}
+
+function renderInterp(plan, step) {
+  const box = document.getElementById("combineInterp");
+  if (step.phase === "combine" || step.phase === "done") {
+    if (step.found && step.b !== undefined) {
+      box.innerHTML = "Right <span class='r'>b = " + step.b + "</span> &nbsp;&rarr;&nbsp; need left a = S &minus; b = <b>" +
+        plan.S + " &minus; " + step.b + " = " + step.need + "</b> &nbsp;&rarr;&nbsp; <span class='val'>FOUND</span>. " +
+        "The two halves meet: a + b = " + step.need + " + " + step.b + " = " + plan.S + ".";
+    } else if (step.b !== undefined) {
+      box.innerHTML = "Right <span class='r'>b = " + step.b + "</span> &nbsp;&rarr;&nbsp; need left a = S &minus; b = <b>" +
+        plan.S + " &minus; " + step.b + " = " + step.need + "</b> &nbsp;&rarr;&nbsp; not found, keep scanning.";
+    } else {
+      box.innerHTML = step.found
+        ? "<span class='val'>A matching pair was found.</span> A subset summing to " + plan.S + " exists."
+        : "No matching complement found in any right value. No subset sums to " + plan.S + ".";
+    }
+  } else if (step.phase === "sort") {
+    box.innerHTML = "Left list sorted ascending. Now binary-search it for each right complement S &minus; b.";
+  } else {
+    box.innerHTML = "Enumerating subset sums. Each chip shows a subset sum and the chosen indices.";
+  }
+}
+
+function applyStep(step) {
+  document.getElementById("phaseTag").textContent =
+    { split: "split", enumL: "enumerate left", enumR: "enumerate right", sort: "sort left", combine: "combine", done: "done" }[step.phase] || step.phase;
+  document.getElementById("leftExp").textContent = state.plan.leftItems.length;
+  document.getElementById("rightExp").textContent = state.plan.rightItems.length;
+  renderArray(state.plan, step);
+  renderSums(state.plan, step);
+  renderInterp(state.plan, step);
+}
+
+// ---------- Animation state ----------
+const state = {
+  arr: [],
+  S: 9,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadArray(key, S) {
+  state.arr = ARRAYS[key];
+  state.S = S;
+  state.plan = buildPlan(state.arr, S);
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = state.plan.steps[0].desc;
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  applyStep(step);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+function rebuild() {
+  const key = document.getElementById("arrSel").value;
+  let S = parseInt(document.getElementById("sInput").value, 10);
+  if (isNaN(S)) S = 0;
+  document.getElementById("sInput").value = S;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadArray(key, S);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("arrSel").addEventListener("change", rebuild);
+document.getElementById("sInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
+
