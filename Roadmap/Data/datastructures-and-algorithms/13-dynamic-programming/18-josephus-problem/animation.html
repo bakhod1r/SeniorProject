@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Josephus Problem — Circle Elimination</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 78px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; margin: 0 auto; }
+  circle.person { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; transition: all 0.25s ease; }
+  circle.person.dead { fill: #2a1416; stroke: var(--bad); opacity: 0.35; }
+  circle.person.survivor { fill: rgba(63,185,80,0.30); stroke: var(--good); stroke-width: 3; }
+  circle.person.pointer { stroke: var(--accent-2); stroke-width: 4; }
+  text.plabel { fill: #fff; font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  text.plabel.dead { fill: var(--muted); }
+  .stat {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .stat .box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 12px;
+  }
+  .stat .box b { color: var(--accent); }
+  .stat .box .v { color: var(--good); font-weight: 700; }
+  .order-list {
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    min-height: 44px;
+    word-spacing: 4px;
+    line-height: 1.9;
+  }
+  .order-list .chip {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--bad);
+    color: var(--bad);
+    border-radius: 5px;
+    padding: 1px 7px;
+    margin: 2px;
+  }
+  .order-list .surv {
+    border-color: var(--good);
+    color: var(--good);
+    background: rgba(63,185,80,0.12);
+  }
+  .formula {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-top: 12px;
+  }
+  .formula .hl { color: var(--accent-2); }
+  .formula .val { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>The Josephus Problem — Every k-th Person Eliminated</h1>
+  <p>n people stand in a circle; counting k at a time, every k-th is eliminated until one survives. Watch the count walk the ring and the survivor emerge — then compare with the recurrence J(n) = (J(n-1) + k) mod n.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>n = <input type="number" id="nInput" value="7" min="1" max="24" /></label>
+    <label>k = <input type="number" id="kInput" value="2" min="1" max="12" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>The circle (current count <span id="curPow">0</span> / k)</h2>
+      <svg id="circleSvg" width="360" height="360" viewBox="0 0 360 360"></svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> alive</span>
+        <span><span class="swatch" style="background:#2a1416;border-color:var(--bad);opacity:0.6"></span> eliminated</span>
+        <span><span class="swatch" style="border-color:var(--accent-2)"></span> counting pointer</span>
+        <span><span class="swatch" style="background:rgba(63,185,80,0.3);border-color:var(--good)"></span> survivor</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Status</h2>
+      <div class="stat">
+        <div class="box"><b>remaining</b><br><span class="v" id="remaining">7</span></div>
+        <div class="box"><b>eliminated</b><br><span class="v" id="elimCount">0</span></div>
+        <div class="box"><b>survivor</b><br><span class="v" id="survivorBox">?</span></div>
+      </div>
+      <h2 style="margin-top:16px;">Elimination order</h2>
+      <div class="order-list" id="orderList"></div>
+      <div class="formula" id="formulaBox"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Counting starts at person 1; we move k people and eliminate whoever we land on, then resume from the next survivor.</div>
+
+  <div class="footnote">
+    Self-contained visualization. People are 1-indexed seats. The survivor matches the recurrence
+    <code>J(n) = (J(n-1) + k) mod n</code> with <code>J(1) = 0</code> (add 1 for the 1-indexed seat),
+    and for <code>k = 2</code> the closed form <code>2·(n − 2^&#8970;log&#8322; n&#8971;) + 1</code>. See <code>junior.md</code> and <code>professional.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the full elimination plan by simulation ----------
+// We pre-simulate the whole process and record discrete sub-steps so the
+// animation can step/replay deterministically. Each "tick" advances the
+// counting pointer by one person; every k ticks an elimination happens.
+function buildPlan(n, k) {
+  // alive[i] = true if seat (i+1) is still in the circle (0-indexed internally)
+  const alive = new Array(n).fill(true);
+  const steps = [];
+  const order = [];      // 1-indexed elimination order
+  let remaining = n;
+  let pos = 0;           // 0-indexed position of the counting pointer (start before seat 1)
+
+  // helper: advance pos to the next alive seat (inclusive search forward)
+  function nextAlive(from) {
+    let p = from;
+    while (!alive[p]) p = (p + 1) % n;
+    return p;
+  }
+
+  // record the initial state
+  steps.push({
+    type: "init",
+    alive: alive.slice(),
+    pointer: 0,
+    count: 0,
+    order: order.slice(),
+    remaining: remaining,
+    desc: "Start: " + n + " people in a circle, step k = " + k + ". Counting begins at person 1."
+  });
+
+  // The pointer starts "just before" seat 0 so the first counted person is seat 0.
+  let pointer = -1; // will become 0 on first count
+  while (remaining > 1) {
+    // count k alive people forward, recording each individual count tick
+    let counted = 0;
+    let p = pointer;
+    while (counted < k) {
+      p = (p + 1) % n;
+      if (alive[p]) {
+        counted++;
+        steps.push({
+          type: "count",
+          alive: alive.slice(),
+          pointer: p,
+          count: counted,
+          order: order.slice(),
+          remaining: remaining,
+          desc: "Count " + counted + (counted === k ? " → this person is eliminated." : " of " + k + " …")
+        });
+      }
+    }
+    // p is the k-th alive person → eliminate
+    alive[p] = false;
+    remaining--;
+    order.push(p + 1); // 1-indexed
+    pointer = p;       // resume counting from here (next count moves forward)
+    steps.push({
+      type: "eliminate",
+      alive: alive.slice(),
+      pointer: p,
+      count: 0,
+      order: order.slice(),
+      remaining: remaining,
+      desc: "Person " + (p + 1) + " is eliminated. " + remaining + " remain. Counting resumes from the next survivor."
+    });
+  }
+
+  // survivor
+  let surv = alive.indexOf(true) + 1;
+  steps.push({
+    type: "done",
+    alive: alive.slice(),
+    pointer: surv - 1,
+    count: 0,
+    order: order.slice(),
+    remaining: 1,
+    survivor: surv,
+    desc: "Done. Person " + surv + " survives. (Recurrence and closed form agree below.)"
+  });
+
+  return { steps, survivor: surv, order };
+}
+
+// ---------- Recurrence and k=2 closed form for the formula panel ----------
+// The recurrence below is the same O(n) dynamic program described in junior.md:
+// J(1) = 0, J(n) = (J(n-1) + k) mod n. It returns the 0-indexed survivor, which
+// we display alongside the simulated result so the two always agree.
+function josephusRecurrence(n, k) {
+  let res = 0;             // J(1) = 0
+  for (let m = 2; m <= n; m++) {
+    res = (res + k) % m;   // shift by k and wrap around the growing circle
+  }
+  return res;              // 0-indexed survivor; add 1 for a seat number
+}
+
+// The k = 2 closed form: 2*(n - 2^floor(log2 n)) + 1, equivalently a one-bit
+// cyclic rotation of n's binary string (move the leading 1 to the end).
+function josephus2Closed(n) {
+  let L = 1;
+  while (L * 2 <= n) {
+    L *= 2;                // L = largest power of two <= n
+  }
+  return 2 * (n - L) + 1;  // 1-indexed survivor seat
+}
+
+// ---------- Geometry ----------
+function seatPos(i, n, cx, cy, r) {
+  // place seat i (0-indexed) starting at top, going clockwise
+  const ang = -Math.PI / 2 + (2 * Math.PI * i) / n;
+  return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)];
+}
+
+// ---------- Render ----------
+function renderCircle(step) {
+  const svg = document.getElementById("circleSvg");
+  svg.innerHTML = "";
+  const n = state.n;
+  const cx = 180, cy = 180, r = 130;
+  const ns = "http://www.w3.org/2000/svg";
+
+  // connecting ring (light guide)
+  const ring = document.createElementNS(ns, "circle");
+  ring.setAttribute("cx", cx); ring.setAttribute("cy", cy);
+  ring.setAttribute("r", r);
+  ring.setAttribute("fill", "none");
+  ring.setAttribute("stroke", "#30363d");
+  ring.setAttribute("stroke-dasharray", "3 5");
+  svg.appendChild(ring);
+
+  for (let i = 0; i < n; i++) {
+    const [x, y] = seatPos(i, n, cx, cy, r);
+    const c = document.createElementNS(ns, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 18);
+    let cls = "person";
+    if (!step.alive[i]) cls += " dead";
+    if (step.type === "done" && step.survivor === i + 1) cls += " survivor";
+    if ((step.type === "count" || step.type === "eliminate") && step.pointer === i && step.alive[i]) cls += " pointer";
+    if (step.type === "done" && step.survivor === i + 1) cls += " pointer";
+    c.setAttribute("class", cls);
+    svg.appendChild(c);
+
+    const t = document.createElementNS(ns, "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 5);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", step.alive[i] ? "plabel" : "plabel dead");
+    t.textContent = i + 1; // 1-indexed seat
+    svg.appendChild(t);
+  }
+}
+
+function renderOrder(step) {
+  const el = document.getElementById("orderList");
+  if (step.order.length === 0 && step.type !== "done") {
+    el.innerHTML = "<span style='color:var(--muted)'>(none yet)</span>";
+    return;
+  }
+  let html = "";
+  for (const x of step.order) {
+    html += "<span class='chip'>" + x + "</span>";
+  }
+  if (step.type === "done") {
+    html += "<span class='chip surv'>" + step.survivor + " ✓</span>";
+  }
+  el.innerHTML = html;
+}
+
+function renderStats(step) {
+  document.getElementById("remaining").textContent = step.remaining;
+  document.getElementById("elimCount").textContent = step.order.length;
+  document.getElementById("curPow").textContent = step.count;
+  document.getElementById("survivorBox").textContent =
+    step.type === "done" ? step.survivor : "?";
+}
+
+function renderFormula() {
+  const n = state.n, k = state.k;
+  const rec0 = josephusRecurrence(n, k);
+  let html = "Recurrence: <span class='hl'>J(" + n + ") = " + rec0 +
+    "</span> (0-indexed) → seat <span class='val'>" + (rec0 + 1) + "</span>";
+  if (k === 2) {
+    let L = 1;
+    while (L * 2 <= n) L *= 2;
+    html += "<br>k = 2 closed form: 2·(" + n + " − " + L + ") + 1 = <span class='val'>" +
+      josephus2Closed(n) + "</span> &nbsp;(2<sup>⌊log₂ " + n + "⌋</sup> = " + L + ")";
+    html += "<br>binary: " + n.toString(2) + "₂ → rotate leading 1 to end → " +
+      josephus2Closed(n).toString(2) + "₂ = " + josephus2Closed(n);
+  } else {
+    html += "<br><span style='color:var(--muted)'>(closed form shown only for k = 2)</span>";
+  }
+  document.getElementById("formulaBox").innerHTML = html;
+}
+
+// ---------- State ----------
+const state = {
+  n: 7,
+  k: 2,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load(n, k) {
+  state.n = n;
+  state.k = k;
+  state.plan = buildPlan(n, k);
+  state.stepIdx = 0;
+  applyStep(0);
+  renderFormula();
+  updateButtons();
+}
+
+function applyStep(idx) {
+  const step = state.plan.steps[idx];
+  renderCircle(step);
+  renderOrder(step);
+  renderStats(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(idx);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild(); // restart from the top if at the end
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 750);
+}
+
+function rebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  let k = parseInt(document.getElementById("kInput").value, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  if (n > 24) n = 24;
+  if (isNaN(k) || k < 1) k = 1;
+  if (k > 12) k = 12;
+  document.getElementById("nInput").value = n;
+  document.getElementById("kInput").value = k;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  load(n, k);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("kInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
