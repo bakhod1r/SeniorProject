@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Matrix Chain Multiplication — Interval DP Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-left: rgba(88, 166, 255, 0.22);
+    --hi-right: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --hi-try: rgba(248, 81, 73, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 180px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 56px;
+    height: 40px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .matrix td.empty { color: #30363d; }
+  .matrix td.diag { color: var(--muted); }
+  .matrix td.hleft { background: var(--hi-left); }
+  .matrix td.hright { background: var(--hi-right); }
+  .matrix td.htry { background: var(--hi-try); }
+  .matrix td.hcell { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .matrix td.filled { color: var(--good); }
+  .dims {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    margin: 4px 0 12px;
+  }
+  .dims b { color: var(--accent-2); }
+  .calc {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-top: 12px;
+    min-height: 64px;
+  }
+  .calc .term { color: var(--accent); }
+  .calc .val { color: var(--good); font-weight: 700; }
+  .calc .lose { color: var(--muted); }
+  .calc .win { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .parens {
+    font-family: var(--mono);
+    font-size: 18px;
+    color: var(--good);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 12px 14px;
+    margin-top: 12px;
+    word-break: break-all;
+    min-height: 24px;
+  }
+  .splittab { margin-top: 8px; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .badge { display:inline-block; padding:2px 7px; border:1px solid var(--border); border-radius: 5px; font-family: var(--mono); font-size: 12px; color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Matrix Chain Multiplication — Filling the Interval DP Table</h1>
+  <p>dp[i][j] = min over k of ( dp[i][k] + dp[k+1][j] + p[i-1]&middot;p[k]&middot;p[j] ). Watch the table fill by increasing chain length, the split point k that wins, and the reconstructed parenthesization.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="40,20,30,10,30">[40,20,30,10,30] (n=4)</option>
+        <option value="10,20,30">[10,20,30] (n=2)</option>
+        <option value="5,4,6,2,7">[5,4,6,2,7] (n=4)</option>
+        <option value="10,30,5,60">[10,30,5,60] (n=3)</option>
+        <option value="30,35,15,5,10,20,25">[30,35,15,5,10,20,25] (n=6)</option>
+      </select>
+    </label>
+    <label>p = <input type="text" id="pInput" value="40,20,30,10,30" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>dp table (cost) &mdash; chain length L = <span id="curL">-</span></h2>
+      <div class="dims" id="dimsLine"></div>
+      <table class="matrix" id="dpTable"></table>
+      <div class="calc" id="calcBox">Press <b>Step</b> to begin filling the table by increasing chain length.</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-left)"></span> left sub-chain dp[i][k]</span>
+        <span><span class="swatch" style="background:var(--hi-right)"></span> right sub-chain dp[k+1][j]</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> current dp[i][j]</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>split table &amp; reconstruction</h2>
+      <table class="matrix splittab" id="splitTable"></table>
+      <div class="step-counter" id="resultInfo" style="margin-top:14px;"></div>
+      <div class="parens" id="parensBox">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We fill dp diagonal by diagonal: length-1 intervals cost 0, then length 2, 3, &hellip; up to the whole chain. Each cell tries every split k and keeps the minimum.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Matrices are 1-indexed: matrix <code>Aᵢ</code> has shape <code>p[i-1] &times; p[j]</code>; multiplying <code>p&times;q</code> by <code>q&times;r</code> costs <code>p&middot;q&middot;r</code>.
+    The diagonal dp[i][i] = 0. The split table records the winning k for reconstruction. See <code>junior.md</code> and <code>professional.md</code> for the optimal-substructure proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Core MCM with a recorded step plan ----------
+// We build a list of discrete animation steps as the bottom-up DP runs.
+// Step types: "init", "try" (evaluate a split k), "commit" (record best for [i][j]),
+// "done" (table complete + reconstruction).
+
+function buildPlan(p) {
+  const n = p.length - 1;                       // number of matrices
+  const dp = [];
+  const split = [];
+  for (let i = 0; i <= n; i++) {
+    dp.push(new Array(n + 1).fill(0));
+    split.push(new Array(n + 1).fill(0));
+  }
+  const steps = [];
+
+  steps.push({
+    type: "init",
+    L: 1,
+    dp: clone(dp),
+    split: clone(split),
+    desc: "Base case: every single matrix Aᵢ costs 0 to 'multiply' (dp[i][i] = 0). These are the diagonal entries."
+  });
+
+  for (let L = 2; L <= n; L++) {                // chain length
+    for (let i = 1; i + L - 1 <= n; i++) {      // left endpoint
+      const j = i + L - 1;
+      let best = Infinity;
+      let bestK = i;
+      for (let k = i; k < j; k++) {             // split point
+        const term = p[i - 1] * p[k] * p[j];
+        const cost = dp[i][k] + dp[k + 1][j] + term;
+        steps.push({
+          type: "try",
+          L: L, i: i, j: j, k: k,
+          left: dp[i][k], right: dp[k + 1][j], term: term, cost: cost,
+          curBest: best,
+          improves: cost < best,
+          dp: clone(dp),
+          split: clone(split),
+          desc: "Interval [" + i + "," + j + "], try split k=" + k + ": dp[" + i + "][" + k +
+                "]=" + dp[i][k] + " + dp[" + (k + 1) + "][" + j + "]=" + dp[k + 1][j] +
+                " + p[" + (i - 1) + "]·p[" + k + "]·p[" + j + "]=" + term + "  =  " + cost +
+                (cost < best ? "  ← new best" : "  (not better than " + (best === Infinity ? "∞" : best) + ")")
+        });
+        if (cost < best) { best = cost; bestK = k; }
+      }
+      dp[i][j] = best;
+      split[i][j] = bestK;
+      steps.push({
+        type: "commit",
+        L: L, i: i, j: j, k: bestK, cost: best,
+        dp: clone(dp),
+        split: clone(split),
+        desc: "Commit dp[" + i + "][" + j + "] = " + best + " with split k=" + bestK +
+              ". Record split[" + i + "][" + j + "]=" + bestK + " for reconstruction."
+      });
+    }
+  }
+
+  const order = reconstruct(split, 1, n);
+  steps.push({
+    type: "done",
+    L: n,
+    dp: clone(dp),
+    split: clone(split),
+    cost: n >= 1 ? dp[1][n] : 0,
+    order: order,
+    desc: "Done. Minimum cost = dp[1][" + n + "] = " + (n >= 1 ? dp[1][n] : 0) +
+          ". Reconstructed optimal parenthesization: " + order + "."
+  });
+
+  return { steps, n, p };
+}
+
+function reconstruct(split, i, j) {
+  if (i === j) return "A" + i;
+  const k = split[i][j];
+  return "(" + reconstruct(split, i, k) + reconstruct(split, k + 1, j) + ")";
+}
+
+function clone(m) { return m.map(r => r.slice()); }
+
+// ---------- Rendering ----------
+function renderDP(table, step, n) {
+  let html = "<tr><th></th>";
+  for (let j = 1; j <= n; j++) html += "<th>j=" + j + "</th>";
+  html += "</tr>";
+  for (let i = 1; i <= n; i++) {
+    html += "<tr><th>i=" + i + "</th>";
+    for (let j = 1; j <= n; j++) {
+      let cls = "";
+      let val = "";
+      if (j < i) {
+        cls = "empty";
+        val = "·";
+      } else if (i === j) {
+        cls = "diag";
+        val = "0";
+      } else {
+        // is this cell computed yet?
+        const computed = cellComputed(step, i, j, n);
+        val = computed ? step.dp[i][j] : "";
+        if (computed) cls = "filled";
+        if (val === "" ) val = "·", cls = "empty";
+      }
+      // highlight current activity
+      if (step.type === "try" || step.type === "commit") {
+        if (i === step.i && j === step.j) cls = "hcell";
+      }
+      // highlight the two sub-chains being read on a "try" step
+      if (step.type === "try") {
+        if (i === step.i && j === step.k) cls = "hleft";
+        if (i === step.k + 1 && j === step.j) cls = "hright";
+      }
+      html += "<td class='" + cls + "'>" + val + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+// A cell [i][j] is "computed" if it has been committed before/at the current step.
+// We approximate by: diagonal always; otherwise committed if dp value set AND
+// its chain-length already fully processed, OR it is the current cell mid-try.
+function cellComputed(step, i, j, n) {
+  if (i === j) return true;
+  const L = j - i + 1;
+  if (step.type === "init") return false;
+  if (step.type === "done") return true;
+  // committed if its length is strictly less than current L,
+  // or same L but endpoint already passed, or it's the current cell after commit.
+  if (L < step.L) return true;
+  if (L === step.L) {
+    if (i < step.i) return true;
+    if (i === step.i && step.type === "commit") return true;
+  }
+  return false;
+}
+
+function renderSplit(table, step, n) {
+  let html = "<tr><th></th>";
+  for (let j = 1; j <= n; j++) html += "<th>" + j + "</th>";
+  html += "</tr>";
+  for (let i = 1; i <= n; i++) {
+    html += "<tr><th>" + i + "</th>";
+    for (let j = 1; j <= n; j++) {
+      let cls = "";
+      let val = "·";
+      if (j <= i) {
+        cls = "empty";
+      } else if (cellComputed(step, i, j, n)) {
+        val = "k=" + step.split[i][j];
+        cls = "filled";
+        if ((step.type === "commit") && i === step.i && j === step.j) cls = "hcell";
+      } else {
+        cls = "empty";
+      }
+      html += "<td class='" + cls + "'>" + val + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function renderCalc(step) {
+  const box = document.getElementById("calcBox");
+  if (step.type === "try") {
+    box.innerHTML =
+      "Interval <b>[" + step.i + "," + step.j + "]</b>, split <b>k=" + step.k + "</b>:<br>" +
+      "<span class='term'>dp[" + step.i + "][" + step.k + "]</span> = " + step.left +
+      " &nbsp;+&nbsp; <span class='term'>dp[" + (step.k + 1) + "][" + step.j + "]</span> = " + step.right +
+      " &nbsp;+&nbsp; <span class='term'>p[" + (step.i - 1) + "]·p[" + step.k + "]·p[" + step.j + "]</span> = " + step.term +
+      "<br>= <span class='" + (step.improves ? "win" : "lose") + "'>" + step.cost + "</span> " +
+      (step.improves ? "&larr; new minimum" : "(current best: " + (step.curBest === Infinity ? "∞" : step.curBest) + ")");
+  } else if (step.type === "commit") {
+    box.innerHTML =
+      "Committed <b>dp[" + step.i + "][" + step.j + "] = <span class='win'>" + step.cost +
+      "</span></b> &nbsp;|&nbsp; best split <b>k=" + step.k + "</b> recorded.";
+  } else if (step.type === "init") {
+    box.innerHTML = "Diagonal initialized: dp[i][i] = 0 for every matrix. Now we grow the chain length.";
+  } else if (step.type === "done") {
+    box.innerHTML = "Final answer: <b>dp[1][" + (step.dp.length - 1) +
+      "] = <span class='win'>" + step.cost + "</span></b>. The split table reconstructs the grouping.";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadPlan(p) {
+  state.plan = buildPlan(p);
+  state.stepIdx = 0;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  document.getElementById("dimsLine").innerHTML = dimsText(p);
+  applyStep();
+  updateButtons();
+}
+
+function dimsText(p) {
+  const n = p.length - 1;
+  let parts = [];
+  for (let i = 1; i <= n; i++) {
+    parts.push("<b>A" + i + "</b>=" + p[i - 1] + "×" + p[i]);
+  }
+  return "p = [" + p.join(",") + "] &nbsp;→&nbsp; " + parts.join(", ");
+}
+
+function applyStep() {
+  const step = state.plan.steps[state.stepIdx];
+  const n = state.plan.n;
+  renderDP(document.getElementById("dpTable"), step, n);
+  renderSplit(document.getElementById("splitTable"), step, n);
+  renderCalc(step);
+  document.getElementById("curL").textContent = step.L || "-";
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1);
+
+  // reconstruction + result panel
+  if (step.type === "done") {
+    document.getElementById("resultInfo").innerHTML =
+      "<span class='badge'>minimum cost = " + step.cost + "</span>";
+    document.getElementById("parensBox").textContent = step.order;
+  } else {
+    document.getElementById("resultInfo").innerHTML =
+      "<span class='badge'>filling table…</span>";
+    document.getElementById("parensBox").textContent = "—";
+  }
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep();
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+function parseDims(str) {
+  const parts = str.split(",").map(s => parseInt(s.trim(), 10)).filter(v => !isNaN(v) && v > 0);
+  return parts;
+}
+
+function rebuild() {
+  let p = parseDims(document.getElementById("pInput").value);
+  if (p.length < 2) p = [40, 20, 30, 10, 30];  // need at least 1 matrix (2 dims)
+  if (p.length > 9) p = p.slice(0, 9);          // keep table readable
+  document.getElementById("pInput").value = p.join(",");
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadPlan(p);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("presetSel").addEventListener("change", () => {
+  document.getElementById("pInput").value = document.getElementById("presetSel").value;
+  rebuild();
+});
+document.getElementById("pInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
