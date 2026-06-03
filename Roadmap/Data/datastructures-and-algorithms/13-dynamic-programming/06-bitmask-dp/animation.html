@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bitmask DP — Held-Karp TSP</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --bit-on: rgba(63, 185, 80, 0.30);
+    --bit-off: rgba(139, 148, 158, 0.12);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .graph-area { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+  .dptable {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+    width: 100%;
+  }
+  .dptable td, .dptable th {
+    border: 1px solid var(--border);
+    padding: 2px 4px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+    min-width: 30px;
+  }
+  .dptable th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .dptable td.inf { color: var(--muted); opacity: 0.45; }
+  .dptable td.src { background: var(--hi-row); }
+  .dptable td.dst { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .dptable tr.popgroup th.maskcell { color: var(--accent-2); }
+  .bits {
+    font-family: var(--mono);
+    letter-spacing: 1px;
+    display: inline-block;
+  }
+  .bits .b { display: inline-block; width: 16px; text-align: center; border-radius: 3px; }
+  .bits .b.on { background: var(--bit-on); color: var(--good); font-weight: 700; }
+  .bits .b.off { background: var(--bit-off); color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .scroll { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  circle.node { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; }
+  circle.node.start { stroke: var(--accent-2); stroke-width: 3; }
+  text.nlabel { fill: #fff; font-size: 14px; font-weight: 700; font-family: var(--mono); }
+  line.edge { stroke: var(--muted); stroke-width: 1.5; }
+  text.elabel { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  line.tour { stroke: var(--good); stroke-width: 3; opacity: 0.9; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .best { color: var(--good); font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bitmask DP — Held-Karp builds the TSP table</h1>
+  <p>dp[mask][last] = cheapest path from city 0 visiting exactly the cities in <b>mask</b>, ending at <b>last</b>. Watch masks fill in popcount order, each transition adding one city.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Graph:
+      <select id="graphSel">
+        <option value="g3">3 cities</option>
+        <option value="g4">4 cities</option>
+        <option value="g4b">4 cities (asymmetric-ish)</option>
+      </select>
+    </label>
+    <label>speed
+      <input type="range" id="speed" min="120" max="1400" value="700" step="20" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Graph &amp; tour so far</h2>
+      <div class="graph-area">
+        <svg id="graphSvg" width="260" height="260" viewBox="0 0 260 260">
+          <g id="edgeLayer"></g>
+          <g id="tourLayer"></g>
+          <g id="nodeLayer"></g>
+        </svg>
+        <div>
+          <div class="step-counter" id="maskCaption">mask = {0}</div>
+          <div class="bits" id="bitView" style="margin:8px 0;"></div>
+          <div class="interp" id="interpBox">
+            Filling <b>dp[mask][last]</b> from smaller masks.
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-row)"></span> source state (mask \\ last)</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> updated state</span>
+        <span><span class="swatch" style="background:var(--bit-on)"></span> bit set (city in mask)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>dp[mask][last] table</h2>
+      <div class="step-counter" id="tableInfo" style="margin-bottom:8px;"></div>
+      <div class="scroll">
+        <table class="dptable" id="dpTable"></table>
+      </div>
+      <div class="step-counter best" id="resultInfo" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We build dp[mask][last] by extending each path with one unvisited city; masks are processed in increasing order so dependencies are always ready.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Held-Karp DP, counting cost in the (min, +) sense. The base case is dp[{0}][0] = 0; the final tour adds dist[last][0].
+    Complexity O(2<sup>n</sup>&middot;n<sup>2</sup>) time, O(2<sup>n</sup>&middot;n) space. See <code>junior.md</code> and <code>professional.md</code> for the recurrence and its proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const INF = Infinity;
+
+// ---------- Graph definitions ----------
+const GRAPHS = {
+  g3: {
+    n: 3,
+    dist: [
+      [0, 10, 15],
+      [10, 0, 20],
+      [15, 20, 0]
+    ],
+    pos: [[60, 50], [200, 90], [110, 210]],
+    name: "3 cities (symmetric)"
+  },
+  g4: {
+    n: 4,
+    dist: [
+      [0, 10, 15, 20],
+      [10, 0, 35, 25],
+      [15, 35, 0, 30],
+      [20, 25, 30, 0]
+    ],
+    pos: [[55, 55], [205, 55], [205, 205], [55, 205]],
+    name: "4 cities (symmetric)"
+  },
+  g4b: {
+    n: 4,
+    dist: [
+      [0, 8, 14, 9],
+      [12, 0, 7, 18],
+      [11, 6, 0, 13],
+      [10, 16, 5, 0]
+    ],
+    pos: [[55, 55], [205, 55], [205, 205], [55, 205]],
+    name: "4 cities (directed costs)"
+  }
+};
+
+// ---------- Build the full Held-Karp step plan ----------
+// Each step records: the (mask,last) source, the (newMask,next) target,
+// the dp snapshot, and a narration. We also emit "begin mask" markers.
+function buildPlan(g) {
+  const n = g.n;
+  const dist = g.dist;
+  const full = (1 << n) - 1;
+  // dp[mask][last]
+  const dp = [];
+  for (let m = 0; m <= full; m++) dp.push(new Array(n).fill(INF));
+  dp[1 << 0][0] = 0;
+
+  const steps = [];
+  steps.push({
+    type: "init",
+    dp: snapshot(dp),
+    mask: 1 << 0,
+    last: 0,
+    desc: "Base case: dp[{0}][0] = 0. The path starts at city 0, only city 0 visited, cost 0. All other entries are ∞."
+  });
+
+  for (let mask = 0; mask <= full; mask++) {
+    if (!(mask & 1)) continue; // every reachable path includes city 0
+    for (let last = 0; last < n; last++) {
+      if (!(mask & (1 << last))) continue;
+      if (dp[mask][last] === INF) continue;
+      for (let next = 0; next < n; next++) {
+        if (mask & (1 << next)) continue;
+        const nm = mask | (1 << next);
+        const cand = dp[mask][last] + dist[last][next];
+        const improved = cand < dp[nm][next];
+        if (improved) dp[nm][next] = cand;
+        steps.push({
+          type: "transition",
+          dp: snapshot(dp),
+          mask: mask, last: last,
+          newMask: nm, next: next,
+          cost: cand, improved: improved,
+          desc: "From dp[" + setStr(mask, n) + "][" + last + "] = " + fmt(cand - dist[last][next]) +
+                ", add city " + next + " (cost " + dist[last][next] + "): candidate " + fmt(cand) +
+                (improved ? " → improves dp[" + setStr(nm, n) + "][" + next + "]." :
+                            " → not better, keep current dp[" + setStr(nm, n) + "][" + next + "].")
+        });
+      }
+    }
+  }
+
+  // close the tour
+  let best = INF, bestLast = -1;
+  for (let last = 1; last < n; last++) {
+    if (dp[full][last] === INF) continue;
+    const c = dp[full][last] + dist[last][0];
+    if (c < best) { best = c; bestLast = last; }
+  }
+  if (n === 1) { best = 0; bestLast = 0; }
+  steps.push({
+    type: "close",
+    dp: snapshot(dp),
+    mask: full, last: bestLast,
+    best: best, bestLast: bestLast,
+    desc: "All cities visited. Close the tour: min over last of dp[full][last] + dist[last][0] = " +
+          fmt(best) + " (via last = " + bestLast + "). That is the optimal tour cost."
+  });
+
+  return { steps, full, n, best, bestLast };
+}
+
+function snapshot(dp) { return dp.map(r => r.slice()); }
+function fmt(v) { return v === INF ? "∞" : String(v); }
+function setStr(mask, n) {
+  const items = [];
+  for (let i = 0; i < n; i++) if (mask & (1 << i)) items.push(i);
+  return "{" + items.join(",") + "}";
+}
+
+// ---------- Render helpers ----------
+function renderBits(mask, n, highlightNext) {
+  const el = document.getElementById("bitView");
+  let html = "city: ";
+  for (let i = n - 1; i >= 0; i--) {
+    const on = (mask & (1 << i)) !== 0;
+    let cls = on ? "b on" : "b off";
+    html += "<span class='" + cls + "' title='city " + i + "'>" + i + "</span>";
+  }
+  html += "<br>bits: ";
+  for (let i = n - 1; i >= 0; i--) {
+    const on = (mask & (1 << i)) !== 0;
+    html += "<span class='b " + (on ? "on" : "off") + "'>" + (on ? 1 : 0) + "</span>";
+  }
+  el.innerHTML = html;
+}
+
+function renderGraph(g, tourEdges, startNode) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  const tourLayer = document.getElementById("tourLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  tourLayer.innerHTML = "";
+  const pos = g.pos;
+  const SVGNS = "http://www.w3.org/2000/svg";
+
+  // base edges (just the upper triangle to avoid clutter)
+  for (let i = 0; i < g.n; i++) {
+    for (let j = i + 1; j < g.n; j++) {
+      const [x1, y1] = pos[i], [x2, y2] = pos[j];
+      const line = document.createElementNS(SVGNS, "line");
+      line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+      line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+      line.setAttribute("class", "edge");
+      edgeLayer.appendChild(line);
+      const t = document.createElementNS(SVGNS, "text");
+      t.setAttribute("x", (x1 + x2) / 2);
+      t.setAttribute("y", (y1 + y2) / 2 - 3);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("class", "elabel");
+      t.textContent = g.dist[i][j];
+      edgeLayer.appendChild(t);
+    }
+  }
+
+  // highlighted tour-so-far edges
+  (tourEdges || []).forEach(([a, b]) => {
+    const [x1, y1] = pos[a], [x2, y2] = pos[b];
+    const line = document.createElementNS(SVGNS, "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.setAttribute("class", "tour");
+    tourLayer.appendChild(line);
+  });
+
+  for (let i = 0; i < g.n; i++) {
+    const [x, y] = pos[i];
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 17);
+    c.setAttribute("class", i === 0 ? "node start" : "node");
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 5);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "nlabel");
+    t.textContent = i;
+    nodeLayer.appendChild(t);
+  }
+}
+
+function popcount(x) { let c = 0; while (x) { c += x & 1; x >>= 1; } return c; }
+
+function renderTable(step, n, full) {
+  const table = document.getElementById("dpTable");
+  const dp = step.dp;
+  let html = "<tr><th>mask</th>";
+  for (let j = 0; j < n; j++) html += "<th>last=" + j + "</th></tr>";
+  // group rows by popcount so the "fill in popcount order" idea is visible
+  const order = [];
+  for (let m = 0; m <= full; m++) if (m & 1) order.push(m);
+  order.sort((a, b) => popcount(a) - popcount(b) || a - b);
+  let lastPop = -1;
+  for (const m of order) {
+    const pop = popcount(m);
+    const groupCls = (pop !== lastPop) ? "popgroup" : "";
+    lastPop = pop;
+    html += "<tr class='" + groupCls + "'><th class='maskcell'>" + setStr(m, n) + "</th>";
+    for (let j = 0; j < n; j++) {
+      let cls = "";
+      const v = dp[m][j];
+      if (v === INF) cls = "inf";
+      // highlight the source and target cells of the current step
+      if (step.type === "transition") {
+        if (m === step.mask && j === step.last) cls += " src";
+        if (m === step.newMask && j === step.next) cls += " dst";
+      } else if (step.type === "init") {
+        if (m === step.mask && j === step.last) cls += " dst";
+      } else if (step.type === "close") {
+        if (m === step.mask && j === step.last) cls += " dst";
+      }
+      html += "<td class='" + cls.trim() + "'>" + fmt(v) + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+// reconstruct the "tour so far" edges to draw on the graph for a transition
+function tourEdgesForStep(step) {
+  // For a transition we draw the single extending edge (last -> next).
+  if (step.type === "transition") return [[step.last, step.next]];
+  if (step.type === "close" && step.bestLast >= 0) return [[step.bestLast, 0]];
+  return [];
+}
+
+// ---------- Animation state ----------
+const state = {
+  g: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadGraph(key) {
+  state.g = GRAPHS[key];
+  state.plan = buildPlan(state.g);
+  state.stepIdx = 0;
+  applyStep();
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  updateButtons();
+}
+
+function applyStep() {
+  const plan = state.plan;
+  const step = plan.steps[state.stepIdx];
+  const n = state.g.n;
+  renderTable(step, n, plan.full);
+  renderGraph(state.g, tourEdgesForStep(step), 0);
+
+  // mask view: show the mask currently being read/written
+  const showMask = (step.type === "transition") ? step.newMask : step.mask;
+  renderBits(showMask, n, step.next);
+  document.getElementById("maskCaption").innerHTML =
+    "mask = " + setStr(showMask, n) + "  (popcount " + popcount(showMask) + ")";
+
+  document.getElementById("tableInfo").textContent =
+    state.g.name + " — masks grouped by popcount (top = fewest cities visited)";
+
+  if (step.type === "transition") {
+    document.getElementById("interpBox").innerHTML =
+      "Transition: dp[<b>" + setStr(step.mask, n) + "</b>][" + step.last + "] + dist[" +
+      step.last + "][" + step.next + "] = <span class='val'>" + fmt(step.cost) +
+      "</span> → dp[" + setStr(step.newMask, n) + "][" + step.next + "]" +
+      (step.improved ? " (improved)" : " (kept)");
+  } else if (step.type === "init") {
+    document.getElementById("interpBox").innerHTML =
+      "Base case <b>dp[{0}][0] = 0</b>. Everything else starts at ∞.";
+  } else {
+    document.getElementById("interpBox").innerHTML =
+      "Closing the tour back to city 0.";
+  }
+
+  document.getElementById("resultInfo").innerHTML =
+    (step.type === "close")
+      ? "Optimal tour cost = " + fmt(step.best) + " (close via last = " + step.bestLast + ")"
+      : "result: pending — finish all masks to close the tour.";
+
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    state.stepIdx = 0;
+    applyStep();
+  }
+  state.running = true;
+  updateButtons();
+  const delay = parseInt(document.getElementById("speed").value, 10) || 700;
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, delay);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadGraph(document.getElementById("graphSel").value);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("graphSel").addEventListener("change", rebuild);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); run(); }
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
