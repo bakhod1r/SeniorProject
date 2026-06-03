@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Edit Distance — Levenshtein DP Matrix and Traceback</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --match: rgba(63, 185, 80, 0.40);
+    --sub: rgba(210, 153, 34, 0.40);
+    --del: rgba(248, 81, 73, 0.38);
+    --ins: rgba(88, 166, 255, 0.38);
+    --hi-diag: rgba(210, 153, 34, 0.22);
+    --hi-up: rgba(248, 81, 73, 0.20);
+    --hi-left: rgba(88, 166, 255, 0.20);
+    --hi-cell: rgba(255, 255, 255, 0.16);
+    --path: rgba(63, 185, 80, 0.55);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 130px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 34px;
+    height: 34px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.18s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 700; background: var(--panel-2); }
+  .matrix td.empty { color: var(--muted); }
+  .matrix td.hdiag { background: var(--hi-diag); }
+  .matrix td.hup { background: var(--hi-up); }
+  .matrix td.hleft { background: var(--hi-left); }
+  .matrix td.cur { background: var(--hi-cell); color: #fff; font-weight: 700; outline: 2px solid var(--accent); }
+  .matrix td.path { background: var(--path); color: #fff; font-weight: 700; }
+  .matrix td.pmatch { box-shadow: inset 0 0 0 3px var(--good); }
+  .matrix td.psub { box-shadow: inset 0 0 0 3px var(--accent-2); }
+  .matrix td.pdel { box-shadow: inset 0 0 0 3px var(--bad); }
+  .matrix td.pins { box-shadow: inset 0 0 0 3px var(--accent); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .strings { font-family: var(--mono); font-size: 15px; margin: 4px 0 12px; }
+  .strings .lab { color: var(--muted); }
+  .script {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .op {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .op .tag { min-width: 78px; font-weight: 700; }
+  .op.match .tag { color: var(--good); }
+  .op.sub .tag { color: var(--accent-2); }
+  .op.del .tag { color: var(--bad); }
+  .op.ins .tag { color: var(--accent); }
+  .align { font-family: var(--mono); font-size: 16px; letter-spacing: 2px; margin-top: 12px; }
+  .align .g { color: var(--bad); }
+  .align .m { color: var(--good); }
+  .align .x { color: var(--accent-2); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .result { font-family: var(--mono); font-size: 14px; color: var(--good); font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Edit Distance — Filling the Levenshtein DP Matrix and Tracing the Edit Script</h1>
+  <p>dp[i][j] = edit distance between the first i chars of A and the first j chars of B. Watch the matrix fill cell by cell, then trace back the match / insert / delete / substitute operations.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="kitten">kitten &rarr; sitting</option>
+        <option value="horse">horse &rarr; ros</option>
+        <option value="sunday">sunday &rarr; saturday</option>
+        <option value="teh">teh &rarr; the</option>
+      </select>
+    </label>
+    <label>A = <input type="text" id="aInput" value="kitten" maxlength="12" /></label>
+    <label>B = <input type="text" id="bInput" value="sitting" maxlength="12" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>DP matrix (A down the rows, B across the columns)</h2>
+      <div class="strings">
+        <span class="lab">A =</span> <span id="aShow"></span>
+        &nbsp;&nbsp; <span class="lab">B =</span> <span id="bShow"></span>
+      </div>
+      <table class="matrix" id="dpMat"></table>
+      <div class="interp" id="interpBox">
+        Each interior cell takes <b>dp[i-1][j-1]</b> (match/substitute), <b>dp[i-1][j]+1</b> (delete), or <b>dp[i][j-1]+1</b> (insert).
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-diag)"></span> diagonal (sub/match)</span>
+        <span><span class="swatch" style="background:var(--hi-up)"></span> up (delete)</span>
+        <span><span class="swatch" style="background:var(--hi-left)"></span> left (insert)</span>
+        <span><span class="swatch" style="background:var(--path)"></span> traceback path</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Edit script (traceback)</h2>
+      <div class="step-counter" id="distInfo"></div>
+      <div class="align" id="alignBox"></div>
+      <div class="script" id="scriptBox"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We fill the matrix row by row; each cell reads its three neighbors. After the corner is reached, we trace back to recover the edit operations.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Unit-cost Levenshtein distance (insert / delete / substitute each cost 1; a match is free).
+    The answer is the bottom-right cell <code>dp[n][m]</code>. See <code>junior.md</code> and <code>professional.md</code> for the proof that each cell is the optimal cost of aligning two prefixes.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Presets ----------
+const PRESETS = {
+  kitten: ["kitten", "sitting"],
+  horse: ["horse", "ros"],
+  sunday: ["sunday", "saturday"],
+  teh: ["teh", "the"]
+};
+
+// ---------- Build the full step plan ----------
+// Phase 1: fill each interior cell one at a time (record the three neighbors).
+// Phase 2: traceback from (n,m) to (0,0), recording one operation per step.
+function buildPlan(a, b) {
+  const n = a.length, m = b.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) {
+    dp.push(new Array(m + 1).fill(0));
+    dp[i][0] = i;
+  }
+  for (let j = 0; j <= m; j++) dp[0][j] = j;
+
+  const steps = [];
+
+  // initial state: base row/column filled, no interior cells yet
+  steps.push({
+    phase: "init",
+    filled: baseFilled(n, m),
+    cur: null,
+    desc: "Base cases: dp[i][0] = i (delete all of A's prefix), dp[0][j] = j (insert all of B's prefix). The empty-prefix row and column are seeded."
+  });
+
+  const filled = baseFilled(n, m);
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const match = a[i - 1] === b[j - 1];
+      const diag = dp[i - 1][j - 1] + (match ? 0 : 1);
+      const up = dp[i - 1][j] + 1;
+      const left = dp[i][j - 1] + 1;
+      dp[i][j] = Math.min(diag, up, left);
+      filled[i][j] = true;
+      let kind;
+      if (match && dp[i][j] === dp[i - 1][j - 1]) kind = "match";
+      else if (dp[i][j] === diag) kind = "sub";
+      else if (dp[i][j] === up) kind = "del";
+      else kind = "ins";
+      steps.push({
+        phase: "fill",
+        i, j,
+        value: dp[i][j],
+        match,
+        kind,
+        filled: cloneBool(filled),
+        cur: [i, j],
+        desc: cellDesc(a, b, i, j, match, diag, up, left, dp[i][j], kind)
+      });
+    }
+  }
+
+  // traceback
+  const path = [];
+  const ops = [];
+  let i = n, j = m;
+  path.push([i, j]);
+  while (i > 0 || j > 0) {
+    const match = (i > 0 && j > 0 && a[i - 1] === b[j - 1]);
+    if (i > 0 && j > 0 && match && dp[i][j] === dp[i - 1][j - 1]) {
+      ops.push({ kind: "match", ca: a[i - 1], cb: b[j - 1] });
+      i--; j--;
+    } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+      ops.push({ kind: "sub", ca: a[i - 1], cb: b[j - 1] });
+      i--; j--;
+    } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+      ops.push({ kind: "del", ca: a[i - 1], cb: null });
+      i--;
+    } else {
+      ops.push({ kind: "ins", ca: null, cb: b[j - 1] });
+      j--;
+    }
+    path.push([i, j]);
+  }
+  ops.reverse();
+  const pathCells = path.slice(); // includes (0,0)
+
+  // emit a traceback step that reveals operations one at a time (reverse order of discovery)
+  // We reveal from the corner backward, but display the forward-ordered list growing.
+  const revealedPath = [];
+  for (let s = 0; s < pathCells.length; s++) {
+    revealedPath.push(pathCells[s]);
+    steps.push({
+      phase: "trace",
+      filled: cloneBool(filled),
+      pathSoFar: revealedPath.slice(),
+      opsKindByCell: opKindForCells(pathCells, ops, a, b),
+      cur: pathCells[s],
+      desc: "Traceback: stepping from the bottom-right corner back toward (0,0), following the neighbor each cell was computed from. Each diagonal is a match/substitute, each up-step a delete, each left-step an insert."
+    });
+  }
+
+  steps.push({
+    phase: "done",
+    filled: cloneBool(filled),
+    pathSoFar: pathCells.slice(),
+    ops,
+    cur: [0, 0],
+    desc: "Done. The edit distance is dp[" + n + "][" + m + "] = " + dp[n][m] + ". The highlighted path spells out the optimal edit script shown on the right."
+  });
+
+  return { steps, dp, ops, n, m, distance: dp[n][m] };
+}
+
+function baseFilled(n, m) {
+  const f = [];
+  for (let i = 0; i <= n; i++) {
+    f.push(new Array(m + 1).fill(false));
+    f[i][0] = true;
+  }
+  for (let j = 0; j <= m; j++) f[0][j] = true;
+  return f;
+}
+function cloneBool(f) { return f.map(r => r.slice()); }
+
+function cellDesc(a, b, i, j, match, diag, up, left, val, kind) {
+  const ca = a[i - 1], cb = b[j - 1];
+  if (match) {
+    return "Cell (" + i + "," + j + "): A[" + (i - 1) + "]='" + ca + "' = B[" + (j - 1) +
+      "]='" + cb + "'. Match is free, so dp = dp[" + (i - 1) + "][" + (j - 1) + "] = " + val + ".";
+  }
+  const names = { sub: "substitute", del: "delete", ins: "insert" };
+  return "Cell (" + i + "," + j + "): A[" + (i - 1) + "]='" + ca + "' ≠ B[" + (j - 1) +
+    "]='" + cb + "'. dp = 1 + min(diag=" + diag + ", up=" + up + ", left=" + left + ") = " +
+    val + " (chose " + names[kind] + ").";
+}
+
+// map each cell on the path to the op kind that links it to the next cell toward the corner
+function opKindForCells(pathCells, ops, a, b) {
+  // pathCells is corner->origin; ops is forward order (origin->corner).
+  // Build a map keyed "i,j" -> kind for the cell that is the *destination* of each op.
+  const map = {};
+  // pathCells corner->origin, reverse to origin->corner
+  const fwd = pathCells.slice().reverse(); // origin .. corner
+  for (let s = 1; s < fwd.length; s++) {
+    const [i, j] = fwd[s];
+    const op = ops[s - 1];
+    map[i + "," + j] = op ? op.kind : "match";
+  }
+  return map;
+}
+
+// ---------- Rendering ----------
+function renderMatrix(step) {
+  const table = document.getElementById("dpMat");
+  const { a, b } = state;
+  const n = a.length, m = b.length;
+  const dp = state.plan.dp;
+  let html = "<tr><th></th><th>ε</th>";
+  for (let j = 0; j < m; j++) html += "<th>" + b[j] + "</th>";
+  html += "</tr>";
+
+  // determine highlight neighbors when filling a cell
+  let cur = step.cur;
+  const filled = step.filled;
+  const pathSet = new Set();
+  const pathKind = step.opsKindByCell || {};
+  if (step.pathSoFar) {
+    for (const [pi, pj] of step.pathSoFar) pathSet.add(pi + "," + pj);
+  }
+
+  for (let i = 0; i <= n; i++) {
+    html += "<tr><th>" + (i === 0 ? "ε" : a[i - 1]) + "</th>";
+    for (let j = 0; j <= m; j++) {
+      const isFilled = filled[i][j];
+      let cls = isFilled ? "" : "empty";
+      const txt = isFilled ? dp[i][j] : "";
+      // neighbor highlight during a fill step
+      if (step.phase === "fill" && cur) {
+        const ci = cur[0], cj = cur[1];
+        if (i === ci && j === cj) cls += " cur";
+        else if (i === ci - 1 && j === cj - 1) cls += " hdiag";
+        else if (i === ci - 1 && j === cj) cls += " hup";
+        else if (i === ci && j === cj - 1) cls += " hleft";
+      }
+      // path highlight during trace/done
+      if (pathSet.has(i + "," + j)) {
+        cls += " path";
+        const k = pathKind[i + "," + j];
+        if (k === "match") cls += " pmatch";
+        else if (k === "sub") cls += " psub";
+        else if (k === "del") cls += " pdel";
+        else if (k === "ins") cls += " pins";
+      }
+      html += "<td class='" + cls.trim() + "'>" + txt + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function renderScript(step) {
+  const box = document.getElementById("scriptBox");
+  const alignBox = document.getElementById("alignBox");
+  const distInfo = document.getElementById("distInfo");
+  distInfo.innerHTML = "edit distance = <span class='result'>" + state.plan.distance + "</span>";
+
+  if (step.phase !== "done") {
+    box.innerHTML = "<div class='step-counter'>The edit script appears once the traceback completes.</div>";
+    alignBox.innerHTML = "";
+    return;
+  }
+  const ops = state.plan.ops;
+  let html = "";
+  let topRow = "", botRow = "";
+  for (const op of ops) {
+    let tag, detail;
+    if (op.kind === "match") {
+      tag = "MATCH"; detail = "keep '" + op.ca + "'";
+      topRow += "<span class='m'>" + op.ca + "</span>";
+      botRow += "<span class='m'>" + op.cb + "</span>";
+    } else if (op.kind === "sub") {
+      tag = "SUBSTITUTE"; detail = "'" + op.ca + "' → '" + op.cb + "'";
+      topRow += "<span class='x'>" + op.ca + "</span>";
+      botRow += "<span class='x'>" + op.cb + "</span>";
+    } else if (op.kind === "del") {
+      tag = "DELETE"; detail = "remove '" + op.ca + "'";
+      topRow += "<span class='m'>" + op.ca + "</span>";
+      botRow += "<span class='g'>-</span>";
+    } else {
+      tag = "INSERT"; detail = "add '" + op.cb + "'";
+      topRow += "<span class='g'>-</span>";
+      botRow += "<span class='m'>" + op.cb + "</span>";
+    }
+    html += "<div class='op " + op.kind + "'><span class='tag'>" + tag + "</span><span>" + detail + "</span></div>";
+  }
+  box.innerHTML = html;
+  alignBox.innerHTML = "<div>" + topRow + "</div><div>" + botRow + "</div>";
+}
+
+function applyStep(step) {
+  renderMatrix(step);
+  renderScript(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  // interp box
+  const ib = document.getElementById("interpBox");
+  if (step.phase === "fill" && step.cur) {
+    ib.innerHTML = "Filling cell <b>(" + step.cur[0] + ", " + step.cur[1] +
+      ")</b> = <span class='val'>" + step.value + "</span>. Highlighted neighbors: diagonal (sub/match), up (delete), left (insert).";
+  } else if (step.phase === "trace") {
+    ib.innerHTML = "Tracing back along the cheapest path. The colored outline of each path cell shows which operation it represents.";
+  } else if (step.phase === "done") {
+    ib.innerHTML = "Final distance <b>dp[" + state.plan.n + "][" + state.plan.m +
+      "]</b> = <span class='val'>" + state.plan.distance + "</span>. The edit script is listed on the right.";
+  } else {
+    ib.innerHTML = "Base row and column seeded. Now the interior cells fill in.";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  a: "kitten",
+  b: "sitting",
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadStrings(a, b) {
+  state.a = a;
+  state.b = b;
+  state.plan = buildPlan(a, b);
+  state.stepIdx = 0;
+  document.getElementById("aShow").textContent = a || "ε";
+  document.getElementById("bShow").textContent = b || "ε";
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 650);
+}
+
+function sanitize(s) {
+  return (s || "").replace(/\s+/g, "").slice(0, 12);
+}
+
+function rebuild() {
+  let a = sanitize(document.getElementById("aInput").value);
+  let b = sanitize(document.getElementById("bInput").value);
+  if (a.length === 0 && b.length === 0) { a = "ab"; b = "ba"; }
+  document.getElementById("aInput").value = a;
+  document.getElementById("bInput").value = b;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadStrings(a, b);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("presetSel").addEventListener("change", (e) => {
+  const [a, b] = PRESETS[e.target.value];
+  document.getElementById("aInput").value = a;
+  document.getElementById("bInput").value = b;
+  rebuild();
+});
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("bInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
