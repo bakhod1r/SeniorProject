@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fractional Knapsack — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  .mode-pill {
+    display: inline-flex; gap: 6px; background: var(--bg);
+    border: 1px solid var(--border); padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 360px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+  input[type="text"], input[type="number"] {
+    flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  label.inline { font-size: 12px; color: var(--muted); }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-weight: 500; transition: all 0.15s ease;
+  }
+  button.btn:hover { border-color: var(--blue); }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.warn { border-color: var(--orange); color: var(--orange); }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset-row button { flex: 1; font-size: 12px; padding: 6px 8px; }
+  table.items { border-collapse: collapse; width: 100%; margin-top: 6px; font-size: 13px; }
+  table.items th, table.items td {
+    border: 1px solid var(--border); padding: 6px 8px; text-align: right;
+    font-family: ui-monospace, Menlo, monospace; transition: background 0.2s ease;
+  }
+  table.items th { color: var(--muted); font-weight: 500; text-align: right; }
+  table.items td.idx, table.items th.idx { text-align: center; color: var(--muted); }
+  tr.taken-full td { background: rgba(63,185,80,0.16); }
+  tr.taken-frac td { background: rgba(210,153,34,0.20); }
+  tr.rejected td { color: var(--muted); opacity: 0.6; }
+  tr.active td { background: rgba(88,166,255,0.22); }
+  svg { width: 100%; height: 300px; display: block; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .stat .value.green { color: var(--green); }
+  .stat .value.blue { color: var(--blue); }
+  .stat .value.orange { color: var(--orange); }
+  #info {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 13px; line-height: 1.5; min-height: 60px;
+  }
+  #info code { background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--orange); }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    height: 160px; overflow-y: auto; line-height: 1.5;
+  }
+  #log .op { color: var(--blue); }
+  #log .cmp { color: var(--yellow); }
+  #log .ok { color: var(--green); }
+  #log .err { color: var(--red); }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0;
+    transition: opacity 0.2s ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Fractional Knapsack — Greedy by Density</h1>
+    <div class="sub">Sort by value/weight, take whole items, slice the last to fill the bag</div>
+  </div>
+  <div class="mode-pill">
+    <button id="modeWalk" class="active">Walkthrough</button>
+    <button id="modeCompare">Compare 0/1</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="control-group">
+      <h2>Items (value/weight)</h2>
+      <div class="control-row">
+        <input type="text" id="itemInput" placeholder="value:weight pairs e.g. 60:10,100:20,120:30" value="60:10,100:20,120:30" />
+      </div>
+      <div class="control-row">
+        <label class="inline">Capacity W</label>
+        <input type="number" id="capInput" value="50" min="0" step="1" style="max-width:110px;" />
+      </div>
+      <div class="control-row">
+        <button class="btn primary" id="btnLoad">Load items</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="preset-row">
+        <button class="btn" data-items="60:10,100:20,120:30" data-cap="50">Classic</button>
+        <button class="btn" data-items="80:10,60:10,100:20,120:30" data-cap="50">Dense first</button>
+        <button class="btn" data-items="10:50,120:30,100:20,60:10" data-cap="60">Mixed</button>
+        <button class="btn" data-items="500:50" data-cap="20">One big</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="control-row">
+        <button class="btn primary" id="btnRun">Run all</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="120" max="1400" value="650" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Result</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Capacity W</div><div class="value blue" id="statW">50</div></div>
+        <div class="stat"><div class="label">Remaining</div><div class="value orange" id="statRem">—</div></div>
+        <div class="stat"><div class="label">Fractional value</div><div class="value green" id="statVal">—</div></div>
+        <div class="stat"><div class="label">0/1 value</div><div class="value" id="stat01">—</div></div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="control-group">
+      <h2>Knapsack fill</h2>
+      <svg id="bag" viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--green)"></i> taken whole</span>
+        <span><i class="swatch" style="background:var(--yellow)"></i> sliced fraction</span>
+        <span><i class="swatch" style="background:var(--blue)"></i> active / considering</span>
+        <span><i class="swatch" style="background:var(--muted)"></i> rejected (no room)</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Items sorted by density</h2>
+      <div id="tableWrap"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Explanation</h2>
+      <div id="info">Load items and press <b>Run all</b> to sort by density (value/weight), then greedily fill the bag — taking whole items and slicing the last one to top off the capacity exactly.</div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const state = {
+  items: [],        // [{value, weight, idx}] original order
+  sorted: [],       // sorted by density desc
+  W: 0,
+  remaining: 0,
+  total: 0,
+  status: [],       // per sorted-row: 'full' | 'frac' | 'rejected' | ''
+  fracAmount: [],   // fraction taken per sorted row
+  busy: false,
+  stopped: false,
+  steps: [],
+  stepIndex: 0,
+  mode: "walk",
+};
+
+const els = {
+  bag: document.getElementById("bag"),
+  tableWrap: document.getElementById("tableWrap"),
+  info: document.getElementById("info"),
+  log: document.getElementById("log"),
+  statW: document.getElementById("statW"),
+  statRem: document.getElementById("statRem"),
+  statVal: document.getElementById("statVal"),
+  stat01: document.getElementById("stat01"),
+  toast: document.getElementById("toast"),
+  speed: document.getElementById("speed"),
+  itemInput: document.getElementById("itemInput"),
+  capInput: document.getElementById("capInput"),
+};
+
+// ---------------- helpers ----------------
+function wait() {
+  return new Promise(res => setTimeout(res, Number(els.speed.value)));
+}
+function showToast(msg, isErr) {
+  els.toast.textContent = msg;
+  els.toast.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => { els.toast.className = "toast"; }, 1800);
+}
+function info(html) { els.info.innerHTML = html; }
+function log(msg, cls) {
+  const div = document.createElement("div");
+  div.className = cls || "";
+  div.textContent = msg;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function clearLog() { els.log.innerHTML = ""; }
+function fmt(x) {
+  if (Math.abs(x - Math.round(x)) < 1e-9) return String(Math.round(x));
+  return x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+// ---------------- parsing ----------------
+function parseItems(raw) {
+  const items = [];
+  raw.split(/[,\s]+/).forEach((tok, k) => {
+    tok = tok.trim();
+    if (!tok) return;
+    const parts = tok.split(":").map(s => parseFloat(s));
+    if (parts.length === 2 && isFinite(parts[0]) && isFinite(parts[1]) && parts[1] > 0) {
+      items.push({ value: parts[0], weight: parts[1], idx: items.length });
+    }
+  });
+  return items;
+}
+
+function loadItems() {
+  const items = parseItems(els.itemInput.value);
+  const W = Math.max(0, parseFloat(els.capInput.value) || 0);
+  if (items.length === 0) { showToast("No valid items (use value:weight)", true); return; }
+  state.items = items;
+  state.W = W;
+  // sort by density descending (stable on idx for ties)
+  state.sorted = items.slice().sort((a, b) => {
+    const da = a.value / a.weight, db = b.value / b.weight;
+    if (db !== da) return db - da;
+    return a.idx - b.idx;
+  });
+  state.remaining = W;
+  state.total = 0;
+  state.status = state.sorted.map(() => "");
+  state.fracAmount = state.sorted.map(() => 0);
+  els.statW.textContent = fmt(W);
+  els.statRem.textContent = "—";
+  els.statVal.textContent = "—";
+  els.stat01.textContent = "—";
+  renderTable();
+  renderBag();
+  info(`Loaded <code>${items.length}</code> items, capacity <code>${fmt(W)}</code>. Press <b>Run all</b> or <b>Step</b>.`);
+}
+
+// ---------------- rendering ----------------
+function renderTable(activeRow) {
+  const wrap = els.tableWrap;
+  wrap.innerHTML = "";
+  const table = document.createElement("table");
+  table.className = "items";
+  const head = document.createElement("tr");
+  ["#", "value", "weight", "density", "taken", "fraction"].forEach((h, i) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    if (i === 0) th.className = "idx";
+    head.appendChild(th);
+  });
+  table.appendChild(head);
+  state.sorted.forEach((it, r) => {
+    const tr = document.createElement("tr");
+    const st = state.status[r];
+    if (st === "full") tr.className = "taken-full";
+    else if (st === "frac") tr.className = "taken-frac";
+    else if (st === "rejected") tr.className = "rejected";
+    if (r === activeRow) tr.className = "active";
+    const dens = it.value / it.weight;
+    const takenW = st === "full" ? it.weight
+                 : st === "frac" ? state.fracAmount[r] * it.weight : 0;
+    const cells = [
+      { t: it.idx, cls: "idx" },
+      { t: fmt(it.value) },
+      { t: fmt(it.weight) },
+      { t: fmt(dens) },
+      { t: st === "full" ? "all" : st === "frac" ? fmt(takenW) : st === "rejected" ? "—" : "" },
+      { t: st === "frac" ? fmt(state.fracAmount[r]) : st === "full" ? "1" : st === "rejected" ? "0" : "" },
+    ];
+    cells.forEach(c => {
+      const td = document.createElement("td");
+      td.textContent = c.t;
+      if (c.cls) td.className = c.cls;
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+  wrap.appendChild(table);
+}
+
+// draw the knapsack as a vertical bar that fills bottom-up
+function renderBag() {
+  const svg = els.bag;
+  svg.innerHTML = "";
+  const W = state.W || 1;
+  const bagX = 220, bagW = 160, bagTop = 20, bagH = 250;
+  // bag outline
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", bagX); rect.setAttribute("y", bagTop);
+  rect.setAttribute("width", bagW); rect.setAttribute("height", bagH);
+  rect.setAttribute("fill", "none");
+  rect.setAttribute("stroke", "var(--border)");
+  rect.setAttribute("stroke-width", "2");
+  rect.setAttribute("rx", "6");
+  svg.appendChild(rect);
+
+  // capacity label
+  const capLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  capLabel.setAttribute("x", bagX + bagW / 2);
+  capLabel.setAttribute("y", bagTop - 6);
+  capLabel.setAttribute("fill", "var(--muted)");
+  capLabel.setAttribute("font-size", "12");
+  capLabel.setAttribute("text-anchor", "middle");
+  capLabel.textContent = "W = " + fmt(state.W);
+  svg.appendChild(capLabel);
+
+  // stack the taken portions bottom-up
+  let usedW = 0;
+  state.sorted.forEach((it, r) => {
+    const st = state.status[r];
+    let segW = 0, color = null;
+    if (st === "full") { segW = it.weight; color = "var(--green)"; }
+    else if (st === "frac") { segW = state.fracAmount[r] * it.weight; color = "var(--yellow)"; }
+    if (segW <= 0) return;
+    const h = (segW / W) * bagH;
+    const y = bagTop + bagH - ((usedW + segW) / W) * bagH;
+    const seg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    seg.setAttribute("x", bagX + 3);
+    seg.setAttribute("y", y);
+    seg.setAttribute("width", bagW - 6);
+    seg.setAttribute("height", Math.max(0, h));
+    seg.setAttribute("fill", color);
+    seg.setAttribute("opacity", "0.85");
+    svg.appendChild(seg);
+    if (h > 14) {
+      const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      lbl.setAttribute("x", bagX + bagW / 2);
+      lbl.setAttribute("y", y + h / 2 + 4);
+      lbl.setAttribute("fill", "#0d1117");
+      lbl.setAttribute("font-size", "11");
+      lbl.setAttribute("font-weight", "700");
+      lbl.setAttribute("text-anchor", "middle");
+      lbl.textContent = "item " + it.idx + (st === "frac" ? " (" + fmt(state.fracAmount[r]) + ")" : "");
+      svg.appendChild(lbl);
+    }
+    usedW += segW;
+  });
+
+  // remaining-capacity marker
+  const fillH = (Math.min(usedW, W) / W) * bagH;
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  const ly = bagTop + bagH - fillH;
+  line.setAttribute("x1", bagX); line.setAttribute("y1", ly);
+  line.setAttribute("x2", bagX + bagW); line.setAttribute("y2", ly);
+  line.setAttribute("stroke", "var(--blue)");
+  line.setAttribute("stroke-dasharray", "5 3");
+  line.setAttribute("stroke-width", "1.5");
+  svg.appendChild(line);
+
+  // running total text
+  const valText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  valText.setAttribute("x", bagX + bagW / 2);
+  valText.setAttribute("y", bagTop + bagH + 22);
+  valText.setAttribute("fill", "var(--green)");
+  valText.setAttribute("font-size", "14");
+  valText.setAttribute("font-weight", "700");
+  valText.setAttribute("text-anchor", "middle");
+  valText.textContent = "value = " + fmt(state.total);
+  svg.appendChild(valText);
+}
+
+// ---------------- 0/1 DP for comparison ----------------
+function knapsack01(W, items) {
+  // works only for integer weights; scale otherwise
+  const allInt = items.every(it => Number.isInteger(it.weight) && Number.isInteger(it.value))
+              && Number.isInteger(W);
+  if (!allInt || W > 5000) return null;
+  const dp = new Array(W + 1).fill(0);
+  for (const it of items) {
+    for (let c = W; c >= it.weight; c--) {
+      dp[c] = Math.max(dp[c], dp[c - it.weight] + it.value);
+    }
+  }
+  return dp[W];
+}
+
+// ---------------- step queue ----------------
+function buildStepQueue() {
+  const steps = [];
+
+  steps.push(async () => {
+    state.remaining = state.W;
+    state.total = 0;
+    state.status = state.sorted.map(() => "");
+    state.fracAmount = state.sorted.map(() => 0);
+    renderTable();
+    renderBag();
+    els.statRem.textContent = fmt(state.W);
+    els.statVal.textContent = "0";
+    info(`<b>Step 1.</b> Items sorted by <code>density = value/weight</code> (highest first). We will fill the bag in this order.`);
+    log("sort items by density (value/weight) descending", "op");
+  });
+
+  state.sorted.forEach((it, r) => {
+    steps.push(async () => {
+      renderTable(r);
+      const dens = it.value / it.weight;
+      if (state.remaining <= 1e-12) {
+        state.status[r] = "rejected";
+        info(`<b>Item ${it.idx}</b> (density ${fmt(dens)}): bag is full — <b>rejected</b>.`);
+        log(`item ${it.idx}: bag full -> reject`, "cmp");
+        renderTable(r);
+        return;
+      }
+      if (it.weight <= state.remaining + 1e-12) {
+        state.status[r] = "full";
+        state.total += it.value;
+        state.remaining -= it.weight;
+        info(`<b>Item ${it.idx}</b> (weight ${fmt(it.weight)} ≤ remaining ${fmt(state.remaining + it.weight)}): take it <b>whole</b>. value += ${fmt(it.value)}.`);
+        log(`item ${it.idx}: take whole (+${fmt(it.value)}), remaining ${fmt(state.remaining)}`, "ok");
+      } else {
+        const f = state.remaining / it.weight;
+        state.status[r] = "frac";
+        state.fracAmount[r] = f;
+        const added = f * it.value;
+        state.total += added;
+        state.remaining = 0;
+        info(`<b>Item ${it.idx}</b> (weight ${fmt(it.weight)} > remaining): <b>slice</b> it. fraction = remaining/weight = <code>${fmt(f)}</code>, value += ${fmt(added)}. Bag is now full.`);
+        log(`item ${it.idx}: slice fraction ${fmt(f)} (+${fmt(added)}) -> FULL`, "ok");
+      }
+      els.statRem.textContent = fmt(state.remaining);
+      els.statVal.textContent = fmt(state.total);
+      renderTable(r);
+      renderBag();
+    });
+  });
+
+  steps.push(async () => {
+    // mark any untouched rows as rejected
+    state.sorted.forEach((it, r) => { if (state.status[r] === "") state.status[r] = "rejected"; });
+    renderTable();
+    renderBag();
+    const partial = state.status.filter(s => s === "frac").length;
+    let cmp01 = "";
+    const o = knapsack01(state.W, state.items);
+    if (o !== null) {
+      els.stat01.textContent = fmt(o);
+      cmp01 = ` The indivisible <b>0/1</b> optimum would be <code>${fmt(o)}</code> — the fractional answer is ≥ it because slicing is allowed.`;
+    }
+    info(`<b>Done.</b> Fractional optimum = <code>${fmt(state.total)}</code>. Exactly <b>${partial}</b> item was sliced (the theorem guarantees at most one).${cmp01}`);
+    log(`fractional value = ${fmt(state.total)}  (${partial} partial item)`, "ok");
+  });
+
+  return steps;
+}
+
+// ---------------- drivers ----------------
+async function runAll() {
+  if (state.busy) { showToast("Running…", true); return; }
+  state.busy = true; state.stopped = false;
+  clearLog();
+  try {
+    const steps = buildStepQueue();
+    for (const step of steps) {
+      if (state.stopped) break;
+      await step();
+      await wait();
+    }
+  } catch (e) {
+    if (e.message !== "__stopped__") { console.error(e); showToast("Error: " + e.message, true); }
+  } finally {
+    state.busy = false;
+  }
+}
+
+function prepareStepMode() {
+  state.steps = buildStepQueue();
+  state.stepIndex = 0;
+}
+
+async function doStep() {
+  if (state.busy) return;
+  if (!state.steps.length || state.stepIndex >= state.steps.length) {
+    prepareStepMode();
+    clearLog();
+  }
+  if (state.stepIndex < state.steps.length) {
+    state.busy = true;
+    try { await state.steps[state.stepIndex](); } catch (e) { /* ignore */ }
+    state.stepIndex++;
+    state.busy = false;
+  }
+}
+
+function reset() {
+  if (state.busy) { state.stopped = true; }
+  loadItems();
+  prepareStepMode();
+}
+
+// ---------------- event wiring ----------------
+document.getElementById("btnLoad").addEventListener("click", () => {
+  loadItems(); prepareStepMode();
+});
+document.getElementById("btnRandom").addEventListener("click", () => {
+  const n = 3 + Math.floor(Math.random() * 4); // 3..6
+  const parts = [];
+  let totalW = 0;
+  for (let i = 0; i < n; i++) {
+    const w = 5 + Math.floor(Math.random() * 26);   // 5..30
+    const v = 10 + Math.floor(Math.random() * 141);  // 10..150
+    parts.push(v + ":" + w);
+    totalW += w;
+  }
+  els.itemInput.value = parts.join(",");
+  els.capInput.value = Math.max(1, Math.floor(totalW * (0.4 + Math.random() * 0.4)));
+  loadItems(); prepareStepMode();
+});
+document.querySelectorAll("[data-items]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    els.itemInput.value = btn.getAttribute("data-items");
+    els.capInput.value = btn.getAttribute("data-cap");
+    loadItems(); prepareStepMode();
+  });
+});
+document.getElementById("btnRun").addEventListener("click", runAll);
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnReset").addEventListener("click", reset);
+
+document.getElementById("modeWalk").addEventListener("click", () => {
+  state.mode = "walk";
+  document.getElementById("modeWalk").classList.add("active");
+  document.getElementById("modeCompare").classList.remove("active");
+  els.stat01.textContent = "—";
+  reset();
+});
+document.getElementById("modeCompare").addEventListener("click", () => {
+  state.mode = "compare";
+  document.getElementById("modeCompare").classList.add("active");
+  document.getElementById("modeWalk").classList.remove("active");
+  reset();
+  const o = knapsack01(state.W, state.items);
+  els.stat01.textContent = o === null ? "n/a" : fmt(o);
+  showToast("0/1 value shown for comparison after a run", false);
+});
+
+els.itemInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { loadItems(); prepareStepMode(); }
+});
+els.capInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { loadItems(); prepareStepMode(); }
+});
+
+// ---------------- init ----------------
+loadItems();
+prepareStepMode();
+</script>
+</body>
+</html>
+</content>
