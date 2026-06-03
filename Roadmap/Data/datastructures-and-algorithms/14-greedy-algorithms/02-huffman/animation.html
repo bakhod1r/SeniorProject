@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Huffman Coding — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  .mode-pill {
+    display: inline-flex; gap: 6px; background: var(--bg);
+    border: 1px solid var(--border); padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  input[type="text"] {
+    flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-weight: 500; transition: all 0.15s ease;
+  }
+  button.btn:hover { border-color: var(--blue); }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.warn { border-color: var(--orange); color: var(--orange); }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset-row button { flex: 1; font-size: 12px; padding: 6px 8px; }
+  svg { width: 100%; height: 360px; display: block; }
+  .edge { stroke: var(--muted); stroke-width: 2; }
+  .edge.path { stroke: var(--green); stroke-width: 3; }
+  .edgelabel { fill: var(--orange); font-size: 12px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+  .tnode circle { fill: var(--surface); stroke: var(--blue); stroke-width: 2.5; }
+  .tnode.leaf circle { stroke: var(--green); }
+  .tnode.active circle { stroke: var(--yellow); stroke-width: 4; }
+  .tnode.merged circle { stroke: var(--purple); }
+  .tnode text { fill: var(--text); font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .tnode .freq { fill: var(--muted); font-size: 10px; }
+  .heap-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .chip {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 9px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    transition: all 0.2s ease;
+  }
+  .chip.smallest { border-color: var(--yellow); color: var(--yellow); }
+  .chip.merged { border-color: var(--purple); color: var(--purple); }
+  table.codes { border-collapse: collapse; margin-top: 6px; font-family: ui-monospace, Menlo, monospace; width: 100%; }
+  table.codes td, table.codes th {
+    text-align: left; border-bottom: 1px solid var(--border); padding: 4px 8px; font-size: 12px;
+  }
+  table.codes th { color: var(--muted); font-weight: 500; }
+  table.codes td.code { color: var(--green); }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  .stat .value.green { color: var(--green); }
+  .stat .value.blue { color: var(--blue); }
+  #info {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 13px; line-height: 1.5; min-height: 60px;
+  }
+  #info code { background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--orange); }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    height: 160px; overflow-y: auto; line-height: 1.5;
+  }
+  #log .op { color: var(--blue); }
+  #log .cmp { color: var(--yellow); }
+  #log .ok { color: var(--green); }
+  #log .err { color: var(--red); }
+  #bits {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    word-break: break-all; line-height: 1.6; min-height: 40px;
+  }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0;
+    transition: opacity 0.2s ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Huffman Coding — Greedy Optimal Prefix Code</h1>
+    <div class="sub">Merge the two lowest-frequency nodes via a min-heap until one tree remains</div>
+  </div>
+  <div class="mode-pill">
+    <button id="modeBuild" class="active">Build tree</button>
+    <button id="modeEncode">Encode message</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="control-group">
+      <h2>Input</h2>
+      <div class="control-row">
+        <input type="text" id="textInput" placeholder="type text to compress" value="abracadabra" />
+      </div>
+      <div class="control-row">
+        <button class="btn primary" id="btnLoad">Load text</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="preset-row">
+        <button class="btn" data-preset="abracadabra">abracadabra</button>
+        <button class="btn" data-preset="mississippi">mississippi</button>
+        <button class="btn" data-preset="aaaabbc">skewed</button>
+        <button class="btn" data-preset="abcdefgh">uniform</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="control-row">
+        <button class="btn primary" id="btnRun">Run all</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="120" max="1600" value="700" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Min-heap (smallest first)</h2>
+      <div class="heap-row" id="heapView"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Result</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Symbols n</div><div class="value blue" id="statN">5</div></div>
+        <div class="stat"><div class="label">Length N</div><div class="value blue" id="statLen">11</div></div>
+        <div class="stat"><div class="label">Huffman bits</div><div class="value green" id="statHuff">—</div></div>
+        <div class="stat"><div class="label">Fixed bits</div><div class="value" id="statFixed">—</div></div>
+        <div class="stat"><div class="label">Entropy H</div><div class="value" id="statH">—</div></div>
+        <div class="stat"><div class="label">Saving</div><div class="value green" id="statSave">—</div></div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="control-group">
+      <h2>Huffman tree (left = 0, right = 1)</h2>
+      <svg id="tree" viewBox="0 0 760 360" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--green)"></i> leaf (symbol)</span>
+        <span><i class="swatch" style="background:var(--purple)"></i> merged node</span>
+        <span><i class="swatch" style="background:var(--yellow)"></i> active in this step</span>
+        <span><i class="swatch" style="background:var(--orange)"></i> edge bit</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Code table</h2>
+      <div id="codesWrap"></div>
+    </div>
+
+    <div class="control-group" id="bitsGroup" style="display:none;">
+      <h2>Encoded bit stream</h2>
+      <div id="bits"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Explanation</h2>
+      <div id="info">Load text and press <b>Run all</b> to count frequencies, repeatedly merge the two smallest nodes from the min-heap, and read the optimal prefix code off the tree.</div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+let NODE_ID = 0;
+
+const state = {
+  text: "",
+  freq: {},          // symbol -> count
+  nodes: [],         // heap of node objects
+  root: null,
+  codes: {},
+  steps: [],
+  stepIndex: 0,
+  busy: false,
+  stopped: false,
+  mode: "build",
+  activeIds: new Set(),
+  mergedIds: new Set(),
+};
+
+const els = {
+  tree: document.getElementById("tree"),
+  heapView: document.getElementById("heapView"),
+  codesWrap: document.getElementById("codesWrap"),
+  info: document.getElementById("info"),
+  log: document.getElementById("log"),
+  bits: document.getElementById("bits"),
+  bitsGroup: document.getElementById("bitsGroup"),
+  statN: document.getElementById("statN"),
+  statLen: document.getElementById("statLen"),
+  statHuff: document.getElementById("statHuff"),
+  statFixed: document.getElementById("statFixed"),
+  statH: document.getElementById("statH"),
+  statSave: document.getElementById("statSave"),
+  toast: document.getElementById("toast"),
+  speed: document.getElementById("speed"),
+  textInput: document.getElementById("textInput"),
+};
+
+// ---------------- helpers ----------------
+function wait() { return new Promise(res => setTimeout(res, Number(els.speed.value))); }
+function showToast(msg, isErr) {
+  els.toast.textContent = msg;
+  els.toast.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => { els.toast.className = "toast"; }, 1800);
+}
+function info(html) { els.info.innerHTML = html; }
+function log(msg, cls) {
+  const div = document.createElement("div");
+  div.className = cls || "";
+  div.textContent = msg;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function clearLog() { els.log.innerHTML = ""; }
+
+// ---------------- node + heap ----------------
+function makeLeaf(sym, freq) {
+  return { id: NODE_ID++, sym, freq, leaf: true, left: null, right: null, order: NODE_ID };
+}
+function makeInternal(a, b) {
+  return { id: NODE_ID++, sym: null, freq: a.freq + b.freq, leaf: false, left: a, right: b, order: NODE_ID };
+}
+// keep nodes array sorted ascending by (freq, order) — a simple "heap" view
+function sortNodes() {
+  state.nodes.sort((x, y) => x.freq !== y.freq ? x.freq - y.freq : x.order - y.order);
+}
+
+// ---------------- load ----------------
+function loadText(raw) {
+  if (!raw || raw.length === 0) { showToast("Type some text first", true); return; }
+  state.text = raw;
+  state.freq = {};
+  for (const ch of raw) state.freq[ch] = (state.freq[ch] || 0) + 1;
+  resetRun();
+  els.statN.textContent = Object.keys(state.freq).length;
+  els.statLen.textContent = raw.length;
+  els.statHuff.textContent = "—";
+  els.statFixed.textContent = "—";
+  els.statH.textContent = "—";
+  els.statSave.textContent = "—";
+  els.bitsGroup.style.display = "none";
+  renderHeap();
+  renderTree();
+  els.codesWrap.innerHTML = "";
+  info(`Loaded <code>${escapeHtml(raw)}</code>: <code>${Object.keys(state.freq).length}</code> distinct symbols, <code>${raw.length}</code> characters. Press <b>Run all</b> or <b>Step</b>.`);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function resetRun() {
+  state.nodes = Object.keys(state.freq).sort().map(s => makeLeaf(s, state.freq[s]));
+  sortNodes();
+  state.root = null;
+  state.codes = {};
+  state.steps = [];
+  state.stepIndex = 0;
+  state.activeIds = new Set();
+  state.mergedIds = new Set();
+}
+
+// ---------------- rendering ----------------
+function renderHeap() {
+  els.heapView.innerHTML = "";
+  state.nodes.forEach((nd, i) => {
+    const chip = document.createElement("div");
+    let cls = "chip";
+    if (state.activeIds.has(nd.id)) cls += " smallest";
+    else if (state.mergedIds.has(nd.id)) cls += " merged";
+    chip.className = cls;
+    chip.textContent = (nd.leaf ? nd.sym : "•") + ":" + nd.freq;
+    els.heapView.appendChild(chip);
+  });
+}
+
+// assign x/y coordinates to tree nodes via an in-order sweep
+function layoutTree(root) {
+  if (!root) return { positions: {}, depth: 0 };
+  const positions = {};
+  let xCounter = 0;
+  let maxDepth = 0;
+  function place(n, d) {
+    if (!n) return;
+    maxDepth = Math.max(maxDepth, d);
+    place(n.left, d + 1);
+    positions[n.id] = { col: xCounter++, depth: d, node: n };
+    place(n.right, d + 1);
+  }
+  place(root, 0);
+  return { positions, depth: maxDepth, cols: xCounter };
+}
+
+function renderTree(highlightPath) {
+  const svg = els.tree;
+  svg.innerHTML = "";
+  if (!state.root) {
+    // draw the forest of current heap roots side by side (pre-merge)
+    const roots = state.nodes;
+    const w = 760, gap = w / (roots.length + 1);
+    roots.forEach((nd, i) => drawSingle(svg, nd, gap * (i + 1), 40));
+    return;
+  }
+  const { positions, depth, cols } = layoutTree(state.root);
+  const w = 760, h = 360;
+  const colW = w / (cols + 1);
+  const rowH = depth > 0 ? (h - 80) / depth : 0;
+  const pathSet = new Set(highlightPath || []);
+
+  // edges first
+  for (const id in positions) {
+    const { col, depth: d, node } = positions[id];
+    const x = colW * (col + 1), y = 40 + d * rowH;
+    for (const [child, bit] of [[node.left, "0"], [node.right, "1"]]) {
+      if (!child) continue;
+      const cp = positions[child.id];
+      const cx = colW * (cp.col + 1), cy = 40 + cp.depth * rowH;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x); line.setAttribute("y1", y);
+      line.setAttribute("x2", cx); line.setAttribute("y2", cy);
+      const onPath = pathSet.has(node.id) && pathSet.has(child.id);
+      line.setAttribute("class", "edge" + (onPath ? " path" : ""));
+      svg.appendChild(line);
+      const lab = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      lab.setAttribute("x", (x + cx) / 2 + (bit === "0" ? -10 : 10));
+      lab.setAttribute("y", (y + cy) / 2);
+      lab.setAttribute("class", "edgelabel");
+      lab.textContent = bit;
+      svg.appendChild(lab);
+    }
+  }
+  // nodes
+  for (const id in positions) {
+    const { col, depth: d, node } = positions[id];
+    const x = colW * (col + 1), y = 40 + d * rowH;
+    drawNode(svg, node, x, y);
+  }
+}
+
+function drawSingle(svg, node, x, y) {
+  drawNode(svg, node, x, y);
+}
+
+function drawNode(svg, node, x, y) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  let cls = "tnode" + (node.leaf ? " leaf" : " merged");
+  if (state.activeIds.has(node.id)) cls += " active";
+  g.setAttribute("class", cls);
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 17);
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  t.setAttribute("x", x); t.setAttribute("y", y - 2);
+  t.textContent = node.leaf ? node.sym : "•";
+  const f = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  f.setAttribute("x", x); f.setAttribute("y", y + 9);
+  f.setAttribute("class", "freq");
+  f.textContent = node.freq;
+  g.appendChild(c); g.appendChild(t); g.appendChild(f);
+  svg.appendChild(g);
+}
+
+function renderCodes() {
+  const wrap = els.codesWrap;
+  wrap.innerHTML = "";
+  if (Object.keys(state.codes).length === 0) return;
+  const table = document.createElement("table");
+  table.className = "codes";
+  const head = document.createElement("tr");
+  head.innerHTML = "<th>symbol</th><th>freq</th><th>code</th><th>bits</th>";
+  table.appendChild(head);
+  Object.keys(state.codes).sort().forEach(s => {
+    const tr = document.createElement("tr");
+    const c = state.codes[s];
+    tr.innerHTML = `<td>${escapeHtml(s)}</td><td>${state.freq[s]}</td>` +
+      `<td class="code">${c}</td><td>${state.freq[s] * c.length}</td>`;
+    table.appendChild(tr);
+  });
+  wrap.appendChild(table);
+}
+
+// ---------------- algorithm as animated steps ----------------
+function deriveCodes() {
+  const out = {};
+  function walk(n, path) {
+    if (!n) return;
+    if (n.leaf) { out[n.sym] = path || "0"; return; }
+    walk(n.left, path + "0");
+    walk(n.right, path + "1");
+  }
+  walk(state.root, "");
+  return out;
+}
+
+function buildStepQueue() {
+  const steps = [];
+
+  steps.push(async () => {
+    resetRun();
+    renderHeap();
+    renderTree();
+    info(`<b>Step 1.</b> Count frequencies and push one leaf per symbol into the min-heap, ordered smallest first.`);
+    log("count frequencies, push " + state.nodes.length + " leaves", "op");
+  });
+
+  const k = state.nodes.length;
+  if (k === 1) {
+    steps.push(async () => {
+      const only = state.nodes[0];
+      state.root = makeInternal(only, { id: -1, freq: 0, leaf: true, sym: "", left: null, right: null, order: 0 });
+      state.root.right = null;
+      state.root.freq = only.freq;
+      state.codes = { [only.sym]: "0" };
+      finalize();
+      info(`<b>Single symbol.</b> Only one distinct symbol — assign it the 1-bit code <code>0</code>.`);
+      log("single symbol -> code 0", "ok");
+    });
+    return steps;
+  }
+
+  for (let m = 0; m < k - 1; m++) {
+    steps.push(makeMergeStep(m, k));
+  }
+
+  steps.push(async () => {
+    state.codes = deriveCodes();
+    state.activeIds = new Set();
+    renderTree();
+    renderCodes();
+    finalize();
+    info(`<b>Done.</b> One node remains — the Huffman-tree root. Read codes off the tree: left = <code>0</code>, right = <code>1</code>. Frequent symbols got short codes.`);
+    log("read code table from tree", "ok");
+  });
+
+  return steps;
+}
+
+function makeMergeStep(m, k) {
+  return async () => {
+    sortNodes();
+    state.activeIds = new Set([state.nodes[0].id, state.nodes[1].id]);
+    renderHeap();
+    renderTree();
+    const a = state.nodes[0], b = state.nodes[1];
+    info(`<b>Merge ${m + 1} of ${k - 1}.</b> Pop the two smallest: <code>${chipLabel(a)}</code> and <code>${chipLabel(b)}</code>. Create a parent of frequency <code>${a.freq + b.freq}</code> and push it back.`);
+    log(`pop ${chipLabel(a)} + ${chipLabel(b)} -> internal:${a.freq + b.freq}`, "cmp");
+    await wait();
+    // perform the merge
+    state.nodes.splice(0, 2);
+    const merged = makeInternal(a, b);
+    state.nodes.push(merged);
+    sortNodes();
+    state.activeIds = new Set([merged.id]);
+    state.mergedIds.add(merged.id);
+    if (state.nodes.length === 1) state.root = state.nodes[0];
+    renderHeap();
+    // show partial tree rooted at the largest current node for context
+    state.root = pickForestRoot();
+    renderTree();
+  };
+}
+
+function pickForestRoot() {
+  // for visualization, show the largest current subtree
+  let best = state.nodes[0];
+  for (const n of state.nodes) if (n.freq > best.freq) best = n;
+  return state.nodes.length === 1 ? state.nodes[0] : best;
+}
+
+function chipLabel(n) { return (n.leaf ? n.sym : "•") + ":" + n.freq; }
+
+function finalize() {
+  // ensure root is the final single node
+  if (state.nodes.length === 1) state.root = state.nodes[0];
+  const codes = state.codes && Object.keys(state.codes).length ? state.codes : deriveCodes();
+  state.codes = codes;
+  renderTree();
+  renderCodes();
+  computeStats();
+}
+
+function computeStats() {
+  const N = state.text.length;
+  const n = Object.keys(state.freq).length;
+  let huff = 0;
+  for (const s in state.codes) huff += state.freq[s] * state.codes[s].length;
+  const fixedBits = n <= 1 ? 1 : Math.ceil(Math.log2(n));
+  const fixed = N * fixedBits;
+  let H = 0;
+  for (const s in state.freq) {
+    const p = state.freq[s] / N;
+    H += -p * Math.log2(p);
+  }
+  els.statHuff.textContent = huff;
+  els.statFixed.textContent = fixed;
+  els.statH.textContent = (H).toFixed(2) + " b/sym";
+  els.statSave.textContent = fixed > 0 ? (100 * (fixed - huff) / fixed).toFixed(1) + "%" : "—";
+}
+
+// ---------------- encode mode ----------------
+async function encodeMessage() {
+  // first build the tree fully (fast), then animate encoding symbol by symbol
+  resetRun();
+  const k = state.nodes.length;
+  if (k === 1) {
+    state.codes = { [state.nodes[0].sym]: "0" };
+    state.root = makeInternal(state.nodes[0], state.nodes[0]);
+    state.root.right = null;
+  } else {
+    while (state.nodes.length > 1) {
+      sortNodes();
+      const a = state.nodes.shift(), b = state.nodes.shift();
+      state.nodes.push(makeInternal(a, b));
+    }
+    state.root = state.nodes[0];
+    state.codes = deriveCodes();
+  }
+  finalize();
+  els.bitsGroup.style.display = "";
+  els.bits.innerHTML = "";
+  info(`<b>Encode.</b> Replace each character with its codeword and concatenate the bits.`);
+  log("encode message symbol by symbol", "op");
+
+  let acc = "";
+  for (const ch of state.text) {
+    if (state.stopped) return;
+    const code = state.codes[ch];
+    acc += code;
+    els.bits.innerHTML = acc.replace(/.{8}/g, "$& ") +
+      ` <span style="color:var(--muted)">(${acc.length} bits)</span>`;
+    log(`${ch} -> ${code}`, "cmp");
+    await wait();
+  }
+  info(`<b>Done.</b> Encoded <code>${state.text.length}</code> characters into <code>${acc.length}</code> bits. A fixed-length code would need <code>${els.statFixed.textContent}</code>.`);
+  log("total " + acc.length + " bits", "ok");
+}
+
+// ---------------- drivers ----------------
+async function runAll() {
+  if (state.busy) { showToast("Running…", true); return; }
+  state.busy = true; state.stopped = false;
+  clearLog();
+  try {
+    if (state.mode === "encode") {
+      await encodeMessage();
+    } else {
+      const steps = buildStepQueue();
+      for (const step of steps) {
+        if (state.stopped) break;
+        await step();
+        await wait();
+      }
+    }
+  } catch (e) {
+    console.error(e); showToast("Error: " + e.message, true);
+  } finally {
+    state.busy = false;
+  }
+}
+
+function prepareStepMode() {
+  state.steps = state.mode === "encode" ? [] : buildStepQueue();
+  state.stepIndex = 0;
+}
+
+async function doStep() {
+  if (state.busy) return;
+  if (state.mode === "encode") { showToast("Step mode is for Build tree", true); return; }
+  if (!state.steps.length || state.stepIndex >= state.steps.length) {
+    prepareStepMode();
+    clearLog();
+  }
+  if (state.stepIndex < state.steps.length) {
+    state.busy = true;
+    try { await state.steps[state.stepIndex](); } catch (e) { console.error(e); }
+    state.stepIndex++;
+    state.busy = false;
+  }
+}
+
+function reset() {
+  if (state.busy) state.stopped = true;
+  resetRun();
+  clearLog();
+  els.codesWrap.innerHTML = "";
+  els.bitsGroup.style.display = "none";
+  els.statHuff.textContent = "—";
+  els.statFixed.textContent = "—";
+  els.statH.textContent = "—";
+  els.statSave.textContent = "—";
+  renderHeap();
+  renderTree();
+  info("Reset. Press <b>Run all</b> or <b>Step</b> to begin.");
+}
+
+// ---------------- event wiring ----------------
+document.getElementById("btnLoad").addEventListener("click", () => {
+  loadText(els.textInput.value);
+  prepareStepMode();
+});
+document.getElementById("btnRandom").addEventListener("click", () => {
+  const alpha = "abcdefg";
+  const len = 8 + Math.floor(Math.random() * 12);
+  let s = "";
+  for (let i = 0; i < len; i++) {
+    // bias toward earlier letters so the distribution is skewed
+    const r = Math.floor(Math.pow(Math.random(), 2) * alpha.length);
+    s += alpha[r];
+  }
+  els.textInput.value = s;
+  loadText(s);
+  prepareStepMode();
+});
+document.querySelectorAll("[data-preset]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    els.textInput.value = btn.getAttribute("data-preset");
+    loadText(btn.getAttribute("data-preset"));
+    prepareStepMode();
+  });
+});
+document.getElementById("btnRun").addEventListener("click", runAll);
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnReset").addEventListener("click", reset);
+
+document.getElementById("modeBuild").addEventListener("click", () => {
+  state.mode = "build";
+  document.getElementById("modeBuild").classList.add("active");
+  document.getElementById("modeEncode").classList.remove("active");
+  reset();
+  prepareStepMode();
+});
+document.getElementById("modeEncode").addEventListener("click", () => {
+  state.mode = "encode";
+  document.getElementById("modeEncode").classList.add("active");
+  document.getElementById("modeBuild").classList.remove("active");
+  reset();
+});
+
+els.textInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { loadText(els.textInput.value); prepareStepMode(); }
+});
+
+// ---------------- init ----------------
+loadText(els.textInput.value);
+prepareStepMode();
+</script>
+</body>
+</html>
