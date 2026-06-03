@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Memoization vs Tabulation — Filling the Subproblem DAG</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-active: rgba(210, 153, 34, 0.85);
+    --hi-cached: rgba(63, 185, 80, 0.85);
+    --hi-hit: rgba(88, 166, 255, 0.85);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  button.toggle.on { background: var(--good); border-color: var(--good); color: #06210f; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    font-family: var(--mono); font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  circle.node { fill: var(--panel-2); stroke: var(--border); stroke-width: 2; transition: fill 0.25s, stroke 0.25s; }
+  circle.node.active { fill: var(--hi-active); stroke: var(--accent-2); }
+  circle.node.cached { fill: var(--hi-cached); stroke: var(--good); }
+  circle.node.hit { fill: var(--hi-hit); stroke: var(--accent); }
+  text.nlabel { fill: #fff; font-size: 12px; font-weight: 700; font-family: var(--mono); pointer-events: none; }
+  text.nval { fill: var(--accent-2); font-size: 11px; font-family: var(--mono); pointer-events: none; }
+  line.dep { stroke: var(--muted); stroke-width: 1.6; marker-end: url(#arrow); opacity: 0.55; transition: stroke 0.2s; }
+  line.dep.lit { stroke: var(--accent-2); opacity: 1; stroke-width: 2.4; }
+  .matrix { border-collapse: collapse; font-family: var(--mono); font-size: 13px; margin-top: 6px; }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border); width: 42px; height: 38px;
+    text-align: center; color: var(--text); transition: background 0.25s, color 0.25s;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .matrix td.filled { background: rgba(63,185,80,0.30); color: #fff; font-weight: 700; }
+  .matrix td.curfill { background: var(--hi-active); color: #06210f; font-weight: 700; }
+  .matrix td.base { background: rgba(88,166,255,0.25); }
+  .narrate {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .callstack {
+    margin-top: 10px; font-family: var(--mono); font-size: 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 10px; min-height: 60px;
+  }
+  .callstack .frame { padding: 1px 0; color: var(--text); }
+  .callstack .frame.top { color: var(--accent-2); font-weight: 700; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-family: var(--mono); font-size: 12px; }
+  .stats b { color: var(--accent); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Memoization vs Tabulation — Filling the Subproblem DAG</h1>
+  <p>The same recurrence, two evaluation strategies. <b>Memoization</b> (left) descends by recursion and caches each subproblem; <b>tabulation</b> (right) fills the table bottom-up in order. Both compute every subproblem exactly once.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnPlay">Play &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Recurrence:
+      <select id="recSel">
+        <option value="fib">Fibonacci fib(n)</option>
+        <option value="climb">Climbing stairs ways(n)</option>
+      </select>
+    </label>
+    <label>n = <input type="number" id="nInput" value="6" min="2" max="10" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Memoization (top-down, recursion + cache)</h2>
+      <svg id="dagSvg" viewBox="0 0 460 300"></svg>
+      <div class="callstack" id="callStack"></div>
+      <div class="stats">
+        <span>computed: <b id="mComputed">0</b></span>
+        <span>cache hits: <b id="mHits">0</b></span>
+        <span>max depth: <b id="mDepth">0</b></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Tabulation (bottom-up, ordered table fill)</h2>
+      <table class="matrix" id="tabTable"></table>
+      <div class="callstack" id="tabExplain" style="border-left:3px solid var(--good);"></div>
+      <div class="stats">
+        <span>cells filled: <b id="tFilled">0</b></span>
+        <span>stack used: <b>none</b></span>
+        <span>order: <b>0,1,2,&hellip;,n</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Watch the left side recurse and cache while the right side fills its table in strict order — both visiting each subproblem once.</div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--hi-active)"></span> currently computing</span>
+    <span><span class="swatch" style="background:var(--hi-cached)"></span> computed &amp; cached</span>
+    <span><span class="swatch" style="background:var(--hi-hit)"></span> cache hit (reused)</span>
+    <span><span class="swatch" style="background:rgba(88,166,255,0.25)"></span> base case</span>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. The recurrence is <code>fib(n)=fib(n-1)+fib(n-2)</code> (or <code>ways(n)=ways(n-1)+ways(n-2)</code> with ways(0)=ways(1)=1).
+    Both strategies evaluate the identical function over the identical subproblem DAG; memoization is a cached depth-first traversal, tabulation a topological scan. See <code>junior.md</code> and <code>professional.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Recurrence definitions ----------
+const RECS = {
+  fib:   { base: {0: 0, 1: 1}, label: "fib",  start: 6 },
+  climb: { base: {0: 1, 1: 1}, label: "ways", start: 6 }
+};
+
+// ---------- State ----------
+const state = {
+  rec: "fib",
+  n: 6,
+  steps: [],
+  idx: 0,
+  playing: false,
+  timer: null,
+  label: "fib"
+};
+
+// ---------- Build the value table (bottom-up reference) ----------
+function buildValues(rec, n) {
+  const base = RECS[rec].base;
+  const v = new Array(n + 1).fill(0);
+  v[0] = base[0];
+  if (n >= 1) v[1] = base[1];
+  for (let i = 2; i <= n; i++) v[i] = v[i - 1] + v[i - 2];
+  return v;
+}
+
+// ---------- Build the step plan ----------
+// We interleave: first the full memoization trace, then the full tabulation fill.
+// Each step carries the complete display state so Step/Reset are deterministic.
+function buildPlan(rec, n) {
+  const label = RECS[rec].label;
+  const base = RECS[rec].base;
+  const vals = buildValues(rec, n);
+  const steps = [];
+
+  // ---- Phase A: memoization (recursive DFS with cache) ----
+  const cache = {};        // node -> value once computed
+  const stackTrace = [];   // current call stack (node indices)
+  let computed = 0, hits = 0, maxDepth = 0;
+
+  function snapshotMemo(extra) {
+    return Object.assign({
+      phase: "memo",
+      cache: Object.assign({}, cache),
+      stack: stackTrace.slice(),
+      computed, hits, maxDepth,
+      tabFilled: 0,
+      tabActive: -1
+    }, extra);
+  }
+
+  function fib(node) {
+    stackTrace.push(node);
+    maxDepth = Math.max(maxDepth, stackTrace.length);
+    // enter
+    if (node <= 1) {
+      cache[node] = base[node];
+      computed++;
+      steps.push(snapshotMemo({
+        active: node, hit: -1,
+        desc: "Reach base case " + label + "(" + node + ") = " + base[node] + ". Store it in the cache and return."
+      }));
+      stackTrace.pop();
+      return cache[node];
+    }
+    if (cache[node] !== undefined) {
+      hits++;
+      steps.push(snapshotMemo({
+        active: -1, hit: node,
+        desc: label + "(" + node + ") is already in the cache → reuse it instantly (cache hit). No recomputation."
+      }));
+      stackTrace.pop();
+      return cache[node];
+    }
+    // computing
+    steps.push(snapshotMemo({
+      active: node, hit: -1,
+      desc: "Compute " + label + "(" + node + ") = " + label + "(" + (node-1) + ") + " + label + "(" + (node-2) + "). Recurse into the children first."
+    }));
+    const a = fib(node - 1);
+    const b = fib(node - 2);
+    cache[node] = a + b;
+    computed++;
+    steps.push(snapshotMemo({
+      active: node, hit: -1,
+      desc: "Children done: " + label + "(" + node + ") = " + a + " + " + b + " = " + cache[node] + ". Cache it and return."
+    }));
+    stackTrace.pop();
+    return cache[node];
+  }
+
+  steps.push(snapshotMemo({ active: -1, hit: -1,
+    desc: "MEMOIZATION starts at the top: call " + label + "(" + n + "). The cache is empty; we recurse downward." }));
+  fib(n);
+  steps.push(snapshotMemo({ active: n, hit: -1,
+    desc: "MEMOIZATION done. Each subproblem was computed once (" + computed + " computes, " + hits + " cache hits). Result " + label + "(" + n + ") = " + cache[n] + "." }));
+
+  // ---- Phase B: tabulation (bottom-up table fill) ----
+  function snapshotTab(filled, active, desc) {
+    return {
+      phase: "tab",
+      cache: Object.assign({}, cache), // keep memo side fully colored as reference
+      stack: [],
+      computed, hits, maxDepth,
+      tabFilled: filled,
+      tabActive: active,
+      active: -1, hit: -1,
+      desc
+    };
+  }
+
+  steps.push(snapshotTab(0, -1,
+    "TABULATION starts at the bottom. Allocate dp[0..n] and fill base cases first — no recursion, no stack."));
+  steps.push(snapshotTab(1, 0,
+    "dp[0] = " + base[0] + " (base case)."));
+  if (n >= 1) steps.push(snapshotTab(2, 1,
+    "dp[1] = " + base[1] + " (base case)."));
+  for (let i = 2; i <= n; i++) {
+    steps.push(snapshotTab(i + 1, i,
+      "dp[" + i + "] = dp[" + (i-1) + "] + dp[" + (i-2) + "] = " + vals[i-1] + " + " + vals[i-2] + " = " + vals[i] +
+      ". Both dependencies were already filled — the order guarantees it."));
+  }
+  steps.push(Object.assign(snapshotTab(n + 1, n,
+    "TABULATION done. dp[" + n + "] = " + vals[n] + ". Same answer as memoization, no call stack used."), { done: true }));
+
+  return { steps, vals };
+}
+
+// ---------- DAG layout for the memo panel ----------
+function nodePositions(n) {
+  // place fib(n) at top, descend by index left->right along the bottom band,
+  // arranged on a simple arc so edges are readable for n<=10.
+  const pos = {};
+  const W = 460, topY = 36, botY = 250;
+  for (let i = 0; i <= n; i++) {
+    // higher index -> higher up and to the right
+    const t = n === 0 ? 0 : i / n;
+    const x = 40 + t * (W - 80);
+    const y = botY - t * (botY - topY);
+    pos[i] = [x, y];
+  }
+  return pos;
+}
+
+function renderDag(n) {
+  const svg = document.getElementById("dagSvg");
+  const pos = nodePositions(n);
+  let edges = "";
+  let defs = '<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#8b949e"/></marker></defs>';
+  // dependency edges: i -> i-1 and i -> i-2
+  for (let i = 2; i <= n; i++) {
+    for (const dj of [i - 1, i - 2]) {
+      const [x1, y1] = pos[i];
+      const [x2, y2] = pos[dj];
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const sx = x1 + ux * 15, sy = y1 + uy * 15;
+      const ex = x2 - ux * 17, ey = y2 - uy * 17;
+      edges += '<line class="dep" id="e' + i + '_' + dj + '" x1="' + sx.toFixed(1) +
+        '" y1="' + sy.toFixed(1) + '" x2="' + ex.toFixed(1) + '" y2="' + ey.toFixed(1) + '"/>';
+    }
+  }
+  let nodes = "";
+  for (let i = 0; i <= n; i++) {
+    const [x, y] = pos[i];
+    nodes += '<g>' +
+      '<circle class="node" id="n' + i + '" cx="' + x + '" cy="' + y + '" r="15"/>' +
+      '<text class="nlabel" x="' + x + '" y="' + (y - 1) + '" text-anchor="middle">' + i + '</text>' +
+      '<text class="nval" id="v' + i + '" x="' + x + '" y="' + (y + 11) + '" text-anchor="middle"></text>' +
+      '</g>';
+  }
+  svg.innerHTML = defs + '<g id="edgeLayer">' + edges + '</g><g id="nodeLayer">' + nodes + '</g>';
+}
+
+// ---------- Render the table ----------
+function renderTable(n) {
+  const t = document.getElementById("tabTable");
+  let head = "<tr><th>i</th>";
+  for (let i = 0; i <= n; i++) head += "<th>" + i + "</th>";
+  head += "</tr>";
+  let row = "<tr><th>dp</th>";
+  for (let i = 0; i <= n; i++) row += '<td id="dp' + i + '"></td>';
+  row += "</tr>";
+  t.innerHTML = head + row;
+}
+
+// ---------- Apply a step's snapshot to the DOM ----------
+function applyStep(step) {
+  const n = state.n;
+  const vals = state.plan.vals;
+
+  // ---- memo DAG colors + values ----
+  for (let i = 0; i <= n; i++) {
+    const circ = document.getElementById("n" + i);
+    const vtext = document.getElementById("v" + i);
+    circ.classList.remove("active", "cached", "hit");
+    if (step.cache[i] !== undefined) {
+      circ.classList.add("cached");
+      vtext.textContent = step.cache[i];
+    } else {
+      vtext.textContent = "";
+    }
+  }
+  if (step.active >= 0) {
+    document.getElementById("n" + step.active).classList.remove("cached");
+    document.getElementById("n" + step.active).classList.add("active");
+  }
+  if (step.hit >= 0) {
+    document.getElementById("n" + step.hit).classList.remove("cached");
+    document.getElementById("n" + step.hit).classList.add("hit");
+  }
+  // light dependency edges of the active/hit node
+  document.querySelectorAll("line.dep").forEach(e => e.classList.remove("lit"));
+  const lit = step.active >= 0 ? step.active : step.hit;
+  if (lit >= 2) {
+    const e1 = document.getElementById("e" + lit + "_" + (lit - 1));
+    const e2 = document.getElementById("e" + lit + "_" + (lit - 2));
+    if (e1) e1.classList.add("lit");
+    if (e2) e2.classList.add("lit");
+  }
+
+  // ---- call stack ----
+  const cs = document.getElementById("callStack");
+  if (step.phase === "memo") {
+    if (step.stack.length === 0) {
+      cs.innerHTML = '<div class="frame" style="color:var(--muted)">call stack empty</div>';
+    } else {
+      let html = "";
+      for (let d = 0; d < step.stack.length; d++) {
+        const top = d === step.stack.length - 1;
+        html += '<div class="frame' + (top ? ' top' : '') + '">' +
+          "&nbsp;".repeat(d * 2) + state.label + "(" + step.stack[d] + ")" +
+          (top ? "  &larr; running" : "") + '</div>';
+      }
+      cs.innerHTML = html;
+    }
+  } else {
+    cs.innerHTML = '<div class="frame" style="color:var(--muted)">memoization complete (reference colors retained)</div>';
+  }
+
+  // ---- table fill ----
+  for (let i = 0; i <= n; i++) {
+    const cell = document.getElementById("dp" + i);
+    cell.classList.remove("filled", "curfill", "base");
+    if (step.phase === "tab" && i < step.tabFilled) {
+      cell.textContent = vals[i];
+      if (i <= 1) cell.classList.add("base");
+      else cell.classList.add("filled");
+      if (i === step.tabActive) {
+        cell.classList.remove("filled", "base");
+        cell.classList.add("curfill");
+      }
+    } else {
+      cell.textContent = "";
+    }
+  }
+  const te = document.getElementById("tabExplain");
+  if (step.phase === "tab") {
+    te.innerHTML = '<div class="frame" style="color:var(--good)">filling dp[] left &rarr; right; each cell uses already-filled neighbors</div>';
+  } else {
+    te.innerHTML = '<div class="frame" style="color:var(--muted)">tabulation waits — finishing the memoization trace first</div>';
+  }
+
+  // ---- stats ----
+  document.getElementById("mComputed").textContent = step.computed;
+  document.getElementById("mHits").textContent = step.hits;
+  document.getElementById("mDepth").textContent = step.maxDepth;
+  document.getElementById("tFilled").textContent = step.phase === "tab" ? step.tabFilled : 0;
+
+  // ---- narration ----
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.steps.length - 1) +
+    "  (" + (step.phase === "memo" ? "memoization" : "tabulation") + ")";
+}
+
+// ---------- Navigation ----------
+function gotoStep(i) {
+  if (i < 0 || i >= state.steps.length) return;
+  state.idx = i;
+  applyStep(state.steps[i]);
+  updateButtons();
+}
+function stepForward() {
+  if (state.idx < state.steps.length - 1) gotoStep(state.idx + 1);
+}
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.playing;
+  document.getElementById("btnPlay").textContent = state.playing ? "Pause ⏸" : "Play ▶▶";
+}
+function play() {
+  if (state.playing) {
+    clearInterval(state.timer);
+    state.playing = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) rebuild();
+  state.playing = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.playing = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 950);
+}
+
+// ---------- Build / reset ----------
+function rebuild() {
+  if (state.playing) { clearInterval(state.timer); state.playing = false; }
+  state.rec = document.getElementById("recSel").value;
+  state.label = RECS[state.rec].label;
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 2) n = 2;
+  if (n > 10) n = 10;
+  document.getElementById("nInput").value = n;
+  state.n = n;
+  state.plan = buildPlan(state.rec, n);
+  state.steps = state.plan.steps;
+  state.idx = 0;
+  renderDag(n);
+  renderTable(n);
+  applyStep(state.steps[0]);
+  updateButtons();
+}
+
+// ---------- Wire controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.playing) { clearInterval(state.timer); state.playing = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnPlay").addEventListener("click", play);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("recSel").addEventListener("change", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
