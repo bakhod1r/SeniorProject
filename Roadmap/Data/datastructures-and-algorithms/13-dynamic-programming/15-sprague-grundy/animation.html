@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sprague-Grundy — Grundy Numbers, mex, and the XOR Sum Rule</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-node: rgba(88, 166, 255, 0.30);
+    --hi-done: rgba(63, 185, 80, 0.22);
+    --hi-mex: rgba(210, 153, 34, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .mexbox {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+  }
+  .mexbox b { color: var(--accent); }
+  .mexbox .val { color: var(--good); font-weight: 700; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+  }
+  .chip.present { border-color: var(--good); color: var(--good); }
+  .chip.mex { background: var(--hi-mex); border-color: var(--accent-2); color: #fff; font-weight: 700; }
+  .sumrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 15px;
+  }
+  .gtag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    font-weight: 700;
+  }
+  .gtag.zero { border-color: var(--bad); color: var(--bad); }
+  .gtag.nz { border-color: var(--good); color: var(--good); }
+  .op { color: var(--muted); font-weight: 700; }
+  .result-line { margin-top: 14px; font-size: 15px; font-family: var(--mono); }
+  .result-line .win { color: var(--good); font-weight: 700; }
+  .result-line .lose { color: var(--bad); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  circle.node { fill: var(--panel-2); stroke: var(--muted); stroke-width: 2; transition: all 0.25s ease; }
+  circle.node.active { stroke: var(--accent); stroke-width: 3; fill: var(--hi-node); }
+  circle.node.done { stroke: var(--good); }
+  text.nlabel { fill: #fff; font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  text.glabel { fill: var(--accent-2); font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  line.edge { stroke: var(--muted); stroke-width: 2; marker-end: url(#arrow); }
+  line.edge.hot { stroke: var(--accent); stroke-width: 3; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sprague-Grundy — Grundy Numbers via mex, and the XOR Sum Rule</h1>
+  <p>grundy(p) = <b>mex</b> of children's Grundy values. <b>0</b> means the mover loses. A sum of games is decided by the <b>XOR</b> of component Grundy values.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Game:
+      <select id="gameSel">
+        <option value="sub123">Subtraction S={1,2,3}, pile up to 6</option>
+        <option value="sub13">Subtraction S={1,3}, pile up to 7</option>
+        <option value="dag">Custom move DAG (7 positions)</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Position DAG &mdash; bottom-up Grundy labeling</h2>
+      <svg id="graphSvg" viewBox="0 0 560 320">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#8b949e"/>
+          </marker>
+        </defs>
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="mexbox" id="mexBox">
+        Press <b>Step</b> to begin computing Grundy numbers from the terminal positions upward.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-node)"></span> node being computed</span>
+        <span><span class="swatch" style="background:var(--good)"></span> already labeled</span>
+        <span><span class="swatch" style="background:var(--hi-mex)"></span> chosen mex</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sum of games &mdash; XOR rule</h2>
+      <div class="step-counter">Pick a few positions; the disjunctive sum's Grundy is their XOR.</div>
+      <div class="sumrow" id="sumRow"></div>
+      <div class="result-line" id="resultLine"></div>
+      <div class="mexbox" id="winBox" style="margin-top:14px;">
+        A single game is a <b>loss</b> for the mover when its Grundy value is <b>0</b>.
+        A sum is a loss when the <b>XOR</b> of components is <b>0</b>.
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">grundy(terminal) = mex&#123;&#125; = 0. Each non-terminal takes the mex of its children's Grundy values. Watch the labels fill in.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Impartial, normal-play games (last to move wins). The <code>mex</code> of a set is its smallest missing non-negative integer.
+    See <code>junior.md</code> for the definitions and <code>professional.md</code> for the proof that grundy(sum) = XOR of component Grundy values.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Game definitions ----------
+// Each game is a DAG: nodes[] with positions, and a topological order (terminals first).
+// edges given as child lists (move i -> j). Grundy computed by mex over children.
+function subtractionGame(S, maxPile) {
+  const n = maxPile + 1;
+  const adj = [];
+  for (let x = 0; x <= maxPile; x++) {
+    const ch = [];
+    for (const s of S) if (s <= x) ch.push(x - s);
+    adj.push(ch);
+  }
+  // layout: along an arc
+  const pos = [];
+  for (let x = 0; x <= maxPile; x++) {
+    const t = maxPile === 0 ? 0 : x / maxPile;
+    pos.push([40 + t * 480, 60 + (x % 2 === 0 ? 0 : 120) + 80]);
+  }
+  const labels = adj.map((_, x) => "" + x);
+  return { adj, pos, labels, name: "Subtraction S={" + S.join(",") + "}" };
+}
+
+const GAMES = {
+  sub123: subtractionGame([1, 2, 3], 6),
+  sub13: subtractionGame([1, 3], 7),
+  dag: (function () {
+    // a custom move DAG over 7 positions (indices are NOT pile sizes)
+    // 0,1 terminal ; 2->0 ; 3->0,1 ; 4->2,3 ; 5->1,4 ; 6->4,5
+    const adj = [[], [], [0], [0, 1], [2, 3], [1, 4], [4, 5]];
+    const pos = [
+      [60, 250], [60, 90], [180, 250], [180, 90],
+      [320, 170], [440, 90], [500, 240]
+    ];
+    const labels = ["A", "B", "C", "D", "E", "F", "G"];
+    return { adj, pos, labels, name: "Custom move DAG" };
+  })()
+};
+
+// ---------- Grundy + plan ----------
+function mexOf(values) {
+  const set = new Set(values);
+  let i = 0;
+  while (set.has(i)) i++;
+  return i;
+}
+
+// Topological order: since adj points to strictly-smaller-or-earlier nodes,
+// we compute an order where all children precede a node (Kahn-ish via DFS).
+function topoOrder(adj) {
+  const n = adj.length;
+  const order = [];
+  const state = new Array(n).fill(0); // 0=unseen,1=active,2=done
+  function dfs(v) {
+    state[v] = 1;
+    for (const u of adj[v]) if (state[u] === 0) dfs(u);
+    state[v] = 2;
+    order.push(v); // children pushed before v
+  }
+  for (let v = 0; v < n; v++) if (state[v] === 0) dfs(v);
+  return order;
+}
+
+function buildPlan(game) {
+  const adj = game.adj;
+  const order = topoOrder(adj);
+  const grundy = new Array(adj.length).fill(null);
+  const steps = [];
+  steps.push({
+    type: "start",
+    node: -1,
+    grundy: grundy.slice(),
+    desc: "We compute Grundy numbers bottom-up over the move DAG. Terminal positions (no moves) get grundy = mex{} = 0."
+  });
+  for (const v of order) {
+    const childVals = adj[v].map(u => grundy[u]);
+    const g = mexOf(childVals);
+    grundy[v] = g;
+    let desc;
+    if (adj[v].length === 0) {
+      desc = "Position " + game.labels[v] + " is terminal (no moves) → grundy = mex{} = 0. The mover here loses.";
+    } else {
+      desc = "Position " + game.labels[v] + ": children grundy = {" + childVals.join(", ") +
+        "} → mex = " + g + (g === 0 ? " (losing position!)" : " (winning position).");
+    }
+    steps.push({
+      type: "label",
+      node: v,
+      children: adj[v].slice(),
+      childVals: childVals.slice(),
+      value: g,
+      grundy: grundy.slice(),
+      desc: desc
+    });
+  }
+  steps.push({
+    type: "done",
+    node: -1,
+    grundy: grundy.slice(),
+    desc: "All Grundy numbers computed. Now pick a few positions on the right to see the XOR sum rule decide the compound game."
+  });
+  return { steps, grundyFinal: grundy };
+}
+
+// ---------- Rendering ----------
+function renderGraph(game) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  const pos = game.pos;
+  for (let v = 0; v < game.adj.length; v++) {
+    for (const u of game.adj[v]) {
+      const [x1, y1] = pos[v];
+      const [x2, y2] = pos[u];
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const sx = x1 + ux * 18, sy = y1 + uy * 18;
+      const ex = x2 - ux * 20, ey = y2 - uy * 20;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", sx); line.setAttribute("y1", sy);
+      line.setAttribute("x2", ex); line.setAttribute("y2", ey);
+      line.setAttribute("class", "edge");
+      line.setAttribute("data-from", v);
+      line.setAttribute("data-to", u);
+      edgeLayer.appendChild(line);
+    }
+  }
+  for (let v = 0; v < game.adj.length; v++) {
+    const [x, y] = pos[v];
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 17);
+    c.setAttribute("class", "node");
+    c.setAttribute("id", "node-" + v);
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "nlabel");
+    t.textContent = game.labels[v];
+    nodeLayer.appendChild(t);
+    const gt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    gt.setAttribute("x", x); gt.setAttribute("y", y - 24);
+    gt.setAttribute("text-anchor", "middle");
+    gt.setAttribute("class", "glabel");
+    gt.setAttribute("id", "glab-" + v);
+    gt.textContent = "";
+    nodeLayer.appendChild(gt);
+  }
+}
+
+function applyStep(step) {
+  const game = state.game;
+  // update node grundy labels and styles
+  for (let v = 0; v < game.adj.length; v++) {
+    const node = document.getElementById("node-" + v);
+    const glab = document.getElementById("glab-" + v);
+    node.classList.remove("active", "done");
+    if (step.grundy[v] !== null) {
+      node.classList.add("done");
+      glab.textContent = "g=" + step.grundy[v];
+    } else {
+      glab.textContent = "";
+    }
+  }
+  // highlight edges
+  document.querySelectorAll("line.edge").forEach(l => l.classList.remove("hot"));
+
+  const mexBox = document.getElementById("mexBox");
+  if (step.type === "label") {
+    const node = document.getElementById("node-" + step.node);
+    node.classList.add("active");
+    node.classList.remove("done");
+    for (const u of step.children) {
+      const l = document.querySelector('line.edge[data-from="' + step.node + '"][data-to="' + u + '"]');
+      if (l) l.classList.add("hot");
+    }
+    // mex chips
+    const present = new Set(step.childVals);
+    let chips = "";
+    const upTo = Math.max(step.value, ...(step.childVals.length ? step.childVals : [0])) + 1;
+    for (let i = 0; i <= upTo; i++) {
+      let cls = "chip";
+      if (i === step.value) cls += " mex";
+      else if (present.has(i)) cls += " present";
+      chips += "<span class='" + cls + "'>" + i + "</span>";
+    }
+    mexBox.innerHTML =
+      "Computing <b>" + game.labels[step.node] + "</b>: children grundy = {" +
+      step.childVals.join(", ") + "}<div class='chips'>" + chips + "</div>" +
+      "<div style='margin-top:8px'>mex = <span class='val'>" + step.value + "</span>" +
+      (step.value === 0 ? " &rarr; <b style='color:var(--bad)'>losing</b>" : " &rarr; <b style='color:var(--good)'>winning</b>") +
+      "</div>";
+  } else if (step.type === "done") {
+    mexBox.innerHTML = "All positions labeled. Final Grundy values: <b>[" +
+      step.grundy.join(", ") + "]</b>. Positions with grundy 0 are losing for the mover.";
+    renderSum();
+  } else {
+    mexBox.innerHTML = step.desc;
+  }
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+// ---------- Sum / XOR panel ----------
+function renderSum() {
+  const game = state.game;
+  const g = state.plan.grundyFinal;
+  // pick a sample subset of positions for the sum
+  const picks = state.sumPicks;
+  const sumRow = document.getElementById("sumRow");
+  let html = "";
+  let xor = 0;
+  picks.forEach((p, idx) => {
+    if (g[p] === null) return;
+    xor ^= g[p];
+    const cls = g[p] === 0 ? "gtag zero" : "gtag nz";
+    if (idx > 0) html += "<span class='op'>&oplus;</span>";
+    html += "<span class='" + cls + "' title='" + game.labels[p] + "'>" + g[p] + "</span>";
+  });
+  html += "<span class='op'>=</span><span class='gtag " + (xor === 0 ? "zero" : "nz") + "'>" + xor + "</span>";
+  sumRow.innerHTML = html;
+  const labelStr = picks.map(p => game.labels[p]).join(" + ");
+  document.getElementById("resultLine").innerHTML =
+    "Sum (" + labelStr + "): XOR = " + xor + " &rarr; " +
+    (xor === 0
+      ? "<span class='lose'>mover LOSES</span>"
+      : "<span class='win'>mover WINS</span>");
+}
+
+// ---------- State machine ----------
+const state = {
+  game: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  sumPicks: []
+};
+
+function loadGame(key) {
+  state.game = GAMES[key];
+  state.plan = buildPlan(state.game);
+  state.stepIdx = 0;
+  // choose sum picks: a few interesting positions
+  const n = state.game.adj.length;
+  if (n >= 4) state.sumPicks = [n - 1, n - 2, Math.max(0, n - 4)];
+  else state.sumPicks = [n - 1];
+  renderGraph(state.game);
+  applyStep(state.plan.steps[0]);
+  document.getElementById("sumRow").innerHTML = "(compute the DAG first)";
+  document.getElementById("resultLine").innerHTML = "";
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+function rebuild() {
+  const key = document.getElementById("gameSel").value;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadGame(key);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("gameSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
