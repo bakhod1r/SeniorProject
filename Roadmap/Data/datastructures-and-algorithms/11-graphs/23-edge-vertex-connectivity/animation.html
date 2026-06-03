@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Edge &amp; Vertex Connectivity — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .mode-pill {
+    display: inline-flex; gap: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 340px 1fr;
+    gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .step-controls {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 6px; margin-bottom: 10px;
+  }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  #vis {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; min-height: 440px; overflow-x: auto;
+  }
+  svg#graph { width: 100%; height: 440px; display: block; }
+  .edge { stroke: var(--border); stroke-width: 2.5; fill: none; transition: all 0.25s ease; }
+  .edge.scan { stroke: var(--yellow); stroke-width: 4; }
+  .edge.cut { stroke: var(--red); stroke-width: 4.5; stroke-dasharray: 6 4; }
+  .edge.merged { stroke: var(--purple); stroke-width: 3; opacity: 0.5; }
+  .elabel { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: var(--muted); text-anchor: middle; }
+  .node circle { stroke-width: 2.5; transition: all 0.25s ease; }
+  .node text.val {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 14px; font-weight: 600; fill: var(--text);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  }
+  .node.default circle { fill: rgba(88,166,255,0.15); stroke: var(--blue); }
+  .node.inA circle { fill: rgba(63,185,80,0.30); stroke: var(--green); }
+  .node.selected circle { fill: rgba(210,153,34,0.35); stroke: var(--yellow); }
+  .node.last circle { fill: rgba(248,81,73,0.30); stroke: var(--red); }
+  .node.sideA circle { fill: rgba(88,166,255,0.30); stroke: var(--blue); }
+  .node.sideB circle { fill: rgba(188,140,255,0.30); stroke: var(--purple); }
+  .node.merged circle { opacity: 0.3; }
+  .info-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5;
+  }
+  .info-bar .step-no { color: var(--blue); font-weight: 600; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; text-align: center;
+  }
+  .stat .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+  .stat .value {
+    font-size: 20px; font-weight: 700; margin-top: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 14px; height: 14px; border-radius: 4px; border: 2px solid; }
+  .sw-green { background: rgba(63,185,80,0.30); border-color: var(--green); }
+  .sw-yellow { background: rgba(210,153,34,0.35); border-color: var(--yellow); }
+  .sw-red { background: rgba(248,81,73,0.30); border-color: var(--red); }
+  .sw-blue { background: rgba(88,166,255,0.30); border-color: var(--blue); }
+  .sw-purple { background: rgba(188,140,255,0.30); border-color: var(--purple); }
+  .order-strip {
+    display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 13px;
+  }
+  .order-cell {
+    border: 2px solid var(--green); background: rgba(63,185,80,0.18);
+    border-radius: 6px; padding: 6px 10px; min-width: 34px; text-align: center;
+  }
+  code { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Edge &amp; Vertex Connectivity — Stoer–Wagner Global Min-Cut</h1>
+  <div class="mode-pill">
+    <button id="modeSW" class="active">Stoer–Wagner</button>
+    <button id="modePaths">Disjoint Paths</button>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="control-group">
+      <h2>Playback</h2>
+      <div class="step-controls">
+        <button class="btn" id="btnPrev">◀ Prev</button>
+        <button class="btn" id="btnNext">Next ▶</button>
+        <button class="btn primary" id="btnRun">Run ▶▶</button>
+        <button class="btn warn" id="btnPause">Pause ⏸</button>
+      </div>
+      <button class="btn danger" id="btnReset" style="width:100%; margin-bottom:10px;">Reset ⟲</button>
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="120" max="1600" value="700" step="20" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Graph</h2>
+      <button class="btn" id="btnGraph1" style="width:100%; margin-bottom:6px;">Example A (8 nodes, cut = 4)</button>
+      <button class="btn" id="btnGraph2" style="width:100%;">Example B (square+diag, cut = 3)</button>
+    </div>
+
+    <div class="control-group">
+      <h2>What you are seeing</h2>
+      <div class="info-bar" id="explain">
+        The <b>Stoer–Wagner</b> algorithm finds the global minimum cut without max-flow.
+        Each <i>phase</i> grows a set <code>A</code> by repeatedly absorbing the most
+        tightly connected vertex (maximum adjacency). The last two vertices added are
+        <code>s</code> and <code>t</code>; the cut isolating the last one is a minimum
+        <code>s-t</code> cut. Then <code>s</code> and <code>t</code> are merged and the
+        next phase begins. The smallest cut over all phases is the global min-cut.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Maximum-Adjacency Order (this phase)</h2>
+      <div class="order-strip" id="orderStrip"></div>
+    </div>
+  </div>
+
+  <div class="right-col">
+    <div id="vis">
+      <svg id="graph" viewBox="0 0 760 440" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="panel">
+      <div class="info-bar"><span class="step-no" id="stepLabel">Step 0</span> — <span id="stepText">Press Next or Run to begin.</span></div>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Phase</div><div class="value" id="statPhase">–</div></div>
+        <div class="stat"><div class="label">Cut of Phase</div><div class="value" id="statCut">–</div></div>
+        <div class="stat"><div class="label">Best (global λ)</div><div class="value" id="statBest">–</div></div>
+      </div>
+      <div class="legend">
+        <div class="item"><span class="swatch sw-green"></span> in set A</div>
+        <div class="item"><span class="swatch sw-yellow"></span> just selected</div>
+        <div class="item"><span class="swatch sw-red"></span> last vertex (cut-of-phase)</div>
+        <div class="item"><span class="swatch sw-blue"></span> final cut side A</div>
+        <div class="item"><span class="swatch sw-purple"></span> final cut side B</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// ----- Graph definitions -----
+const GRAPHS = {
+  A: {
+    n: 8,
+    pos: [
+      [110, 80], [300, 60], [500, 70], [660, 110],
+      [110, 320], [300, 360], [500, 350], [660, 300]
+    ],
+    edges: [
+      [0,1,2],[0,4,3],[1,2,3],[1,4,2],[1,5,2],
+      [2,3,4],[2,6,2],[3,6,2],[3,7,2],[4,5,3],[5,6,1],[6,7,3]
+    ]
+  },
+  B: {
+    n: 4,
+    pos: [ [180,90], [560,90], [560,350], [180,350] ],
+    edges: [ [0,1,3],[1,2,1],[2,3,3],[3,0,1],[0,2,1] ]
+  }
+};
+
+let current = "A";
+let steps = [];
+let stepIdx = 0;
+let timer = null;
+let speed = 700;
+
+// ----- Build the weight matrix from edges -----
+function buildMatrix(g) {
+  const w = Array.from({length: g.n}, () => new Array(g.n).fill(0));
+  for (const [u, v, c] of g.edges) { w[u][v] += c; w[v][u] += c; }
+  return w;
+}
+
+// ----- Stoer-Wagner with full step trace -----
+function stoerWagnerTrace(g) {
+  const n = g.n;
+  const w = buildMatrix(g);
+  // working copy
+  const gm = w.map(r => r.slice());
+  const groups = Array.from({length: n}, (_, i) => [i]);
+  const alive = new Array(n).fill(true);
+  let best = Infinity;
+  let bestSide = [];
+  const trace = [];
+
+  trace.push({
+    type: "start",
+    alive: alive.slice(),
+    text: "Global min-cut via Stoer–Wagner. We run n−1 phases; each merges the last two vertices.",
+    phase: "–", cut: "–", best: "–", inA: [], order: []
+  });
+
+  let phaseNo = 0;
+  let aliveCount = n;
+  while (aliveCount > 1) {
+    phaseNo++;
+    const weight = new Array(n).fill(0);
+    const added = new Array(n).fill(false);
+    const order = [];
+    let prev = -1, last = -1;
+    for (let i = 0; i < aliveCount; i++) {
+      let sel = -1;
+      for (let v = 0; v < n; v++) {
+        if (alive[v] && !added[v] && (sel === -1 || weight[v] > weight[sel])) sel = v;
+      }
+      added[sel] = true;
+      order.push(sel);
+      prev = last; last = sel;
+      trace.push({
+        type: "select",
+        alive: alive.slice(),
+        inA: order.slice(0, -1),
+        sel: sel,
+        order: order.slice(),
+        phase: phaseNo,
+        cut: "–", best: best === Infinity ? "–" : best,
+        text: `Phase ${phaseNo}: add vertex ${sel} to A (it is most tightly connected to the current A). Connection weight = ${weight[sel]}.`
+      });
+      for (let v = 0; v < n; v++) {
+        if (alive[v] && !added[v]) weight[v] += gm[sel][v];
+      }
+    }
+    const cutOfPhase = weight[last];
+    let newBest = best;
+    let newSide = bestSide;
+    if (cutOfPhase < best) { newBest = cutOfPhase; newSide = groups[last].slice(); }
+    trace.push({
+      type: "cut",
+      alive: alive.slice(),
+      inA: order.slice(0, -1),
+      last: last,
+      order: order.slice(),
+      phase: phaseNo,
+      cut: cutOfPhase,
+      best: newBest,
+      text: `Phase ${phaseNo} ends. Last vertex = ${last}; cut-of-phase (isolating its group) = ${cutOfPhase}. ` +
+            (cutOfPhase < best ? `New global best = ${cutOfPhase}!` : `Global best stays ${best}.`)
+    });
+    best = newBest; bestSide = newSide;
+    // merge last into prev
+    alive[last] = false;
+    aliveCount--;
+    groups[prev] = groups[prev].concat(groups[last]);
+    for (let v = 0; v < n; v++) { gm[prev][v] += gm[last][v]; gm[v][prev] += gm[v][last]; }
+    if (aliveCount > 1) {
+      trace.push({
+        type: "merge",
+        alive: alive.slice(),
+        inA: [],
+        mergedPair: [prev, last],
+        order: [],
+        phase: phaseNo,
+        cut: cutOfPhase,
+        best: best,
+        text: `Merge vertex ${last} into ${prev} (super-vertex). ${aliveCount} vertices remain.`
+      });
+    }
+  }
+  trace.push({
+    type: "done",
+    alive: alive.slice(),
+    inA: [],
+    order: [],
+    phase: phaseNo,
+    cut: "–",
+    best: best,
+    sideA: bestSide.slice(),
+    text: `Done. Global minimum cut value = ${best}. The highlighted partition is one minimum cut.`
+  });
+  return { trace, best, bestSide };
+}
+
+// ----- Disjoint-paths mode trace (Example B): show edge-disjoint s-t paths -----
+function disjointPathsTrace(g) {
+  // For simplicity, illustrate fixed edge-disjoint paths on the chosen graph.
+  const trace = [];
+  trace.push({ type: "start", text: "Menger's theorem: max edge-disjoint s→t paths = min s-t edge cut. We route disjoint paths one at a time.", inA: [], order: [], phase: "–", cut: "–", best: "–", alive: new Array(g.n).fill(true) });
+  let pathSets;
+  if (current === "B") {
+    // s=0, t=2 : paths 0-2, 0-1-2, 0-3-2
+    pathSets = [
+      { edges: [[0,2]], label: "0 → 2" },
+      { edges: [[0,1],[1,2]], label: "0 → 1 → 2" },
+      { edges: [[0,3],[3,2]], label: "0 → 3 → 2" }
+    ];
+  } else {
+    // Example A: s=0, t=7 — show two disjoint paths for illustration
+    pathSets = [
+      { edges: [[0,1],[1,2],[2,3],[3,7]], label: "0 → 1 → 2 → 3 → 7" },
+      { edges: [[0,4],[4,5],[5,6],[6,7]], label: "0 → 4 → 5 → 6 → 7" }
+    ];
+  }
+  const used = [];
+  pathSets.forEach((p, i) => {
+    used.push(...p.edges);
+    trace.push({
+      type: "path",
+      pathEdges: used.map(e => e.slice()),
+      text: `Edge-disjoint path #${i+1}: ${p.label}. Total disjoint paths so far = ${i+1}.`,
+      inA: [], order: [], phase: "–", cut: i+1, best: i+1, alive: new Array(g.n).fill(true)
+    });
+  });
+  const k = pathSets.length;
+  trace.push({
+    type: "pathsDone",
+    pathEdges: used.map(e => e.slice()),
+    text: `No more edge-disjoint paths exist. Max disjoint paths = ${k} = min s-t edge cut (by Menger).`,
+    inA: [], order: [], phase: "–", cut: k, best: k, alive: new Array(g.n).fill(true)
+  });
+  return { trace, best: k };
+}
+
+let mode = "SW";
+
+// ----- Rendering -----
+const svg = document.getElementById("graph");
+const SVGNS = "http://www.w3.org/2000/svg";
+
+function clearSvg() { while (svg.firstChild) svg.removeChild(svg.firstChild); }
+
+function edgeKey(u, v) { return u < v ? u + "_" + v : v + "_" + u; }
+
+function renderBase(g) {
+  clearSvg();
+  // edges first
+  const drawn = new Set();
+  for (const [u, v, c] of g.edges) {
+    const k = edgeKey(u, v);
+    if (drawn.has(k)) continue;
+    drawn.add(k);
+    const line = document.createElementNS(SVGNS, "line");
+    line.setAttribute("x1", g.pos[u][0]); line.setAttribute("y1", g.pos[u][1]);
+    line.setAttribute("x2", g.pos[v][0]); line.setAttribute("y2", g.pos[v][1]);
+    line.setAttribute("class", "edge");
+    line.dataset.key = k;
+    svg.appendChild(line);
+    const mx = (g.pos[u][0] + g.pos[v][0]) / 2;
+    const my = (g.pos[u][1] + g.pos[v][1]) / 2;
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("x", mx); t.setAttribute("y", my - 4);
+    t.setAttribute("class", "elabel");
+    t.textContent = c;
+    svg.appendChild(t);
+  }
+  // nodes
+  for (let i = 0; i < g.n; i++) {
+    const gEl = document.createElementNS(SVGNS, "g");
+    gEl.setAttribute("class", "node default");
+    gEl.dataset.id = i;
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("cx", g.pos[i][0]); c.setAttribute("cy", g.pos[i][1]); c.setAttribute("r", 20);
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("x", g.pos[i][0]); t.setAttribute("y", g.pos[i][1]);
+    t.setAttribute("class", "val");
+    t.textContent = i;
+    gEl.appendChild(c); gEl.appendChild(t);
+    svg.appendChild(gEl);
+  }
+}
+
+function setNodeClass(id, cls) {
+  const el = svg.querySelector('.node[data-id="' + id + '"]');
+  if (el) el.setAttribute("class", "node " + cls);
+}
+function setEdgeClass(u, v, cls) {
+  const el = svg.querySelector('.edge[data-key="' + edgeKey(u, v) + '"]');
+  if (el) el.setAttribute("class", "edge " + cls);
+}
+
+function applyStep(s) {
+  const g = GRAPHS[current];
+  // reset nodes/edges
+  for (let i = 0; i < g.n; i++) setNodeClass(i, "default");
+  svg.querySelectorAll(".edge").forEach(e => e.setAttribute("class", "edge"));
+
+  if (mode === "SW") {
+    if (s.alive) {
+      for (let i = 0; i < g.n; i++) if (!s.alive[i]) setNodeClass(i, "merged");
+    }
+    (s.inA || []).forEach(v => { if (!s.alive || s.alive[v]) setNodeClass(v, "inA"); });
+    if (s.type === "select" && s.sel !== undefined) setNodeClass(s.sel, "selected");
+    if (s.type === "cut" && s.last !== undefined) setNodeClass(s.last, "last");
+    if (s.type === "merge" && s.mergedPair) {
+      setNodeClass(s.mergedPair[0], "selected");
+    }
+    if (s.type === "done" && s.sideA) {
+      const inA = new Set(s.sideA);
+      for (let i = 0; i < g.n; i++) setNodeClass(i, inA.has(i) ? "sideA" : "sideB");
+      // mark cut edges
+      const drawn = new Set();
+      for (const [u, v] of g.edges) {
+        const k = edgeKey(u, v);
+        if (drawn.has(k)) continue; drawn.add(k);
+        if (inA.has(u) !== inA.has(v)) setEdgeClass(u, v, "cut");
+      }
+    }
+  } else {
+    // paths mode
+    if (s.pathEdges) {
+      for (const [u, v] of s.pathEdges) setEdgeClass(u, v, "scan");
+    }
+  }
+
+  // order strip
+  const strip = document.getElementById("orderStrip");
+  strip.innerHTML = "";
+  (s.order || []).forEach(v => {
+    const cell = document.createElement("div");
+    cell.className = "order-cell";
+    cell.textContent = v;
+    strip.appendChild(cell);
+  });
+
+  document.getElementById("stepLabel").textContent = "Step " + stepIdx;
+  document.getElementById("stepText").textContent = s.text || "";
+  document.getElementById("statPhase").textContent = s.phase !== undefined ? s.phase : "–";
+  document.getElementById("statCut").textContent = s.cut !== undefined ? s.cut : "–";
+  document.getElementById("statBest").textContent = s.best !== undefined ? s.best : "–";
+}
+
+function rebuild() {
+  const g = GRAPHS[current];
+  renderBase(g);
+  const res = (mode === "SW") ? stoerWagnerTrace(g) : disjointPathsTrace(g);
+  steps = res.trace;
+  stepIdx = 0;
+  applyStep(steps[0]);
+}
+
+function next() {
+  if (stepIdx < steps.length - 1) { stepIdx++; applyStep(steps[stepIdx]); }
+  else pause();
+}
+function prev() {
+  if (stepIdx > 0) { stepIdx--; applyStep(steps[stepIdx]); }
+}
+function run() {
+  pause();
+  timer = setInterval(() => {
+    if (stepIdx < steps.length - 1) next();
+    else pause();
+  }, speed);
+}
+function pause() { if (timer) { clearInterval(timer); timer = null; } }
+function reset() { pause(); stepIdx = 0; applyStep(steps[0]); }
+
+// ----- Wire controls -----
+document.getElementById("btnNext").onclick = () => { pause(); next(); };
+document.getElementById("btnPrev").onclick = () => { pause(); prev(); };
+document.getElementById("btnRun").onclick = run;
+document.getElementById("btnPause").onclick = pause;
+document.getElementById("btnReset").onclick = reset;
+document.getElementById("speed").oninput = (e) => {
+  speed = (1720 - parseInt(e.target.value, 10));
+  if (timer) run();
+};
+document.getElementById("btnGraph1").onclick = () => { current = "A"; rebuild(); };
+document.getElementById("btnGraph2").onclick = () => { current = "B"; rebuild(); };
+
+const modeSW = document.getElementById("modeSW");
+const modePaths = document.getElementById("modePaths");
+modeSW.onclick = () => {
+  mode = "SW"; modeSW.classList.add("active"); modePaths.classList.remove("active");
+  document.getElementById("explain").innerHTML =
+    "The <b>Stoer–Wagner</b> algorithm finds the global minimum cut without max-flow. " +
+    "Each <i>phase</i> grows a set <code>A</code> by repeatedly absorbing the most tightly " +
+    "connected vertex (maximum adjacency). The last two vertices added are <code>s</code> and " +
+    "<code>t</code>; the cut isolating the last one is a minimum <code>s-t</code> cut. Then " +
+    "<code>s</code> and <code>t</code> are merged and the next phase begins. The smallest " +
+    "cut over all phases is the global min-cut.";
+  rebuild();
+};
+modePaths.onclick = () => {
+  mode = "paths"; modePaths.classList.add("active"); modeSW.classList.remove("active");
+  document.getElementById("explain").innerHTML =
+    "<b>Menger's theorem</b> says the maximum number of edge-disjoint <code>s→t</code> paths " +
+    "equals the minimum <code>s-t</code> edge cut. Here we route disjoint paths one at a time; " +
+    "when no more can be routed, that count is both the number of independent routes and the " +
+    "size of the smallest set of edges that disconnects <code>s</code> from <code>t</code>.";
+  rebuild();
+};
+
+// initial speed mapping
+speed = 1720 - 700;
+rebuild();
+</script>
+</body>
+</html>
