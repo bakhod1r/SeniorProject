@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Karatsuba Multiplication — Three Products by Divide and Conquer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --z2: rgba(88, 166, 255, 0.22);
+    --z0: rgba(210, 153, 34, 0.22);
+    --z1: rgba(63, 185, 80, 0.28);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 120px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .split-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 8px 0;
+    font-family: var(--mono);
+    font-size: 15px;
+  }
+  .split-row .tag { color: var(--muted); min-width: 78px; }
+  .block {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-weight: 700;
+    transition: all 0.2s ease;
+  }
+  .block.hi { border-color: var(--accent); color: #fff; }
+  .block.lo { border-color: var(--accent-2); color: #fff; }
+  .block.dim { opacity: 0.35; }
+  .prod-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .prod {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+  .prod.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .prod.done { border-color: var(--good); }
+  .prod.dim { opacity: 0.32; }
+  .prod .pname { font-weight: 700; min-width: 34px; }
+  .prod.z2 .pname { color: var(--accent); }
+  .prod.z0 .pname { color: var(--accent-2); }
+  .prod.z1 .pname { color: var(--good); }
+  .prod .pval { margin-left: auto; color: var(--good); font-weight: 700; }
+  .prod .pform { color: var(--muted); }
+  .recombine {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .recombine .lbl { color: var(--muted); }
+  .recombine .z2c { color: var(--accent); font-weight: 700; }
+  .recombine .z1c { color: var(--good); font-weight: 700; }
+  .recombine .z0c { color: var(--accent-2); font-weight: 700; }
+  .recombine .total { color: #fff; font-weight: 700; font-size: 16px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .cost {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .cost b { color: var(--accent); }
+  .cost .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+  .barlabel { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Karatsuba Multiplication — Three Products Instead of Four</h1>
+  <p>Split x = a·B + b and y = c·B + d, compute z2 = a·c, z0 = b·d, and z1 = (a+b)(c+d) &minus; z2 &minus; z0, then recombine z2·B&sup2; + z1·B + z0. Three multiplications give T(n)=3T(n/2)+O(n)=O(n<sup>1.585</sup>).</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Example:
+      <select id="exSel">
+        <option value="0">1234 &times; 5678</option>
+        <option value="1">99 &times; 99 (carry)</option>
+        <option value="2">5678 &times; 1234</option>
+        <option value="3">4321 &times; 8765</option>
+      </select>
+    </label>
+    <label>x = <input type="number" id="xInput" value="1234" min="0" max="99999999" /></label>
+    <label>y = <input type="number" id="yInput" value="5678" min="0" max="99999999" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Split into high / low halves</h2>
+      <div class="split-row">
+        <span class="tag">x = <span id="xVal">1234</span></span>
+        <span class="block hi" id="aBlock">a=12</span>
+        <span class="block lo" id="bBlock">b=34</span>
+      </div>
+      <div class="split-row">
+        <span class="tag">y = <span id="yVal">5678</span></span>
+        <span class="block hi" id="cBlock">c=56</span>
+        <span class="block lo" id="dBlock">d=78</span>
+      </div>
+      <div class="step-counter" id="baseInfo" style="margin-top:8px;"></div>
+
+      <div class="prod-grid" id="prodGrid">
+        <div class="prod z2" id="prodZ2">
+          <span class="pname">z2</span>
+          <span class="pform">= a&middot;c</span>
+          <span class="pval" id="z2Val">&mdash;</span>
+        </div>
+        <div class="prod z0" id="prodZ0">
+          <span class="pname">z0</span>
+          <span class="pform">= b&middot;d</span>
+          <span class="pval" id="z0Val">&mdash;</span>
+        </div>
+        <div class="prod z1" id="prodP">
+          <span class="pname">p</span>
+          <span class="pform">= (a+b)(c+d)</span>
+          <span class="pval" id="pVal">&mdash;</span>
+        </div>
+        <div class="prod z1" id="prodZ1">
+          <span class="pname">z1</span>
+          <span class="pform">= p &minus; z2 &minus; z0</span>
+          <span class="pval" id="z1Val">&mdash;</span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--z2)"></span> z2 (high · B&sup2;)</span>
+        <span><span class="swatch" style="background:var(--z1)"></span> z1 (middle · B)</span>
+        <span><span class="swatch" style="background:var(--z0)"></span> z0 (low · B&#8304;)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recombine with shifts</h2>
+      <div class="recombine" id="recombineBox">
+        <div><span class="lbl">x&middot;y = z2&middot;B&sup2; + z1&middot;B + z0</span></div>
+        <div style="margin-top:8px;">
+          = <span class="z2c" id="rZ2">&mdash;</span>&middot;B&sup2;
+            + <span class="z1c" id="rZ1">&mdash;</span>&middot;B
+            + <span class="z0c" id="rZ0">&mdash;</span>
+        </div>
+        <div style="margin-top:6px;" id="rExpand"></div>
+        <div style="margin-top:8px;">= <span class="total" id="rTotal">&mdash;</span></div>
+        <div style="margin-top:6px;" id="rCheck"></div>
+      </div>
+
+      <h2 style="margin-top:16px;">Three products, not four</h2>
+      <svg id="barSvg" width="100%" height="120" viewBox="0 0 360 120" preserveAspectRatio="xMidYMid meet">
+        <text class="barlabel" x="8" y="26">naive: 4 mults</text>
+        <rect x="120" y="14" width="56" height="16" fill="var(--bad)" opacity="0.5"></rect>
+        <rect x="178" y="14" width="56" height="16" fill="var(--bad)" opacity="0.5"></rect>
+        <rect x="236" y="14" width="56" height="16" fill="var(--bad)" opacity="0.5"></rect>
+        <rect x="294" y="14" width="56" height="16" fill="var(--bad)" opacity="0.5"></rect>
+        <text class="barlabel" x="8" y="64">Karatsuba: 3</text>
+        <rect id="bar1" x="120" y="52" width="56" height="16" fill="var(--good)" opacity="0.25"></rect>
+        <rect id="bar2" x="178" y="52" width="56" height="16" fill="var(--good)" opacity="0.25"></rect>
+        <rect id="bar3" x="236" y="52" width="56" height="16" fill="var(--good)" opacity="0.25"></rect>
+        <text class="barlabel" x="8" y="100">exponent</text>
+        <text class="barlabel" x="120" y="100" fill="var(--bad)">n² (4 mults)</text>
+        <text class="barlabel" x="236" y="100" fill="var(--good)">n^1.585 (3 mults)</text>
+      </svg>
+
+      <div class="cost" id="costBox">
+        Recurrence <b>T(n) = 3T(n/2) + O(n)</b> &rarr; <span class="val">O(n^log&#8322;3) &asymp; O(n^1.585)</span>.
+        The saved 4th multiplication is recovered by addition/subtraction (cheap, O(n)).
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We split each number into a high half and a low half, then compute the product with only three multiplications.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Decimal base B = 10<sup>half</sup>; values are exact (no modulus). For integers, recombination additions may carry &mdash; try <code>99 &times; 99</code> where z1 = 162 overflows a base-10 slot. See <code>junior.md</code> and <code>professional.md</code> for the derivation and the recurrence solution.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Examples ----------
+const EXAMPLES = [
+  { x: 1234, y: 5678 },
+  { x: 99,   y: 99 },
+  { x: 5678, y: 1234 },
+  { x: 4321, y: 8765 }
+];
+
+// ---------- Karatsuba decomposition (single top level, for display) ----------
+function decompose(x, y) {
+  // Choose half = number of digits in the longer operand / 2 (at least 1).
+  const sx = String(x);
+  const sy = String(y);
+  let digits = Math.max(sx.length, sy.length);
+  if (digits < 2) digits = 2;
+  const half = Math.ceil(digits / 2);
+  const B = Math.pow(10, half);
+
+  const a = Math.floor(x / B);
+  const b = x % B;
+  const c = Math.floor(y / B);
+  const d = y % B;
+
+  const z2 = a * c;
+  const z0 = b * d;
+  const p  = (a + b) * (c + d);
+  const z1 = p - z2 - z0;
+
+  const result = z2 * B * B + z1 * B + z0;
+  return { x, y, a, b, c, d, B, half, z2, z0, p, z1, result, truth: x * y };
+}
+
+// ---------- Build the step plan ----------
+function buildPlan(dc) {
+  const steps = [];
+  steps.push({
+    type: "init",
+    reveal: {},
+    desc: "Start: x = " + dc.x + ", y = " + dc.y +
+      ". Base B = 10^" + dc.half + " = " + dc.B + ". We will split each number at B."
+  });
+  steps.push({
+    type: "split",
+    reveal: { split: true },
+    desc: "Split: x = a·B + b with a = " + dc.a + ", b = " + dc.b +
+      ";  y = c·B + d with c = " + dc.c + ", d = " + dc.d + "."
+  });
+  steps.push({
+    type: "z2",
+    reveal: { split: true, z2: true },
+    desc: "Multiplication 1 of 3 — z2 = a·c = " + dc.a + "·" + dc.c + " = " + dc.z2 +
+      ". This is the high coefficient (goes in the B² position)."
+  });
+  steps.push({
+    type: "z0",
+    reveal: { split: true, z2: true, z0: true },
+    desc: "Multiplication 2 of 3 — z0 = b·d = " + dc.b + "·" + dc.d + " = " + dc.z0 +
+      ". This is the low coefficient (B⁰ position)."
+  });
+  steps.push({
+    type: "p",
+    reveal: { split: true, z2: true, z0: true, p: true },
+    desc: "Multiplication 3 of 3 — p = (a+b)(c+d) = (" + dc.a + "+" + dc.b + ")(" +
+      dc.c + "+" + dc.d + ") = " + (dc.a + dc.b) + "·" + (dc.c + dc.d) + " = " + dc.p +
+      ".  Only three products total — this is the Karatsuba trick."
+  });
+  steps.push({
+    type: "z1",
+    reveal: { split: true, z2: true, z0: true, p: true, z1: true },
+    desc: "Recover the middle term by subtraction (cheap): z1 = p − z2 − z0 = " +
+      dc.p + " − " + dc.z2 + " − " + dc.z0 + " = " + dc.z1 +
+      " (= a·d + b·c = " + (dc.a * dc.d) + " + " + (dc.b * dc.c) + ")."
+  });
+  steps.push({
+    type: "recombine",
+    reveal: { split: true, z2: true, z0: true, p: true, z1: true, recombine: true },
+    desc: "Recombine with shifts: x·y = z2·B² + z1·B + z0 = " +
+      dc.z2 + "·" + (dc.B * dc.B) + " + " + dc.z1 + "·" + dc.B + " + " + dc.z0 + "."
+  });
+  steps.push({
+    type: "done",
+    reveal: { split: true, z2: true, z0: true, p: true, z1: true, recombine: true, done: true },
+    desc: "Done. x·y = " + dc.result + (dc.result === dc.truth ? "  ✓ (matches " + dc.x + "×" + dc.y + ")" : "")
+  });
+  return steps;
+}
+
+// ---------- Render ----------
+const state = {
+  dc: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadExample(x, y) {
+  state.dc = decompose(x, y);
+  state.plan = buildPlan(state.dc);
+  state.stepIdx = 0;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  applyStep(0);
+  updateButtons();
+}
+
+function setText(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+function setHTML(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
+
+function applyStep(idx) {
+  state.stepIdx = idx;
+  const step = state.plan[idx];
+  const dc = state.dc;
+  const r = step.reveal;
+
+  setText("xVal", dc.x);
+  setText("yVal", dc.y);
+  setText("baseInfo", "B = 10^" + dc.half + " = " + dc.B);
+
+  // Split blocks
+  setText("aBlock", "a=" + dc.a);
+  setText("bBlock", "b=" + dc.b);
+  setText("cBlock", "c=" + dc.c);
+  setText("dBlock", "d=" + dc.d);
+  const splitOn = !!r.split;
+  ["aBlock", "bBlock", "cBlock", "dBlock"].forEach(id => {
+    document.getElementById(id).classList.toggle("dim", !splitOn);
+  });
+
+  // Products
+  setProd("prodZ2", "z2Val", r.z2, dc.z2, step.type === "z2");
+  setProd("prodZ0", "z0Val", r.z0, dc.z0, step.type === "z0");
+  setProd("prodP", "pVal", r.p, dc.p, step.type === "p");
+  setProd("prodZ1", "z1Val", r.z1, dc.z1, step.type === "z1");
+
+  // Bars: light up as each multiplication is revealed
+  document.getElementById("bar1").setAttribute("opacity", r.z2 ? "0.9" : "0.25");
+  document.getElementById("bar2").setAttribute("opacity", r.z0 ? "0.9" : "0.25");
+  document.getElementById("bar3").setAttribute("opacity", r.p ? "0.9" : "0.25");
+
+  // Recombine
+  if (r.recombine) {
+    setHTML("rZ2", dc.z2);
+    setHTML("rZ1", dc.z1);
+    setHTML("rZ0", dc.z0);
+    setHTML("rExpand",
+      "<span class='lbl'>= " + (dc.z2 * dc.B * dc.B) + " + " + (dc.z1 * dc.B) + " + " + dc.z0 + "</span>");
+    setHTML("rTotal", r.done ? dc.result : "&hellip;");
+    if (r.done) {
+      const ok = dc.result === dc.truth;
+      setHTML("rCheck", ok
+        ? "<span style='color:var(--good)'>✓ equals " + dc.x + " × " + dc.y + " = " + dc.truth + "</span>"
+        : "<span style='color:var(--bad)'>mismatch!</span>");
+    } else {
+      setHTML("rCheck", "");
+    }
+  } else {
+    setHTML("rZ2", "&mdash;"); setHTML("rZ1", "&mdash;"); setHTML("rZ0", "&mdash;");
+    setHTML("rExpand", ""); setHTML("rTotal", "&mdash;"); setHTML("rCheck", "");
+  }
+
+  setHTML("narrate", step.desc);
+  setText("stepInfo", "step " + idx + " / " + (state.plan.length - 1));
+}
+
+function setProd(boxId, valId, revealed, value, active) {
+  const box = document.getElementById(boxId);
+  box.classList.toggle("dim", !revealed);
+  box.classList.toggle("active", !!active);
+  box.classList.toggle("done", revealed && !active);
+  setHTML(valId, revealed ? String(value) : "&mdash;");
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) applyStep(state.stepIdx + 1);
+  updateButtons();
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) {
+    applyStep(0);
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1300);
+}
+
+function rebuild() {
+  let x = parseInt(document.getElementById("xInput").value, 10);
+  let y = parseInt(document.getElementById("yInput").value, 10);
+  if (isNaN(x) || x < 0) x = 0;
+  if (isNaN(y) || y < 0) y = 0;
+  // Keep numbers small enough that JS doubles stay exact for products.
+  if (x > 99999999) x = 99999999;
+  if (y > 99999999) y = 99999999;
+  document.getElementById("xInput").value = x;
+  document.getElementById("yInput").value = y;
+  loadExample(x, y);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("exSel").addEventListener("change", () => {
+  const ex = EXAMPLES[parseInt(document.getElementById("exSel").value, 10)];
+  document.getElementById("xInput").value = ex.x;
+  document.getElementById("yInput").value = ex.y;
+  rebuild();
+});
+document.getElementById("xInput").addEventListener("change", rebuild);
+document.getElementById("yInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
