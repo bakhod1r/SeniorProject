@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LCS & LIS — DP Table Fill, Traceback, and Patience Piles</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --hi-diag: rgba(210, 153, 34, 0.30);
+    --hi-path: rgba(63, 185, 80, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 130px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .mode-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .mode-tabs button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 34px;
+    height: 34px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.18s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .matrix td.hrow { background: var(--hi-row); }
+  .matrix td.hcol { background: var(--hi-col); }
+  .matrix td.hdiag { background: var(--hi-diag); }
+  .matrix td.hcell { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .matrix td.onpath { background: var(--hi-path); color: #fff; font-weight: 700; }
+  .matrix td.empty { color: #3a4250; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  /* patience piles */
+  .piles { display: flex; gap: 14px; align-items: flex-start; min-height: 200px; margin-top: 10px; flex-wrap: wrap; }
+  .pile { display: flex; flex-direction: column-reverse; gap: 4px; min-width: 48px; }
+  .pile-label { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 4px; }
+  .cardc {
+    width: 44px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel-2); font-family: var(--mono); font-size: 14px;
+    transition: all 0.18s ease;
+  }
+  .cardc.top { border-color: var(--accent); color: #fff; }
+  .cardc.justplaced { border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; color: #fff; }
+  .seqrow { display: flex; gap: 6px; margin: 8px 0 0; flex-wrap: wrap; }
+  .seqrow .elem {
+    width: 40px; height: 30px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 5px; font-family: var(--mono); font-size: 13px;
+    background: var(--bg);
+  }
+  .seqrow .elem.cur { border-color: var(--accent-2); color: #fff; background: var(--hi-col); }
+  .seqrow .elem.done { opacity: 0.45; }
+  .tails-disp { font-family: var(--mono); font-size: 14px; margin-top: 10px; }
+  .tails-disp b { color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LCS &amp; LIS — DP Table Fill, Traceback, and Patience Piles</h1>
+  <p>LCS: fill the O(nm) table (match &rarr; diagonal +1, mismatch &rarr; max of up/left), then trace back to read the actual subsequence. LIS: deal values into patience piles; the pile count is the LIS length.</p>
+</header>
+
+<div class="wrap">
+  <div class="mode-tabs">
+    <button id="tabLCS" class="active">LCS table + traceback</button>
+    <button id="tabLIS">LIS patience piles</button>
+  </div>
+
+  <!-- ===================== LCS MODE ===================== -->
+  <div id="lcsMode">
+    <div class="controls">
+      <button id="btnStep" class="primary">Step &#9654;</button>
+      <button id="btnRun">Run &#9654;&#9654;</button>
+      <button id="btnReset">Reset &#8635;</button>
+      <span class="spacer"></span>
+      <label>X = <input type="text" id="xInput" value="AGCAT" maxlength="10" /></label>
+      <label>Y = <input type="text" id="yInput" value="GAC" maxlength="10" /></label>
+      <span class="step-counter" id="lcsStepInfo">step 0</span>
+    </div>
+
+    <div class="card">
+      <h2>LCS DP table &nbsp; dp[i][j] = LCS(X[0..i), Y[0..j))</h2>
+      <table class="matrix" id="lcsMat"></table>
+      <div class="interp" id="lcsInterp">
+        Match &rarr; <b>dp[i-1][j-1] + 1</b> (diagonal). Mismatch &rarr; <b>max(dp[i-1][j], dp[i][j-1])</b>.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-row)"></span> row i (X char)</span>
+        <span><span class="swatch" style="background:var(--hi-col)"></span> col j (Y char)</span>
+        <span><span class="swatch" style="background:var(--hi-diag)"></span> source neighbor</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> current cell</span>
+        <span><span class="swatch" style="background:var(--hi-path)"></span> traceback path</span>
+      </div>
+    </div>
+
+    <div class="narrate" id="lcsNarrate">Press <b>Step</b> to begin filling the table cell by cell.</div>
+  </div>
+
+  <!-- ===================== LIS MODE ===================== -->
+  <div id="lisMode" class="hide">
+    <div class="controls">
+      <button id="btnStepLis" class="primary">Step &#9654;</button>
+      <button id="btnRunLis">Run &#9654;&#9654;</button>
+      <button id="btnResetLis">Reset &#8635;</button>
+      <span class="spacer"></span>
+      <label>array = <input type="text" id="arrInput" value="10,9,2,5,3,7,101,18" /></label>
+      <label>variant:
+        <select id="variantSel">
+          <option value="strict">strict (&lt;)</option>
+          <option value="nondec">non-decreasing (&le;)</option>
+        </select>
+      </label>
+      <span class="step-counter" id="lisStepInfo">step 0</span>
+    </div>
+
+    <div class="card">
+      <h2>Input array (current element highlighted)</h2>
+      <div class="seqrow" id="lisSeq"></div>
+      <h2 style="margin-top:16px;">Patience piles &nbsp; (place x on leftmost pile whose top &ge; x; pile count = LIS length)</h2>
+      <div class="piles" id="lisPiles"></div>
+      <div class="tails-disp" id="lisTails"></div>
+      <div class="interp" id="lisInterp">
+        <b>tails[p]</b> = smallest tail of any increasing subsequence of length <b>p+1</b>.
+        len(tails) is the running LIS length.
+      </div>
+    </div>
+
+    <div class="narrate" id="lisNarrate">Press <b>Step</b> to deal the first value onto a pile.</div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. LCS uses the counting recurrence; LIS uses the patience / binary-search method.
+    The <code>tails</code> array tracks lengths, not a valid subsequence &mdash; see <code>middle.md</code> for parent-pointer reconstruction
+    and <code>professional.md</code> for the proof that <code>tails</code> stays sorted.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   MODE SWITCHING
+   ============================================================ */
+const lcsModeEl = document.getElementById("lcsMode");
+const lisModeEl = document.getElementById("lisMode");
+const tabLCS = document.getElementById("tabLCS");
+const tabLIS = document.getElementById("tabLIS");
+
+tabLCS.addEventListener("click", () => {
+  tabLCS.classList.add("active");
+  tabLIS.classList.remove("active");
+  lcsModeEl.classList.remove("hide");
+  lisModeEl.classList.add("hide");
+});
+tabLIS.addEventListener("click", () => {
+  tabLIS.classList.add("active");
+  tabLCS.classList.remove("active");
+  lisModeEl.classList.remove("hide");
+  lcsModeEl.classList.add("hide");
+});
+
+/* ============================================================
+   LCS MODE: build a step plan for filling the table, then trace back
+   ============================================================ */
+const lcs = {
+  X: "AGCAT",
+  Y: "GAC",
+  dp: null,
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function buildLcsPlan(X, Y) {
+  const n = X.length, m = Y.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+  const steps = [];
+
+  // initial: empty table with zeros on row 0 / col 0
+  steps.push({
+    type: "init",
+    filled: 0,
+    cur: null,
+    src: null,
+    path: [],
+    desc: "Row 0 and column 0 are all 0 (an empty prefix shares nothing). We fill row by row."
+  });
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const match = X[i - 1] === Y[j - 1];
+      let src;
+      if (match) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+        src = [i - 1, j - 1];
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        dp[i][j] = dp[i - 1][j];
+        src = [i - 1, j];
+      } else {
+        dp[i][j] = dp[i][j - 1];
+        src = [i, j - 1];
+      }
+      steps.push({
+        type: "fill",
+        i: i, j: j,
+        val: dp[i][j],
+        match: match,
+        src: src,
+        snapshot: dp.map(r => r.slice()),
+        desc: match
+          ? "X[" + (i - 1) + "]='" + X[i - 1] + "' = Y[" + (j - 1) + "]='" + Y[j - 1] +
+            "'  MATCH  &rarr; dp[" + i + "][" + j + "] = dp[" + (i - 1) + "][" + (j - 1) + "] + 1 = " + dp[i][j]
+          : "X[" + (i - 1) + "]='" + X[i - 1] + "' &ne; Y[" + (j - 1) + "]='" + Y[j - 1] +
+            "'  mismatch  &rarr; dp[" + i + "][" + j + "] = max(up, left) = " + dp[i][j]
+      });
+    }
+  }
+
+  // traceback
+  let i = n, j = m;
+  const path = [];
+  const collected = [];
+  // mark the corner as the answer
+  steps.push({
+    type: "answer",
+    snapshot: dp.map(r => r.slice()),
+    path: [],
+    desc: "Table complete. LCS length = dp[" + n + "][" + m + "] = " + dp[n][m] +
+          ". Now trace back from the corner to read the actual subsequence."
+  });
+  while (i > 0 && j > 0) {
+    if (X[i - 1] === Y[j - 1]) {
+      path.push([i, j]);
+      collected.push(X[i - 1]);
+      steps.push({
+        type: "trace",
+        path: path.slice(),
+        collected: collected.slice().reverse().join(""),
+        desc: "dp[" + i + "][" + j + "]: chars match ('" + X[i - 1] +
+              "') &rarr; this char is in the LCS; move diagonally."
+      });
+      i--; j--;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      steps.push({
+        type: "trace",
+        path: path.slice(),
+        collected: collected.slice().reverse().join(""),
+        desc: "dp[" + i + "][" + j + "]: mismatch; up (" + dp[i - 1][j] +
+              ") &ge; left (" + dp[i][j - 1] + ") &rarr; move up."
+      });
+      i--;
+    } else {
+      steps.push({
+        type: "trace",
+        path: path.slice(),
+        collected: collected.slice().reverse().join(""),
+        desc: "dp[" + i + "][" + j + "]: mismatch; left (" + dp[i][j - 1] +
+              ") &gt; up (" + dp[i - 1][j] + ") &rarr; move left."
+      });
+      j--;
+    }
+  }
+  const finalLcs = collected.slice().reverse().join("");
+  steps.push({
+    type: "done",
+    path: path.slice(),
+    collected: finalLcs,
+    snapshot: dp.map(r => r.slice()),
+    desc: "Done. One LCS of X and Y is \"" + (finalLcs || "(empty)") +
+          "\", length " + dp[n][m] + "."
+  });
+
+  return { dp, steps };
+}
+
+function renderLcsTable(step) {
+  const X = lcs.X, Y = lcs.Y;
+  const n = X.length, m = Y.length;
+  const dp = step.snapshot || lcs.dp;
+  const table = document.getElementById("lcsMat");
+  // header row: blank, "", Y chars
+  let html = "<tr><th></th><th>&empty;</th>";
+  for (let j = 0; j < m; j++) html += "<th>" + Y[j] + "</th>";
+  html += "</tr>";
+
+  // figure out which cells are filled so far for "fill" steps
+  let filledUpto = null; // [i,j] last filled
+  if (step.type === "fill") filledUpto = [step.i, step.j];
+
+  const pathSet = new Set();
+  if (step.path) step.path.forEach(p => pathSet.add(p[0] + "," + p[1]));
+
+  for (let i = 0; i <= n; i++) {
+    const rowLabel = i === 0 ? "&empty;" : X[i - 1];
+    html += "<tr><th>" + rowLabel + "</th>";
+    for (let j = 0; j <= m; j++) {
+      let cls = "";
+      let val = dp[i][j];
+      let showEmpty = false;
+
+      // during fill, hide cells not yet reached
+      if (step.type === "fill") {
+        const reached = (i === 0 || j === 0) ||
+          (i < step.i) || (i === step.i && j <= step.j);
+        if (!reached) { showEmpty = true; }
+        if (i === step.i && j === step.j) cls = "hcell";
+        else if (step.src && i === step.src[0] && j === step.src[1]) cls = "hdiag";
+        else if (i === step.i) cls = "hrow";
+        else if (j === step.j) cls = "hcol";
+      } else if (step.type === "init") {
+        if (!(i === 0 || j === 0)) showEmpty = true;
+      } else {
+        // answer / trace / done
+        if (pathSet.has(i + "," + j)) cls = "onpath";
+      }
+
+      if (showEmpty) {
+        html += "<td class='empty'>·</td>";
+      } else {
+        html += "<td class='" + cls + "'>" + val + "</td>";
+      }
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function applyLcsStep(idx) {
+  const step = lcs.steps[idx];
+  renderLcsTable(step);
+  document.getElementById("lcsNarrate").innerHTML = step.desc;
+  document.getElementById("lcsStepInfo").textContent =
+    "step " + idx + " / " + (lcs.steps.length - 1);
+  if (step.collected !== undefined) {
+    document.getElementById("lcsInterp").innerHTML =
+      "Collected so far (read forward): <span class='val'>\"" +
+      (step.collected || "") + "\"</span>";
+  } else {
+    document.getElementById("lcsInterp").innerHTML =
+      "Match &rarr; <b>dp[i-1][j-1] + 1</b> (diagonal). Mismatch &rarr; <b>max(dp[i-1][j], dp[i][j-1])</b>.";
+  }
+  updateLcsButtons();
+}
+
+function updateLcsButtons() {
+  const atEnd = lcs.stepIdx >= lcs.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !lcs.running;
+  document.getElementById("btnRun").textContent = lcs.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function lcsStepForward() {
+  if (lcs.stepIdx < lcs.steps.length - 1) {
+    lcs.stepIdx++;
+    applyLcsStep(lcs.stepIdx);
+  }
+}
+
+function lcsRun() {
+  if (lcs.running) {
+    clearInterval(lcs.timer);
+    lcs.running = false;
+    updateLcsButtons();
+    return;
+  }
+  if (lcs.stepIdx >= lcs.steps.length - 1) lcsRebuild();
+  lcs.running = true;
+  updateLcsButtons();
+  lcs.timer = setInterval(() => {
+    if (lcs.stepIdx >= lcs.steps.length - 1) {
+      clearInterval(lcs.timer);
+      lcs.running = false;
+      updateLcsButtons();
+      return;
+    }
+    lcsStepForward();
+  }, 750);
+}
+
+function sanitize(s) {
+  return (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+}
+
+function lcsRebuild() {
+  let X = sanitize(document.getElementById("xInput").value);
+  let Y = sanitize(document.getElementById("yInput").value);
+  if (X.length === 0) X = "A";
+  if (Y.length === 0) Y = "A";
+  document.getElementById("xInput").value = X;
+  document.getElementById("yInput").value = Y;
+  if (lcs.running) { clearInterval(lcs.timer); lcs.running = false; }
+  lcs.X = X; lcs.Y = Y;
+  const built = buildLcsPlan(X, Y);
+  lcs.dp = built.dp;
+  lcs.steps = built.steps;
+  lcs.stepIdx = 0;
+  applyLcsStep(0);
+}
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (lcs.running) { clearInterval(lcs.timer); lcs.running = false; updateLcsButtons(); }
+  lcsStepForward();
+});
+document.getElementById("btnRun").addEventListener("click", lcsRun);
+document.getElementById("btnReset").addEventListener("click", lcsRebuild);
+document.getElementById("xInput").addEventListener("change", lcsRebuild);
+document.getElementById("yInput").addEventListener("change", lcsRebuild);
+
+/* ============================================================
+   LIS MODE: patience piles with binary-search placement
+   ============================================================ */
+const lis = {
+  arr: [10, 9, 2, 5, 3, 7, 101, 18],
+  variant: "strict",
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// lower_bound (strict): leftmost p with tails[p] >= x
+// upper_bound (nondec): leftmost p with tails[p] > x
+function searchPos(tails, x, variant) {
+  let lo = 0, hi = tails.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const goLeft = variant === "strict" ? (tails[mid] >= x) : (tails[mid] > x);
+    if (goLeft) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+function buildLisPlan(arr, variant) {
+  const steps = [];
+  const tails = [];      // tail value per pile
+  const piles = [];      // each pile is an array of values (bottom..top)
+  steps.push({
+    type: "init",
+    piles: [],
+    tails: [],
+    cur: -1,
+    placed: -1,
+    desc: "Empty piles. We place each value on the leftmost pile whose top is " +
+          (variant === "strict" ? "&ge;" : "&gt;") + " it, else open a new pile."
+  });
+
+  for (let idx = 0; idx < arr.length; idx++) {
+    const x = arr[idx];
+    const p = searchPos(tails, x, variant);
+    let appended;
+    if (p === tails.length) {
+      tails.push(x);
+      piles.push([x]);
+      appended = true;
+    } else {
+      tails[p] = x;
+      piles[p].push(x);
+      appended = false;
+    }
+    steps.push({
+      type: "place",
+      cur: idx,
+      placed: p,
+      piles: piles.map(pl => pl.slice()),
+      tails: tails.slice(),
+      appended: appended,
+      desc: "Value <b>" + x + "</b>: binary search finds pile <b>" + p + "</b>" +
+            (appended
+              ? " &mdash; no pile qualifies, open a NEW pile (LIS length grows to " + tails.length + ")."
+              : " &mdash; place on existing pile " + p + " (replaces its top tail with a smaller value).")
+    });
+  }
+  steps.push({
+    type: "done",
+    cur: -1,
+    placed: -1,
+    piles: piles.map(pl => pl.slice()),
+    tails: tails.slice(),
+    desc: "Done. Number of piles = len(tails) = <b>" + tails.length +
+          "</b> = the LIS length. (The tails array itself is not the subsequence; reconstruction needs parent pointers.)"
+  });
+  return steps;
+}
+
+function renderLisSeq(step) {
+  const el = document.getElementById("lisSeq");
+  let html = "";
+  for (let i = 0; i < lis.arr.length; i++) {
+    let cls = "elem";
+    if (step.cur === i) cls += " cur";
+    else if (step.cur > i || step.type === "done") cls += " done";
+    html += "<div class='" + cls + "'>" + lis.arr[i] + "</div>";
+  }
+  el.innerHTML = html;
+}
+
+function renderLisPiles(step) {
+  const el = document.getElementById("lisPiles");
+  let html = "";
+  const piles = step.piles || [];
+  for (let p = 0; p < piles.length; p++) {
+    html += "<div class='pile'>";
+    html += "<div class='pile-label'>pile " + p + "</div>";
+    const pile = piles[p];
+    for (let k = 0; k < pile.length; k++) {
+      let cls = "cardc";
+      const isTop = k === pile.length - 1;
+      if (isTop) cls += " top";
+      if (step.placed === p && isTop && step.type === "place") cls += " justplaced";
+      html += "<div class='" + cls + "'>" + pile[k] + "</div>";
+    }
+    html += "</div>";
+  }
+  if (piles.length === 0) {
+    html = "<div class='step-counter'>(no piles yet)</div>";
+  }
+  el.innerHTML = html;
+  const tailsEl = document.getElementById("lisTails");
+  tailsEl.innerHTML = "tails = [ " + (step.tails || []).join(", ") +
+    " ]   &rarr;   LIS length = <b>" + (step.tails ? step.tails.length : 0) + "</b>";
+}
+
+function applyLisStep(idx) {
+  const step = lis.steps[idx];
+  renderLisSeq(step);
+  renderLisPiles(step);
+  document.getElementById("lisNarrate").innerHTML = step.desc;
+  document.getElementById("lisStepInfo").textContent =
+    "step " + idx + " / " + (lis.steps.length - 1);
+  updateLisButtons();
+}
+
+function updateLisButtons() {
+  const atEnd = lis.stepIdx >= lis.steps.length - 1;
+  document.getElementById("btnStepLis").disabled = atEnd && !lis.running;
+  document.getElementById("btnRunLis").textContent = lis.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function lisStepForward() {
+  if (lis.stepIdx < lis.steps.length - 1) {
+    lis.stepIdx++;
+    applyLisStep(lis.stepIdx);
+  }
+}
+
+function lisRun() {
+  if (lis.running) {
+    clearInterval(lis.timer);
+    lis.running = false;
+    updateLisButtons();
+    return;
+  }
+  if (lis.stepIdx >= lis.steps.length - 1) lisRebuild();
+  lis.running = true;
+  updateLisButtons();
+  lis.timer = setInterval(() => {
+    if (lis.stepIdx >= lis.steps.length - 1) {
+      clearInterval(lis.timer);
+      lis.running = false;
+      updateLisButtons();
+      return;
+    }
+    lisStepForward();
+  }, 850);
+}
+
+function parseArr(s) {
+  const parts = (s || "").split(/[, ]+/).map(t => parseInt(t, 10)).filter(v => !isNaN(v));
+  return parts.slice(0, 14); // keep it visual
+}
+
+function lisRebuild() {
+  let arr = parseArr(document.getElementById("arrInput").value);
+  if (arr.length === 0) arr = [3, 1, 4, 1, 5, 9, 2, 6];
+  document.getElementById("arrInput").value = arr.join(",");
+  lis.variant = document.getElementById("variantSel").value;
+  if (lis.running) { clearInterval(lis.timer); lis.running = false; }
+  lis.arr = arr;
+  lis.steps = buildLisPlan(arr, lis.variant);
+  lis.stepIdx = 0;
+  applyLisStep(0);
+}
+
+document.getElementById("btnStepLis").addEventListener("click", () => {
+  if (lis.running) { clearInterval(lis.timer); lis.running = false; updateLisButtons(); }
+  lisStepForward();
+});
+document.getElementById("btnRunLis").addEventListener("click", lisRun);
+document.getElementById("btnResetLis").addEventListener("click", lisRebuild);
+document.getElementById("arrInput").addEventListener("change", lisRebuild);
+document.getElementById("variantSel").addEventListener("change", lisRebuild);
+
+/* ============================================================
+   INITIAL LOAD
+   ============================================================ */
+lcsRebuild();
+lisRebuild();
+</script>
+</body>
+</html>
