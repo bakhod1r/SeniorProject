@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quicksort — Partition &amp; Recursion Visualizer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --pivot: #d29922;
+    --iptr: #58a6ff;
+    --jptr: #bc8cff;
+    --less: rgba(63, 185, 80, 0.30);
+    --greater: rgba(248, 81, 73, 0.22);
+    --placed: rgba(210, 153, 34, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 220px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 220px; padding: 6px 2px 0; }
+  .bar {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px 4px 0 0;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+    min-width: 16px;
+  }
+  .bar .val {
+    position: absolute;
+    bottom: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .bar .idx {
+    position: absolute;
+    top: -18px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .bar.in-range { border-color: var(--accent); }
+  .bar.less { background: var(--less); }
+  .bar.greater { background: var(--greater); }
+  .bar.pivot { background: var(--placed); border-color: var(--pivot); }
+  .bar.placed { background: var(--placed); border-color: var(--pivot); box-shadow: 0 0 0 1px var(--pivot) inset; }
+  .bar.compare { transform: translateY(-6px); }
+  .ptrs { display: flex; gap: 4px; margin-top: 4px; height: 20px; }
+  .ptr-slot { flex: 1; text-align: center; font-family: var(--mono); font-size: 11px; min-width: 16px; }
+  .ptr-i { color: var(--iptr); font-weight: 700; }
+  .ptr-j { color: var(--jptr); font-weight: 700; }
+  .ptr-p { color: var(--pivot); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .tree { margin-top: 6px; font-family: var(--mono); font-size: 12px; }
+  .tree-node {
+    display: inline-block;
+    padding: 3px 7px;
+    margin: 2px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  .tree-node.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .tree-node.done { border-color: var(--good); color: var(--good); }
+  .tree-level { margin: 4px 0; }
+  .stats { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .stats b { color: var(--accent-2); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Quicksort — Lomuto Partition &amp; Recursion</h1>
+  <p>Pick a <b style="color:#d29922">pivot</b>, scan with <b style="color:#bc8cff">j</b> growing the <b style="color:#3fb950">&le; pivot</b> region behind <b style="color:#58a6ff">i</b>, then place the pivot. Watch each partition spawn left/right subproblems.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Pivot:
+      <select id="pivotSel">
+        <option value="last">Last element</option>
+        <option value="random">Random</option>
+        <option value="median3">Median-of-three</option>
+      </select>
+    </label>
+    <label>Array: <input type="text" id="arrInput" value="3 7 8 5 2 1 9 5 4" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Array &amp; current partition</h2>
+      <div class="bars" id="bars"></div>
+      <div class="ptrs" id="ptrs"></div>
+      <div class="interp" id="interpBox">
+        Pivot = <b>?</b>. Scanning subarray <b>[lo..hi]</b>; grow the &le;-pivot region.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--placed)"></span> pivot / placed</span>
+        <span><span class="swatch" style="background:var(--less)"></span> &le; pivot</span>
+        <span><span class="swatch" style="background:var(--greater)"></span> &gt; pivot</span>
+        <span><span class="swatch" style="background:var(--bg);border-color:var(--accent)"></span> active range [lo..hi]</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recursion tree</h2>
+      <div class="step-counter" id="recInfo" style="margin-bottom:6px;"></div>
+      <div class="tree" id="tree"></div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We partition the active range around the pivot, then recurse into the smaller subproblems. No merge step is needed.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Lomuto partition (pivot moved to the end), counting comparisons and swaps.
+    The pivot lands in its <b>final sorted position</b> each partition. See <code>junior.md</code> and <code>professional.md</code> for the loop-invariant proof and the average-case analysis.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  values: [],
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  comparisons: 0,
+  swaps: 0,
+  maxDepth: 0
+};
+
+// ---------- Pivot selection ----------
+function choosePivotIndex(a, lo, hi, mode) {
+  if (mode === "random") {
+    return lo + Math.floor(Math.random() * (hi - lo + 1));
+  }
+  if (mode === "median3") {
+    const mid = lo + ((hi - lo) >> 1);
+    // pick index whose value is the median of a[lo], a[mid], a[hi]
+    const x = a[lo], y = a[mid], z = a[hi];
+    if ((x <= y && y <= z) || (z <= y && y <= x)) return mid;
+    if ((y <= x && x <= z) || (z <= x && x <= y)) return lo;
+    return hi;
+  }
+  return hi; // last
+}
+
+// ---------- Build the full step plan ----------
+// We simulate quicksort and record every comparison, swap, and placement as a discrete step.
+function buildPlan(initial, pivotMode) {
+  const a = initial.slice();
+  const steps = [];
+  let comparisons = 0;
+  let swaps = 0;
+  const treeNodes = [];   // {lo, hi, depth, state: 'pending'|'active'|'done'}
+
+  function snapshot(extra) {
+    const s = Object.assign({
+      arr: a.slice(),
+      comparisons: comparisons,
+      swaps: swaps,
+      tree: treeNodes.map(n => ({ lo: n.lo, hi: n.hi, depth: n.depth, st: n.st }))
+    }, extra);
+    steps.push(s);
+  }
+
+  function swap(i, j) {
+    const t = a[i]; a[i] = a[j]; a[j] = t; swaps++;
+  }
+
+  // iterative stack of ranges to sort, with depth tracking
+  function quicksort(lo, hi, depth) {
+    if (lo > hi) return;
+    const node = { lo, hi, depth, st: 'active' };
+    treeNodes.push(node);
+    state.maxDepth = Math.max(state.maxDepth, depth);
+    if (lo === hi) {
+      node.st = 'done';
+      snapshot({
+        lo, hi, depth,
+        pivotIdx: lo, i: lo, j: lo, region: regionFlags(lo, hi, lo, lo),
+        desc: "Range [" + lo + ".." + hi + "] has a single element — already sorted (base case)."
+      });
+      return;
+    }
+    if (lo + 1 > hi) { node.st = 'done'; return; }
+
+    // choose pivot, move to hi
+    let pidx = choosePivotIndex(a, lo, hi, pivotMode);
+    snapshot({
+      lo, hi, depth, pivotIdx: pidx, i: lo - 1, j: lo,
+      region: regionFlags(lo, hi, lo - 1, lo),
+      desc: "Active range [" + lo + ".." + hi + "]. Chosen pivot = " + a[pidx] +
+            " (index " + pidx + ", " + pivotMode + "). Move it to the end for Lomuto."
+    });
+    if (pidx !== hi) { swap(pidx, hi); }
+    const pivot = a[hi];
+
+    let i = lo - 1;
+    for (let j = lo; j < hi; j++) {
+      comparisons++;
+      snapshot({
+        lo, hi, depth, pivotIdx: hi, i, j, compare: j,
+        region: regionFlags(lo, hi, i, j),
+        desc: "Compare a[" + j + "] = " + a[j] + " with pivot " + pivot +
+              ". " + (a[j] <= pivot ? "It is ≤ pivot → it belongs in the left region." :
+                                       "It is > pivot → leave it in the right region.")
+      });
+      if (a[j] <= pivot) {
+        i++;
+        if (i !== j) {
+          swap(i, j);
+          snapshot({
+            lo, hi, depth, pivotIdx: hi, i, j,
+            region: regionFlags(lo, hi, i, j),
+            desc: "Grow the ≤-pivot region: i→" + i + ", swap a[" + i + "] and a[" + j + "]."
+          });
+        }
+      }
+    }
+    // place pivot
+    swap(i + 1, hi);
+    const p = i + 1;
+    node.st = 'done';
+    snapshot({
+      lo, hi, depth, pivotIdx: p, placed: p, i, j: hi,
+      region: regionFlags(lo, hi, i, hi),
+      desc: "Place the pivot: swap a[" + p + "] and a[" + hi + "]. Pivot " + pivot +
+            " is now at index " + p + " — its FINAL sorted position. Recurse on [" +
+            lo + ".." + (p - 1) + "] and [" + (p + 1) + ".." + hi + "]."
+    });
+
+    // recurse smaller side first (tail-call elimination flavor), but we just recurse both
+    quicksort(lo, p - 1, depth + 1);
+    quicksort(p + 1, hi, depth + 1);
+  }
+
+  function regionFlags(lo, hi, i, jUpTo) {
+    // returns a map index->class for the current partition view
+    const flags = {};
+    for (let m = lo; m <= hi; m++) {
+      if (m <= i) flags[m] = 'less';
+      else if (m < jUpTo) flags[m] = 'greater';
+    }
+    return flags;
+  }
+
+  // initial snapshot
+  snapshot({
+    lo: 0, hi: a.length - 1, depth: 0, pivotIdx: -1, i: -1, j: 0, region: {},
+    desc: "Start: sort the whole array [0.." + (a.length - 1) + "]. Quicksort partitions around a pivot, then recurses — no merge step."
+  });
+
+  quicksort(0, a.length - 1, 0);
+
+  // final snapshot
+  snapshot({
+    lo: 0, hi: a.length - 1, depth: 0, pivotIdx: -1, i: -1, j: a.length, region: {}, done: true,
+    desc: "Done. The array is fully sorted in place. Total comparisons: " + comparisons +
+          ", total swaps: " + swaps + "."
+  });
+
+  return { steps, comparisons, swaps };
+}
+
+// ---------- Rendering ----------
+function maxVal() {
+  let m = 1;
+  for (const v of state.values) m = Math.max(m, v);
+  return m;
+}
+
+function renderStep(step) {
+  const bars = document.getElementById("bars");
+  const ptrs = document.getElementById("ptrs");
+  bars.innerHTML = "";
+  ptrs.innerHTML = "";
+  const arr = step.arr;
+  const mx = Math.max(1, ...arr);
+  for (let idx = 0; idx < arr.length; idx++) {
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const h = 24 + Math.round((arr[idx] / mx) * 170);
+    bar.style.height = h + "px";
+    const inRange = (idx >= step.lo && idx <= step.hi);
+    if (inRange) bar.classList.add("in-range");
+    if (step.region && step.region[idx]) bar.classList.add(step.region[idx]);
+    if (step.pivotIdx === idx) bar.classList.add("pivot");
+    if (step.placed === idx) bar.classList.add("placed");
+    if (step.compare === idx) bar.classList.add("compare");
+    bar.innerHTML = "<span class='idx'>" + idx + "</span><span class='val'>" + arr[idx] + "</span>";
+    bars.appendChild(bar);
+
+    // pointer row
+    const slot = document.createElement("div");
+    slot.className = "ptr-slot";
+    let label = "";
+    if (step.placed === idx) label = "<span class='ptr-p'>P</span>";
+    else {
+      if (step.i === idx) label += "<span class='ptr-i'>i</span>";
+      if (step.j === idx) label += "<span class='ptr-j'>j</span>";
+      if (step.pivotIdx === idx && step.placed === undefined) {
+        label += "<span class='ptr-p'>▲</span>";
+      }
+    }
+    slot.innerHTML = label;
+    ptrs.appendChild(slot);
+  }
+
+  // interpretation box
+  let pivotTxt = step.pivotIdx >= 0 ? String(arr[step.pivotIdx]) : "?";
+  document.getElementById("interpBox").innerHTML =
+    "Range <b>[" + step.lo + ".." + step.hi + "]</b>, pivot = <b>" + pivotTxt + "</b>. " +
+    "<span class='val'>" + (step.comparisons) + "</span> comparisons, " +
+    "<span class='val'>" + (step.swaps) + "</span> swaps so far.";
+
+  // recursion tree
+  renderTree(step);
+
+  document.getElementById("stats").innerHTML =
+    "comparisons: <b>" + step.comparisons + "</b> &nbsp; swaps: <b>" + step.swaps +
+    "</b> &nbsp; max depth: <b>" + state.maxDepth + "</b> &nbsp; (n=" + arr.length +
+    ", ~1.39·n·log₂n ≈ " + Math.round(1.386 * arr.length * Math.log2(Math.max(2, arr.length))) + ")";
+}
+
+function renderTree(step) {
+  const tree = document.getElementById("tree");
+  tree.innerHTML = "";
+  // group nodes by depth
+  const byDepth = {};
+  let maxD = 0;
+  for (const node of step.tree) {
+    if (!byDepth[node.depth]) byDepth[node.depth] = [];
+    byDepth[node.depth].push(node);
+    maxD = Math.max(maxD, node.depth);
+  }
+  for (let d = 0; d <= maxD; d++) {
+    const level = document.createElement("div");
+    level.className = "tree-level";
+    const nodes = (byDepth[d] || []).sort((a, b) => a.lo - b.lo);
+    for (const node of nodes) {
+      const el = document.createElement("span");
+      el.className = "tree-node " + (node.st === 'done' ? "done" : (node.st === 'active' ? "active" : ""));
+      const isCur = (node.lo === step.lo && node.hi === step.hi && !step.done);
+      if (isCur) el.classList.add("active");
+      el.textContent = "[" + node.lo + ".." + node.hi + "]";
+      level.appendChild(el);
+    }
+    if (nodes.length) tree.appendChild(level);
+  }
+  document.getElementById("recInfo").textContent =
+    "Each partition fixes the pivot and spawns a left & right subproblem (green = sorted).";
+}
+
+// ---------- Driver ----------
+function parseArray(text) {
+  const parts = text.trim().split(/[\s,]+/).filter(s => s.length);
+  const vals = [];
+  for (const p of parts) {
+    const v = parseInt(p, 10);
+    if (!isNaN(v)) vals.push(v);
+  }
+  return vals.length ? vals.slice(0, 14) : [3, 7, 8, 5, 2, 1, 9, 5, 4];
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.values = parseArray(document.getElementById("arrInput").value);
+  state.maxDepth = 0;
+  const mode = document.getElementById("pivotSel").value;
+  state.plan = buildPlan(state.values, mode);
+  state.stepIdx = 0;
+  renderStep(state.plan.steps[0]);
+  document.getElementById("narrate").innerHTML = state.plan.steps[0].desc;
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  renderStep(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 750);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("pivotSel").addEventListener("change", rebuild);
+document.getElementById("arrInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
