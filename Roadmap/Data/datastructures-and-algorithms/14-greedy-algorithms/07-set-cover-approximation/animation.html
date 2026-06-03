@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Greedy Set Cover — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  .mode-pill {
+    display: inline-flex; gap: 6px; background: var(--bg);
+    border: 1px solid var(--border); padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  input[type="text"] {
+    flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-weight: 500; transition: all 0.15s ease;
+  }
+  button.btn:hover { border-color: var(--blue); }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.warn { border-color: var(--orange); color: var(--orange); }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset-row button { flex: 1; font-size: 12px; padding: 6px 8px; }
+  svg { width: 100%; height: 240px; display: block; }
+  .universe-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .elem {
+    width: 34px; height: 34px; border-radius: 7px; display: flex;
+    align-items: center; justify-content: center; font-size: 13px; font-weight: 600;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    font-family: ui-monospace, Menlo, monospace; transition: all 0.25s ease;
+  }
+  .elem.covered { background: rgba(63,185,80,0.22); border-color: var(--green); color: var(--green); }
+  .elem.justnow { background: var(--green); color: #fff; border-color: var(--green); }
+  .set-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .set-card {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+    transition: all 0.2s ease;
+  }
+  .set-card.best { border-color: var(--blue); background: rgba(88,166,255,0.15); }
+  .set-card.chosen { border-color: var(--green); background: rgba(63,185,80,0.12); }
+  .set-card.dead { opacity: 0.45; }
+  .set-card .name { font-weight: 700; color: var(--text); }
+  .set-card .elems { color: var(--muted); flex: 1; margin: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .set-card .gain {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 9px; font-size: 12px; color: var(--yellow); min-width: 60px; text-align: center;
+  }
+  .set-card.best .gain { color: var(--blue); border-color: var(--blue); font-weight: 700; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .stat .value.green { color: var(--green); }
+  .stat .value.blue { color: var(--blue); }
+  .stat .value.orange { color: var(--orange); }
+  #info {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 13px; line-height: 1.5; min-height: 60px;
+  }
+  #info code { background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--orange); }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    height: 160px; overflow-y: auto; line-height: 1.5;
+  }
+  #log .op { color: var(--blue); }
+  #log .cmp { color: var(--yellow); }
+  #log .ok { color: var(--green); }
+  #log .err { color: var(--red); }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0;
+    transition: opacity 0.2s ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Greedy Set Cover — Approximation</h1>
+    <div class="sub">Repeatedly pick the set covering the most still-uncovered elements (ratio ≤ H(n) ≈ ln n + 1)</div>
+  </div>
+  <div class="mode-pill">
+    <button id="modeGreedy" class="active">Greedy</button>
+    <button id="modeOpt">Brute-force OPT</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="control-group">
+      <h2>Instance</h2>
+      <div class="control-row">
+        <input type="text" id="setInput" placeholder="sets: 0 1 2 ; 1 3 ; 2 3 ; 3 4 ; 4" value="0 1 2 ; 1 3 ; 2 3 ; 3 4 ; 4" />
+      </div>
+      <div class="control-row">
+        <button class="btn primary" id="btnLoad">Load instance</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="preset-row">
+        <button class="btn" data-preset="0 1 2 ; 1 3 ; 2 3 ; 3 4 ; 4">Demo</button>
+        <button class="btn" data-preset="0 1 2 3 ; 0 1 ; 2 3 4 ; 4 5">Overlap</button>
+        <button class="btn" data-preset="0 2 4 6 ; 1 3 5 7 ; 0 1 2 3 4 ; 5 6 7 ; 4 5 6 7">Halving</button>
+        <button class="btn" data-preset="0 ; 1 ; 2 ; 3 ; 4 ; 0 1 2 3 4">Singletons</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="control-row">
+        <button class="btn primary" id="btnRun">Run all</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="150" max="1600" value="750" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Result</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Universe n</div><div class="value blue" id="statN">5</div></div>
+        <div class="stat"><div class="label">Sets m</div><div class="value blue" id="statM">5</div></div>
+        <div class="stat"><div class="label">Covered</div><div class="value orange" id="statCov">0</div></div>
+        <div class="stat"><div class="label">Sets chosen</div><div class="value green" id="statChosen">0</div></div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="control-group">
+      <h2>Coverage growth</h2>
+      <svg id="bar" viewBox="0 0 600 60" preserveAspectRatio="none"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--green)"></i> covered</span>
+        <span><i class="swatch" style="background:var(--blue)"></i> max-gain set (chosen this round)</span>
+        <span><i class="swatch" style="background:var(--yellow)"></i> gain (uncovered elements)</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Universe</h2>
+      <div class="universe-grid" id="universe"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Sets (live gain = still-uncovered count)</h2>
+      <div class="set-list" id="sets"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Explanation</h2>
+      <div id="info">Load an instance and press <b>Run all</b> to watch greedy repeatedly pick the set covering the most still-uncovered elements until the whole universe is covered.</div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const state = {
+  n: 0,
+  sets: [],          // array of arrays of element ids
+  covered: [],       // boolean per element
+  numCovered: 0,
+  chosen: [],        // chosen set indices
+  justCovered: [],   // elements covered in the latest round (for highlight)
+  busy: false,
+  stopped: false,
+  steps: [],
+  stepIndex: 0,
+  mode: "greedy",
+};
+
+const els = {
+  universe: document.getElementById("universe"),
+  setsBox: document.getElementById("sets"),
+  bar: document.getElementById("bar"),
+  info: document.getElementById("info"),
+  log: document.getElementById("log"),
+  statN: document.getElementById("statN"),
+  statM: document.getElementById("statM"),
+  statCov: document.getElementById("statCov"),
+  statChosen: document.getElementById("statChosen"),
+  toast: document.getElementById("toast"),
+  speed: document.getElementById("speed"),
+  setInput: document.getElementById("setInput"),
+};
+
+// ---------------- helpers ----------------
+function wait() {
+  return new Promise(res => setTimeout(res, Number(els.speed.value)));
+}
+function showToast(msg, isErr) {
+  els.toast.textContent = msg;
+  els.toast.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => { els.toast.className = "toast"; }, 1800);
+}
+function info(html) { els.info.innerHTML = html; }
+function log(msg, cls) {
+  const div = document.createElement("div");
+  div.className = cls || "";
+  div.textContent = msg;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function clearLog() { els.log.innerHTML = ""; }
+
+function harmonic(n) {
+  let h = 0;
+  for (let j = 1; j <= n; j++) h += 1 / j;
+  return h;
+}
+
+// ---------------- parsing ----------------
+// sets separated by ';', element ids within a set separated by spaces or commas
+function parseSets(raw) {
+  const sets = [];
+  let maxV = -1;
+  raw.split(";").forEach(chunk => {
+    const ids = chunk.split(/[,\s]+/).map(s => s.trim()).filter(s => s.length)
+      .map(s => parseInt(s, 10)).filter(x => Number.isFinite(x) && x >= 0);
+    if (ids.length) {
+      // dedupe within a set
+      const uniq = Array.from(new Set(ids));
+      sets.push(uniq);
+      uniq.forEach(x => { if (x > maxV) maxV = x; });
+    }
+  });
+  return { sets, n: maxV + 1 };
+}
+
+function loadInstance(raw) {
+  const { sets, n } = parseSets(raw);
+  if (n < 1 || sets.length === 0) { showToast("No valid sets", true); return; }
+  state.sets = sets;
+  state.n = n;
+  state.covered = new Array(n).fill(false);
+  state.numCovered = 0;
+  state.chosen = [];
+  state.justCovered = [];
+  els.statN.textContent = n;
+  els.statM.textContent = sets.length;
+  els.statCov.textContent = 0;
+  els.statChosen.textContent = 0;
+  renderUniverse();
+  renderSets();
+  renderBar();
+  info(`Instance loaded: universe <code>{0..${n - 1}}</code>, <code>${sets.length}</code> sets. Press <b>Run all</b> or <b>Step</b>.`);
+}
+
+// ---------------- core greedy logic ----------------
+function gainOf(i) {
+  let g = 0;
+  for (const e of state.sets[i]) if (!state.covered[e]) g++;
+  return g;
+}
+
+function bestSet() {
+  let best = -1, bestGain = 0;
+  for (let i = 0; i < state.sets.length; i++) {
+    if (state.chosen.includes(i)) continue;
+    const g = gainOf(i);
+    if (g > bestGain) { bestGain = g; best = i; }
+  }
+  return { best, bestGain };
+}
+
+// ---------------- rendering ----------------
+function renderUniverse() {
+  els.universe.innerHTML = "";
+  for (let e = 0; e < state.n; e++) {
+    const d = document.createElement("div");
+    let cls = "elem";
+    if (state.justCovered.includes(e)) cls += " justnow";
+    else if (state.covered[e]) cls += " covered";
+    d.className = cls;
+    d.textContent = e;
+    els.universe.appendChild(d);
+  }
+}
+
+function renderSets(bestIdx) {
+  els.setsBox.innerHTML = "";
+  for (let i = 0; i < state.sets.length; i++) {
+    const card = document.createElement("div");
+    const g = gainOf(i);
+    let cls = "set-card";
+    if (state.chosen.includes(i)) cls += " chosen";
+    else if (i === bestIdx) cls += " best";
+    else if (g === 0) cls += " dead";
+    card.className = cls;
+
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = "S" + i;
+
+    const elems = document.createElement("span");
+    elems.className = "elems";
+    elems.textContent = "{" + state.sets[i].join(",") + "}";
+
+    const gain = document.createElement("span");
+    gain.className = "gain";
+    if (state.chosen.includes(i)) gain.textContent = "chosen";
+    else gain.textContent = "gain " + g;
+
+    card.appendChild(name);
+    card.appendChild(elems);
+    card.appendChild(gain);
+    els.setsBox.appendChild(card);
+  }
+}
+
+function renderBar() {
+  const svg = els.bar;
+  svg.innerHTML = "";
+  const W = 600, H = 60;
+  const frac = state.n ? state.numCovered / state.n : 0;
+  // background
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("x", 0); bg.setAttribute("y", 14); bg.setAttribute("width", W);
+  bg.setAttribute("height", 32); bg.setAttribute("rx", 6);
+  bg.setAttribute("fill", "var(--bg)"); bg.setAttribute("stroke", "var(--border)");
+  svg.appendChild(bg);
+  // covered fill
+  const fill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  fill.setAttribute("x", 0); fill.setAttribute("y", 14);
+  fill.setAttribute("width", Math.max(0, W * frac)); fill.setAttribute("height", 32);
+  fill.setAttribute("rx", 6); fill.setAttribute("fill", "var(--green)");
+  fill.setAttribute("opacity", 0.85);
+  svg.appendChild(fill);
+  // label
+  const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  txt.setAttribute("x", W / 2); txt.setAttribute("y", 34);
+  txt.setAttribute("text-anchor", "middle"); txt.setAttribute("fill", "var(--text)");
+  txt.setAttribute("font-size", "14"); txt.setAttribute("font-weight", "700");
+  txt.setAttribute("font-family", "ui-monospace, Menlo, monospace");
+  txt.textContent = state.numCovered + " / " + state.n + " covered";
+  svg.appendChild(txt);
+}
+
+// ---------------- greedy as animated steps ----------------
+function buildStepQueue() {
+  const steps = [];
+
+  steps.push(async () => {
+    info(`<b>Start.</b> Nothing is covered. The <b>gain</b> of a set is how many <i>still-uncovered</i> elements it contains. Greedy picks the maximum-gain set each round.`);
+    renderSets();
+    log("start: 0 / " + state.n + " covered", "op");
+  });
+
+  // each round: highlight best, then pick it
+  const maxRounds = state.sets.length + 1;
+  for (let r = 0; r < maxRounds; r++) {
+    // highlight best
+    steps.push(async () => {
+      if (state.numCovered >= state.n) return; // already done
+      const { best, bestGain } = bestSet();
+      if (best === -1 || bestGain === 0) {
+        info(`<b>No progress possible.</b> Every remaining set has gain 0 — some element is in no set, so the instance is <b>infeasible</b>.`);
+        log("no positive-gain set -> infeasible", "err");
+        state.__stop = true;
+        return;
+      }
+      state.__pendingBest = best;
+      renderSets(best);
+      info(`<b>Evaluate.</b> Set <code>S${best}</code> has the largest gain (<code>${bestGain}</code> still-uncovered elements). It wins this round.`);
+      log("round " + (state.chosen.length + 1) + ": best = S" + best + " (gain " + bestGain + ")", "cmp");
+    });
+    // pick it
+    steps.push(async () => {
+      if (state.__stop || state.numCovered >= state.n) return;
+      const best = state.__pendingBest;
+      if (best === undefined || best < 0) return;
+      state.chosen.push(best);
+      state.justCovered = [];
+      for (const e of state.sets[best]) {
+        if (!state.covered[e]) {
+          state.covered[e] = true;
+          state.numCovered++;
+          state.justCovered.push(e);
+        }
+      }
+      els.statCov.textContent = state.numCovered;
+      els.statChosen.textContent = state.chosen.length;
+      renderUniverse();
+      renderSets();
+      renderBar();
+      info(`<b>Pick S${best}.</b> Newly covered: <code>{${state.justCovered.join(",")}}</code>. Covered now <code>${state.numCovered}/${state.n}</code>. Notice other sets' gains shrank.`);
+      log("  pick S" + best + " -> covered " + state.numCovered + "/" + state.n, "ok");
+      state.__pendingBest = -1;
+    });
+  }
+
+  // final
+  steps.push(async () => {
+    state.justCovered = [];
+    renderUniverse();
+    if (state.numCovered >= state.n) {
+      const Hn = harmonic(state.n);
+      els.statChosen.textContent = state.chosen.length;
+      info(`<b>Done.</b> Greedy covered the universe with <b>${state.chosen.length}</b> set(s): <code>${state.chosen.map(i => "S" + i).join(", ")}</code>. Guarantee: greedy ≤ <code>H(${state.n}) ≈ ${Hn.toFixed(2)}</code> × OPT.`);
+      log("DONE: " + state.chosen.length + " sets cover all " + state.n + " elements", "ok");
+    } else {
+      info(`<b>Infeasible.</b> Greedy stopped with <code>${state.numCovered}/${state.n}</code> covered — some element is in no set.`);
+      log("STOPPED: only " + state.numCovered + "/" + state.n + " covered (infeasible)", "err");
+    }
+  });
+
+  return steps;
+}
+
+// ---------------- brute-force OPT mode ----------------
+async function bruteOpt() {
+  const m = state.sets.length;
+  if (m > 18) {
+    showToast("Brute force only for m ≤ 18", true);
+    info("Brute force tries all <code>2^m</code> sub-collections — only feasible for a small number of sets (m ≤ 18).");
+    return;
+  }
+  info(`<b>Brute-force OPT.</b> Trying all <code>2^${m}</code> sub-collections to find the true minimum cover.`);
+  log("brute force: searching 2^" + m + " sub-collections", "op");
+  const full = (1 << state.n) - 1;
+  const masks = state.sets.map(s => s.reduce((acc, e) => acc | (1 << e), 0));
+  let best = -1, bestMask = 0;
+  for (let sub = 0; sub < (1 << m); sub++) {
+    let cov = 0, cnt = 0;
+    for (let i = 0; i < m; i++) {
+      if (sub & (1 << i)) { cov |= masks[i]; cnt++; }
+    }
+    if (cov === full && (best === -1 || cnt < best)) {
+      best = cnt; bestMask = sub;
+    }
+  }
+  if (best === -1) {
+    info("<b>Infeasible.</b> No sub-collection covers the universe — some element is in no set.");
+    log("no cover exists (infeasible)", "err");
+    return;
+  }
+  // show the optimal cover
+  state.covered = new Array(state.n).fill(false);
+  state.numCovered = 0;
+  state.chosen = [];
+  for (let i = 0; i < m; i++) {
+    if (bestMask & (1 << i)) {
+      state.chosen.push(i);
+      for (const e of state.sets[i]) {
+        if (!state.covered[e]) { state.covered[e] = true; state.numCovered++; }
+      }
+      renderUniverse(); renderSets(); renderBar();
+      els.statCov.textContent = state.numCovered;
+      els.statChosen.textContent = state.chosen.length;
+      log("  OPT uses S" + i, "ok");
+      if (state.stopped) return;
+      await wait();
+    }
+  }
+  // greedy comparison
+  const gChosen = greedySolveCount();
+  info(`<b>OPT = ${best}</b> set(s): <code>${state.chosen.map(i => "S" + i).join(", ")}</code>. Greedy on this instance uses <b>${gChosen}</b>. Ratio greedy/OPT = <code>${(gChosen / best).toFixed(2)}</code> (always ≤ H(n) ≈ ${harmonic(state.n).toFixed(2)}).`);
+  log("OPT = " + best + ", greedy = " + gChosen + ", ratio = " + (gChosen / best).toFixed(2), "cmp");
+}
+
+// run greedy silently, return number of sets used
+function greedySolveCount() {
+  const covered = new Array(state.n).fill(false);
+  let numCovered = 0, count = 0;
+  const used = new Array(state.sets.length).fill(false);
+  while (numCovered < state.n) {
+    let best = -1, bestGain = 0;
+    for (let i = 0; i < state.sets.length; i++) {
+      if (used[i]) continue;
+      let g = 0;
+      for (const e of state.sets[i]) if (!covered[e]) g++;
+      if (g > bestGain) { bestGain = g; best = i; }
+    }
+    if (best === -1 || bestGain === 0) break;
+    used[best] = true; count++;
+    for (const e of state.sets[best]) {
+      if (!covered[e]) { covered[e] = true; numCovered++; }
+    }
+  }
+  return count;
+}
+
+// ---------------- drivers ----------------
+async function runAll() {
+  if (state.busy) { showToast("Running…", true); return; }
+  state.busy = true; state.stopped = false; state.__stop = false;
+  clearLog();
+  resetCoverageState();
+  try {
+    if (state.mode === "opt") {
+      await bruteOpt();
+    } else {
+      const steps = buildStepQueue();
+      for (const step of steps) {
+        if (state.stopped || state.__stop) break;
+        await step();
+        await wait();
+      }
+    }
+  } catch (e) {
+    console.error(e); showToast("Error: " + e.message, true);
+  } finally {
+    state.busy = false;
+  }
+}
+
+function resetCoverageState() {
+  state.covered = new Array(state.n).fill(false);
+  state.numCovered = 0;
+  state.chosen = [];
+  state.justCovered = [];
+  state.__pendingBest = -1;
+  state.__stop = false;
+  els.statCov.textContent = 0;
+  els.statChosen.textContent = 0;
+  renderUniverse();
+  renderSets();
+  renderBar();
+}
+
+function prepareStepMode() {
+  resetCoverageState();
+  state.steps = state.mode === "opt" ? [] : buildStepQueue();
+  state.stepIndex = 0;
+}
+
+async function doStep() {
+  if (state.busy) return;
+  if (state.mode === "opt") { showToast("Step mode is for Greedy", true); return; }
+  if (!state.steps.length || state.stepIndex >= state.steps.length) {
+    prepareStepMode();
+    clearLog();
+  }
+  if (state.stepIndex < state.steps.length) {
+    state.busy = true;
+    try { await state.steps[state.stepIndex](); } catch (e) { /* handled in step */ }
+    state.stepIndex++;
+    state.busy = false;
+  }
+}
+
+function reset() {
+  if (state.busy) { state.stopped = true; }
+  clearLog();
+  resetCoverageState();
+  prepareStepMode();
+  info("Reset. Press <b>Run all</b> or <b>Step</b> to begin.");
+}
+
+// ---------------- random instance ----------------
+function randomInstance() {
+  const n = 5 + Math.floor(Math.random() * 5); // 5..9
+  const sets = [];
+  // guarantee feasibility: singletons covering everything, then a few random subsets
+  // start with two complementary-ish blocks
+  const a = [], b = [];
+  for (let e = 0; e < n; e++) (e % 2 === 0 ? a : b).push(e);
+  if (a.length) sets.push(a);
+  if (b.length) sets.push(b);
+  const numExtra = 3 + Math.floor(Math.random() * 3);
+  for (let s = 0; s < numExtra; s++) {
+    const k = 1 + Math.floor(Math.random() * Math.min(4, n));
+    const pool = Array.from({ length: n }, (_, i) => i);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    sets.push(pool.slice(0, k).sort((x, y) => x - y));
+  }
+  els.setInput.value = sets.map(s => s.join(" ")).join(" ; ");
+  loadInstance(els.setInput.value);
+  prepareStepMode();
+}
+
+// ---------------- event wiring ----------------
+document.getElementById("btnLoad").addEventListener("click", () => {
+  loadInstance(els.setInput.value);
+  prepareStepMode();
+});
+document.getElementById("btnRandom").addEventListener("click", randomInstance);
+document.querySelectorAll("[data-preset]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    els.setInput.value = btn.getAttribute("data-preset");
+    loadInstance(els.setInput.value);
+    prepareStepMode();
+  });
+});
+document.getElementById("btnRun").addEventListener("click", runAll);
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnReset").addEventListener("click", reset);
+
+document.getElementById("modeGreedy").addEventListener("click", () => {
+  state.mode = "greedy";
+  document.getElementById("modeGreedy").classList.add("active");
+  document.getElementById("modeOpt").classList.remove("active");
+  reset();
+});
+document.getElementById("modeOpt").addEventListener("click", () => {
+  state.mode = "opt";
+  document.getElementById("modeOpt").classList.add("active");
+  document.getElementById("modeGreedy").classList.remove("active");
+  reset();
+});
+
+els.setInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { loadInstance(els.setInput.value); prepareStepMode(); }
+});
+
+// ---------------- init ----------------
+loadInstance(els.setInput.value);
+prepareStepMode();
+</script>
+</body>
+</html>
+</content>
