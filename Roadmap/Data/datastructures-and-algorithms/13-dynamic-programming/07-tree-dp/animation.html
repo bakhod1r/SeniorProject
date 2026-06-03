@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tree DP — Post-order DFS computing dp bottom-up</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-node: rgba(88, 166, 255, 0.30);
+    --hi-child: rgba(210, 153, 34, 0.28);
+    --done: rgba(63, 185, 80, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .dptable {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+  }
+  .dptable td, .dptable th {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .dptable th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .dptable tr.active td { background: var(--hi-node); color: #fff; font-weight: 700; }
+  .dptable tr.childrow td { background: var(--hi-child); }
+  .dptable tr.donerow td { background: var(--done); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .formula {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    white-space: pre-wrap;
+  }
+  .formula b { color: var(--accent); }
+  .formula .val { color: var(--good); font-weight: 700; }
+  circle.node { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; }
+  circle.node.active { fill: var(--hi-node); stroke: var(--accent); stroke-width: 3; }
+  circle.node.child { fill: var(--hi-child); stroke: var(--accent-2); stroke-width: 3; }
+  circle.node.done { fill: var(--done); stroke: var(--good); stroke-width: 2; }
+  text.nlabel { fill: #fff; font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  text.wlabel { fill: var(--accent-2); font-size: 11px; font-family: var(--mono); }
+  text.dplabel { fill: var(--good); font-size: 11px; font-family: var(--mono); }
+  line.edge { stroke: var(--muted); stroke-width: 2; }
+  line.edge.tree { stroke: var(--good); stroke-width: 3; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .codepanel {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .codepanel { grid-template-columns: 1fr; } }
+  pre.code {
+    margin: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow-x: auto;
+  }
+  pre.code .ln {
+    display: block;
+    padding: 0 14px;
+    white-space: pre;
+    border-left: 3px solid transparent;
+  }
+  pre.code .ln.active {
+    background: var(--hi-node);
+    border-left-color: var(--accent);
+    color: #fff;
+  }
+  pre.code .ln .kw { color: var(--accent); }
+  pre.code .ln .cm { color: var(--muted); }
+  .order-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .order-strip .chip {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 3px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--muted);
+  }
+  .order-strip .chip.done { border-color: var(--good); color: var(--good); }
+  .order-strip .chip.current { border-color: var(--accent); color: #fff; background: var(--hi-node); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tree DP — Post-order DFS computing dp bottom-up</h1>
+  <p>Maximum-weight independent set (House Robber III). At each node we keep two values: <b>incl</b> (best if the node is chosen) and <b>excl</b> (best if skipped). Leaves first, parents last.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Tree:
+      <select id="treeSel">
+        <option value="demo">Demo tree (6 nodes)</option>
+        <option value="path">Path (5 nodes)</option>
+        <option value="star">Star (1 + 4)</option>
+        <option value="balanced">Balanced (7 nodes)</option>
+      </select>
+    </label>
+    <label>Speed
+      <input type="range" id="speed" min="300" max="2000" value="1100" step="100" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Tree &amp; current dp state</h2>
+      <svg id="treeSvg" viewBox="0 0 460 320" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-node)"></span> current node</span>
+        <span><span class="swatch" style="background:var(--hi-child)"></span> child being folded</span>
+        <span><span class="swatch" style="background:var(--done)"></span> done</span>
+      </div>
+      <div class="formula" id="formulaBox">incl[v] = w[v] + &Sigma; excl[child]
+excl[v] = &Sigma; max(excl[child], incl[child])</div>
+    </div>
+
+    <div class="card">
+      <h2>dp table (excl, incl) per node</h2>
+      <table class="dptable" id="dpTable"></table>
+      <div class="formula" id="answerBox" style="margin-top:10px;">
+        Answer = max(excl[root], incl[root]) = <span class="val" id="answerVal">?</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We root the tree at node 0 and run a post-order DFS: every child is finished before its parent, so a parent can fold its children's (excl, incl) into its own.</div>
+
+  <div class="codepanel">
+    <div class="card">
+      <h2>Algorithm (the line we are executing)</h2>
+      <pre class="code" id="codeBox">
+<span class="ln" data-line="0"><span class="kw">function</span> dfs(v, parent):           <span class="cm"># post-order DFS</span></span>
+<span class="ln" data-line="1">    excl = 0                          <span class="cm"># best if v is NOT chosen</span></span>
+<span class="ln" data-line="2">    incl = w[v]                       <span class="cm"># best if v IS chosen</span></span>
+<span class="ln" data-line="3">    <span class="kw">for</span> child c <span class="kw">in</span> adj[v]:</span>
+<span class="ln" data-line="4">        <span class="kw">if</span> c == parent: <span class="kw">continue</span>      <span class="cm"># don't walk back up</span></span>
+<span class="ln" data-line="5">        dfs(c, v)                     <span class="cm"># solve child's subtree first</span></span>
+<span class="ln" data-line="6">        excl += max(excl[c], incl[c]) <span class="cm"># child free to pick</span></span>
+<span class="ln" data-line="7">        incl += excl[c]               <span class="cm"># v chosen => child excluded</span></span>
+<span class="ln" data-line="8">    <span class="kw">return</span> (excl, incl)               <span class="cm"># summary for parent</span></span>
+<span class="ln" data-line="9"><span class="cm"># answer = max(dfs(root, -1))</span></span>
+</pre>
+    </div>
+    <div class="card">
+      <h2>Post-order processing</h2>
+      <p class="step-counter" id="orderCaption">Nodes are folded leaves-first; each turns green when its (excl, incl) is final.</p>
+      <div class="order-strip" id="orderStrip"></div>
+      <div class="formula" id="invariantBox" style="margin-top:12px;">
+Invariant: when node v is processed, every child of v
+is already <span class="val">done</span>, so dfs(c, v) returns instantly
+from the table. Each subtree is solved exactly once → <b>O(n)</b>.
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization of dynamic programming on a tree. The recurrence is the classic include/exclude:
+    a node that is <b>included</b> forces each child to its <code>excl</code> value; a node that is <b>excluded</b> lets each child take <code>max(excl, incl)</code>.
+    Each subtree is solved exactly once, so the whole DFS is <code>O(n)</code>. See <code>junior.md</code> and <code>professional.md</code> for the correctness proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Tree definitions ----------
+// Each tree: parent[] (parent[0] = -1), weight w[], and SVG positions pos[].
+const TREES = {
+  demo: {
+    parent: [-1, 0, 0, 1, 1, 2],
+    w: [3, 2, 1, 1, 3, 1],
+    pos: [[230, 40], [140, 130], [330, 130], [80, 230], [200, 230], [330, 230]],
+  },
+  path: {
+    parent: [-1, 0, 1, 2, 3],
+    w: [2, 3, 2, 5, 1],
+    pos: [[70, 60], [150, 110], [230, 160], [310, 210], [390, 260]],
+  },
+  star: {
+    parent: [-1, 0, 0, 0, 0],
+    w: [4, 3, 2, 5, 1],
+    pos: [[230, 60], [80, 220], [180, 250], [280, 250], [380, 220]],
+  },
+  balanced: {
+    parent: [-1, 0, 0, 1, 1, 2, 2],
+    w: [1, 4, 2, 3, 2, 5, 1],
+    pos: [[230, 40], [130, 140], [330, 140], [70, 250], [180, 250], [280, 250], [390, 250]],
+  },
+};
+
+// ---------- Build children lists and a post-order ----------
+function buildTree(def) {
+  const n = def.parent.length;
+  const children = Array.from({ length: n }, () => []);
+  for (let v = 0; v < n; v++) {
+    if (def.parent[v] !== -1) children[def.parent[v]].push(v);
+  }
+  // post-order via iterative DFS from root 0
+  const order = [];
+  const stack = [0];
+  const tmp = [];
+  while (stack.length) {
+    const v = stack.pop();
+    tmp.push(v);
+    for (const c of children[v]) stack.push(c);
+  }
+  // reverse pre-order is a valid post-order
+  for (let i = tmp.length - 1; i >= 0; i--) order.push(tmp[i]);
+  return { n, children, parent: def.parent, w: def.w, pos: def.pos, order };
+}
+
+// ---------- Build the step plan ----------
+// One step per node in post-order; the step shows incl/excl being assembled
+// from that node's children (which are already finished).
+function buildPlan(tree) {
+  const steps = [];
+  const excl = new Array(tree.n).fill(null);
+  const incl = new Array(tree.n).fill(null);
+
+  steps.push({
+    type: "init",
+    node: -1,
+    excl: excl.slice(),
+    incl: incl.slice(),
+    desc: "Root at node 0. We process nodes in post-order: " +
+      tree.order.join(" → ") + ". Children are always finished before their parent.",
+  });
+
+  for (const v of tree.order) {
+    let e = 0;
+    let i = tree.w[v];
+    const parts = [];
+    for (const c of tree.children[v]) {
+      e += Math.max(excl[c], incl[c]);
+      i += excl[c];
+      parts.push(c);
+    }
+    excl[v] = e;
+    incl[v] = i;
+    let desc;
+    if (parts.length === 0) {
+      desc = "Node " + v + " is a leaf. excl[" + v + "] = 0, incl[" + v +
+        "] = w[" + v + "] = " + tree.w[v] + ".";
+    } else {
+      desc = "Node " + v + " folds children {" + parts.join(", ") + "}: " +
+        "incl = w[" + v + "](" + tree.w[v] + ") + Σ excl[child] = " + i + "; " +
+        "excl = Σ max(excl,incl) of children = " + e + ".";
+    }
+    steps.push({
+      type: "node",
+      node: v,
+      children: parts,
+      excl: excl.slice(),
+      incl: incl.slice(),
+      w: tree.w[v],
+      e, i,
+      desc,
+    });
+  }
+
+  const root = 0;
+  const ans = Math.max(excl[root], incl[root]);
+  steps.push({
+    type: "done",
+    node: -1,
+    excl: excl.slice(),
+    incl: incl.slice(),
+    answer: ans,
+    desc: "Done. Answer = max(excl[0], incl[0]) = max(" + excl[root] + ", " +
+      incl[root] + ") = " + ans + ".",
+  });
+  return steps;
+}
+
+// ---------- Rendering ----------
+function renderTree(tree, step) {
+  const svg = document.getElementById("treeSvg");
+  let html = "";
+  // edges
+  for (let v = 0; v < tree.n; v++) {
+    const p = tree.parent[v];
+    if (p === -1) continue;
+    const [x1, y1] = tree.pos[p];
+    const [x2, y2] = tree.pos[v];
+    let cls = "edge";
+    if (step.type === "node" && step.node === p && step.children.includes(v)) {
+      cls = "edge tree";
+    }
+    html += `<line class="${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+  }
+  // nodes
+  for (let v = 0; v < tree.n; v++) {
+    const [x, y] = tree.pos[v];
+    let cls = "node";
+    const settled = step.excl[v] !== null;
+    if (step.type === "node" && step.node === v) cls = "node active";
+    else if (step.type === "node" && step.children && step.children.includes(v)) cls = "node child";
+    else if (settled) cls = "node done";
+    html += `<circle class="${cls}" cx="${x}" cy="${y}" r="18" />`;
+    html += `<text class="nlabel" x="${x}" y="${y + 4}" text-anchor="middle">${v}</text>`;
+    html += `<text class="wlabel" x="${x}" y="${y - 24}" text-anchor="middle">w=${tree.w[v]}</text>`;
+    if (settled) {
+      html += `<text class="dplabel" x="${x}" y="${y + 34}" text-anchor="middle">(${step.excl[v]},${step.incl[v]})</text>`;
+    }
+  }
+  svg.innerHTML = html;
+}
+
+function highlightCode(step) {
+  // map step type to a representative line of the pseudocode
+  let line;
+  if (step.type === "init") line = 0;
+  else if (step.type === "done") line = 9;
+  else if (step.children && step.children.length === 0) line = 2; // leaf: incl=w[v]
+  else line = 7; // internal node: folding children (incl += excl[c])
+  const lines = document.querySelectorAll("#codeBox .ln");
+  lines.forEach((el) => {
+    el.classList.toggle("active", parseInt(el.dataset.line, 10) === line);
+  });
+}
+
+function renderOrderStrip(tree, step) {
+  const strip = document.getElementById("orderStrip");
+  let html = "";
+  for (const v of tree.order) {
+    let cls = "chip";
+    if (step.type === "node" && step.node === v) cls += " current";
+    else if (step.excl[v] !== null) cls += " done";
+    html += `<span class="${cls}">node ${v}</span>`;
+  }
+  strip.innerHTML = html;
+}
+
+function renderTable(tree, step) {
+  const t = document.getElementById("dpTable");
+  let html = "<tr><th>node</th><th>w</th><th>excl</th><th>incl</th></tr>";
+  for (let v = 0; v < tree.n; v++) {
+    let cls = "";
+    if (step.type === "node" && step.node === v) cls = "active";
+    else if (step.type === "node" && step.children && step.children.includes(v)) cls = "childrow";
+    else if (step.type === "done") cls = "donerow";
+    const e = step.excl[v] === null ? "·" : step.excl[v];
+    const i = step.incl[v] === null ? "·" : step.incl[v];
+    html += `<tr class="${cls}"><td>${v}</td><td>${tree.w[v]}</td><td>${e}</td><td>${i}</td></tr>`;
+  }
+  t.innerHTML = html;
+}
+
+// ---------- Animation state ----------
+const state = {
+  tree: null,
+  steps: null,
+  idx: 0,
+  running: false,
+  timer: null,
+};
+
+function applyStep() {
+  const step = state.steps[state.idx];
+  renderTree(state.tree, step);
+  renderTable(state.tree, step);
+  highlightCode(step);
+  renderOrderStrip(state.tree, step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.steps.length - 1);
+
+  const fb = document.getElementById("formulaBox");
+  if (step.type === "node" && step.children.length > 0) {
+    fb.innerHTML =
+      "incl[" + step.node + "] = w(" + step.w + ") + Σ excl[child] = <span class='val'>" + step.i + "</span>\n" +
+      "excl[" + step.node + "] = Σ max(excl,incl) of children = <span class='val'>" + step.e + "</span>";
+  } else {
+    fb.innerHTML = "incl[v] = w[v] + Σ excl[child]\nexcl[v] = Σ max(excl[child], incl[child])";
+  }
+
+  const av = document.getElementById("answerVal");
+  if (step.type === "done") {
+    av.textContent = step.answer;
+  } else {
+    av.textContent = "?";
+  }
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) {
+    state.idx++;
+    applyStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  const delay = parseInt(document.getElementById("speed").value, 10);
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, delay);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const key = document.getElementById("treeSel").value;
+  state.tree = buildTree(TREES[key]);
+  state.steps = buildPlan(state.tree);
+  state.idx = 0;
+  applyStep();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("treeSel").addEventListener("change", rebuild);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; run(); }
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
