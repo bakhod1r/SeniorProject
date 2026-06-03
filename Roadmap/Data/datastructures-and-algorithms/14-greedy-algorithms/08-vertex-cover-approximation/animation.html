@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vertex Cover 2-Approximation — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  .mode-pill {
+    display: inline-flex; gap: 6px; background: var(--bg);
+    border: 1px solid var(--border); padding: 4px; border-radius: 999px; font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  input[type="text"] {
+    flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-weight: 500; transition: all 0.15s ease;
+  }
+  button.btn:hover { border-color: var(--blue); }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.warn { border-color: var(--orange); color: var(--orange); }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset-row button { flex: 1; font-size: 12px; padding: 6px 8px; }
+  svg { width: 100%; height: 320px; display: block; }
+  .edge { stroke: var(--muted); stroke-width: 2; }
+  .edge.current { stroke: var(--yellow); stroke-width: 5; }
+  .edge.matched { stroke: var(--purple); stroke-width: 5; }
+  .edge.covered { stroke: var(--green); stroke-width: 2.5; }
+  .node circle { fill: var(--surface); stroke: var(--blue); stroke-width: 2.5; }
+  .node.incover circle { fill: var(--green); stroke: var(--green); }
+  .node.endpoint circle { stroke: var(--orange); stroke-width: 4; }
+  .node text { fill: var(--text); font-size: 14px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  .cover-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+  .chip {
+    background: rgba(63,185,80,0.18); border: 1px solid var(--green); color: var(--green);
+    padding: 3px 9px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .chip.match { background: rgba(188,140,255,0.18); border-color: var(--purple); color: var(--purple); }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .stat .value.green { color: var(--green); }
+  .stat .value.blue { color: var(--blue); }
+  .stat .value.purple { color: var(--purple); }
+  #info {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 13px; line-height: 1.5; min-height: 60px;
+  }
+  #info code { background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--orange); }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    height: 180px; overflow-y: auto; line-height: 1.5;
+  }
+  #log .op { color: var(--blue); }
+  #log .cmp { color: var(--yellow); }
+  #log .ok { color: var(--green); }
+  #log .err { color: var(--red); }
+  #log .match { color: var(--purple); }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0;
+    transition: opacity 0.2s ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Vertex Cover — 2-Approximation</h1>
+    <div class="sub">For each uncovered edge, add BOTH endpoints (maximal matching) → cover ≤ 2·OPT</div>
+  </div>
+  <div class="mode-pill">
+    <button id="modeWalk" class="active">Walkthrough</button>
+    <button id="modeOpt">Compare to OPT</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="control-row">
+        <input type="text" id="edgeInput" placeholder="edges: 0-1,1-2,0-2" value="0-1,1-2,2-3,3-4,4-0,1-3" />
+      </div>
+      <div class="control-row">
+        <button class="btn primary" id="btnLoad">Load graph</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="preset-row">
+        <button class="btn" data-preset="0-1,1-2,2-3,3-4,4-0,1-3">Cycle+chord</button>
+        <button class="btn" data-preset="0-1,0-2,0-3,1-2,1-3,2-3">K4</button>
+        <button class="btn" data-preset="0-1,2-3,4-5">Disjoint edges</button>
+        <button class="btn" data-preset="0-1,0-2,0-3,0-4,0-5">Star</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="control-row">
+        <button class="btn primary" id="btnRun">Run all</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="120" max="1600" value="700" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Result</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Vertices n</div><div class="value blue" id="statN">5</div></div>
+        <div class="stat"><div class="label">Edges m</div><div class="value blue" id="statM">6</div></div>
+        <div class="stat"><div class="label">Matching |M|</div><div class="value purple" id="statMatch">—</div></div>
+        <div class="stat"><div class="label">Cover = 2|M|</div><div class="value green" id="statCover">—</div></div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Cover so far</h2>
+      <div class="cover-chips" id="coverChips"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="control-group">
+      <h2>Graph view</h2>
+      <svg id="graph" viewBox="0 0 600 320" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--yellow)"></i> current edge</span>
+        <span><i class="swatch" style="background:var(--purple)"></i> matched edge</span>
+        <span><i class="swatch" style="background:var(--green)"></i> in cover / covered edge</span>
+        <span><i class="swatch" style="background:var(--orange)"></i> endpoints just added</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Edge scan</h2>
+      <div id="edgeList"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Explanation</h2>
+      <div id="info">Load a graph and press <b>Run all</b> to scan the edges; each uncovered edge contributes <b>both</b> endpoints to the cover (a maximal matching), guaranteeing a cover at most twice the optimum.</div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const state = {
+  n: 0,
+  edges: [],          // [{u,v}]
+  inCover: [],        // boolean per vertex
+  matching: [],       // [{u,v}] picked edges
+  positions: [],      // node coords
+  busy: false,
+  stopped: false,
+  steps: [],
+  stepIndex: 0,
+  mode: "walk",
+  endpoints: null,    // {u,v} just added, for highlight
+  currentEdge: -1,    // index in edges of the edge under inspection
+};
+
+const els = {
+  graph: document.getElementById("graph"),
+  edgeList: document.getElementById("edgeList"),
+  info: document.getElementById("info"),
+  log: document.getElementById("log"),
+  statN: document.getElementById("statN"),
+  statM: document.getElementById("statM"),
+  statMatch: document.getElementById("statMatch"),
+  statCover: document.getElementById("statCover"),
+  coverChips: document.getElementById("coverChips"),
+  toast: document.getElementById("toast"),
+  speed: document.getElementById("speed"),
+  edgeInput: document.getElementById("edgeInput"),
+};
+
+// ---------------- helpers ----------------
+function wait() {
+  return new Promise(res => setTimeout(res, Number(els.speed.value)));
+}
+function showToast(msg, isErr) {
+  els.toast.textContent = msg;
+  els.toast.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => { els.toast.className = "toast"; }, 1800);
+}
+function info(html) { els.info.innerHTML = html; }
+function log(msg, cls) {
+  const div = document.createElement("div");
+  div.className = cls || "";
+  div.textContent = msg;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function clearLog() { els.log.innerHTML = ""; }
+
+// ---------------- parsing ----------------
+function parseEdges(raw) {
+  const edges = [];
+  let maxV = -1;
+  raw.split(/[,\s]+/).forEach(tok => {
+    tok = tok.trim();
+    if (!tok) return;
+    const parts = tok.split("-").map(s => parseInt(s, 10));
+    if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+      const [u, v] = parts;
+      if (u === v) return;       // ignore self-loops
+      edges.push({ u, v });
+      maxV = Math.max(maxV, u, v);
+    }
+  });
+  return { edges, n: maxV + 1 };
+}
+
+function loadGraph(raw) {
+  const { edges, n } = parseEdges(raw);
+  if (n < 1) { showToast("No valid edges", true); return; }
+  state.edges = edges;
+  state.n = n;
+  resetRunState();
+  layoutNodes();
+  els.statN.textContent = n;
+  els.statM.textContent = edges.length;
+  renderGraph();
+  renderEdgeList();
+  renderCoverChips();
+  info(`Graph loaded: <code>${n}</code> vertices, <code>${edges.length}</code> edges. Press <b>Run all</b> or <b>Step</b>.`);
+}
+
+function resetRunState() {
+  state.inCover = new Array(state.n).fill(false);
+  state.matching = [];
+  state.endpoints = null;
+  state.currentEdge = -1;
+  els.statMatch.textContent = "—";
+  els.statCover.textContent = "—";
+}
+
+function layoutNodes() {
+  const n = state.n;
+  const cx = 300, cy = 160, R = 120;
+  state.positions = [];
+  for (let i = 0; i < n; i++) {
+    const ang = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    state.positions.push({ x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) });
+  }
+}
+
+// ---------------- rendering ----------------
+function edgeKey(e) { return e.u + "-" + e.v; }
+
+function renderGraph() {
+  const svg = els.graph;
+  svg.innerHTML = "";
+  const matchedSet = new Set(state.matching.map(edgeKey));
+  for (let i = 0; i < state.edges.length; i++) {
+    const e = state.edges[i];
+    const p1 = state.positions[e.u], p2 = state.positions[e.v];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
+    line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
+    let cls = "edge";
+    if (i === state.currentEdge) cls += " current";
+    else if (matchedSet.has(edgeKey(e))) cls += " matched";
+    else if (state.inCover[e.u] || state.inCover[e.v]) cls += " covered";
+    line.setAttribute("class", cls);
+    svg.appendChild(line);
+  }
+  for (let i = 0; i < state.n; i++) {
+    const p = state.positions[i];
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    let cls = "node";
+    if (state.inCover[i]) cls += " incover";
+    if (state.endpoints && (state.endpoints.u === i || state.endpoints.v === i)) cls += " endpoint";
+    g.setAttribute("class", cls);
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", p.x); c.setAttribute("cy", p.y); c.setAttribute("r", 18);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", p.x); t.setAttribute("y", p.y);
+    t.textContent = i;
+    g.appendChild(c); g.appendChild(t);
+    svg.appendChild(g);
+  }
+}
+
+function renderEdgeList() {
+  const wrap = els.edgeList;
+  wrap.innerHTML = "";
+  const matchedSet = new Set(state.matching.map(edgeKey));
+  const table = document.createElement("div");
+  table.style.fontFamily = "ui-monospace, Menlo, monospace";
+  table.style.fontSize = "13px";
+  table.style.display = "flex";
+  table.style.flexWrap = "wrap";
+  table.style.gap = "6px";
+  for (let i = 0; i < state.edges.length; i++) {
+    const e = state.edges[i];
+    const chip = document.createElement("span");
+    chip.textContent = e.u + "–" + e.v;
+    chip.style.padding = "3px 9px";
+    chip.style.borderRadius = "6px";
+    chip.style.border = "1px solid var(--border)";
+    if (i === state.currentEdge) {
+      chip.style.background = "rgba(210,153,34,0.22)";
+      chip.style.borderColor = "var(--yellow)";
+      chip.style.color = "var(--yellow)";
+    } else if (matchedSet.has(edgeKey(e))) {
+      chip.style.background = "rgba(188,140,255,0.18)";
+      chip.style.borderColor = "var(--purple)";
+      chip.style.color = "var(--purple)";
+    } else if (state.inCover[e.u] || state.inCover[e.v]) {
+      chip.style.background = "rgba(63,185,80,0.12)";
+      chip.style.borderColor = "var(--green)";
+      chip.style.color = "var(--green)";
+    } else {
+      chip.style.color = "var(--muted)";
+    }
+    table.appendChild(chip);
+  }
+  wrap.appendChild(table);
+}
+
+function renderCoverChips() {
+  const wrap = els.coverChips;
+  wrap.innerHTML = "";
+  for (let i = 0; i < state.n; i++) {
+    if (state.inCover[i]) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = i;
+      wrap.appendChild(chip);
+    }
+  }
+}
+
+// ---------------- the algorithm as animated steps ----------------
+function buildStepQueue() {
+  const steps = [];
+
+  steps.push(async () => {
+    resetRunState();
+    renderGraph(); renderEdgeList(); renderCoverChips();
+    info(`<b>Start.</b> Cover is empty. We will scan edges left to right. For every <b>uncovered</b> edge we add <b>both</b> endpoints — building a maximal matching whose vertices form the cover.`);
+    log("start: cover = {}", "op");
+  });
+
+  for (let i = 0; i < state.edges.length; i++) {
+    steps.push(makeEdgeStep(i));
+  }
+
+  steps.push(async () => {
+    state.currentEdge = -1;
+    state.endpoints = null;
+    renderGraph(); renderEdgeList();
+    const coverSize = state.inCover.filter(Boolean).length;
+    els.statCover.textContent = coverSize;
+    els.statMatch.textContent = state.matching.length;
+    info(`<b>Done.</b> Every edge is covered. Cover size = <code>${coverSize}</code> = 2·|M| where |M| = <code>${state.matching.length}</code>. By the matching lower bound, <code>OPT ≥ |M|</code>, so this cover is <b>≤ 2·OPT</b>.`);
+    log("done: cover size " + coverSize + " = 2 × matching " + state.matching.length, "ok");
+  });
+
+  return steps;
+}
+
+function makeEdgeStep(i) {
+  return async () => {
+    const e = state.edges[i];
+    state.currentEdge = i;
+    state.endpoints = null;
+    renderGraph(); renderEdgeList();
+    const uCov = state.inCover[e.u], vCov = state.inCover[e.v];
+    if (uCov || vCov) {
+      info(`Edge <code>${e.u}–${e.v}</code>: already <b>covered</b> (endpoint ${uCov ? e.u : e.v} is in the cover). Skip.`);
+      log("edge " + e.u + "-" + e.v + " covered → skip", "cmp");
+      return;
+    }
+    // uncovered: add both endpoints
+    state.inCover[e.u] = true;
+    state.inCover[e.v] = true;
+    state.matching.push({ u: e.u, v: e.v });
+    state.endpoints = { u: e.u, v: e.v };
+    renderGraph(); renderEdgeList(); renderCoverChips();
+    els.statMatch.textContent = state.matching.length;
+    els.statCover.textContent = state.inCover.filter(Boolean).length;
+    info(`Edge <code>${e.u}–${e.v}</code> is <b>uncovered</b> → add <b>both</b> endpoints <code>${e.u}</code> and <code>${e.v}</code> to the cover. This edge joins the matching.`);
+    log("edge " + e.u + "-" + e.v + " uncovered → add " + e.u + " & " + e.v, "match");
+  };
+}
+
+// ---------------- compare-to-OPT mode (brute force) ----------------
+function bruteMinCover(n, edges) {
+  // smallest subset (by size) covering all edges; n is small in this mode
+  for (let k = 0; k <= n; k++) {
+    const res = chooseCover(n, edges, k);
+    if (res) return res;
+  }
+  return [];
+}
+function chooseCover(n, edges, k) {
+  // try all k-subsets via combinations
+  const combo = [];
+  let found = null;
+  function rec(start, depth) {
+    if (found) return;
+    if (depth === k) {
+      const s = new Set(combo);
+      for (const e of edges) if (!s.has(e.u) && !s.has(e.v)) return;
+      found = combo.slice();
+      return;
+    }
+    for (let v = start; v < n; v++) {
+      combo.push(v);
+      rec(v + 1, depth + 1);
+      combo.pop();
+      if (found) return;
+    }
+  }
+  rec(0, 0);
+  return found;
+}
+
+async function compareToOpt() {
+  if (state.n > 18) {
+    showToast("Compare mode is for n ≤ 18", true);
+    info("Brute-force OPT is exponential. Use a graph with <code>n ≤ 18</code>.");
+    return;
+  }
+  // first run the approximation silently
+  resetRunState();
+  for (const e of state.edges) {
+    if (!state.inCover[e.u] && !state.inCover[e.v]) {
+      state.inCover[e.u] = true; state.inCover[e.v] = true;
+      state.matching.push({ u: e.u, v: e.v });
+    }
+  }
+  const approxSize = state.inCover.filter(Boolean).length;
+  renderGraph(); renderCoverChips(); renderEdgeList();
+  els.statMatch.textContent = state.matching.length;
+  els.statCover.textContent = approxSize;
+  log("2-approx cover size = " + approxSize, "ok");
+  await wait();
+  const opt = bruteMinCover(state.n, state.edges);
+  const optSize = opt.length;
+  log("brute-force OPT = " + optSize + "  (cover " + opt.join(",") + ")", "op");
+  const ratio = optSize === 0 ? 1 : (approxSize / optSize);
+  info(`<b>2-approx</b> cover size = <code>${approxSize}</code>. <b>Exact OPT</b> = <code>${optSize}</code> (e.g. {${opt.join(", ")}}). Ratio = <code>${ratio.toFixed(2)}</code> ≤ 2, exactly as guaranteed (<code>|cover| = 2|M| ≤ 2·OPT</code>).`);
+  if (approxSize <= 2 * optSize) {
+    log("within 2x ✓  (ratio " + ratio.toFixed(2) + ")", "ok");
+  } else {
+    log("VIOLATION — this should never happen", "err");
+  }
+}
+
+// ---------------- drivers ----------------
+async function runAll() {
+  if (state.busy) { showToast("Running…", true); return; }
+  state.busy = true; state.stopped = false;
+  clearLog();
+  try {
+    if (state.mode === "opt") {
+      await compareToOpt();
+    } else {
+      const steps = buildStepQueue();
+      for (const step of steps) {
+        if (state.stopped) break;
+        await step();
+        await wait();
+      }
+    }
+  } catch (e) {
+    if (e.message !== "__stopped__") { console.error(e); showToast("Error: " + e.message, true); }
+  } finally {
+    state.busy = false;
+  }
+}
+
+function prepareStepMode() {
+  state.steps = state.mode === "opt" ? [] : buildStepQueue();
+  state.stepIndex = 0;
+}
+
+async function doStep() {
+  if (state.busy) return;
+  if (state.mode === "opt") { showToast("Step mode is for Walkthrough", true); return; }
+  if (!state.steps.length || state.stepIndex >= state.steps.length) {
+    prepareStepMode();
+    clearLog();
+  }
+  if (state.stepIndex < state.steps.length) {
+    state.busy = true;
+    try { await state.steps[state.stepIndex](); } catch (e) { /* ignore */ }
+    state.stepIndex++;
+    state.busy = false;
+  }
+}
+
+function reset() {
+  if (state.busy) { state.stopped = true; }
+  resetRunState();
+  state.steps = [];
+  state.stepIndex = 0;
+  clearLog();
+  renderGraph();
+  renderEdgeList();
+  renderCoverChips();
+  info("Reset. Press <b>Run all</b> or <b>Step</b> to begin.");
+}
+
+// ---------------- event wiring ----------------
+document.getElementById("btnLoad").addEventListener("click", () => {
+  loadGraph(els.edgeInput.value);
+  prepareStepMode();
+});
+document.getElementById("btnRandom").addEventListener("click", () => {
+  const n = 4 + Math.floor(Math.random() * 4); // 4..7
+  const present = new Set();
+  const edges = [];
+  const perm = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i + 1 < n; i++) { const a = perm[i], b = perm[i + 1]; const k = Math.min(a, b) + "-" + Math.max(a, b); edges.push([Math.min(a, b), Math.max(a, b)]); present.add(k); }
+  const extra = 1 + Math.floor(Math.random() * 3);
+  let tries = 0;
+  while (edges.length < n - 1 + extra && tries < 50) {
+    tries++;
+    const a = Math.floor(Math.random() * n), b = Math.floor(Math.random() * n);
+    if (a === b) continue;
+    const key = Math.min(a, b) + "-" + Math.max(a, b);
+    if (present.has(key)) continue;
+    present.add(key); edges.push([Math.min(a, b), Math.max(a, b)]);
+  }
+  els.edgeInput.value = edges.map(e => e[0] + "-" + e[1]).join(",");
+  loadGraph(els.edgeInput.value);
+  prepareStepMode();
+});
+document.querySelectorAll("[data-preset]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    els.edgeInput.value = btn.getAttribute("data-preset");
+    loadGraph(els.edgeInput.value);
+    prepareStepMode();
+  });
+});
+document.getElementById("btnRun").addEventListener("click", runAll);
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnReset").addEventListener("click", reset);
+
+document.getElementById("modeWalk").addEventListener("click", () => {
+  state.mode = "walk";
+  document.getElementById("modeWalk").classList.add("active");
+  document.getElementById("modeOpt").classList.remove("active");
+  reset();
+  prepareStepMode();
+});
+document.getElementById("modeOpt").addEventListener("click", () => {
+  state.mode = "opt";
+  document.getElementById("modeOpt").classList.add("active");
+  document.getElementById("modeWalk").classList.remove("active");
+  reset();
+});
+
+els.edgeInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { loadGraph(els.edgeInput.value); prepareStepMode(); }
+});
+
+// ---------------- init ----------------
+loadGraph(els.edgeInput.value);
+prepareStepMode();
+</script>
+</body>
+</html>
