@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Strong Orientation (Robbins' Theorem) — Interactive Animation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --tree: #3fb950;     /* tree edges - down */
+    --back: #d29922;     /* back edges - up */
+    --bridge: #f85149;   /* bridge - no orientation */
+    --visited: #1f6feb;
+    --active: #bc8cff;
+    --unvisited: #6e7681;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
+    padding: 16px 24px 40px;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; }
+  svg { width: 100%; height: auto; display: block; background: var(--panel-2); border-radius: 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  button {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: filter .15s ease;
+  }
+  button:hover { filter: brightness(1.12); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  select {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font-size: 13px;
+  }
+  .legend { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+  .legend .row { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 22px; height: 4px; border-radius: 2px; display: inline-block; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid var(--border); }
+  .log {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    height: 240px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .log .tree { color: var(--tree); }
+  .log .back { color: var(--back); }
+  .log .bridge { color: var(--bridge); font-weight: 700; }
+  .log .info { color: var(--muted); }
+  .log .ok { color: var(--accent); }
+  .status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .status.good { border-color: var(--tree); color: var(--tree); }
+  .status.bad { border-color: var(--bridge); color: var(--bridge); }
+  table.edges { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  table.edges th, table.edges td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  table.edges th { color: var(--muted); font-weight: 600; }
+  .pill { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.tree { background: rgba(63,185,80,.15); color: var(--tree); }
+  .pill.back { background: rgba(210,153,34,.15); color: var(--back); }
+  .pill.bridge { background: rgba(248,81,73,.18); color: var(--bridge); }
+  .pill.none { background: var(--panel-2); color: var(--muted); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Strong Orientation &mdash; Robbins' Theorem</h1>
+  <p>Watch a DFS orient every undirected edge: <span style="color:var(--tree)">tree edges go down</span>,
+     <span style="color:var(--back)">back edges go up</span>. If a <span style="color:var(--bridge)">bridge</span> exists, no strong orientation is possible.</p>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="controls">
+      <button id="btnStep">Step ▶</button>
+      <button id="btnRun">Run ⏩</button>
+      <button id="btnReset" class="secondary">Reset ⟲</button>
+      <select id="graphSelect">
+        <option value="square">Bridgeless: square + diagonal</option>
+        <option value="theta">Bridgeless: theta graph</option>
+        <option value="twoTriangles">Has bridge: two triangles + 1 bridge</option>
+        <option value="tree">All bridges: a tree</option>
+      </select>
+    </div>
+    <svg id="canvas" viewBox="0 0 640 460" aria-label="graph"></svg>
+    <div id="status" class="status">Press <b>Step</b> or <b>Run</b> to begin the DFS orientation.</div>
+    <div class="hint">
+      Node colors: <span class="dot" style="background:var(--unvisited)"></span> unvisited &nbsp;
+      <span class="dot" style="background:var(--active)"></span> active (on DFS stack) &nbsp;
+      <span class="dot" style="background:var(--visited)"></span> visited.
+      Each node shows <code>disc/low</code> once computed.
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Legend</h2>
+      <div class="legend">
+        <div class="row"><span class="swatch" style="background:var(--tree)"></span> Tree edge &mdash; oriented <b>down</b> (parent → child)</div>
+        <div class="row"><span class="swatch" style="background:var(--back)"></span> Back edge &mdash; oriented <b>up</b> (descendant → ancestor)</div>
+        <div class="row"><span class="swatch" style="background:var(--bridge)"></span> Bridge &mdash; <b>no strong orientation</b></div>
+        <div class="row"><span class="dot" style="background:var(--active)"></span> Active vertex (current DFS frame)</div>
+        <div class="row"><span class="dot" style="background:var(--visited)"></span> Finished vertex</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Trace Log</h2>
+      <div id="log" class="log"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Edge Orientations</h2>
+      <table class="edges" id="edgeTable">
+        <thead><tr><th>id</th><th>edge</th><th>type</th><th>oriented</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Graph definitions ----------
+// Each graph: vertices with positions, and an edge list of [u, v].
+const GRAPHS = {
+  square: {
+    name: "square + diagonal (bridgeless)",
+    pos: [ [120,120], [520,120], [120,360], [520,360] ],
+    edges: [ [0,1], [0,2], [1,2], [1,3], [2,3] ],
+  },
+  theta: {
+    name: "theta graph (bridgeless)",
+    pos: [ [320,70], [140,230], [500,230], [320,400] ],
+    edges: [ [0,1], [0,2], [1,3], [2,3], [1,2] ],
+  },
+  twoTriangles: {
+    name: "two triangles joined by one bridge",
+    pos: [ [110,110], [110,350], [260,230], [420,230], [560,110], [560,350] ],
+    edges: [ [0,1], [1,2], [2,0], [2,3], [3,4], [4,5], [5,3] ],
+  },
+  tree: {
+    name: "a tree (every edge is a bridge)",
+    pos: [ [320,70], [160,210], [480,210], [90,370], [240,370], [480,370] ],
+    edges: [ [0,1], [0,2], [1,3], [1,4], [2,5] ],
+  },
+};
+
+// ---------- State ----------
+let G = null;             // current graph
+let n = 0;                // vertex count
+let adj = [];             // adjacency: adj[u] = [{to, id}]
+let disc = [], low = [];
+let dir = [];             // dir[id] = [from, to] or null
+let edgeType = [];        // 'tree' | 'back' | 'bridge' | null
+let timer = 0;
+let steps = [];           // precomputed list of step closures (description + mutation)
+let stepIdx = 0;
+let runHandle = null;
+let bridgeFound = false;
+
+const SVG = document.getElementById("canvas");
+const SVGNS = "http://www.w3.org/2000/svg";
+const logEl = document.getElementById("log");
+const statusEl = document.getElementById("status");
+const edgeTableBody = document.querySelector("#edgeTable tbody");
+
+// ---------- Build graph + simulate DFS into discrete steps ----------
+function buildGraph(key) {
+  G = GRAPHS[key];
+  n = G.pos.length;
+  adj = Array.from({ length: n }, () => []);
+  dir = [];
+  edgeType = [];
+  G.edges.forEach((e, id) => {
+    adj[e[0]].push({ to: e[1], id });
+    adj[e[1]].push({ to: e[0], id });
+    dir.push(null);
+    edgeType.push(null);
+  });
+  disc = new Array(n).fill(-1);
+  low = new Array(n).fill(0);
+  timer = 0;
+  bridgeFound = false;
+  steps = [];
+  // record steps by simulating the recursion explicitly
+  simulate();
+}
+
+// We generate a flat list of "step" objects. Each step is { kind, ... } and a
+// human log line. Applying a step mutates the visualization state arrays.
+function simulate() {
+  const localDisc = new Array(n).fill(-1);
+  const localLow = new Array(n).fill(0);
+  let t = 0;
+  const stack = []; // active vertices for visualization
+
+  function pushStep(s) { steps.push(s); }
+
+  function dfs(u, pe) {
+    localDisc[u] = t; localLow[u] = t; t++;
+    pushStep({ kind: "enter", u, disc: localDisc[u], low: localLow[u],
+               log: { cls: "info", text: `enter ${u}  disc=${localDisc[u]} low=${localLow[u]}` } });
+    for (const { to: v, id } of adj[u]) {
+      if (id === pe) {
+        pushStep({ kind: "skip", u, v, id,
+                   log: { cls: "info", text: `  edge ${u}-${v} (id ${id}): parent edge, skip` } });
+        continue;
+      }
+      if (localDisc[v] === -1) {
+        pushStep({ kind: "tree", u, v, id, from: u, to: v,
+                   log: { cls: "tree", text: `  edge ${u}-${v} (id ${id}): TREE, orient ${u}→${v} (down)` } });
+        dfs(v, id);
+        localLow[u] = Math.min(localLow[u], localLow[v]);
+        pushStep({ kind: "updateLow", u, low: localLow[u],
+                   log: { cls: "info", text: `  back at ${u}: low[${u}]=min → ${localLow[u]}` } });
+        if (localLow[v] > localDisc[u]) {
+          pushStep({ kind: "bridge", u, v, id,
+                     log: { cls: "bridge", text: `  !! edge ${u}-${v} is a BRIDGE (low[${v}]=${localLow[v]} > disc[${u}]=${localDisc[u]}) → NO strong orientation` } });
+        }
+      } else if (localDisc[v] < localDisc[u]) {
+        pushStep({ kind: "back", u, v, id, from: u, to: v,
+                   log: { cls: "back", text: `  edge ${u}-${v} (id ${id}): BACK, orient ${u}→${v} (up)` } });
+        localLow[u] = Math.min(localLow[u], localDisc[v]);
+        pushStep({ kind: "updateLow", u, low: localLow[u],
+                   log: { cls: "info", text: `  low[${u}]=min(…, disc[${v}]=${localDisc[v]}) → ${localLow[u]}` } });
+      } else {
+        pushStep({ kind: "skip", u, v, id,
+                   log: { cls: "info", text: `  edge ${u}-${v} (id ${id}): forward/seen, skip` } });
+      }
+    }
+    pushStep({ kind: "leave", u,
+               log: { cls: "info", text: `leave ${u}` } });
+  }
+
+  // DFS over all components (handles forests / trees)
+  for (let s = 0; s < n; s++) {
+    if (localDisc[s] === -1) dfs(s, -1);
+  }
+  pushStep({ kind: "done",
+             log: { cls: "ok", text: `DFS complete.` } });
+}
+
+// ---------- Apply a step to the live visualization state ----------
+const activeSet = new Set();
+
+function applyStep(s) {
+  switch (s.kind) {
+    case "enter":
+      disc[s.u] = s.disc; low[s.u] = s.low;
+      activeSet.add(s.u);
+      break;
+    case "tree":
+      dir[s.id] = [s.from, s.to]; edgeType[s.id] = "tree";
+      break;
+    case "back":
+      if (!dir[s.id]) { dir[s.id] = [s.from, s.to]; edgeType[s.id] = "back"; }
+      break;
+    case "updateLow":
+      low[s.u] = s.low;
+      break;
+    case "bridge":
+      edgeType[s.id] = "bridge";
+      bridgeFound = true;
+      break;
+    case "leave":
+      activeSet.delete(s.u);
+      break;
+    case "done":
+      break;
+    case "skip":
+    default:
+      break;
+  }
+}
+
+function logLine(entry) {
+  const span = document.createElement("span");
+  span.className = entry.cls;
+  span.textContent = entry.text + "\n";
+  logEl.appendChild(span);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ---------- Rendering ----------
+function clearSVG() { while (SVG.firstChild) SVG.removeChild(SVG.firstChild); }
+
+function edgeColor(id) {
+  const t = edgeType[id];
+  if (t === "tree") return getCSS("--tree");
+  if (t === "back") return getCSS("--back");
+  if (t === "bridge") return getCSS("--bridge");
+  return getCSS("--unvisited");
+}
+
+function getCSS(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function render() {
+  clearSVG();
+
+  // arrow markers (one per relevant color)
+  const defs = document.createElementNS(SVGNS, "defs");
+  [["arrow-tree", getCSS("--tree")], ["arrow-back", getCSS("--back")],
+   ["arrow-bridge", getCSS("--bridge")], ["arrow-none", getCSS("--unvisited")]].forEach(([id, color]) => {
+    const m = document.createElementNS(SVGNS, "marker");
+    m.setAttribute("id", id);
+    m.setAttribute("viewBox", "0 0 10 10");
+    m.setAttribute("refX", "9"); m.setAttribute("refY", "5");
+    m.setAttribute("markerWidth", "7"); m.setAttribute("markerHeight", "7");
+    m.setAttribute("orient", "auto-start-reverse");
+    const p = document.createElementNS(SVGNS, "path");
+    p.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+    p.setAttribute("fill", color);
+    m.appendChild(p); defs.appendChild(m);
+  });
+  SVG.appendChild(defs);
+
+  // edges
+  G.edges.forEach((e, id) => {
+    const [a, b] = e;
+    let [x1, y1] = G.pos[a];
+    let [x2, y2] = G.pos[b];
+    // shorten endpoints so arrowheads sit outside the node circles
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const r = 24;
+    const sx = x1 + (dx / len) * r, sy = y1 + (dy / len) * r;
+    const ex = x2 - (dx / len) * r, ey = y2 - (dy / len) * r;
+
+    const line = document.createElementNS(SVGNS, "line");
+    const color = edgeColor(id);
+    line.setAttribute("stroke", color);
+    line.setAttribute("stroke-width", edgeType[id] ? "3.5" : "2");
+    if (edgeType[id] === "bridge") line.setAttribute("stroke-dasharray", "7 5");
+
+    // if oriented, draw from -> to with an arrowhead
+    if (dir[id]) {
+      const [f, tnode] = dir[id];
+      let [fx, fy] = G.pos[f];
+      let [tx, ty] = G.pos[tnode];
+      const ddx = tx - fx, ddy = ty - fy;
+      const dl = Math.hypot(ddx, ddy) || 1;
+      const fsx = fx + (ddx / dl) * r, fsy = fy + (ddy / dl) * r;
+      const fex = tx - (ddx / dl) * r, fey = ty - (ddy / dl) * r;
+      line.setAttribute("x1", fsx); line.setAttribute("y1", fsy);
+      line.setAttribute("x2", fex); line.setAttribute("y2", fey);
+      const markerId = edgeType[id] === "tree" ? "arrow-tree"
+                     : edgeType[id] === "back" ? "arrow-back"
+                     : edgeType[id] === "bridge" ? "arrow-bridge" : "arrow-none";
+      line.setAttribute("marker-end", `url(#${markerId})`);
+    } else {
+      line.setAttribute("x1", sx); line.setAttribute("y1", sy);
+      line.setAttribute("x2", ex); line.setAttribute("y2", ey);
+    }
+    SVG.appendChild(line);
+
+    // edge id label at midpoint
+    const lbl = document.createElementNS(SVGNS, "text");
+    lbl.setAttribute("x", (x1 + x2) / 2 + 6);
+    lbl.setAttribute("y", (y1 + y2) / 2 - 4);
+    lbl.setAttribute("fill", getCSS("--muted"));
+    lbl.setAttribute("font-size", "11");
+    lbl.textContent = "e" + id;
+    SVG.appendChild(lbl);
+  });
+
+  // nodes
+  for (let v = 0; v < n; v++) {
+    const [x, y] = G.pos[v];
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 22);
+    let fill = getCSS("--unvisited");
+    if (activeSet.has(v)) fill = getCSS("--active");
+    else if (disc[v] !== -1) fill = getCSS("--visited");
+    c.setAttribute("fill", fill);
+    c.setAttribute("stroke", getCSS("--border"));
+    c.setAttribute("stroke-width", "2");
+    SVG.appendChild(c);
+
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 5);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("fill", "#0d1117");
+    t.setAttribute("font-size", "15");
+    t.setAttribute("font-weight", "700");
+    t.textContent = v;
+    SVG.appendChild(t);
+
+    if (disc[v] !== -1) {
+      const dl = document.createElementNS(SVGNS, "text");
+      dl.setAttribute("x", x); dl.setAttribute("y", y + 40);
+      dl.setAttribute("text-anchor", "middle");
+      dl.setAttribute("fill", getCSS("--muted"));
+      dl.setAttribute("font-size", "11");
+      dl.textContent = `d=${disc[v]} low=${low[v]}`;
+      SVG.appendChild(dl);
+    }
+  }
+}
+
+function renderEdgeTable() {
+  edgeTableBody.innerHTML = "";
+  G.edges.forEach((e, id) => {
+    const tr = document.createElement("tr");
+    const type = edgeType[id];
+    const pillClass = type || "none";
+    const pillText = type || "—";
+    const orient = dir[id] ? `${dir[id][0]} → ${dir[id][1]}` : "—";
+    tr.innerHTML =
+      `<td>e${id}</td>` +
+      `<td>${e[0]}–${e[1]}</td>` +
+      `<td><span class="pill ${pillClass}">${pillText}</span></td>` +
+      `<td>${type === "bridge" ? "<i>none</i>" : orient}</td>`;
+    edgeTableBody.appendChild(tr);
+  });
+}
+
+function updateStatus() {
+  if (stepIdx < steps.length) {
+    statusEl.className = "status";
+    statusEl.innerHTML = `Step ${stepIdx} / ${steps.length}. DFS in progress…`;
+    return;
+  }
+  // finished
+  if (bridgeFound) {
+    statusEl.className = "status bad";
+    statusEl.innerHTML = "❌ A <b>bridge</b> was found → <b>NO strong orientation exists</b> (Robbins' precondition fails).";
+  } else {
+    statusEl.className = "status good";
+    statusEl.innerHTML = "✅ Bridgeless → the orientation is a valid <b>strong orientation</b> (every vertex reaches every other).";
+  }
+}
+
+// ---------- Step driver ----------
+function doStep() {
+  if (stepIdx >= steps.length) { stopRun(); updateStatus(); return false; }
+  const s = steps[stepIdx];
+  applyStep(s);
+  if (s.log) logLine(s.log);
+  stepIdx++;
+  render();
+  renderEdgeTable();
+  updateStatus();
+  if (stepIdx >= steps.length) { stopRun(); }
+  return true;
+}
+
+function startRun() {
+  if (runHandle) return;
+  document.getElementById("btnRun").textContent = "Pause ⏸";
+  runHandle = setInterval(() => {
+    const cont = doStep();
+    if (!cont) stopRun();
+  }, 650);
+}
+
+function stopRun() {
+  if (runHandle) { clearInterval(runHandle); runHandle = null; }
+  document.getElementById("btnRun").textContent = "Run ⏩";
+}
+
+function reset(key) {
+  stopRun();
+  buildGraph(key || document.getElementById("graphSelect").value);
+  stepIdx = 0;
+  activeSet.clear();
+  logEl.innerHTML = "";
+  logLine({ cls: "ok", text: `Graph: ${G.name}` });
+  logLine({ cls: "info", text: `Rule: tree edges → down, back edges → up.` });
+  render();
+  renderEdgeTable();
+  statusEl.className = "status";
+  statusEl.innerHTML = "Press <b>Step</b> or <b>Run</b> to begin the DFS orientation.";
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => { stopRun(); doStep(); });
+document.getElementById("btnRun").addEventListener("click", () => {
+  if (runHandle) stopRun(); else startRun();
+});
+document.getElementById("btnReset").addEventListener("click", () => reset());
+document.getElementById("graphSelect").addEventListener("change", (e) => reset(e.target.value));
+
+// ---------- Init ----------
+reset("square");
+</script>
+</body>
+</html>
+</content>
