@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fast Fourier Transform — Radix-2 Cooley-Tukey Butterfly</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --even: rgba(88, 166, 255, 0.22);
+    --odd: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .roots-wrap { display: flex; flex-direction: column; align-items: center; }
+  .formula {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    white-space: pre-wrap;
+  }
+  .formula b { color: var(--accent); }
+  .formula .even { color: var(--accent); font-weight: 700; }
+  .formula .odd { color: var(--accent-2); font-weight: 700; }
+  .formula .val { color: var(--good); font-weight: 700; }
+  text.idx { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+  text.coef { fill: #fff; font-size: 12px; font-weight: 700; font-family: var(--mono); }
+  .node-box { stroke: var(--border); stroke-width: 1.2; }
+  .node-even { fill: var(--even); stroke: var(--accent); }
+  .node-odd { fill: var(--odd); stroke: var(--accent-2); }
+  .node-plain { fill: var(--panel-2); }
+  .node-active { fill: var(--hi-cell); stroke: var(--good); stroke-width: 2; }
+  line.bfly { stroke: var(--muted); stroke-width: 1.5; opacity: 0.5; }
+  line.bfly.active { stroke: var(--good); stroke-width: 2.5; opacity: 1; }
+  circle.root { fill: var(--panel-2); stroke: var(--muted); stroke-width: 1.5; }
+  circle.root.active { fill: var(--good); stroke: var(--good); }
+  text.rootlbl { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .stage-label { fill: var(--accent); font-size: 12px; font-weight: 700; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fast Fourier Transform — Radix-2 Cooley-Tukey</h1>
+  <p>The DFT splits coefficients by <b>even</b>/<b>odd</b> index and recombines with the <b>butterfly</b> &acirc;<sub>k</sub> = E<sub>k</sub> + &omega;<sup>k</sup>O<sub>k</sub>, &acirc;<sub>k+n/2</sub> = E<sub>k</sub> &minus; &omega;<sup>k</sup>O<sub>k</sub>. Watch the O(n log n) divide-and-conquer build the transform.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Size n =
+      <select id="nSel">
+        <option value="4">4</option>
+        <option value="8" selected>8</option>
+        <option value="16">16</option>
+      </select>
+    </label>
+    <label>Input:
+      <select id="inputSel">
+        <option value="ramp">ramp [0,1,2,…]</option>
+        <option value="impulse">impulse [1,0,…]</option>
+        <option value="ones">all ones</option>
+        <option value="alt">alternating ±1</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Divide &amp; conquer tree (even / odd split &amp; butterfly combine)</h2>
+      <svg id="treeSvg" viewBox="0 0 640 420"></svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--even)"></span> even-index group</span>
+        <span><span class="swatch" style="background:var(--odd)"></span> odd-index group</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> active butterfly</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Roots of unity (n = <span id="rootN">8</span>)</h2>
+      <div class="roots-wrap">
+        <svg id="rootsSvg" viewBox="0 0 220 220" width="220" height="220"></svg>
+      </div>
+      <div class="formula" id="formulaBox">Press <b>Step</b> to begin.</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    We compute the DFT by recursively splitting the coefficient array into its <b>even-indexed</b> and <b>odd-indexed</b> halves, transforming each, then combining with butterflies that reuse the halving property (&omega;<sub>n</sub><sup>k</sup>)&sup2; = &omega;<sub>n/2</sub><sup>k</sup>.
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Forward DFT over the complex roots of unity &omega;<sub>n</sub> = e<sup>2&pi;i/n</sup>.
+    Recurrence T(n) = 2T(n/2) + O(n) = O(n log n). The bottom row shows bit-reversed leaves; each stage applies one butterfly pass.
+    See <code>junior.md</code> and <code>professional.md</code> for the proof that &acirc;<sub>k</sub> = E<sub>k</sub> + &omega;<sup>k</sup>O<sub>k</sub>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Complex helpers ----------
+function cAdd(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+function cSub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+function cMul(a, b) { return [a[0]*b[0] - a[1]*b[1], a[0]*b[1] + a[1]*b[0]]; }
+function fmt(c) {
+  const r = Math.round(c[0] * 100) / 100;
+  const im = Math.round(c[1] * 100) / 100;
+  if (Math.abs(im) < 1e-9) return "" + r;
+  const sign = im >= 0 ? "+" : "−";
+  return r + sign + Math.abs(im) + "i";
+}
+
+// ---------- Build input ----------
+function buildInput(kind, n) {
+  const a = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (kind === "ramp") a[i] = [i, 0];
+    else if (kind === "impulse") a[i] = [i === 0 ? 1 : 0, 0];
+    else if (kind === "ones") a[i] = [1, 0];
+    else a[i] = [(i % 2 === 0) ? 1 : -1, 0];
+  }
+  return a;
+}
+
+// ---------- Bit reversal ----------
+function bitReverse(arr) {
+  const n = arr.length;
+  const a = arr.slice();
+  let j = 0;
+  for (let i = 1; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { const t = a[i]; a[i] = a[j]; a[j] = t; }
+  }
+  return a;
+}
+
+// ---------- Build the iterative FFT plan as discrete steps ----------
+// Each "stage" is a butterfly pass at block length `len`.
+// We record the array snapshot after each pass plus a per-pass description.
+function buildPlan(input) {
+  const n = input.length;
+  const levels = Math.round(Math.log2(n));
+  const steps = [];
+
+  let a = bitReverse(input);
+  steps.push({
+    type: "permute",
+    snapshot: a.map(c => c.slice()),
+    len: 1,
+    stage: 0,
+    activePairs: [],
+    desc: "Bit-reversal permutation: reorder the input so the bottom-up passes work in place. Index j moves to rev(j)."
+  });
+
+  let stage = 1;
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = 2 * Math.PI / len;
+    const wlen = [Math.cos(ang), Math.sin(ang)];
+    const pairs = [];
+    for (let i = 0; i < n; i += len) {
+      let w = [1, 0];
+      for (let k = 0; k < len / 2; k++) {
+        const u = a[i + k];
+        const v = cMul(a[i + k + len / 2], w);
+        a[i + k] = cAdd(u, v);
+        a[i + k + len / 2] = cSub(u, v);
+        pairs.push([i + k, i + k + len / 2, k, len]);
+        w = cMul(w, wlen);
+      }
+    }
+    steps.push({
+      type: "butterfly",
+      snapshot: a.map(c => c.slice()),
+      len: len,
+      stage: stage,
+      activePairs: pairs.slice(),
+      desc: "Stage " + stage + " (block length " + len + "): apply " + pairs.length +
+        " butterflies. Each combines two values: top = E + ω^k·O, bottom = E − ω^k·O, using the " +
+        len + "-th roots of unity."
+    });
+    stage++;
+  }
+  steps.push({
+    type: "done",
+    snapshot: a.map(c => c.slice()),
+    len: n,
+    stage: stage,
+    activePairs: [],
+    desc: "Done after log₂(n) = " + levels + " stages. The array now holds the DFT â_k = A(ω_n^k) for k = 0 … n−1."
+  });
+  return { steps, n, levels };
+}
+
+// ---------- Render the divide & conquer tree ----------
+function renderTree(step, plan) {
+  const svg = document.getElementById("treeSvg");
+  const n = plan.n;
+  const W = 640, H = 420;
+  svg.innerHTML = "";
+  const NS = "http://www.w3.org/2000/svg";
+
+  const colW = W / n;
+  const boxW = Math.min(colW - 8, 60);
+  const boxH = 26;
+  const stages = plan.levels;          // number of butterfly passes
+  // rows: row 0 = leaves (after permute), row s = after stage s
+  const rowGap = (H - 60) / (stages + 1);
+  const topY = 20;
+
+  // determine which array the current step shows
+  const snap = step.snapshot;
+
+  // Draw butterfly connection lines from previous row to current active row
+  // We draw, for the active stage, lines connecting the two indices of each butterfly.
+  function rowY(r) { return topY + r * rowGap; }
+
+  // Always draw all rows up to and including current stage as boxes,
+  // but only the latest snapshot has real values; earlier rows are schematic.
+  const curStage = (step.type === "butterfly") ? step.stage
+                  : (step.type === "done") ? stages
+                  : 0;
+
+  // draw active butterfly lines (connect index pairs at the current stage)
+  if (step.type === "butterfly") {
+    const yTop = rowY(curStage - 1);
+    const yBot = rowY(curStage);
+    step.activePairs.forEach(p => {
+      const [hi, lo] = p;
+      [hi, lo].forEach(idx => {
+        const x = colW * idx + colW / 2;
+        const line = document.createElementNS(NS, "line");
+        line.setAttribute("x1", colW * hi + colW / 2);
+        line.setAttribute("y1", yTop + boxH / 2);
+        line.setAttribute("x2", colW * idx + colW / 2);
+        line.setAttribute("y2", yBot - boxH / 2);
+        line.setAttribute("class", "bfly active");
+        svg.appendChild(line);
+        const line2 = document.createElementNS(NS, "line");
+        line2.setAttribute("x1", colW * lo + colW / 2);
+        line2.setAttribute("y1", yTop + boxH / 2);
+        line2.setAttribute("x2", colW * idx + colW / 2);
+        line2.setAttribute("y2", yBot - boxH / 2);
+        line2.setAttribute("class", "bfly active");
+        svg.appendChild(line2);
+      });
+    });
+  }
+
+  // stage label
+  const lbl = document.createElementNS(NS, "text");
+  lbl.setAttribute("x", 6);
+  lbl.setAttribute("y", 14);
+  lbl.setAttribute("class", "stage-label");
+  lbl.textContent = (step.type === "permute")
+    ? "bit-reversed leaves"
+    : (step.type === "done" ? "DFT output â" : "after stage " + step.stage + " (block " + step.len + ")");
+  svg.appendChild(lbl);
+
+  // determine active indices for highlighting
+  const activeSet = new Set();
+  step.activePairs.forEach(p => { activeSet.add(p[0]); activeSet.add(p[1]); });
+
+  // Which group is "even"/"odd" within current block size — color by position parity in block
+  const len = step.len;
+  for (let idx = 0; idx < n; idx++) {
+    const x = colW * idx + (colW - boxW) / 2;
+    const y = rowY(curStage) - boxH / 2;
+    const rect = document.createElementNS(NS, "rect");
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", boxW);
+    rect.setAttribute("height", boxH);
+    rect.setAttribute("rx", 4);
+    let cls = "node-box node-plain";
+    if (activeSet.has(idx)) cls = "node-box node-active";
+    else if (step.type === "permute") {
+      cls = "node-box node-plain";
+    } else if (len > 1) {
+      const inBlock = idx % len;
+      cls = "node-box " + (inBlock < len / 2 ? "node-even" : "node-odd");
+    }
+    rect.setAttribute("class", cls);
+    svg.appendChild(rect);
+
+    const tIdx = document.createElementNS(NS, "text");
+    tIdx.setAttribute("x", colW * idx + colW / 2);
+    tIdx.setAttribute("y", y - 4);
+    tIdx.setAttribute("text-anchor", "middle");
+    tIdx.setAttribute("class", "idx");
+    tIdx.textContent = idx;
+    svg.appendChild(tIdx);
+
+    const tVal = document.createElementNS(NS, "text");
+    tVal.setAttribute("x", colW * idx + colW / 2);
+    tVal.setAttribute("y", rowY(curStage) + 4);
+    tVal.setAttribute("text-anchor", "middle");
+    tVal.setAttribute("class", "coef");
+    tVal.textContent = fmt(snap[idx]);
+    svg.appendChild(tVal);
+  }
+
+  // caption row beneath
+  const cap = document.createElementNS(NS, "text");
+  cap.setAttribute("x", W / 2);
+  cap.setAttribute("y", H - 10);
+  cap.setAttribute("text-anchor", "middle");
+  cap.setAttribute("class", "idx");
+  cap.textContent = step.type === "done"
+    ? "â = DFT of input  (read any entry as A(ω_n^k))"
+    : "block length " + step.len + " — even half (blue) gets +ω^k·O, odd half (gold) gets −ω^k·O";
+  svg.appendChild(cap);
+}
+
+// ---------- Render roots of unity on the unit circle ----------
+function renderRoots(step, plan) {
+  const svg = document.getElementById("rootsSvg");
+  const NS = "http://www.w3.org/2000/svg";
+  svg.innerHTML = "";
+  const cx = 110, cy = 110, R = 80;
+  const len = (step.type === "butterfly" || step.type === "done") ? step.len : plan.n;
+  const m = Math.max(len, 2);
+
+  // axis circle
+  const circ = document.createElementNS(NS, "circle");
+  circ.setAttribute("cx", cx); circ.setAttribute("cy", cy);
+  circ.setAttribute("r", R);
+  circ.setAttribute("fill", "none");
+  circ.setAttribute("stroke", "#30363d");
+  circ.setAttribute("stroke-width", "1");
+  svg.appendChild(circ);
+
+  // axes
+  ["h", "v"].forEach(ax => {
+    const ln = document.createElementNS(NS, "line");
+    if (ax === "h") { ln.setAttribute("x1", cx - R - 8); ln.setAttribute("y1", cy); ln.setAttribute("x2", cx + R + 8); ln.setAttribute("y2", cy); }
+    else { ln.setAttribute("x1", cx); ln.setAttribute("y1", cy - R - 8); ln.setAttribute("x2", cx); ln.setAttribute("y2", cy + R + 8); }
+    ln.setAttribute("stroke", "#21262d"); ln.setAttribute("stroke-width", "1");
+    svg.appendChild(ln);
+  });
+
+  for (let k = 0; k < m; k++) {
+    const ang = 2 * Math.PI * k / m;
+    const x = cx + R * Math.cos(ang);
+    const y = cy - R * Math.sin(ang);
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 6);
+    c.setAttribute("class", k === 0 ? "root active" : "root");
+    svg.appendChild(c);
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", cx + (R + 14) * Math.cos(ang) - 5);
+    t.setAttribute("y", cy - (R + 14) * Math.sin(ang) + 3);
+    t.setAttribute("class", "rootlbl");
+    t.textContent = "ω" + (k === 0 ? "⁰" : (k === 1 ? "¹" : "^" + k));
+    svg.appendChild(t);
+  }
+
+  document.getElementById("rootN").textContent = m;
+}
+
+// ---------- Formula box ----------
+function renderFormula(step, plan) {
+  const box = document.getElementById("formulaBox");
+  if (step.type === "permute") {
+    box.innerHTML =
+      "Bit-reversal places leaves so the bottom-up FFT is in place.\n" +
+      "<b>Halving:</b> (ω_n^k)² = ω_{n/2}^k  →  even/odd subproblems share points.\n" +
+      "<b>Cancellation:</b> ω_n^{k+n/2} = −ω_n^k  →  the ± butterfly.";
+  } else if (step.type === "done") {
+    const n = plan.n;
+    const k = Math.min(1, n - 1);
+    box.innerHTML =
+      "Final DFT:\n" +
+      "â_" + k + " = <span class='val'>" + fmt(step.snapshot[k]) + "</span> = A(ω_n^" + k + ").\n" +
+      "Cost: T(n) = 2T(n/2) + O(n) = <b>O(n log n)</b>.";
+  } else {
+    box.innerHTML =
+      "Stage " + step.stage + ", block length " + step.len + ":\n" +
+      "<span class='even'>â_k       = E_k + ω^k · O_k</span>   (top half)\n" +
+      "<span class='odd'>â_{k+m}   = E_k − ω^k · O_k</span>   (bottom half)\n" +
+      "ω = ω_" + step.len + " = e^{2πi/" + step.len + "}.  " + step.activePairs.length + " butterflies this pass.";
+  }
+}
+
+// ---------- State ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadPlan() {
+  const n = parseInt(document.getElementById("nSel").value, 10);
+  const kind = document.getElementById("inputSel").value;
+  const input = buildInput(kind, n);
+  state.plan = buildPlan(input);
+  state.stepIdx = 0;
+  applyStep();
+}
+
+function applyStep() {
+  const step = state.plan.steps[state.stepIdx];
+  renderTree(step, state.plan);
+  renderRoots(step, state.plan);
+  renderFormula(step, state.plan);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep();
+  }
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    loadPlan();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1300);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadPlan();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nSel").addEventListener("change", rebuild);
+document.getElementById("inputSel").addEventListener("change", rebuild);
+
+// ---------- Initial ----------
+rebuild();
+</script>
+</body>
+</html>
