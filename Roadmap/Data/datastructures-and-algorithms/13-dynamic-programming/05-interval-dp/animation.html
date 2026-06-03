@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Interval DP — DP over Ranges [i..j]</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --hi-left: rgba(88, 166, 255, 0.38);
+    --hi-right: rgba(210, 153, 34, 0.38);
+    --done: rgba(63, 185, 80, 0.12);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 46px;
+    height: 40px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); font-size: 12px; }
+  .matrix td.dead { background: #10141b; color: #2d333b; }
+  .matrix td.done { background: var(--done); }
+  .matrix td.curcell { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .matrix td.left { background: var(--hi-left); color: #fff; }
+  .matrix td.right { background: var(--hi-right); color: #fff; }
+  .matrix td.empty { color: var(--muted); }
+  .seqbar { display: flex; gap: 6px; margin: 4px 0 10px; flex-wrap: wrap; }
+  .cell {
+    min-width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--mono); font-size: 13px; background: var(--panel-2);
+    transition: all 0.2s ease;
+  }
+  .cell.inrange { border-color: var(--accent); }
+  .cell.split { background: var(--hi-cell); color: #fff; font-weight: 700; border-color: var(--good); }
+  .cell.dim { opacity: 0.35; }
+  .candlist { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .cand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px;
+    background: var(--panel-2); font-family: var(--mono); font-size: 13px;
+  }
+  .cand.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cand.best { border-color: var(--good); }
+  .cand .k { color: var(--accent-2); font-weight: 700; min-width: 42px; }
+  .cand .val { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Interval DP — Filling dp[i][j] by Increasing Length</h1>
+  <p>dp[i][j] = best over split point k of ( dp[i][k] + dp[k+1][j] + cost(i,k,j) ). Watch the table fill diagonal by diagonal and the optimal split k highlight.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Problem:
+      <select id="probSel">
+        <option value="mcm">Matrix chain (split-point)</option>
+        <option value="stones">Stone merging (split-point)</option>
+        <option value="burst">Burst balloons (last-element)</option>
+      </select>
+    </label>
+    <label>Instance:
+      <select id="instSel"></select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>dp[i][j] table (upper triangle)</h2>
+      <div class="step-counter" id="seqCaption">sequence</div>
+      <div class="seqbar" id="seqBar"></div>
+      <table class="matrix" id="dpTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> current cell (i,j)</span>
+        <span><span class="swatch" style="background:var(--hi-left)"></span> left dp[i][k]</span>
+        <span><span class="swatch" style="background:var(--hi-right)"></span> right dp[k(+1)][j]</span>
+        <span><span class="swatch" style="background:var(--done)"></span> finished</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="candTitle">Trying split points k</h2>
+      <div class="step-counter" id="rangeInfo"></div>
+      <div class="candlist" id="candList"></div>
+      <div class="interp" id="interpBox">
+        Fill order is by <b>increasing interval length</b>: length 1 (the diagonal), then 2, then 3, &hellip; up to the whole range.
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We fill dp[i][j] for every contiguous range, shortest first, trying every split point k.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Split-point problems partition <code>[i..j]</code> into <code>[i..k]</code> and <code>[k+1..j]</code>;
+    burst balloons uses the <b>last-element</b> framing with halves <code>(i,k)</code> and <code>(k,j)</code> on the padded array.
+    The answer is the top-right corner <code>dp[0][n-1]</code>. See <code>junior.md</code> and <code>professional.md</code> for the proof that increasing-length order is a valid topological fill.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Problem instances ----------
+const INSTANCES = {
+  mcm: [
+    { name: "dims [10,30,5,60]", dims: [10, 30, 5, 60] },
+    { name: "dims [40,20,30,10,30]", dims: [40, 20, 30, 10, 30] },
+    { name: "dims [5,4,6,2,7]", dims: [5, 4, 6, 2, 7] }
+  ],
+  stones: [
+    { name: "stones [4,1,1,4]", stones: [4, 1, 1, 4] },
+    { name: "stones [1,2,3,4]", stones: [1, 2, 3, 4] },
+    { name: "stones [3,5,1,2,6]", stones: [3, 5, 1, 2, 6] }
+  ],
+  burst: [
+    { name: "nums [3,1,5,8]", nums: [3, 1, 5, 8] },
+    { name: "nums [1,5,3]", nums: [1, 5, 3] },
+    { name: "nums [2,4,3,5]", nums: [2, 4, 3, 5] }
+  ]
+};
+
+const INF = Number.POSITIVE_INFINITY;
+
+// ---------- Build the step plan for a problem instance ----------
+// A "step" snapshots the dp table, the cell being computed, the candidate
+// splits tried, and a narration string. We replay these for the animation.
+function buildPlan(prob, inst) {
+  if (prob === "mcm") return planSplit(inst.dims.length - 1, "mcm", inst);
+  if (prob === "stones") return planSplit(inst.stones.length, "stones", inst);
+  if (prob === "burst") return planBurst(inst);
+}
+
+function emptyTable(n) {
+  const t = [];
+  for (let i = 0; i < n; i++) t.push(new Array(n).fill(null));
+  return t;
+}
+function cloneTable(t) { return t.map(r => r.slice()); }
+
+// Split-point problems: matrix chain & stone merging.
+// dp index range [0..n-1]; dp[i][i] = 0 base; k in [i, j-1].
+function planSplit(n, kind, inst) {
+  const steps = [];
+  const dp = emptyTable(n);
+  let prefix = null, dims = null, seq = null;
+  if (kind === "stones") {
+    prefix = [0];
+    for (const x of inst.stones) prefix.push(prefix[prefix.length - 1] + x);
+    seq = inst.stones.slice();
+  } else {
+    dims = inst.dims.slice();
+    // sequence shown is the matrices M0..M(n-1)
+    seq = [];
+    for (let m = 0; m < n; m++) seq.push("M" + m);
+  }
+
+  for (let i = 0; i < n; i++) dp[i][i] = 0;
+  steps.push({
+    table: cloneTable(dp), cell: null, cands: [], best: null, splitK: null,
+    range: null, len: 1, framing: "split",
+    desc: "Base case: every length-1 interval costs 0 (a single element needs no combining). dp[i][i] = 0 fills the diagonal."
+  });
+
+  for (let length = 2; length <= n; length++) {
+    for (let i = 0; i + length - 1 < n; i++) {
+      const j = i + length - 1;
+      let best = INF, bestK = -1;
+      const cands = [];
+      for (let k = i; k < j; k++) {
+        let cost;
+        if (kind === "mcm") cost = dims[i] * dims[k + 1] * dims[j + 1];
+        else cost = prefix[j + 1] - prefix[i]; // range sum, same for all k
+        const total = dp[i][k] + dp[k + 1][j] + cost;
+        cands.push({ k, left: dp[i][k], right: dp[k + 1][j], cost, total, leftIdx: [i, k], rightIdx: [k + 1, j] });
+        if (total < best) { best = total; bestK = k; }
+      }
+      dp[i][j] = best;
+      const costDesc = kind === "mcm"
+        ? "cost = dims[i]·dims[k+1]·dims[j+1]"
+        : "cost = sum(stones[i..j]) (same for every split)";
+      steps.push({
+        table: cloneTable(dp), cell: [i, j], cands, best, splitK: bestK,
+        range: [i, j], len: length, framing: "split",
+        desc: "Compute dp[" + i + "][" + j + "] (length " + length + "). Try each split k in [" + i + "," + (j - 1) +
+          "]: dp[i][k] + dp[k+1][j] + (" + costDesc + "). Best split k=" + bestK + " gives " + best + "."
+      });
+    }
+  }
+  steps.push({
+    table: cloneTable(dp), cell: [0, n - 1], cands: [], best: dp[0][n - 1], splitK: null,
+    range: [0, n - 1], len: n, framing: "split", done: true,
+    desc: "Done. dp[0][" + (n - 1) + "] = " + dp[0][n - 1] + " is the optimum for the whole sequence."
+  });
+  return { steps, seq, n, framing: "split", kind };
+}
+
+// Burst balloons: last-element framing on padded array a = [1, nums..., 1].
+// dp[i][j] over open interval (i,j); k in (i,j); halves dp[i][k] + dp[k][j].
+function planBurst(inst) {
+  const a = [1].concat(inst.nums.slice(), [1]);
+  const n = a.length;
+  const dp = emptyTable(n);
+  const steps = [];
+  for (let i = 0; i < n; i++) dp[i][i] = 0;
+  // also dp[i][i+1] = 0 (no interior)
+  for (let i = 0; i + 1 < n; i++) dp[i][i + 1] = 0;
+  const seq = a.map((v, idx) => (idx === 0 || idx === n - 1) ? "1*" : String(v));
+
+  steps.push({
+    table: cloneTable(dp), cell: null, cands: [], best: null, splitK: null,
+    range: null, len: 1, framing: "last",
+    desc: "Padded array a = [1, nums..., 1]. Base: intervals with no interior (length ≤ 1 between boundaries) score 0."
+  });
+
+  for (let length = 2; length < n; length++) {
+    for (let i = 0; i + length < n; i++) {
+      const j = i + length;
+      let best = 0, bestK = -1;
+      const cands = [];
+      for (let k = i + 1; k < j; k++) {
+        const cost = a[i] * a[k] * a[j];
+        const total = dp[i][k] + dp[k][j] + cost;
+        cands.push({ k, left: dp[i][k], right: dp[k][j], cost, total, leftIdx: [i, k], rightIdx: [k, j] });
+        if (total > best) { best = total; bestK = k; }
+      }
+      dp[i][j] = best;
+      steps.push({
+        table: cloneTable(dp), cell: [i, j], cands, best, splitK: bestK,
+        range: [i, j], len: length, framing: "last",
+        desc: "Compute dp[" + i + "][" + j + "] over open range (" + i + "," + j + "). Pick balloon k burst LAST: dp[i][k] + dp[k][j] + a[i]·a[k]·a[j]. Best k=" + bestK + " gives " + best + " coins."
+      });
+    }
+  }
+  steps.push({
+    table: cloneTable(dp), cell: [0, n - 1], cands: [], best: dp[0][n - 1], splitK: null,
+    range: [0, n - 1], len: n - 1, framing: "last", done: true,
+    desc: "Done. dp[0][" + (n - 1) + "] = " + dp[0][n - 1] + " is the maximum coins."
+  });
+  return { steps, seq, n, framing: "last", kind: "burst" };
+}
+
+// ---------- Rendering ----------
+function fmt(v) {
+  if (v === null) return "";
+  if (v === INF) return "∞";
+  return String(v);
+}
+
+function renderTable(step) {
+  const t = step.table;
+  const n = t.length;
+  const cell = step.cell;
+  const best = step.framing === "last" ? Math.max : Math.min;
+  // figure out which left/right cells the WINNING split reads (for highlight)
+  let leftIdx = null, rightIdx = null;
+  if (cell && step.splitK !== null && step.cands.length) {
+    const w = step.cands.find(c => c.k === step.splitK);
+    if (w) { leftIdx = w.leftIdx; rightIdx = w.rightIdx; }
+  }
+  let html = "<tr><th>i\\j</th>";
+  for (let j = 0; j < n; j++) html += "<th>" + j + "</th>";
+  html += "</tr>";
+  for (let i = 0; i < n; i++) {
+    html += "<tr><th>" + i + "</th>";
+    for (let j = 0; j < n; j++) {
+      let cls = "";
+      if (j < i) cls = "dead";
+      else if (cell && i === cell[0] && j === cell[1]) cls = "curcell";
+      else if (leftIdx && i === leftIdx[0] && j === leftIdx[1]) cls = "left";
+      else if (rightIdx && i === rightIdx[0] && j === rightIdx[1]) cls = "right";
+      else if (t[i][j] !== null) cls = "done";
+      const v = (j < i) ? "" : fmt(t[i][j]);
+      html += "<td class='" + cls + "'>" + v + "</td>";
+    }
+    html += "</tr>";
+  }
+  document.getElementById("dpTable").innerHTML = html;
+}
+
+function renderSeq(plan, step) {
+  const bar = document.getElementById("seqBar");
+  bar.innerHTML = "";
+  const range = step.range;
+  const splitK = step.splitK;
+  for (let idx = 0; idx < plan.seq.length; idx++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.textContent = plan.seq[idx];
+    if (range) {
+      const lo = range[0], hi = range[1];
+      if (idx >= lo && idx <= hi) c.classList.add("inrange");
+      else c.classList.add("dim");
+      if (splitK !== null && idx === splitK) c.classList.add("split");
+    }
+    bar.appendChild(c);
+  }
+  document.getElementById("seqCaption").textContent =
+    plan.framing === "last"
+      ? "padded array a (1* = sentinel); highlighted = current range, green = split k (burst last)"
+      : "sequence; highlighted = current range, green = optimal split k";
+}
+
+function renderCands(step) {
+  const list = document.getElementById("candList");
+  list.innerHTML = "";
+  const title = document.getElementById("candTitle");
+  if (!step.cell || !step.cands.length) {
+    title.textContent = step.done ? "Final answer" : "Trying split points k";
+    document.getElementById("rangeInfo").textContent =
+      step.done ? "dp[0][n-1] = " + step.best : "";
+    if (step.done) {
+      const d = document.createElement("div");
+      d.className = "cand best";
+      d.innerHTML = "<span class='k'>=</span> optimum for the whole sequence: <span class='val'>" + step.best + "</span>";
+      list.appendChild(d);
+    }
+    return;
+  }
+  const [i, j] = step.cell;
+  title.textContent = "Trying split points k for dp[" + i + "][" + j + "]";
+  document.getElementById("rangeInfo").textContent =
+    "range [" + i + ".." + j + "], length " + step.len + " — best split k = " + step.splitK + ", value = " + step.best;
+  for (const c of step.cands) {
+    const d = document.createElement("div");
+    d.className = "cand";
+    if (c.k === step.splitK) d.classList.add("best");
+    const arrow = step.framing === "last"
+      ? "dp[" + i + "][" + c.k + "] + dp[" + c.k + "][" + j + "] + " + c.cost
+      : "dp[" + i + "][" + c.k + "] + dp[" + (c.k + 1) + "][" + j + "] + " + c.cost;
+    d.innerHTML = "<span class='k'>k=" + c.k + "</span> " + arrow +
+      " = <span class='val'>" + c.total + "</span>" + (c.k === step.splitK ? " ◀ best" : "");
+    list.appendChild(d);
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadPlan() {
+  const prob = document.getElementById("probSel").value;
+  const inst = INSTANCES[prob][parseInt(document.getElementById("instSel").value, 10)];
+  state.plan = buildPlan(prob, inst);
+  state.stepIdx = 0;
+  gotoStep(0);
+}
+
+function gotoStep(idx) {
+  if (!state.plan) return;
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  renderTable(step);
+  renderSeq(state.plan, step);
+  renderCands(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  const interp = document.getElementById("interpBox");
+  if (step.done) {
+    interp.innerHTML = "Answer = <b>dp[0][" + (state.plan.n - 1) + "]</b> = <span class='val'>" + step.best +
+      "</span> — the optimum for the whole sequence, the last (longest) interval filled.";
+  } else if (step.cell) {
+    interp.innerHTML = "State = interval <b>[" + step.cell[0] + ".." + step.cell[1] +
+      "]</b>. Transition = choose the " + (step.framing === "last" ? "<b>last element</b> k" : "<b>split point</b> k") +
+      " that optimizes dp[i][k] + dp[" + (step.framing === "last" ? "k" : "k+1") + "][j] + cost.";
+  } else {
+    interp.innerHTML = "Fill order is by <b>increasing interval length</b>: the diagonal (length 1) first, then each longer diagonal.";
+  }
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) loadPlan();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1300);
+}
+
+function populateInstances() {
+  const prob = document.getElementById("probSel").value;
+  const sel = document.getElementById("instSel");
+  sel.innerHTML = "";
+  INSTANCES[prob].forEach((inst, idx) => {
+    const o = document.createElement("option");
+    o.value = String(idx);
+    o.textContent = inst.name;
+    sel.appendChild(o);
+  });
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadPlan();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("probSel").addEventListener("change", () => {
+  populateInstances();
+  rebuild();
+});
+document.getElementById("instSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+populateInstances();
+loadPlan();
+</script>
+</body>
+</html>
