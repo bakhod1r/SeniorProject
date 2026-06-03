@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Graph Coloring — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+    /* palette for vertex colors 0..5 */
+    --c0: #58a6ff;
+    --c1: #f85149;
+    --c2: #3fb950;
+    --c3: #d29922;
+    --c4: #bc8cff;
+    --c5: #ff7b72;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  button.btn:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+
+  button.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  button.btn.primary {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+
+  button.btn.primary:hover:not(:disabled) {
+    background: #4493e0;
+  }
+
+  select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    flex: 1;
+  }
+
+  label.field {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  svg { width: 100%; height: 520px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; transition: stroke 0.2s, stroke-width 0.2s; }
+  .edge.active { stroke: var(--purple); stroke-width: 3.5; }
+  .edge.conflict { stroke: var(--red); stroke-width: 4; }
+
+  .vnode circle { stroke-width: 3; transition: all 0.25s ease; }
+  .vnode text.label { font-size: 14px; font-weight: 700; fill: #0d1117; text-anchor: middle; dominant-baseline: central; }
+  .vnode text.sat { font-size: 11px; fill: var(--orange); text-anchor: middle; font-family: "SF Mono", Menlo, monospace; }
+
+  .v-uncolored circle { fill: #21262d; stroke: var(--muted); }
+  .v-uncolored text.label { fill: var(--muted); }
+  .v-current circle { stroke: var(--yellow); stroke-width: 5; }
+  .v-c0 circle { fill: var(--c0); stroke: #fff; }
+  .v-c1 circle { fill: var(--c1); stroke: #fff; }
+  .v-c2 circle { fill: var(--c2); stroke: #fff; }
+  .v-c3 circle { fill: var(--c3); stroke: #fff; }
+  .v-c4 circle { fill: var(--c4); stroke: #fff; }
+  .v-c5 circle { fill: var(--c5); stroke: #fff; }
+  .v-conflict circle { fill: var(--red); stroke: #fff; stroke-width: 5; }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    margin-top: 14px;
+  }
+
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stat b { color: var(--text); }
+
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.assign { color: var(--green); }
+  #log .entry.bad { color: var(--red); }
+  #log .entry.pick { color: var(--blue); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .legend .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Graph Coloring — Greedy · DSATUR · 2-Coloring</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="greedy" class="active">Greedy</button>
+    <button data-mode="dsatur">DSATUR</button>
+    <button data-mode="bipartite">2-Coloring</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel" id="controls">
+    <h2>Controls</h2>
+
+    <div class="control-group">
+      <label class="field" for="graphSelect">Sample graph</label>
+      <div class="control-row">
+        <select id="graphSelect">
+          <option value="triangleFan">Triangle + tail (χ=3)</option>
+          <option value="square">4-cycle (bipartite, χ=2)</option>
+          <option value="pentagon">5-cycle (odd, χ=3)</option>
+          <option value="petersenLike">Wheel W5 (χ=4)</option>
+          <option value="bipartiteK33">K3,3 (bipartite, χ=2)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-row">
+        <button class="btn primary" id="stepBtn">Step ▸</button>
+        <button class="btn" id="runBtn">Run ▶</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="resetBtn">Reset ↺</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>State</h2>
+      <div class="stats-row">
+        <span class="stat">colors: <b id="statColors">0</b></span>
+        <span class="stat">colored: <b id="statColored">0</b>/<b id="statTotal">0</b></span>
+        <span class="stat">mode: <b id="statMode">greedy</b></span>
+      </div>
+      <div class="info-bar" id="info">Pick a graph and press <code>Step</code> or <code>Run</code>.</div>
+    </div>
+
+    <div class="control-group">
+      <h2>Event Log</h2>
+      <div id="log"></div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:#21262d;border-color:#8b949e"></span>uncolored</span>
+      <span><span class="dot" style="border-color:#d29922;background:#21262d"></span>current</span>
+      <span><span class="dot" style="background:var(--c0)"></span>color 0</span>
+      <span><span class="dot" style="background:var(--c1)"></span>color 1</span>
+      <span><span class="dot" style="background:var(--c2)"></span>color 2</span>
+      <span><span class="dot" style="background:var(--c3)"></span>color 3</span>
+      <span><span class="dot" style="background:var(--red)"></span>conflict</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Graph</h2>
+    <svg id="svg" viewBox="0 0 640 520" preserveAspectRatio="xMidYMid meet"></svg>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ---------- Sample graphs: positions + edges ----------
+const GRAPHS = {
+  triangleFan: {
+    pos: [[160,120],[480,120],[320,300],[320,470],[120,440]],
+    edges: [[0,1],[0,2],[1,2],[2,3],[3,4]]
+  },
+  square: {
+    pos: [[200,140],[460,140],[460,400],[200,400]],
+    edges: [[0,1],[1,2],[2,3],[3,0]]
+  },
+  pentagon: {
+    pos: [[320,90],[510,230],[440,440],[200,440],[130,230]],
+    edges: [[0,1],[1,2],[2,3],[3,4],[4,0]]
+  },
+  petersenLike: { // wheel W5: hub 5 connected to a 5-cycle
+    pos: [[320,80],[520,230],[440,450],[200,450],[120,230],[320,260]],
+    edges: [[0,1],[1,2],[2,3],[3,4],[4,0],[5,0],[5,1],[5,2],[5,3],[5,4]]
+  },
+  bipartiteK33: {
+    pos: [[140,110],[320,110],[500,110],[140,410],[320,410],[500,410]],
+    edges: [[0,3],[0,4],[0,5],[1,3],[1,4],[1,5],[2,3],[2,4],[2,5]]
+  }
+};
+
+// ---------- Global state ----------
+let mode = "greedy";
+let graphKey = "triangleFan";
+let n = 0;
+let adj = [];        // adjacency list
+let edges = [];      // edge pairs
+let pos = [];
+let color = [];      // -1 = uncolored
+let order = [];      // for greedy: precomputed order; for dsatur: dynamic
+let step = 0;        // generic step counter
+let plan = [];       // list of step closures
+let running = false;
+let runTimer = null;
+let parent = [];     // for bipartite odd-cycle tracking
+let bfsQueue = [];
+let conflictFound = false;
+
+const svg = document.getElementById("svg");
+const logEl = document.getElementById("log");
+const infoEl = document.getElementById("info");
+
+// ---------- Build graph data ----------
+function buildGraph() {
+  const g = GRAPHS[graphKey];
+  pos = g.pos.map(p => p.slice());
+  edges = g.edges.map(e => e.slice());
+  n = pos.length;
+  adj = Array.from({length: n}, () => []);
+  for (const [u, v] of edges) {
+    adj[u].push(v);
+    adj[v].push(u);
+  }
+}
+
+// ---------- Logging ----------
+function log(msg, cls) {
+  const div = document.createElement("div");
+  div.className = "entry " + (cls || "");
+  const ts = String(step).padStart(2, "0");
+  div.innerHTML = '<span class="ts">' + ts + '</span>' + msg;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ---------- Rendering ----------
+function colorClass(c) {
+  if (c < 0) return "v-uncolored";
+  return "v-c" + (c % 6);
+}
+
+function render(highlight) {
+  highlight = highlight || {};
+  let svgParts = "";
+  // edges
+  for (let i = 0; i < edges.length; i++) {
+    const [u, v] = edges[i];
+    let cls = "edge";
+    if (highlight.activeEdge && highlight.activeEdge[0] === u && highlight.activeEdge[1] === v) cls += " active";
+    if (highlight.conflictEdge &&
+        ((highlight.conflictEdge[0] === u && highlight.conflictEdge[1] === v) ||
+         (highlight.conflictEdge[0] === v && highlight.conflictEdge[1] === u))) cls += " conflict";
+    svgParts += '<line class="' + cls + '" x1="' + pos[u][0] + '" y1="' + pos[u][1] +
+                '" x2="' + pos[v][0] + '" y2="' + pos[v][1] + '"/>';
+  }
+  // nodes
+  for (let v = 0; v < n; v++) {
+    let cls = "vnode " + colorClass(color[v]);
+    if (highlight.current === v) cls += " v-current";
+    if (highlight.conflictNode === v) cls = "vnode v-conflict";
+    const [x, y] = pos[v];
+    svgParts += '<g class="' + cls + '">';
+    svgParts += '<circle cx="' + x + '" cy="' + y + '" r="24"/>';
+    svgParts += '<text class="label" x="' + x + '" y="' + y + '">' + v + '</text>';
+    // saturation label for DSATUR
+    if (mode === "dsatur" && color[v] === -1) {
+      const s = saturation(v);
+      svgParts += '<text class="sat" x="' + x + '" y="' + (y + 40) + '">sat=' + s + '</text>';
+    }
+    svgParts += '</g>';
+  }
+  svg.innerHTML = svgParts;
+  document.getElementById("statColors").textContent = colorsUsed();
+  document.getElementById("statColored").textContent = color.filter(c => c >= 0).length;
+  document.getElementById("statTotal").textContent = n;
+  document.getElementById("statMode").textContent = mode;
+}
+
+function colorsUsed() {
+  let mx = -1;
+  for (const c of color) if (c > mx) mx = c;
+  return mx + 1;
+}
+
+function saturation(v) {
+  const s = new Set();
+  for (const u of adj[v]) if (color[u] !== -1) s.add(color[u]);
+  return s.size;
+}
+
+// ---------- Plan builders (one closure per visible step) ----------
+function smallestFreeColor(v) {
+  const used = new Set();
+  for (const u of adj[v]) if (color[u] !== -1) used.add(color[u]);
+  let c = 0;
+  while (used.has(c)) c++;
+  return c;
+}
+
+function buildGreedyPlan() {
+  plan = [];
+  order = Array.from({length: n}, (_, i) => i);
+  for (const v of order) {
+    plan.push(() => {
+      const c = smallestFreeColor(v);
+      const blocked = adj[v].filter(u => color[u] !== -1).map(u => color[u]);
+      color[v] = c;
+      log("vertex " + v + " neighbors-use {" + [...new Set(blocked)].sort().join(",") +
+          "} → color " + c, "assign");
+      infoEl.innerHTML = "Greedy: vertex <code>" + v + "</code> gets smallest free color <code>" +
+        c + "</code>. Blocked: {" + [...new Set(blocked)].sort().join(",") + "}.";
+      render({ current: v });
+    });
+  }
+  plan.push(() => {
+    log("done — " + colorsUsed() + " colors used (greedy, index order)", "op");
+    infoEl.innerHTML = "Greedy finished using <code>" + colorsUsed() +
+      "</code> colors. Note: not necessarily χ(G).";
+    render({});
+  });
+}
+
+function buildDsaturPlan() {
+  plan = [];
+  for (let k = 0; k < n; k++) {
+    plan.push(() => {
+      // choose uncolored vertex with max saturation, tie-break degree
+      let best = -1, bestSat = -1, bestDeg = -1;
+      for (let v = 0; v < n; v++) {
+        if (color[v] !== -1) continue;
+        const s = saturation(v);
+        const d = adj[v].length;
+        if (s > bestSat || (s === bestSat && d > bestDeg)) {
+          best = v; bestSat = s; bestDeg = d;
+        }
+      }
+      const c = smallestFreeColor(best);
+      log("pick v=" + best + " (sat=" + bestSat + ", deg=" + bestDeg + ") → color " + c, "pick");
+      color[best] = c;
+      infoEl.innerHTML = "DSATUR picks the highest-saturation vertex <code>" + best +
+        "</code> (sat=" + bestSat + ") and assigns color <code>" + c + "</code>.";
+      render({ current: best });
+    });
+  }
+  plan.push(() => {
+    log("done — " + colorsUsed() + " colors (DSATUR)", "op");
+    infoEl.innerHTML = "DSATUR finished using <code>" + colorsUsed() +
+      "</code> colors — optimal on bipartite graphs.";
+    render({});
+  });
+}
+
+function buildBipartitePlan() {
+  plan = [];
+  parent = new Array(n).fill(-1);
+  conflictFound = false;
+  // We emulate a BFS that processes edges; each step examines one frontier expansion.
+  let pending = [];      // queue of vertices to expand
+  let started = false;
+  let startIdx = 0;
+
+  // We make steps that each either seed a component or expand one vertex.
+  plan.push(() => {
+    color[0] = 0;
+    parent[0] = -1;
+    pending = [0];
+    log("seed component at vertex 0 → color 0", "assign");
+    infoEl.innerHTML = "Start BFS at vertex <code>0</code> with color <code>0</code>.";
+    render({ current: 0 });
+  });
+
+  // Generate a generous number of expansion steps; each pops one vertex.
+  for (let s = 0; s < n + edges.length + 5; s++) {
+    plan.push(() => {
+      if (conflictFound) return;
+      // ensure all components seeded
+      if (pending.length === 0) {
+        let seed = -1;
+        for (let v = 0; v < n; v++) if (color[v] === -1) { seed = v; break; }
+        if (seed === -1) {
+          log("all components 2-colored — graph is BIPARTITE", "op");
+          infoEl.innerHTML = "No odd cycle found. The graph is <code>bipartite</code> (χ = 2).";
+          render({});
+          return;
+        }
+        color[seed] = 0;
+        pending.push(seed);
+        log("seed new component at vertex " + seed + " → color 0", "assign");
+        render({ current: seed });
+        return;
+      }
+      const u = pending.shift();
+      for (const v of adj[u]) {
+        if (color[v] === -1) {
+          color[v] = 1 - color[u];
+          parent[v] = u;
+          pending.push(v);
+          log("edge " + u + "-" + v + ": color " + v + " → " + color[v], "assign");
+        } else if (color[v] === color[u]) {
+          conflictFound = true;
+          log("edge " + u + "-" + v + ": BOTH color " + color[u] + " → ODD CYCLE!", "bad");
+          infoEl.innerHTML = "Conflict on edge <code>" + u + "–" + v +
+            "</code>: same color on both ends. The graph has an <code>odd cycle</code> — NOT bipartite.";
+          render({ current: u, conflictNode: v, conflictEdge: [u, v] });
+          return;
+        }
+      }
+      infoEl.innerHTML = "Expanded vertex <code>" + u + "</code> (color " + color[u] +
+        "), pushed its uncolored neighbors with the opposite color.";
+      render({ current: u });
+    });
+  }
+}
+
+function buildPlan() {
+  if (mode === "greedy") buildGreedyPlan();
+  else if (mode === "dsatur") buildDsaturPlan();
+  else buildBipartitePlan();
+}
+
+// ---------- Driver ----------
+function reset() {
+  stopRun();
+  buildGraph();
+  color = new Array(n).fill(-1);
+  step = 0;
+  logEl.innerHTML = "";
+  conflictFound = false;
+  buildPlan();
+  render({});
+  infoEl.innerHTML = "Ready. Mode <code>" + mode + "</code> on graph <code>" + graphKey +
+    "</code>. Press <code>Step</code> or <code>Run</code>.";
+  log("reset: mode=" + mode + ", graph=" + graphKey + ", n=" + n, "op");
+  document.getElementById("stepBtn").disabled = false;
+  document.getElementById("runBtn").disabled = false;
+}
+
+function doStep() {
+  if (step >= plan.length || conflictFound && mode === "bipartite" && step > 0 && allColored()) {
+    // allow finishing remaining no-op steps gracefully
+  }
+  if (step >= plan.length) {
+    stopRun();
+    document.getElementById("stepBtn").disabled = true;
+    document.getElementById("runBtn").disabled = true;
+    return;
+  }
+  step++;
+  plan[step - 1]();
+  if (mode === "bipartite" && conflictFound) {
+    stopRun();
+    document.getElementById("stepBtn").disabled = true;
+    document.getElementById("runBtn").disabled = true;
+  }
+}
+
+function allColored() {
+  return color.every(c => c !== -1);
+}
+
+function runAll() {
+  if (running) { stopRun(); return; }
+  running = true;
+  document.getElementById("runBtn").textContent = "Pause ⏸";
+  runTimer = setInterval(() => {
+    if (step >= plan.length || (mode === "bipartite" && conflictFound)) {
+      stopRun();
+      return;
+    }
+    doStep();
+  }, 700);
+}
+
+function stopRun() {
+  running = false;
+  if (runTimer) clearInterval(runTimer);
+  runTimer = null;
+  const rb = document.getElementById("runBtn");
+  if (rb) rb.textContent = "Run ▶";
+}
+
+// ---------- Wiring ----------
+document.getElementById("stepBtn").addEventListener("click", () => { stopRun(); doStep(); });
+document.getElementById("runBtn").addEventListener("click", runAll);
+document.getElementById("resetBtn").addEventListener("click", reset);
+
+document.getElementById("graphSelect").addEventListener("change", (e) => {
+  graphKey = e.target.value;
+  reset();
+});
+
+document.querySelectorAll("#modePill button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#modePill button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    mode = b.dataset.mode;
+    reset();
+  });
+});
+
+// ---------- Init ----------
+reset();
+</script>
+</body>
+</html>
