@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Merge Sort — The Canonical Divide-and-Conquer Algorithm</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-left: rgba(88, 166, 255, 0.30);
+    --hi-right: rgba(210, 153, 34, 0.30);
+    --hi-out: rgba(63, 185, 80, 0.40);
+    --hi-cmp: rgba(248, 81, 73, 0.35);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 200px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  /* The recursion tree of bars */
+  .tree { display: flex; flex-direction: column; gap: 10px; }
+  .level { display: flex; flex-direction: column; gap: 4px; }
+  .level-label { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .segments { display: flex; gap: 8px; flex-wrap: wrap; }
+  .segment {
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  .segment.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .segment.done { border-color: var(--good); }
+  .cell {
+    min-width: 26px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    border-radius: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    transition: background 0.2s ease, transform 0.15s ease;
+  }
+  .cell.left   { background: var(--hi-left); }
+  .cell.right  { background: var(--hi-right); }
+  .cell.cmpL, .cell.cmpR { background: var(--hi-cmp); color: #fff; font-weight: 700; }
+  .cell.out    { background: var(--hi-out); color: #fff; font-weight: 700; }
+  /* The merge work area */
+  .mergebox { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 70px; }
+  .ptr {
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--accent);
+  }
+  .ptrrow { display: flex; gap: 2px; padding: 0 0 0 78px; }
+  .ptrslot { min-width: 26px; height: 10px; display: flex; justify-content: center; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .stat { font-family: var(--mono); font-size: 13px; color: var(--text); }
+  .stat b { color: var(--accent-2); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Merge Sort — Divide, Conquer, Combine</h1>
+  <p>Split the array in half, recursively sort each half, then <b>merge</b> the two sorted halves with a two-pointer scan. Total cost T(n) = 2T(n/2) + O(n) = <b>O(n log n)</b>, stable, O(n) extra space.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="classic">5 2 4 7 1 3 2 6</option>
+        <option value="sorted">1 2 3 4 5 6 7 8</option>
+        <option value="reverse">8 7 6 5 4 3 2 1</option>
+        <option value="dups">3 1 3 2 1 2 3 1</option>
+      </select>
+    </label>
+    <label>Array: <input type="text" id="arrInput" value="5 2 4 7 1 3 2 6" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Recursion tree (divide &rarr; merge)</h2>
+      <div class="tree" id="tree"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-left)"></span> left run</span>
+        <span><span class="swatch" style="background:var(--hi-right)"></span> right run</span>
+        <span><span class="swatch" style="background:var(--hi-out)"></span> merged output</span>
+        <span><span class="swatch" style="background:var(--good); border-color:var(--good)"></span> sorted segment</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Current merge (two-pointer)</h2>
+      <div class="mergebox" id="mergebox">
+        <div class="step-counter" id="mergeCaption">Press Step to begin merging.</div>
+        <div class="row"><span class="tag">left L</span><div class="seg" id="rowL"></div></div>
+        <div class="ptrrow" id="ptrL"></div>
+        <div class="row"><span class="tag">right R</span><div class="seg" id="rowR"></div></div>
+        <div class="ptrrow" id="ptrR"></div>
+        <div class="row"><span class="tag">output</span><div class="seg" id="rowOut"></div></div>
+      </div>
+      <div class="interp" id="interpBox">
+        Compare the two front elements; copy the smaller (take from the <b>left</b> on ties &rarr; stable).
+      </div>
+      <div class="stat" id="statBox" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We recursively split the array down to single elements, then merge sorted runs back up. Each merge is a linear two-pointer scan.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The merge uses <code>L[i] &lt;= R[j]</code> (take the left run on ties), which makes merge sort <b>stable</b>.
+    There are log&#8322;(n) levels of merges, each doing O(n) total work &mdash; that is the O(n log n) bound. See <code>junior.md</code> and <code>professional.md</code> for the proof that the merge is correct and stable.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the step plan for top-down merge sort ----------
+// Each "merge event" records the exact L, R runs, the index range, and the
+// sequence of micro-steps (compare/take-left/take-right/drain) of the merge.
+// We schedule merges in post-order (the order the recursion actually merges).
+
+function buildPlan(arr) {
+  const a = arr.slice();
+  const events = [];        // list of merge events (post-order)
+  let comparisons = 0;
+  let moves = 0;
+
+  function rec(lo, hi) {
+    if (hi - lo <= 1) return;
+    const mid = lo + ((hi - lo) >> 1);
+    rec(lo, mid);
+    rec(mid, hi);
+    // snapshot the two sorted runs BEFORE merging
+    const L = a.slice(lo, mid);
+    const R = a.slice(mid, hi);
+    const micro = [];       // micro-steps of this merge
+    let i = 0, j = 0;
+    const out = [];
+    while (i < L.length && j < R.length) {
+      micro.push({ kind: "compare", i, j });
+      if (L[i] <= R[j]) {
+        micro.push({ kind: "takeL", i, j, val: L[i] });
+        out.push(L[i]); i++;
+      } else {
+        micro.push({ kind: "takeR", i, j, val: R[j] });
+        out.push(R[j]); j++;
+      }
+    }
+    while (i < L.length) { micro.push({ kind: "drainL", i, j, val: L[i] }); out.push(L[i]); i++; }
+    while (j < R.length) { micro.push({ kind: "drainR", i, j, val: R[j] }); out.push(R[j]); j++; }
+    micro.push({ kind: "done" });
+    // write merged run back into a
+    for (let t = 0; t < out.length; t++) a[lo + t] = out[t];
+    events.push({ lo, mid, hi, L, R, out: out.slice(), micro });
+  }
+
+  rec(0, a.length);
+
+  // Flatten into a global step list, each step = (eventIndex, microIndex, partial out)
+  const steps = [];
+  steps.push({ type: "intro" });
+  events.forEach((ev, ei) => {
+    steps.push({ type: "beginMerge", ei });
+    let partial = [];
+    let i = 0, j = 0;
+    ev.micro.forEach((m) => {
+      if (m.kind === "compare") {
+        comparisons++;
+        steps.push({ type: "micro", ei, m, partial: partial.slice(), i, j, comparisons, moves });
+      } else if (m.kind === "takeL" || m.kind === "drainL") {
+        partial.push(ev.L[i]); i++; moves++;
+        steps.push({ type: "micro", ei, m, partial: partial.slice(), i, j, comparisons, moves });
+      } else if (m.kind === "takeR" || m.kind === "drainR") {
+        partial.push(ev.R[j]); j++; moves++;
+        steps.push({ type: "micro", ei, m, partial: partial.slice(), i, j, comparisons, moves });
+      } else if (m.kind === "done") {
+        steps.push({ type: "endMerge", ei, partial: ev.out.slice(), i, j, comparisons, moves });
+      }
+    });
+  });
+  steps.push({ type: "finished", sorted: a.slice(), comparisons, moves });
+  return { steps, events, original: arr.slice(), sorted: a.slice() };
+}
+
+// ---------- Render the recursion tree ----------
+// We show, for each level (by run width), the array partitioned into runs.
+// The "active" event highlights which runs are currently being merged.
+function renderTree(state) {
+  const tree = document.getElementById("tree");
+  tree.innerHTML = "";
+  const n = state.plan.original.length;
+  // Determine current display array: original until each merge completes.
+  // We reconstruct the array state at the current step.
+  const disp = currentArrayState(state);
+  const completed = state.completedRanges; // list of [lo,hi) that are sorted now
+  const active = state.activeEvent;        // current event or null
+
+  // Show levels by run width: 1, 2, 4, ..., up to n
+  let width = 1;
+  const levels = [];
+  while (width < n) { levels.push(width); width *= 2; }
+  levels.push(n);
+
+  levels.forEach((w) => {
+    const level = document.createElement("div");
+    level.className = "level";
+    const label = document.createElement("div");
+    label.className = "level-label";
+    label.textContent = "runs of width " + w;
+    level.appendChild(label);
+    const segs = document.createElement("div");
+    segs.className = "segments";
+    for (let lo = 0; lo < n; lo += w) {
+      const hi = Math.min(lo + w, n);
+      const seg = document.createElement("div");
+      seg.className = "segment";
+      // mark active if this range exactly equals an active half
+      if (active && ((lo === active.lo && hi === active.mid) || (lo === active.mid && hi === active.hi))) {
+        seg.classList.add("active");
+      }
+      // mark done if fully inside a completed merged range of >= this width
+      if (isRangeSorted(lo, hi, completed)) seg.classList.add("done");
+      for (let t = lo; t < hi; t++) {
+        const c = document.createElement("div");
+        c.className = "cell";
+        c.textContent = disp[t];
+        if (active) {
+          if (t >= active.lo && t < active.mid) c.classList.add("left");
+          else if (t >= active.mid && t < active.hi) c.classList.add("right");
+        }
+        seg.appendChild(c);
+      }
+      segs.appendChild(seg);
+    }
+    level.appendChild(segs);
+    tree.appendChild(segs.children.length ? level : level);
+  });
+}
+
+function isRangeSorted(lo, hi, completed) {
+  return completed.some(r => lo >= r[0] && hi <= r[1]);
+}
+
+// Reconstruct the array as it would be after all merges strictly before the
+// current event have completed (plus the partial output of the current merge).
+function currentArrayState(state) {
+  const a = state.plan.original.slice();
+  const evs = state.plan.events;
+  // apply all events with index < activeEventIndex fully
+  for (let e = 0; e < state.activeEventIndex; e++) {
+    const ev = evs[e];
+    for (let t = 0; t < ev.out.length; t++) a[ev.lo + t] = ev.out[t];
+  }
+  // apply partial of current event
+  if (state.activeEvent && state.partial) {
+    for (let t = 0; t < state.partial.length; t++) {
+      a[state.activeEvent.lo + t] = state.partial[t];
+    }
+  } else if (state.activeEvent) {
+    // before merge begins, the two runs are already in place (sorted halves)
+  }
+  return a;
+}
+
+// ---------- Render the current merge work area ----------
+function renderMerge(state, step) {
+  const rowL = document.getElementById("rowL");
+  const rowR = document.getElementById("rowR");
+  const rowOut = document.getElementById("rowOut");
+  const ptrL = document.getElementById("ptrL");
+  const ptrR = document.getElementById("ptrR");
+  rowL.innerHTML = ""; rowR.innerHTML = ""; rowOut.innerHTML = "";
+  ptrL.innerHTML = ""; ptrR.innerHTML = "";
+
+  const ev = state.activeEvent;
+  if (!ev) {
+    document.getElementById("mergeCaption").textContent =
+      (step && step.type === "finished")
+        ? "All merges complete — array is sorted."
+        : "Press Step to begin merging.";
+    return;
+  }
+
+  const mi = (step && step.type === "micro") ? step.i : (step && step.type === "endMerge" ? step.i : 0);
+  const mj = (step && step.type === "micro") ? step.j : (step && step.type === "endMerge" ? step.j : 0);
+  const partial = (step && step.partial) ? step.partial : [];
+  const m = (step && step.m) ? step.m : null;
+
+  // render L
+  ev.L.forEach((v, idx) => {
+    const c = document.createElement("div");
+    c.className = "cell left";
+    if (m && (m.kind === "compare") && idx === m.i) c.classList.add("cmpL");
+    if (m && (m.kind === "takeL" || m.kind === "drainL") && idx === m.i) c.classList.add("cmpL");
+    if (idx < mi) { c.style.opacity = "0.35"; } // consumed
+    c.textContent = v;
+    rowL.appendChild(c);
+  });
+  // render R
+  ev.R.forEach((v, idx) => {
+    const c = document.createElement("div");
+    c.className = "cell right";
+    if (m && (m.kind === "compare") && idx === m.j) c.classList.add("cmpR");
+    if (m && (m.kind === "takeR" || m.kind === "drainR") && idx === m.j) c.classList.add("cmpR");
+    if (idx < mj) { c.style.opacity = "0.35"; }
+    c.textContent = v;
+    rowR.appendChild(c);
+  });
+  // render output
+  partial.forEach((v) => {
+    const c = document.createElement("div");
+    c.className = "cell out";
+    c.textContent = v;
+    rowOut.appendChild(c);
+  });
+
+  // pointers under L and R
+  ev.L.forEach((_, idx) => {
+    const slot = document.createElement("div");
+    slot.className = "ptrslot";
+    if (idx === mi && mi < ev.L.length) {
+      const p = document.createElement("div"); p.className = "ptr"; slot.appendChild(p);
+    }
+    ptrL.appendChild(slot);
+  });
+  ev.R.forEach((_, idx) => {
+    const slot = document.createElement("div");
+    slot.className = "ptrslot";
+    if (idx === mj && mj < ev.R.length) {
+      const p = document.createElement("div"); p.className = "ptr"; slot.appendChild(p);
+    }
+    ptrR.appendChild(slot);
+  });
+
+  document.getElementById("mergeCaption").textContent =
+    "Merging a[" + ev.lo + ":" + ev.mid + ") with a[" + ev.mid + ":" + ev.hi + ")";
+}
+
+// ---------- Interpretation + stats ----------
+function renderInterp(step) {
+  const box = document.getElementById("interpBox");
+  if (!step) return;
+  if (step.type === "micro" && step.m) {
+    const m = step.m;
+    const ev = state.activeEvent;
+    if (m.kind === "compare") {
+      box.innerHTML = "Compare <b>L[" + m.i + "] = " + ev.L[m.i] + "</b> vs <b>R[" + m.j + "] = " + ev.R[m.j] +
+        "</b> &mdash; take the smaller (left on ties &rarr; <span class='val'>stable</span>).";
+    } else if (m.kind === "takeL") {
+      box.innerHTML = "Take <span class='val'>" + m.val + "</span> from the <b>left</b> run &rarr; advance i.";
+    } else if (m.kind === "takeR") {
+      box.innerHTML = "Take <span class='val'>" + m.val + "</span> from the <b>right</b> run &rarr; advance j. " +
+        "(Each right-pick here would count an inversion against the remaining left elements.)";
+    } else if (m.kind === "drainL") {
+      box.innerHTML = "Right run empty &rarr; drain remaining left element <span class='val'>" + m.val + "</span>.";
+    } else if (m.kind === "drainR") {
+      box.innerHTML = "Left run empty &rarr; drain remaining right element <span class='val'>" + m.val + "</span>.";
+    }
+  } else if (step.type === "beginMerge") {
+    box.innerHTML = "Both halves are already sorted. Begin the linear two-pointer <b>merge</b>.";
+  } else if (step.type === "endMerge") {
+    box.innerHTML = "Merge complete &mdash; this segment is now <span class='val'>sorted</span>.";
+  } else if (step.type === "finished") {
+    box.innerHTML = "Done. The whole array is <span class='val'>sorted</span> and stable.";
+  } else if (step.type === "intro") {
+    box.innerHTML = "Compare the two front elements; copy the smaller (take from the <b>left</b> on ties &rarr; stable).";
+  }
+}
+
+function renderStats(step) {
+  const el = document.getElementById("statBox");
+  const c = (step && step.comparisons !== undefined) ? step.comparisons : 0;
+  const mv = (step && step.moves !== undefined) ? step.moves : 0;
+  const n = state.plan.original.length;
+  const lvls = Math.ceil(Math.log2(Math.max(1, n)));
+  el.innerHTML = "comparisons so far: <b>" + c + "</b> &nbsp;|&nbsp; element moves: <b>" + mv +
+    "</b> &nbsp;|&nbsp; n = " + n + ", levels &asymp; log&#8322;(n) = <b>" + lvls + "</b>";
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  activeEvent: null,
+  activeEventIndex: 0,
+  partial: null,
+  completedRanges: []
+};
+
+function loadArray(arr) {
+  state.plan = buildPlan(arr);
+  state.stepIdx = 0;
+  state.activeEvent = null;
+  state.activeEventIndex = 0;
+  state.partial = null;
+  state.completedRanges = [];
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = introText();
+  updateButtons();
+}
+
+function introText() {
+  return "Array: <b>[" + state.plan.original.join(", ") +
+    "]</b>. We recursively split it into halves down to single elements, then merge sorted runs back up. " +
+    "Each merge is a linear two-pointer scan; there are log&#8322;(n) levels.";
+}
+
+function applyStep(step) {
+  // update active event + partial + completed ranges based on step
+  if (step.type === "beginMerge" || step.type === "micro" || step.type === "endMerge") {
+    state.activeEventIndex = step.ei;
+    state.activeEvent = state.plan.events[step.ei];
+    state.partial = step.partial || (step.type === "beginMerge" ? [] : state.partial);
+    if (step.type === "endMerge") {
+      const ev = state.activeEvent;
+      state.completedRanges.push([ev.lo, ev.hi]);
+    }
+  } else if (step.type === "finished") {
+    state.activeEvent = null;
+    state.activeEventIndex = state.plan.events.length;
+    state.partial = null;
+  } else if (step.type === "intro") {
+    state.activeEvent = null;
+    state.activeEventIndex = 0;
+    state.partial = null;
+    state.completedRanges = [];
+  }
+  renderTree(state);
+  renderMerge(state, step);
+  renderInterp(step);
+  renderStats(step);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  // Rebuild completedRanges deterministically by replaying up to idx.
+  state.completedRanges = [];
+  for (let s = 0; s <= idx; s++) {
+    const st = state.plan.steps[s];
+    if (st.type === "endMerge") {
+      const ev = state.plan.events[st.ei];
+      state.completedRanges.push([ev.lo, ev.hi]);
+    }
+  }
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  // set active event/partial without re-pushing completed ranges
+  if (step.type === "beginMerge" || step.type === "micro" || step.type === "endMerge") {
+    state.activeEventIndex = step.ei;
+    state.activeEvent = state.plan.events[step.ei];
+    state.partial = step.partial || [];
+  } else if (step.type === "finished") {
+    state.activeEvent = null;
+    state.activeEventIndex = state.plan.events.length;
+    state.partial = null;
+  } else {
+    state.activeEvent = null;
+    state.activeEventIndex = 0;
+    state.partial = null;
+  }
+  renderTree(state);
+  renderMerge(state, step);
+  renderInterp(step);
+  renderStats(step);
+  document.getElementById("stepInfo").textContent = "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = narrateFor(step);
+  updateButtons();
+}
+
+function narrateFor(step) {
+  switch (step.type) {
+    case "intro": return introText();
+    case "beginMerge": {
+      const ev = state.plan.events[step.ei];
+      return "Merging sorted runs <b>[" + ev.L.join(", ") + "]</b> and <b>[" + ev.R.join(", ") +
+        "]</b> into the range a[" + ev.lo + ":" + ev.hi + ").";
+    }
+    case "micro": {
+      const m = step.m, ev = state.plan.events[step.ei];
+      if (m.kind === "compare")
+        return "Compare front elements: L[" + m.i + "]=" + ev.L[m.i] + " vs R[" + m.j + "]=" + ev.R[m.j] + ".";
+      if (m.kind === "takeL") return "L[" + m.i + "] (" + m.val + ") is &le; R front &rarr; copy it out, advance i.";
+      if (m.kind === "takeR") return "R[" + m.j + "] (" + m.val + ") is smaller &rarr; copy it out, advance j.";
+      if (m.kind === "drainL") return "Right run exhausted &rarr; drain left element " + m.val + ".";
+      if (m.kind === "drainR") return "Left run exhausted &rarr; drain right element " + m.val + ".";
+      return "";
+    }
+    case "endMerge": {
+      const ev = state.plan.events[step.ei];
+      return "Merged run: <b>[" + ev.out.join(", ") + "]</b> &mdash; this segment is now sorted.";
+    }
+    case "finished":
+      return "Sorted: <b>[" + step.sorted.join(", ") + "]</b> in " + step.comparisons +
+        " comparisons and " + step.moves + " moves. T(n) = 2T(n/2) + O(n) = O(n log n).";
+    default: return "";
+  }
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+function parseArr(text) {
+  const parts = text.trim().split(/[\s,]+/).filter(s => s.length > 0);
+  const nums = parts.map(s => parseInt(s, 10)).filter(x => !isNaN(x));
+  return nums.slice(0, 16); // cap for clarity
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  let arr = parseArr(document.getElementById("arrInput").value);
+  if (arr.length === 0) arr = [5, 2, 4, 7, 1, 3, 2, 6];
+  document.getElementById("arrInput").value = arr.join(" ");
+  loadArray(arr);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("arrInput").addEventListener("change", rebuild);
+document.getElementById("presetSel").addEventListener("change", (e) => {
+  const presets = {
+    classic: "5 2 4 7 1 3 2 6",
+    sorted: "1 2 3 4 5 6 7 8",
+    reverse: "8 7 6 5 4 3 2 1",
+    dups: "3 1 3 2 1 2 3 1"
+  };
+  document.getElementById("arrInput").value = presets[e.target.value] || presets.classic;
+  rebuild();
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
