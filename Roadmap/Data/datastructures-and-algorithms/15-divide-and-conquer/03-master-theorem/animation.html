@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Master Theorem — Recursion Tree &amp; Case Detector</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --leaf: rgba(63, 185, 80, 0.40);
+    --root: rgba(248, 81, 73, 0.40);
+    --tie: rgba(210, 153, 34, 0.40);
+    --bar: #1f6feb;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+  circle.tnode { fill: var(--panel-2); stroke: var(--accent); stroke-width: 1.5; }
+  circle.tnode.shown { fill: #233048; }
+  line.tedge { stroke: var(--muted); stroke-width: 1.5; opacity: 0.5; }
+  .levels {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .levelrow {
+    display: grid;
+    grid-template-columns: 64px 1fr 110px;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    opacity: 0.3;
+    transition: opacity 0.25s ease, border-color 0.25s ease;
+  }
+  .levelrow.shown { opacity: 1; }
+  .levelrow.leafwin { border-color: var(--good); }
+  .levelrow.rootwin { border-color: var(--bad); }
+  .levelrow.tiewin  { border-color: var(--accent-2); }
+  .levelrow .lbl { color: var(--muted); }
+  .barwrap { background: var(--bg); border-radius: 4px; height: 16px; overflow: hidden; }
+  .bar { height: 100%; background: var(--bar); width: 0%; transition: width 0.3s ease; }
+  .bar.leaf { background: var(--good); }
+  .bar.root { background: var(--bad); }
+  .bar.tie  { background: var(--accent-2); }
+  .levelrow .work { text-align: right; color: var(--text); }
+  .verdict {
+    margin-top: 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .verdict b { color: var(--accent); }
+  .verdict .res { color: var(--good); font-weight: 700; font-size: 15px; }
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .stat span:first-child { color: var(--muted); }
+  .stat span:last-child { color: var(--accent-2); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>The Master Theorem — Recursion Tree &amp; Case Detector</h1>
+  <p>Enter <b>a</b>, <b>b</b>, and <b>f(n)=n<sup>c</sup></b>. Watch the recursion tree grow level by level; each level's work <b>a<sup>i</sup>&middot;f(n/b<sup>i</sup>)</b> is a bar. Whether the bars grow (leaves win), stay flat (tie), or shrink (root wins) reveals the case.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="custom">— custom —</option>
+        <option value="merge">Merge sort 2T(n/2)+n</option>
+        <option value="binsearch">Binary search T(n/2)+1</option>
+        <option value="karatsuba">Karatsuba 3T(n/2)+n</option>
+        <option value="strassen">Strassen 7T(n/2)+n²</option>
+        <option value="naivemm">Naive matmul 8T(n/2)+n²</option>
+        <option value="case3">Root-heavy 2T(n/2)+n²</option>
+        <option value="case2b">4T(n/2)+n²</option>
+      </select>
+    </label>
+    <label>a = <input type="number" id="aInput" value="2" min="1" max="16" /></label>
+    <label>b = <input type="number" id="bInput" value="2" min="2" max="8" /></label>
+    <label>f(n)=n^<input type="number" id="cInput" value="1" min="0" max="4" step="0.5" /></label>
+    <label>n = <input type="number" id="nInput" value="64" min="2" max="4096" /></label>
+    <span class="step-counter" id="stepInfo">level 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Recursion tree (level by level)</h2>
+      <svg id="treeSvg" height="260" viewBox="0 0 560 260" preserveAspectRatio="xMidYMid meet">
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--good)"></span> leaves dominate (Case 1)</span>
+        <span><span class="swatch" style="background:var(--accent-2)"></span> all levels tie (Case 2)</span>
+        <span><span class="swatch" style="background:var(--bad)"></span> root dominates (Case 3)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Per-level work &nbsp; a<sup>i</sup>&middot;f(n/b<sup>i</sup>)</h2>
+      <div class="stat"><span>critical exponent log_b a</span><span id="critStat">1.000</span></div>
+      <div class="stat"><span>watershed n^(log_b a)</span><span id="wsStat">n^1.00</span></div>
+      <div class="stat"><span>geometric ratio r = a/b^c</span><span id="ratioStat">1.000</span></div>
+      <div class="levels" id="levels"></div>
+      <div class="verdict" id="verdict">Press <b>Step</b> to reveal levels one at a time.</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    The Master Theorem compares the combine cost <code>f(n)=n^c</code> to the watershed <code>n^(log_b a)</code>.
+    Each tree level <code>i</code> does total work <code>a^i &middot; f(n/b^i)</code>. Summing them is a geometric series with ratio <code>r = a/b^c</code>.
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>The three cases at a glance</h2>
+    <div class="levels" style="gap:8px;">
+      <div class="levelrow shown leafwin" style="grid-template-columns:130px 1fr;">
+        <span class="lbl">Case 1 (r&gt;1)</span>
+        <span class="work" style="text-align:left;">f polynomially smaller than watershed &rarr; <b style="color:var(--good)">leaves dominate</b> &rarr; T(n)=&Theta;(n^log_b a)</span>
+      </div>
+      <div class="levelrow shown tiewin" style="grid-template-columns:130px 1fr;">
+        <span class="lbl">Case 2 (r=1)</span>
+        <span class="work" style="text-align:left;">f equals watershed &rarr; <b style="color:var(--accent-2)">all levels tie</b> &rarr; T(n)=&Theta;(n^log_b a &middot; log n)</span>
+      </div>
+      <div class="levelrow shown rootwin" style="grid-template-columns:130px 1fr;">
+        <span class="lbl">Case 3 (r&lt;1)</span>
+        <span class="work" style="text-align:left;">f polynomially larger (+regularity) &rarr; <b style="color:var(--bad)">root dominates</b> &rarr; T(n)=&Theta;(f(n))</span>
+      </div>
+    </div>
+    <div class="verdict" style="margin-top:10px;">
+      <b>Gap cases:</b> when f differs from the watershed by only a <code>log</code> factor, r&rarr;1 and the series
+      does not collapse &mdash; the basic theorem is silent. Use the <b>extended Case 2</b> (adds one <code>log</code>) or
+      <b>Akra&ndash;Bazzi</b> (the integral form) instead.
+    </div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. The tree is drawn schematically (capped node count) but the per-level work bars use the
+    exact values <code>a^i &middot; (n/b^i)^c</code>. <b>r &gt; 1</b> &rarr; bars grow &rarr; leaves win (Case 1).
+    <b>r = 1</b> &rarr; bars flat &rarr; tie (Case 2, extra log factor). <b>r &lt; 1</b> &rarr; bars shrink &rarr; root wins (Case 3).
+    See <code>junior.md</code>, <code>middle.md</code>, and <code>professional.md</code> for the full derivation.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  a: 2, b: 2, c: 1, n: 64,
+  levels: [],     // [{nodes, size, work}]
+  crit: 1, ratio: 1, caseNum: 2,
+  shown: 0,       // how many levels revealed
+  running: false,
+  timer: null
+};
+
+// ---------- Compute the level plan ----------
+function computeLevels(a, b, c, n) {
+  const levels = [];
+  let size = n, nodes = 1;
+  let guard = 0;
+  while (size >= 1 && guard < 40) {
+    const work = nodes * Math.pow(size, c);
+    levels.push({ nodes: nodes, size: size, work: work });
+    size = size / b;
+    nodes = nodes * a;
+    guard++;
+  }
+  return levels;
+}
+
+function classify(a, b, c) {
+  const crit = Math.log(a) / Math.log(b);
+  const eps = 1e-9;
+  if (c < crit - eps) return 1;
+  if (Math.abs(c - crit) <= eps) return 2;
+  return 3;
+}
+
+// ---------- Tree drawing ----------
+function drawTree(shownLevels) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  const W = 560, H = 260;
+  const L = state.levels.length;
+  const rowH = Math.min(48, (H - 40) / Math.max(L, 1));
+  // cap nodes drawn per level so the SVG stays readable
+  const CAP = 12;
+  const drawnPositions = []; // per level array of x
+  for (let i = 0; i < L; i++) {
+    const want = state.levels[i].nodes;
+    const count = Math.min(want, CAP);
+    const y = 24 + i * rowH;
+    const xs = [];
+    for (let j = 0; j < count; j++) {
+      const x = (W * (j + 1)) / (count + 1);
+      xs.push(x);
+    }
+    drawnPositions.push({ xs: xs, y: y, truncated: want > CAP });
+  }
+  // edges: connect each parent level node to children evenly (schematic)
+  for (let i = 1; i < L; i++) {
+    if (i > shownLevels) break;
+    const parent = drawnPositions[i - 1];
+    const child = drawnPositions[i];
+    for (let j = 0; j < child.xs.length; j++) {
+      const px = parent.xs[Math.min(parent.xs.length - 1,
+        Math.floor(j * parent.xs.length / child.xs.length))];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", px); line.setAttribute("y1", parent.y);
+      line.setAttribute("x2", child.xs[j]); line.setAttribute("y2", child.y);
+      line.setAttribute("class", "tedge");
+      edgeLayer.appendChild(line);
+    }
+  }
+  // nodes
+  for (let i = 0; i < L; i++) {
+    const p = drawnPositions[i];
+    const isShown = i <= shownLevels;
+    for (let j = 0; j < p.xs.length; j++) {
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", p.xs[j]); c.setAttribute("cy", p.y);
+      c.setAttribute("r", 7);
+      c.setAttribute("class", "tnode" + (isShown ? " shown" : ""));
+      nodeLayer.appendChild(c);
+    }
+    if (p.truncated && isShown) {
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("x", W - 8); t.setAttribute("y", p.y + 4);
+      t.setAttribute("text-anchor", "end");
+      t.setAttribute("fill", "#8b949e");
+      t.setAttribute("font-size", "10");
+      t.setAttribute("font-family", "monospace");
+      t.textContent = "(" + state.levels[i].nodes.toLocaleString() + " nodes)";
+      nodeLayer.appendChild(t);
+    }
+  }
+}
+
+// ---------- Level bars ----------
+function renderLevels(shownLevels) {
+  const box = document.getElementById("levels");
+  box.innerHTML = "";
+  const maxWork = Math.max.apply(null, state.levels.map(l => l.work));
+  const barClass = state.caseNum === 1 ? "leaf" : (state.caseNum === 3 ? "root" : "tie");
+  const rowWin = state.caseNum === 1 ? "leafwin" : (state.caseNum === 3 ? "rootwin" : "tiewin");
+  for (let i = 0; i < state.levels.length; i++) {
+    const lvl = state.levels[i];
+    const row = document.createElement("div");
+    row.className = "levelrow";
+    if (i <= shownLevels) row.classList.add("shown", rowWin);
+    const pct = maxWork > 0 ? (lvl.work / maxWork) * 100 : 0;
+    const isLeaf = (i === state.levels.length - 1);
+    row.innerHTML =
+      "<span class='lbl'>lvl " + i + (isLeaf ? " (leaves)" : "") + "</span>" +
+      "<div class='barwrap'><div class='bar " + barClass + "' style='width:" +
+        (i <= shownLevels ? pct.toFixed(1) : 0) + "%'></div></div>" +
+      "<span class='work'>" + formatWork(lvl.work) + "</span>";
+    box.appendChild(row);
+  }
+}
+
+function formatWork(w) {
+  if (w >= 1e6) return w.toExponential(2);
+  if (w >= 1000) return Math.round(w).toLocaleString();
+  return (Math.round(w * 100) / 100).toString();
+}
+
+// ---------- Verdict ----------
+function updateVerdict(complete) {
+  const crit = state.crit;
+  const v = document.getElementById("verdict");
+  let res, why;
+  if (state.caseNum === 1) {
+    res = "T(n) = Θ(n^" + crit.toFixed(3) + ")";
+    why = "ratio r = " + state.ratio.toFixed(3) + " &gt; 1 → work grows downward → <b>leaves dominate (Case 1)</b>.";
+  } else if (state.caseNum === 2) {
+    res = "T(n) = Θ(n^" + crit.toFixed(3) + " log n)";
+    why = "ratio r = " + state.ratio.toFixed(3) + " = 1 → every level ties → <b>Case 2</b>, extra log factor over " +
+          Math.round(Math.log(state.n) / Math.log(state.b) + 1) + " levels.";
+  } else {
+    res = "T(n) = Θ(n^" + state.c.toFixed(2) + ")";
+    why = "ratio r = " + state.ratio.toFixed(3) + " &lt; 1 → work shrinks downward → <b>root dominates (Case 3)</b> (regularity holds for n^c).";
+  }
+  v.innerHTML = "<div class='res'>" + res + "</div>" + why +
+    (complete ? "" : "<br><span style='color:#8b949e'>(revealing levels… press Step)</span>");
+}
+
+// ---------- Apply / step ----------
+function refreshStats() {
+  document.getElementById("critStat").textContent = state.crit.toFixed(3);
+  document.getElementById("wsStat").textContent = "n^" + state.crit.toFixed(2);
+  document.getElementById("ratioStat").textContent = state.ratio.toFixed(3);
+}
+
+function showStep(shown) {
+  state.shown = Math.max(0, Math.min(shown, state.levels.length - 1));
+  drawTree(state.shown);
+  renderLevels(state.shown);
+  const complete = state.shown >= state.levels.length - 1;
+  updateVerdict(complete);
+  document.getElementById("stepInfo").textContent =
+    "level " + state.shown + " / " + (state.levels.length - 1);
+  document.getElementById("narrate").innerHTML = narrateFor(state.shown, complete);
+  updateButtons();
+}
+
+function narrateFor(i, complete) {
+  if (complete) {
+    return "All " + state.levels.length + " levels revealed. The geometric series of per-level work has ratio <code>r = " +
+      state.ratio.toFixed(3) + "</code>, so this is <b>Case " + state.caseNum + "</b>.";
+  }
+  const lvl = state.levels[i];
+  return "Level " + i + ": <code>" + lvl.nodes.toLocaleString() + " nodes</code> of size <code>" +
+    formatWork(lvl.size) + "</code>, each paying f(size). Total level work = <code>a^" + i + " &middot; f(n/b^" + i +
+    ") = " + formatWork(lvl.work) + "</code>.";
+}
+
+function stepForward() {
+  if (state.shown < state.levels.length - 1) showStep(state.shown + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.shown >= state.levels.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.shown >= state.levels.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.shown >= state.levels.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+// ---------- Rebuild from inputs ----------
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  let a = parseFloat(document.getElementById("aInput").value);
+  let b = parseFloat(document.getElementById("bInput").value);
+  let c = parseFloat(document.getElementById("cInput").value);
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(a) || a < 1) a = 1;
+  if (isNaN(b) || b <= 1) b = 2;
+  if (isNaN(c) || c < 0) c = 0;
+  if (isNaN(n) || n < 2) n = 2;
+  if (n > 4096) n = 4096;
+  document.getElementById("aInput").value = a;
+  document.getElementById("bInput").value = b;
+  document.getElementById("cInput").value = c;
+  document.getElementById("nInput").value = n;
+
+  state.a = a; state.b = b; state.c = c; state.n = n;
+  state.crit = Math.log(a) / Math.log(b);
+  state.ratio = a / Math.pow(b, c);
+  state.caseNum = classify(a, b, c);
+  state.levels = computeLevels(a, b, c, n);
+  state.shown = 0;
+  refreshStats();
+  showStep(0);
+}
+
+// ---------- Presets ----------
+const PRESETS = {
+  merge:     { a: 2, b: 2, c: 1, n: 64 },
+  binsearch: { a: 1, b: 2, c: 0, n: 64 },
+  karatsuba: { a: 3, b: 2, c: 1, n: 64 },
+  strassen:  { a: 7, b: 2, c: 2, n: 64 },
+  naivemm:   { a: 8, b: 2, c: 2, n: 64 },
+  case3:     { a: 2, b: 2, c: 2, n: 64 },
+  case2b:    { a: 4, b: 2, c: 2, n: 64 }
+};
+
+function applyPreset() {
+  const key = document.getElementById("presetSel").value;
+  if (key === "custom" || !PRESETS[key]) return;
+  const p = PRESETS[key];
+  document.getElementById("aInput").value = p.a;
+  document.getElementById("bInput").value = p.b;
+  document.getElementById("cInput").value = p.c;
+  document.getElementById("nInput").value = p.n;
+  rebuild();
+}
+
+// ---------- Wire controls ----------
+document.getElementById("presetSel").addEventListener("change", applyPreset);
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+["aInput", "bInput", "cInput", "nInput"].forEach(id => {
+  document.getElementById(id).addEventListener("change", () => {
+    document.getElementById("presetSel").value = "custom";
+    rebuild();
+  });
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
