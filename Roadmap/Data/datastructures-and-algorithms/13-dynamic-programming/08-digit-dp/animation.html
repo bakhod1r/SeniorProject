@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Digit DP — Counting Numbers in a Range with Digit Constraints</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --tight: rgba(210, 153, 34, 0.30);
+    --free: rgba(88, 166, 255, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"], .controls input[type="text"] {
+    width: 110px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="number"] { width: 72px; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  /* Bound number digit boxes */
+  .digits { display: flex; gap: 8px; margin: 6px 0 14px; flex-wrap: wrap; }
+  .digit {
+    width: 46px;
+    height: 56px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    background: var(--panel-2);
+    transition: all 0.2s ease;
+  }
+  .digit .val { font-size: 22px; font-weight: 700; color: var(--text); }
+  .digit .idx { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .digit.cur { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .digit.done { opacity: 0.55; }
+  /* candidate being built */
+  .candidate { display: flex; gap: 8px; margin: 4px 0 10px; flex-wrap: wrap; }
+  .cdigit {
+    width: 46px; height: 46px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 20px; font-weight: 700;
+    color: var(--muted);
+  }
+  .cdigit.set { border-style: solid; color: #fff; }
+  .cdigit.tight { background: var(--tight); border-color: var(--accent-2); }
+  .cdigit.free { background: var(--free); border-color: var(--accent); }
+  .branchbox {
+    margin-top: 10px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .branch {
+    flex: 1;
+    min-width: 200px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--bg);
+    font-size: 13px;
+  }
+  .branch h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .branch.tight { border-color: var(--accent-2); }
+  .branch.tight h3 { color: var(--accent-2); }
+  .branch.free { border-color: var(--accent); }
+  .branch.free h3 { color: var(--accent); }
+  .branch code, .pill {
+    font-family: var(--mono);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 12px;
+  }
+  .accbar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 12px 0;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .accbar .label { color: var(--muted); font-size: 12px; }
+  .accbar .sum { color: var(--good); font-weight: 700; font-size: 18px; }
+  .accbar .target { color: var(--accent-2); font-weight: 700; }
+  .accbar .flag { color: var(--muted); }
+  .accbar .flag.on { color: var(--good); font-weight: 700; }
+  /* count tree / accumulation panel */
+  .countbox {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 120px;
+  }
+  .countbox .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  .countbox .row .lbl { color: var(--muted); }
+  .countbox .row .num { color: var(--good); font-weight: 700; }
+  .total {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 16px;
+    color: #fff;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  .total .big { color: var(--good); font-weight: 800; font-size: 22px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .stack {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--bg);
+    margin-top: 10px;
+  }
+  .stack .frame { padding: 1px 0; }
+  .stack .frame.active { color: var(--accent); }
+  .stack .frame.leafok { color: var(--good); }
+  .stack .frame.leafbad { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Digit DP — Counting Numbers &le; N with Digit Sum = S</h1>
+  <p>Build the number <b>digit by digit</b>, most significant first. At each position the <span style="color:var(--accent-2)">tight</span> branch is capped at N[pos]; the <span style="color:var(--accent)">free</span> branch allows all digits. Counts bubble up from the leaves.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>N = <input type="text" id="nInput" value="21" /></label>
+    <label>S = <input type="number" id="sInput" value="3" min="0" max="40" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Bound N &amp; the candidate being built</h2>
+      <div class="step-counter">Bound N digits (position highlighted):</div>
+      <div class="digits" id="boundDigits"></div>
+      <div class="step-counter">Candidate so far (<span style="color:var(--accent-2)">tight</span> / <span style="color:var(--accent)">free</span>):</div>
+      <div class="candidate" id="candDigits"></div>
+
+      <div class="accbar">
+        <span class="label">running digit sum</span>
+        <span class="sum" id="accSum">0</span>
+        <span class="label">/ target</span>
+        <span class="target" id="accTarget">3</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="flag" id="flagTight">tight</span>
+        <span class="flag" id="flagStarted">started</span>
+      </div>
+
+      <div class="branchbox">
+        <div class="branch tight" id="tightBranch">
+          <h3>Tight branch</h3>
+          <div>digit capped at <code id="tightCap">N[pos]</code></div>
+          <div id="tightDesc" style="margin-top:6px;color:var(--muted)"></div>
+        </div>
+        <div class="branch free" id="freeBranch">
+          <h3>Free branch</h3>
+          <div>digit &isin; <code>0..9</code> (all allowed)</div>
+          <div id="freeDesc" style="margin-top:6px;color:var(--muted)"></div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--tight)"></span> tight (capped by N)</span>
+        <span><span class="swatch" style="background:var(--free)"></span> free (below N)</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> valid leaf</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Accumulating counts</h2>
+      <div class="countbox" id="countBox">
+        <div class="row"><span class="lbl">valid completions found so far</span><span class="num" id="validCount">0</span></div>
+        <div class="row"><span class="lbl">leaves examined</span><span class="num" id="leafCount">0</span></div>
+        <div class="row"><span class="lbl">memo (free states) reused</span><span class="num" id="memoHits">0</span></div>
+        <div class="total">f(N) so far = <span class="big" id="runningTotal">0</span></div>
+      </div>
+      <div class="step-counter" style="margin-top:12px;">Recursion stack (top = current frame):</div>
+      <div class="stack" id="stackView"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We count integers in [0, N] whose digits sum to exactly S, by exploring digit choices position by position. The tight flag keeps us &le; N.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Running example: count numbers in [0, N] with digit sum = S.
+    A leaf is reached at the last position; it is <span style="color:var(--good)">valid</span> iff the accumulated digit sum equals S.
+    Free (tight=false) states are memoized; tight states are unique per N and never cached.
+    See <code>junior.md</code> and <code>professional.md</code> for the tight-flag decomposition proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the full DFS step plan for digit-sum counting ----------
+// We perform a complete recursion over (pos, tight, started, sum) and emit a
+// discrete step for every "enter frame", "place digit / recurse", and "leaf".
+// Free states are memoized; we record memo hits as steps too.
+
+const state = {
+  N: "21",
+  S: 3,
+  digits: [],
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null,
+};
+
+function buildPlan(N, S) {
+  const digits = N.split("").map(c => c.charCodeAt(0) - 48);
+  const D = digits.length;
+  const steps = [];
+  // memo[pos][sum] for FREE states only
+  const memo = {};
+  let validTotal = 0;
+  let leaves = 0;
+  let memoHits = 0;
+  // a logical stack of frames for visualization
+  const frame = [];
+
+  function key(pos, started, sum) { return pos + "|" + (started ? 1 : 0) + "|" + sum; }
+
+  function snapshot(extra) {
+    return Object.assign({
+      stack: frame.map(f => Object.assign({}, f)),
+      validTotal,
+      leaves,
+      memoHits,
+    }, extra);
+  }
+
+  function rec(pos, tight, started, sum) {
+    frame.push({ pos, tight, started, sum, label: "solve(pos=" + pos + ", tight=" + tight + ", started=" + started + ", sum=" + sum + ")" });
+    steps.push(snapshot({
+      type: "enter",
+      pos, tight, started, sum,
+      desc: "Enter position " + pos + ". tight=" + tight + ", started=" + started + ", running sum=" + sum + "."
+    }));
+
+    if (sum > S) {
+      // prune
+      steps.push(snapshot({
+        type: "prune", pos, tight, started, sum,
+        desc: "Prune: running sum " + sum + " already exceeds target " + S + ". 0 completions."
+      }));
+      frame.pop();
+      return 0;
+    }
+
+    if (pos === D) {
+      leaves++;
+      const ok = (sum === S);
+      if (ok) validTotal++;
+      steps.push(snapshot({
+        type: ok ? "leafok" : "leafbad",
+        pos, tight, started, sum, leaf: true,
+        desc: "Leaf: built a full number with digit sum " + sum + ". " +
+              (ok ? ("Equals target " + S + " → VALID (+1).") : ("≠ target " + S + " → invalid."))
+      }));
+      frame.pop();
+      return ok ? 1 : 0;
+    }
+
+    if (!tight) {
+      const k = key(pos, started, sum);
+      if (memo[k] !== undefined) {
+        memoHits++;
+        steps.push(snapshot({
+          type: "memohit", pos, tight, started, sum,
+          desc: "Free state (pos=" + pos + ", sum=" + sum + ") already computed → reuse memo = " + memo[k] + "."
+        }));
+        frame.pop();
+        return memo[k];
+      }
+    }
+
+    const limit = tight ? digits[pos] : 9;
+    let total = 0;
+    for (let dig = 0; dig <= limit; dig++) {
+      const nTight = tight && (dig === limit);
+      const nStarted = started || dig !== 0;
+      steps.push(snapshot({
+        type: "place", pos, tight, started, sum, dig, limit, nTight,
+        desc: "At position " + pos + " place digit " + dig + " (allowed 0.." + limit + (tight ? ", capped by N[" + pos + "]=" + digits[pos] : ", free") + "). " +
+              (nTight ? "Stay TIGHT (matched the cap)." : "Go FREE (below N).")
+      }));
+      total += rec(pos + 1, nTight, nStarted, sum + dig);
+    }
+
+    if (!tight) {
+      memo[key(pos, started, sum)] = total;
+      steps.push(snapshot({
+        type: "store", pos, tight, started, sum, total,
+        desc: "Store memo[pos=" + pos + "][sum=" + sum + "] = " + total + " (free state, reusable)."
+      }));
+    } else {
+      steps.push(snapshot({
+        type: "tightret", pos, tight, started, sum, total,
+        desc: "Tight state at position " + pos + " returns " + total + " — NOT cached (unique per N)."
+      }));
+    }
+    frame.pop();
+    return total;
+  }
+
+  const answer = rec(0, true, true, 0);
+  steps.push(snapshot({
+    type: "done", desc: "Done. f(N) = number of integers in [0, " + N + "] with digit sum " + S + " = " + answer + "."
+  }));
+  return { steps, digits, answer };
+}
+
+// ---------- Rendering ----------
+function renderBound(snap) {
+  const el = document.getElementById("boundDigits");
+  el.innerHTML = "";
+  const D = state.digits.length;
+  const curPos = (snap && snap.pos !== undefined) ? snap.pos : -1;
+  for (let i = 0; i < D; i++) {
+    const d = document.createElement("div");
+    d.className = "digit";
+    if (i === curPos) d.classList.add("cur");
+    if (curPos >= 0 && i < curPos) d.classList.add("done");
+    d.innerHTML = "<span class='val'>" + state.digits[i] + "</span><span class='idx'>pos " + i + "</span>";
+    el.appendChild(d);
+  }
+}
+
+function renderCandidate(snap) {
+  const el = document.getElementById("candDigits");
+  el.innerHTML = "";
+  const D = state.digits.length;
+  // reconstruct chosen digits from the stack frames (each frame's child dig is in the next frame)
+  // We approximate: use snap.stack to know depth, and snap.dig for the digit just placed.
+  const stack = (snap && snap.stack) ? snap.stack : [];
+  const depth = stack.length;
+  // The digits already committed are encoded by the path; we display tight/free state per box.
+  for (let i = 0; i < D; i++) {
+    const c = document.createElement("div");
+    c.className = "cdigit";
+    if (i < depth - 1 || (snap && snap.leaf && i < depth)) {
+      c.classList.add("set");
+    }
+    // color by whether that prefix position was tight or free
+    if (stack[i + 1]) {
+      c.classList.add(stack[i + 1].tight ? "tight" : "free");
+    } else if (stack[i]) {
+      c.classList.add(stack[i].tight ? "tight" : "free");
+    }
+    // value: if a digit was placed at this depth, show it via snap.dig at the current pos
+    if (snap && snap.type === "place" && snap.pos === i) {
+      c.textContent = snap.dig;
+      c.classList.add("set");
+      c.classList.add(snap.nTight ? "tight" : "free");
+    } else if (i < depth - 1) {
+      c.textContent = "·";
+    } else {
+      c.textContent = "_";
+    }
+    el.appendChild(c);
+  }
+}
+
+function renderAcc(snap) {
+  const sum = (snap && snap.sum !== undefined) ? snap.sum : 0;
+  document.getElementById("accSum").textContent = sum;
+  document.getElementById("accTarget").textContent = state.S;
+  const ft = document.getElementById("flagTight");
+  const fs = document.getElementById("flagStarted");
+  const tight = snap && snap.tight;
+  const started = snap && snap.started;
+  ft.textContent = tight ? "TIGHT" : "free";
+  ft.className = "flag" + (tight ? " on" : "");
+  fs.textContent = started ? "STARTED" : "leading-zeros";
+  fs.className = "flag" + (started ? " on" : "");
+}
+
+function renderBranches(snap) {
+  const tb = document.getElementById("tightBranch");
+  const fb = document.getElementById("freeBranch");
+  const cap = document.getElementById("tightCap");
+  const td = document.getElementById("tightDesc");
+  const fd = document.getElementById("freeDesc");
+  const pos = (snap && snap.pos !== undefined) ? snap.pos : 0;
+  const D = state.digits.length;
+  if (pos < D) {
+    cap.textContent = "N[" + pos + "] = " + state.digits[pos];
+    td.textContent = "digits 0.." + state.digits[pos] + "; only choosing exactly " + state.digits[pos] + " stays tight.";
+    fd.textContent = "digits 0..9; reachable once any earlier digit went below N.";
+  } else {
+    cap.textContent = "—";
+    td.textContent = "at a leaf; no more positions.";
+    fd.textContent = "at a leaf; no more positions.";
+  }
+  // emphasize whichever branch the current step is in
+  const tight = snap && snap.tight;
+  tb.style.opacity = (tight === false) ? "0.5" : "1";
+  fb.style.opacity = (tight === true) ? "0.5" : "1";
+}
+
+function renderCounts(snap) {
+  document.getElementById("validCount").textContent = snap ? snap.validTotal : 0;
+  document.getElementById("leafCount").textContent = snap ? snap.leaves : 0;
+  document.getElementById("memoHits").textContent = snap ? snap.memoHits : 0;
+  document.getElementById("runningTotal").textContent = snap ? snap.validTotal : 0;
+}
+
+function renderStack(snap) {
+  const el = document.getElementById("stackView");
+  el.innerHTML = "";
+  const stack = (snap && snap.stack) ? snap.stack : [];
+  if (stack.length === 0) {
+    el.innerHTML = "<div class='frame'>(empty — not started)</div>";
+    return;
+  }
+  for (let i = 0; i < stack.length; i++) {
+    const f = document.createElement("div");
+    f.className = "frame";
+    if (i === stack.length - 1) {
+      f.classList.add("active");
+      if (snap.type === "leafok") f.classList.add("leafok");
+      if (snap.type === "leafbad") f.classList.add("leafbad");
+    }
+    f.textContent = "  ".repeat(i) + stack[i].label;
+    el.appendChild(f);
+  }
+}
+
+function applyStep(snap) {
+  renderBound(snap);
+  renderCandidate(snap);
+  renderAcc(snap);
+  renderBranches(snap);
+  renderCounts(snap);
+  renderStack(snap);
+  document.getElementById("narrate").innerHTML = snap.desc || "";
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  let N = document.getElementById("nInput").value.trim();
+  if (!/^\d+$/.test(N)) N = "21";
+  // keep it small enough to animate fully
+  if (N.length > 4) N = N.slice(0, 4);
+  document.getElementById("nInput").value = N;
+  let S = parseInt(document.getElementById("sInput").value, 10);
+  if (isNaN(S) || S < 0) S = 0;
+  if (S > 40) S = 40;
+  document.getElementById("sInput").value = S;
+
+  state.N = N;
+  state.S = S;
+  const plan = buildPlan(N, S);
+  state.steps = plan.steps;
+  state.digits = plan.digits;
+  state.stepIdx = 0;
+  applyStep(state.steps[0]);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("sInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
