@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prüfer Code — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    min-width: 0;
+  }
+
+  .btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .btn:hover { border-color: var(--blue); }
+  .btn.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn.success { background: var(--green); color: #07210f; border-color: var(--green); }
+  .btn.warn    { background: var(--yellow); color: #2a1d00; border-color: var(--yellow); }
+  .btn.danger  { background: var(--red); color: #fff; border-color: var(--red); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .step-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+
+  svg { width: 100%; height: 420px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; transition: all 0.25s ease; }
+  .edge.recorded { stroke: var(--green); stroke-width: 3; }
+  .edge.removing { stroke: var(--red); stroke-width: 3; stroke-dasharray: 4 3; }
+
+  .node circle {
+    fill: rgba(88,166,255,0.15);
+    stroke: var(--blue);
+    stroke-width: 2;
+    transition: all 0.25s ease;
+  }
+  .node.leaf circle    { fill: rgba(63,185,80,0.2); stroke: var(--green); }
+  .node.smallest circle{ fill: rgba(248,81,73,0.3); stroke: var(--red); stroke-width: 3; }
+  .node.neighbor circle{ fill: rgba(210,153,34,0.3); stroke: var(--yellow); stroke-width: 3; }
+  .node.gone circle    { opacity: 0.18; }
+  .node text {
+    fill: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+    font-family: "SF Mono", Menlo, Monaco, monospace;
+  }
+  .node.gone text { opacity: 0.3; }
+  .node .deg {
+    fill: var(--orange);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .code-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .code-box {
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, Monaco, monospace;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .code-box.filled { border-color: var(--green); color: var(--green); background: rgba(63,185,80,0.12); }
+  .code-box.active { border-color: var(--yellow); color: var(--yellow); background: rgba(210,153,34,0.18); }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; flex-wrap: wrap; }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: var(--muted);
+    font-family: "SF Mono", Menlo, Monaco, monospace;
+  }
+  .stat b { color: var(--text); }
+
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    margin-top: 12px;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.rec { color: var(--green); }
+  #log .entry.rem { color: var(--red); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .dot.d-leaf     { background: rgba(63,185,80,0.2); border-color: var(--green); }
+  .dot.d-smallest { background: rgba(248,81,73,0.3); border-color: var(--red); }
+  .dot.d-neighbor { background: rgba(210,153,34,0.3); border-color: var(--yellow); }
+  .dot.d-gone     { background: rgba(139,148,158,0.15); border-color: var(--muted); }
+
+  .deg-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px;
+    font-family: "SF Mono", Menlo, Monaco, monospace; }
+  .deg-table th, .deg-table td { border: 1px solid var(--border); padding: 3px 6px; text-align: center; }
+  .deg-table th { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Prüfer Code — Encode &amp; Decode Visualizer</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="encode" class="active">Encode (tree → code)</button>
+    <button data-mode="decode">Decode (code → tree)</button>
+  </div>
+</header>
+
+<main>
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Input</h2>
+      <div class="control-row" id="encodeInput">
+        <input type="text" id="edgesInput" placeholder="edges e.g. 1-4,2-4,4-6,5-3,3-6" />
+      </div>
+      <div class="control-row" id="decodeInput" style="display:none">
+        <input type="text" id="codeInput" placeholder="code e.g. 4,4,6,3" />
+      </div>
+      <div class="control-row">
+        <button class="btn success" id="btnLoad" style="flex:1">Load</button>
+        <button class="btn" id="btnExample">Example</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnStep">Step</button>
+        <button class="btn warn" id="btnRun">Run</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row" style="margin-top:10px">
+        <span>Speed</span>
+        <input type="range" id="speed" min="120" max="1400" value="650" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Prüfer Code</h2>
+      <div class="code-strip" id="codeStrip"></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Degrees</h2>
+      <table class="deg-table" id="degTable"></table>
+    </div>
+
+    <div class="control-group">
+      <h2>Legend</h2>
+      <div class="legend">
+        <span><span class="dot d-leaf"></span>leaf</span>
+        <span><span class="dot d-smallest"></span>smallest leaf</span>
+        <span><span class="dot d-neighbor"></span>neighbor (recorded)</span>
+        <span><span class="dot d-gone"></span>removed</span>
+      </div>
+    </div>
+  </aside>
+
+  <section class="panel">
+    <h2 id="treeTitle">Tree</h2>
+    <svg id="svg" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="info-bar" id="info">Load an example and press <b>Step</b> or <b>Run</b>.</div>
+    <div class="stats-row">
+      <span class="stat">mode: <b id="statMode">encode</b></span>
+      <span class="stat">n: <b id="statN">0</b></span>
+      <span class="stat">step: <b id="statStep">0</b> / <b id="statTotal">0</b></span>
+      <span class="stat">code len: <b id="statCode">0</b></span>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ---------------- state ----------------
+const state = {
+  mode: "encode",
+  speedMs: 650,
+  running: false,
+  paused: false,
+  // shared graph model
+  n: 0,
+  adj: {},        // v -> Set(neighbors)  (current, mutated during animation)
+  deg: {},        // v -> current degree
+  pos: {},        // v -> {x,y}
+  code: [],       // produced / consumed code
+  step: 0,
+  total: 0,
+  // decode-only
+  decodeEdges: [],
+  // generator of step thunks
+  gen: null,
+};
+
+const els = {
+  svg:       document.getElementById("svg"),
+  info:      document.getElementById("info"),
+  log:       document.getElementById("log"),
+  codeStrip: document.getElementById("codeStrip"),
+  degTable:  document.getElementById("degTable"),
+  edgesInput:document.getElementById("edgesInput"),
+  codeInput: document.getElementById("codeInput"),
+  statMode:  document.getElementById("statMode"),
+  statN:     document.getElementById("statN"),
+  statStep:  document.getElementById("statStep"),
+  statTotal: document.getElementById("statTotal"),
+  statCode:  document.getElementById("statCode"),
+  treeTitle: document.getElementById("treeTitle"),
+};
+
+// ---------------- helpers ----------------
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function log(msg, cls = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const d = document.createElement("div");
+  d.className = "entry " + cls;
+  d.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(d);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+function info(html) { els.info.innerHTML = html; }
+
+function setStats() {
+  els.statMode.textContent  = state.mode;
+  els.statN.textContent     = state.n;
+  els.statStep.textContent  = state.step;
+  els.statTotal.textContent = state.total;
+  els.statCode.textContent  = state.code.length;
+}
+
+// circle layout for vertices 1..n
+function layout(n) {
+  const cx = 500, cy = 210, R = 160;
+  const pos = {};
+  for (let v = 1; v <= n; v++) {
+    const ang = (-Math.PI / 2) + (2 * Math.PI * (v - 1)) / n;
+    pos[v] = { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) };
+  }
+  return pos;
+}
+
+// ---------------- parsing ----------------
+function parseEdges(str) {
+  const edges = [];
+  let maxV = 0;
+  str.split(",").forEach(p => {
+    p = p.trim();
+    if (!p) return;
+    const m = p.split("-").map(s => parseInt(s.trim(), 10));
+    if (m.length === 2 && !isNaN(m[0]) && !isNaN(m[1])) {
+      edges.push([m[0], m[1]]);
+      maxV = Math.max(maxV, m[0], m[1]);
+    }
+  });
+  return { edges, n: maxV };
+}
+
+function parseCode(str) {
+  const code = str.split(",").map(s => parseInt(s.trim(), 10)).filter(x => !isNaN(x));
+  return { code, n: code.length + 2 };
+}
+
+// ---------------- rendering ----------------
+function render(highlight = {}) {
+  const svg = els.svg;
+  svg.innerHTML = "";
+  const ns = "http://www.w3.org/2000/svg";
+
+  // edges
+  const drawn = new Set();
+  for (const v in state.adj) {
+    for (const u of state.adj[v]) {
+      const key = Math.min(+v, u) + "-" + Math.max(+v, u);
+      if (drawn.has(key)) continue;
+      drawn.add(key);
+      const p1 = state.pos[+v], p2 = state.pos[u];
+      const line = document.createElementNS(ns, "line");
+      line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
+      line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
+      let cls = "edge";
+      if (highlight.removeEdge && highlight.removeEdge === key) cls += " removing";
+      line.setAttribute("class", cls);
+      svg.appendChild(line);
+    }
+  }
+  // decode: show already-built edges
+  if (state.mode === "decode") {
+    for (const [a, b] of state.decodeEdges) {
+      const p1 = state.pos[a], p2 = state.pos[b];
+      const line = document.createElementNS(ns, "line");
+      line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
+      line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
+      line.setAttribute("class", "edge recorded");
+      svg.appendChild(line);
+    }
+  }
+
+  // nodes
+  for (let v = 1; v <= state.n; v++) {
+    const g = document.createElementNS(ns, "g");
+    let cls = "node";
+    const gone = state.deg[v] === undefined || (state.mode === "encode" && state.deg[v] <= 0);
+    if (gone) cls += " gone";
+    else if (highlight.smallest === v) cls += " smallest";
+    else if (highlight.neighbor === v) cls += " neighbor";
+    else if (state.deg[v] === 1) cls += " leaf";
+    g.setAttribute("class", cls);
+
+    const c = document.createElementNS(ns, "circle");
+    c.setAttribute("cx", state.pos[v].x);
+    c.setAttribute("cy", state.pos[v].y);
+    c.setAttribute("r", 18);
+    g.appendChild(c);
+
+    const t = document.createElementNS(ns, "text");
+    t.setAttribute("x", state.pos[v].x);
+    t.setAttribute("y", state.pos[v].y);
+    t.textContent = v;
+    g.appendChild(t);
+
+    // degree badge
+    const d = document.createElementNS(ns, "text");
+    d.setAttribute("class", "deg");
+    d.setAttribute("x", state.pos[v].x + 20);
+    d.setAttribute("y", state.pos[v].y - 18);
+    d.textContent = state.deg[v] !== undefined ? "d" + state.deg[v] : "";
+    g.appendChild(d);
+
+    svg.appendChild(g);
+  }
+}
+
+function renderCode(activeIdx = -1) {
+  els.codeStrip.innerHTML = "";
+  for (let i = 0; i < state.total; i++) {
+    const b = document.createElement("div");
+    b.className = "code-box";
+    if (i < state.code.length) { b.classList.add("filled"); b.textContent = state.code[i]; }
+    else b.textContent = "·";
+    if (i === activeIdx) b.classList.add("active");
+    els.codeStrip.appendChild(b);
+  }
+}
+
+function renderDegTable() {
+  let html = "<tr><th>v</th>";
+  for (let v = 1; v <= state.n; v++) html += `<th>${v}</th>`;
+  html += "</tr><tr><td>deg</td>";
+  for (let v = 1; v <= state.n; v++) {
+    const d = state.deg[v];
+    html += `<td>${d === undefined || d <= 0 ? "–" : d}</td>`;
+  }
+  html += "</tr>";
+  els.degTable.innerHTML = html;
+}
+
+function redraw(hl = {}, activeIdx = -1) {
+  render(hl);
+  renderCode(activeIdx);
+  renderDegTable();
+  setStats();
+}
+
+// ---------------- ENCODE generator ----------------
+function* encodeSteps() {
+  state.total = Math.max(0, state.n - 2);
+  redraw();
+  yield { info: `Start encoding. Tree on <code>n = ${state.n}</code>. We peel the smallest leaf ${state.total} times.` };
+
+  for (let s = 0; s < state.total; s++) {
+    // find smallest leaf
+    let leaf = -1;
+    for (let v = 1; v <= state.n; v++) {
+      if (state.deg[v] === 1) { leaf = v; break; }
+    }
+    const neighbor = [...state.adj[leaf]][0];
+
+    yield {
+      hl: { smallest: leaf },
+      info: `Step ${s + 1}: smallest leaf is <code>${leaf}</code>. Its only neighbor is <code>${neighbor}</code>.`,
+      logMsg: [`smallest leaf = ${leaf}`, "op"],
+    };
+
+    // record neighbor
+    state.code.push(neighbor);
+    const key = Math.min(leaf, neighbor) + "-" + Math.max(leaf, neighbor);
+    yield {
+      hl: { smallest: leaf, neighbor: neighbor, removeEdge: key },
+      info: `Record neighbor <code>${neighbor}</code> into the code, then delete leaf <code>${leaf}</code>.`,
+      logMsg: [`record ${neighbor}; remove leaf ${leaf}`, "rec"],
+    };
+
+    // delete leaf
+    state.adj[neighbor].delete(leaf);
+    delete state.adj[leaf];
+    state.deg[leaf] = 0;
+    state.deg[neighbor]--;
+    redraw();
+    state.step = s + 1;
+  }
+
+  yield {
+    info: `Done. Two vertices remain (final edge is implicit). <b>Prüfer code = [${state.code.join(", ")}]</b>.`,
+    logMsg: [`code = [${state.code.join(",")}]`, "rec"],
+  };
+}
+
+// ---------------- DECODE generator ----------------
+function* decodeSteps() {
+  const code = state.code.slice();
+  state.code = []; // we'll re-reveal incrementally? keep full but mark consumed
+  state.total = code.length;
+  // degrees from appearances
+  for (let v = 1; v <= state.n; v++) state.deg[v] = 1;
+  for (const x of code) state.deg[x]++;
+  state.code = code.slice();
+  state.adj = {};
+  redraw();
+  yield { info: `Start decoding <code>[${code.join(", ")}]</code>. Set <code>deg(v) = count(v)+1</code>.` };
+
+  for (let i = 0; i < code.length; i++) {
+    const x = code[i];
+    // smallest current leaf
+    let leaf = -1;
+    for (let v = 1; v <= state.n; v++) {
+      if (state.deg[v] === 1) { leaf = v; break; }
+    }
+    yield {
+      hl: { smallest: leaf, neighbor: x },
+      activeIdx: i,
+      info: `Code entry <code>${x}</code>: connect it to the smallest degree-1 vertex <code>${leaf}</code>.`,
+      logMsg: [`edge (${leaf}, ${x})`, "rec"],
+    };
+    state.decodeEdges.push([leaf, x]);
+    state.deg[leaf]--;
+    state.deg[x]--;
+    redraw({ smallest: leaf, neighbor: x }, i);
+    state.step = i + 1;
+  }
+
+  // final two leaves
+  const rem = [];
+  for (let v = 1; v <= state.n; v++) if (state.deg[v] === 1) rem.push(v);
+  state.decodeEdges.push([rem[0], rem[1]]);
+  state.deg[rem[0]]--; state.deg[rem[1]]--;
+  yield {
+    info: `Connect the final two degree-1 vertices <code>${rem[0]}</code> and <code>${rem[1]}</code>. Tree rebuilt with ${state.decodeEdges.length} edges.`,
+    logMsg: [`final edge (${rem[0]}, ${rem[1]})`, "rec"],
+  };
+  redraw();
+}
+
+// ---------------- driver ----------------
+function applyYield(y) {
+  if (!y) return;
+  if (y.logMsg) log(y.logMsg[0], y.logMsg[1]);
+  redraw(y.hl || {}, y.activeIdx !== undefined ? y.activeIdx : -1);
+  if (y.info) info(y.info);
+}
+
+function doStep() {
+  if (!state.gen) buildGen();
+  const r = state.gen.next();
+  if (r.done) { state.running = false; return false; }
+  applyYield(r.value);
+  return true;
+}
+
+async function doRun() {
+  if (state.running) return;
+  state.running = true;
+  state.paused = false;
+  if (!state.gen) buildGen();
+  while (state.running && !state.paused) {
+    const more = doStep();
+    if (!more) break;
+    await sleep(state.speedMs);
+  }
+  state.running = false;
+}
+
+function buildGen() {
+  state.gen = state.mode === "encode" ? encodeSteps() : decodeSteps();
+}
+
+// ---------------- load / reset ----------------
+function resetModel() {
+  state.adj = {};
+  state.deg = {};
+  state.code = [];
+  state.decodeEdges = [];
+  state.step = 0;
+  state.total = 0;
+  state.gen = null;
+  state.running = false;
+  state.paused = false;
+  els.log.innerHTML = "";
+}
+
+function loadEncode() {
+  const { edges, n } = parseEdges(els.edgesInput.value);
+  if (n < 1 || edges.length !== n - 1) {
+    info(`<span style="color:var(--red)">Need a tree: ${n - 1} edges for n=${n}. Got ${edges.length}.</span>`);
+    return;
+  }
+  resetModel();
+  state.n = n;
+  state.pos = layout(n);
+  for (let v = 1; v <= n; v++) { state.adj[v] = new Set(); state.deg[v] = 0; }
+  for (const [a, b] of edges) {
+    state.adj[a].add(b); state.adj[b].add(a);
+    state.deg[a]++; state.deg[b]++;
+  }
+  state.total = Math.max(0, n - 2);
+  els.treeTitle.textContent = "Tree (peel smallest leaf, record neighbor)";
+  redraw();
+  info(`Loaded tree on <code>n = ${n}</code>, ${edges.length} edges. Press <b>Step</b> / <b>Run</b>.`);
+  log(`loaded encode: n=${n}`, "op");
+}
+
+function loadDecode() {
+  const { code, n } = parseCode(els.codeInput.value);
+  if (n < 2) { info(`<span style="color:var(--red)">Code too short.</span>`); return; }
+  for (const x of code) {
+    if (x < 1 || x > n) {
+      info(`<span style="color:var(--red)">Value ${x} out of range 1..${n}.</span>`);
+      return;
+    }
+  }
+  resetModel();
+  state.n = n;
+  state.pos = layout(n);
+  state.code = code.slice();
+  state.total = code.length;
+  for (let v = 1; v <= n; v++) state.deg[v] = 1;
+  for (const x of code) state.deg[x]++;
+  els.treeTitle.textContent = "Reconstructed tree (connect smallest leaf to each entry)";
+  redraw();
+  info(`Loaded code <code>[${code.join(", ")}]</code> → n = ${n}. Press <b>Step</b> / <b>Run</b>.`);
+  log(`loaded decode: [${code.join(",")}]`, "op");
+}
+
+function load() {
+  state.mode === "encode" ? loadEncode() : loadDecode();
+}
+
+function example() {
+  if (state.mode === "encode") {
+    els.edgesInput.value = "1-4,2-4,4-6,5-3,3-6";
+  } else {
+    els.codeInput.value = "4,4,6,3";
+  }
+  load();
+}
+
+// ---------------- events ----------------
+document.getElementById("modePill").addEventListener("click", e => {
+  if (e.target.tagName !== "BUTTON") return;
+  document.querySelectorAll("#modePill button").forEach(b => b.classList.remove("active"));
+  e.target.classList.add("active");
+  state.mode = e.target.dataset.mode;
+  document.getElementById("encodeInput").style.display = state.mode === "encode" ? "flex" : "none";
+  document.getElementById("decodeInput").style.display = state.mode === "decode" ? "flex" : "none";
+  resetModel();
+  els.svg.innerHTML = "";
+  els.codeStrip.innerHTML = "";
+  els.degTable.innerHTML = "";
+  setStats();
+  info(`Switched to <b>${state.mode}</b> mode. Load an example.`);
+});
+
+document.getElementById("btnLoad").addEventListener("click", load);
+document.getElementById("btnExample").addEventListener("click", example);
+document.getElementById("btnStep").addEventListener("click", () => { state.paused = true; state.running = false; doStep(); });
+document.getElementById("btnRun").addEventListener("click", doRun);
+document.getElementById("btnPause").addEventListener("click", () => { state.paused = true; state.running = false; });
+document.getElementById("btnReset").addEventListener("click", () => {
+  const isEnc = state.mode === "encode";
+  resetModel();
+  isEnc ? loadEncode() : loadDecode();
+});
+document.getElementById("speed").addEventListener("input", e => { state.speedMs = +e.target.value; });
+
+// boot
+example();
+</script>
+</body>
+</html>
