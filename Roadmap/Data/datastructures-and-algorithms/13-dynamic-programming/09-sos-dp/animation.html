@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sum over Subsets DP — Dimension-by-Dimension Bit Relaxation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-src: rgba(210, 153, 34, 0.34);
+    --hi-dst: rgba(63, 185, 80, 0.40);
+    --hi-bit: rgba(88, 166, 255, 0.20);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid {
+    display: grid;
+    gap: 8px;
+  }
+  .cell {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    padding: 7px 6px 6px;
+    text-align: center;
+    font-family: var(--mono);
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+  }
+  .cell .mask {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .cell .val {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .cell.bitset { background: var(--hi-bit); }
+  .cell.src { border-color: var(--accent-2); background: var(--hi-src); }
+  .cell.dst { border-color: var(--good); background: var(--hi-dst); }
+  .cell.dst .val { color: #fff; }
+  .cell.bumped { transform: scale(1.06); }
+  .bitlabel {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    margin: 4px 0 10px;
+  }
+  .bitlabel b { color: var(--accent); }
+  .passrow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .pass {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .pass.active { border-color: var(--accent); color: #fff; box-shadow: 0 0 0 1px var(--accent) inset; }
+  .pass.done { border-color: var(--good); color: var(--good); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .interp .src { color: var(--accent-2); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sum over Subsets DP — Dimension-by-Dimension Bit Relaxation</h1>
+  <p>F[mask] = &Sigma; A[sub] over all submasks sub &sube; mask. Watch the SOS DP sweep one bit at a time: each mask with bit i set <b>pulls</b> the value of mask with bit i cleared.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>n =
+      <select id="nSel">
+        <option value="2">2 (4 masks)</option>
+        <option value="3" selected>3 (8 masks)</option>
+        <option value="4">4 (16 masks)</option>
+      </select>
+    </label>
+    <label>Direction:
+      <select id="dirSel">
+        <option value="subset" selected>subset (submask sum)</option>
+        <option value="superset">superset (superset sum)</option>
+      </select>
+    </label>
+    <label>Data:
+      <select id="dataSel">
+        <option value="ones" selected>all 1s</option>
+        <option value="ramp">A[mask] = mask+1</option>
+        <option value="single">indicator at full mask</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Bitmask grid &mdash; current array F</h2>
+      <div class="bitlabel" id="bitLabel">Pass for bit <b>0</b>.</div>
+      <div class="passrow" id="passRow"></div>
+      <div class="grid" id="gridArea"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-bit)"></span> bit i set</span>
+        <span><span class="swatch" style="background:var(--hi-src)"></span> source: mask without bit i</span>
+        <span><span class="swatch" style="background:var(--hi-dst)"></span> destination: mask += source</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>What is happening</h2>
+      <div class="interp" id="interpBox">
+        Each pass sweeps one bit dimension. A destination mask absorbs the value of its bit-cleared (or bit-set) neighbor.
+      </div>
+      <div class="step-counter" id="formula" style="margin-top:12px;"></div>
+      <div class="step-counter" id="checkBox" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We start with F = A, then sweep bits 0, 1, &hellip;, n&minus;1. After the last bit, every cell holds the full sum over its submasks.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Counting semiring (+); entries are exact subset sums (no modulus needed at these sizes).
+    Subset direction: mask with bit i set does <code>F[mask] += F[mask ^ (1&lt;&lt;i)]</code>. Superset direction: mask with bit i clear does <code>F[mask] += F[mask | (1&lt;&lt;i)]</code>.
+    See <code>junior.md</code> and <code>professional.md</code> for the induction proof that the bit sweep computes the zeta transform in O(n &middot; 2&#8319;).
+    <br /><br />
+    <b>How to read the grid.</b> Each cell is one mask, labelled with its bits (e.g. <code>011</code>) and its current value of <code>F[mask]</code>.
+    During a pass for bit <i>i</i>, cells that have bit <i>i</i> set (subset mode) or clear (superset mode) are tinted blue; the <span style="color:var(--accent-2)">amber</span> cell is the source being read and the <span style="color:var(--good)">green</span> cell is the destination being updated.
+    <br />
+    <b>Why the empty mask never changes.</b> Mask <code>000</code> has no bits set, so in the subset sweep it is never a destination &mdash; it keeps its original value <code>A[0]</code> throughout, and <code>A[0]</code> flows <i>into</i> every other cell.
+    <br />
+    <b>Try this.</b> Pick the "indicator at full mask" data and the subset direction: only the full mask starts at 1, and you will watch that 1 propagate down to all of its submasks &mdash; a direct picture of "which cells the full mask is a submask-summand of".
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Initial data builders ----------
+function buildData(n, kind) {
+  const size = 1 << n;
+  const A = new Array(size).fill(0);
+  for (let m = 0; m < size; m++) {
+    if (kind === "ones") A[m] = 1;
+    else if (kind === "ramp") A[m] = m + 1;
+    else if (kind === "single") A[m] = (m === size - 1) ? 1 : 0;
+  }
+  return A;
+}
+
+// ---------- Build the step plan ----------
+// Each step relaxes ONE (bit, mask) pair, in order: bit 0 over all masks, bit 1, ...
+// The first step is an "init" snapshot. The last is "done".
+function buildPlan(A, n, subset) {
+  const size = 1 << n;
+  const steps = [];
+  const F = A.slice();
+
+  steps.push({
+    type: "init",
+    F: F.slice(),
+    bit: -1, dst: -1, src: -1,
+    desc: "Start: F = A (a copy of the input). The empty mask never changes; F[0] = A[0]."
+  });
+
+  for (let i = 0; i < n; i++) {
+    const bit = 1 << i;
+    // announce the pass
+    steps.push({
+      type: "passStart",
+      F: F.slice(),
+      bit: i, dst: -1, src: -1,
+      desc: "Begin pass for bit " + i + " (value " + bit + "). " +
+        (subset
+          ? "Every mask with bit " + i + " SET pulls the value of the mask with bit " + i + " cleared."
+          : "Every mask with bit " + i + " CLEAR pulls the value of the mask with bit " + i + " set.")
+    });
+    for (let mask = 0; mask < size; mask++) {
+      const hasBit = (mask & bit) !== 0;
+      const active = subset ? hasBit : !hasBit;
+      if (!active) continue;
+      const src = subset ? (mask ^ bit) : (mask | bit);
+      const before = F[mask];
+      F[mask] = F[mask] + F[src];
+      steps.push({
+        type: "relax",
+        F: F.slice(),
+        bit: i, dst: mask, src: src,
+        before: before, added: F[src],
+        desc: "Bit " + i + ": F[" + bin(mask, n) + "] += F[" + bin(src, n) + "]  →  " +
+          before + " + " + (F[mask] - before) + " = " + F[mask] + "."
+      });
+    }
+    steps.push({
+      type: "passEnd",
+      F: F.slice(),
+      bit: i, dst: -1, src: -1,
+      desc: "Pass for bit " + i + " complete. Each cell now sums over submasks that differ only within bits 0.." + i + "."
+    });
+  }
+
+  steps.push({
+    type: "done",
+    F: F.slice(),
+    bit: -1, dst: -1, src: -1,
+    desc: subset
+      ? "Done. F[mask] = sum of A[sub] over ALL submasks sub ⊆ mask. F[full] = total of A."
+      : "Done. F[mask] = sum of A[sup] over ALL supersets sup ⊇ mask. F[0] = total of A."
+  });
+  return steps;
+}
+
+function bin(x, n) {
+  let s = "";
+  for (let i = n - 1; i >= 0; i--) s += ((x >> i) & 1);
+  return s;
+}
+
+// ---------- Rendering ----------
+function renderGrid(step) {
+  const grid = document.getElementById("gridArea");
+  const n = state.n;
+  const size = 1 << n;
+  // columns: choose a layout that fits
+  const cols = (n <= 2) ? 4 : (n === 3 ? 4 : 4);
+  grid.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+  grid.innerHTML = "";
+  const bit = step.bit;
+  for (let m = 0; m < size; m++) {
+    const div = document.createElement("div");
+    div.className = "cell";
+    if (bit >= 0 && ((m & (1 << bit)) !== 0)) {
+      // visually flag masks that have the current bit set
+      if (state.dir === "subset") div.classList.add("bitset");
+    }
+    if (bit >= 0 && state.dir === "superset" && ((m & (1 << bit)) === 0)) {
+      div.classList.add("bitset");
+    }
+    if (m === step.src) div.classList.add("src");
+    if (m === step.dst) { div.classList.add("dst"); div.classList.add("bumped"); }
+    div.innerHTML = "<div class='mask'>" + bin(m, n) + "</div>" +
+      "<div class='val'>" + step.F[m] + "</div>";
+    grid.appendChild(div);
+  }
+}
+
+function renderPasses(step) {
+  const row = document.getElementById("passRow");
+  row.innerHTML = "";
+  for (let i = 0; i < state.n; i++) {
+    const p = document.createElement("div");
+    p.className = "pass";
+    if (step.bit === i && step.type !== "done") p.classList.add("active");
+    if (step.bit > i || step.type === "done") p.classList.add("done");
+    p.textContent = "bit " + i;
+    row.appendChild(p);
+  }
+}
+
+function renderInterp(step) {
+  const n = state.n;
+  const interp = document.getElementById("interpBox");
+  if (step.type === "relax") {
+    interp.innerHTML =
+      "Destination <b>" + bin(step.dst, n) + "</b> absorbs source <span class='src'>" +
+      bin(step.src, n) + "</span>: it becomes <span class='val'>" + step.F[step.dst] +
+      "</span> (was " + step.before + ", added " + step.added + ").";
+  } else if (step.type === "passStart") {
+    interp.innerHTML = "Sweeping bit dimension <b>" + step.bit + "</b> across all masks.";
+  } else if (step.type === "passEnd") {
+    interp.innerHTML = "Bit <b>" + step.bit + "</b> dimension fully summed. Partial sums now span bits 0.." + step.bit + ".";
+  } else if (step.type === "done") {
+    const full = (1 << n) - 1;
+    const grand = step.F.reduce((a, b) => a + b, 0) - 0; // not used directly
+    interp.innerHTML = "Transform complete. " +
+      (state.dir === "subset"
+        ? "F[" + bin(full, n) + "] = <span class='val'>" + step.F[full] + "</span> is the grand total over all submasks."
+        : "F[" + bin(0, n) + "] = <span class='val'>" + step.F[0] + "</span> is the grand total over all supersets.");
+  } else {
+    interp.innerHTML = "F = A. Ready to sweep bit 0.";
+  }
+
+  // formula reminder
+  document.getElementById("formula").innerHTML = state.dir === "subset"
+    ? "<b>subset zeta:</b> for bit i, if (mask &amp; (1&lt;&lt;i)) → F[mask] += F[mask ^ (1&lt;&lt;i)]"
+    : "<b>superset zeta:</b> for bit i, if !(mask &amp; (1&lt;&lt;i)) → F[mask] += F[mask | (1&lt;&lt;i)]";
+
+  // sanity check line
+  if (step.type === "done") {
+    const sumA = state.A.reduce((a, b) => a + b, 0);
+    const full = (1 << n) - 1;
+    const check = state.dir === "subset"
+      ? (step.F[full] === sumA)
+      : (step.F[0] === sumA);
+    document.getElementById("checkBox").innerHTML =
+      "sanity: " + (state.dir === "subset" ? "F[full]" : "F[0]") +
+      " should equal Σ A = " + sumA + " → " +
+      (check ? "<span style='color:var(--good)'>OK ✓</span>" : "<span style='color:var(--bad)'>mismatch</span>");
+  } else {
+    document.getElementById("checkBox").textContent = "";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  n: 3,
+  dir: "subset",
+  dataKind: "ones",
+  A: [],
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function applyStep(step) {
+  renderGrid(step);
+  renderPasses(step);
+  renderInterp(step);
+  document.getElementById("bitLabel").innerHTML =
+    step.bit >= 0 ? "Pass for bit <b>" + step.bit + "</b>." : "All passes complete / not started.";
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.steps[idx];
+  applyStep(step);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 750);
+}
+
+function rebuild() {
+  const n = parseInt(document.getElementById("nSel").value, 10);
+  const dir = document.getElementById("dirSel").value;
+  const dataKind = document.getElementById("dataSel").value;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.n = n;
+  state.dir = dir;
+  state.dataKind = dataKind;
+  state.A = buildData(n, dataKind);
+  state.steps = buildPlan(state.A, n, dir === "subset");
+  state.stepIdx = 0;
+  gotoStep(0);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nSel").addEventListener("change", rebuild);
+document.getElementById("dirSel").addEventListener("change", rebuild);
+document.getElementById("dataSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
