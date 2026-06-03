@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Convex Hull Trick — Lower Envelope of Lines</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 86px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="range"] { width: 180px; }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .deque {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .linerow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+    transition: all 0.2s ease;
+  }
+  .linerow.kept { border-color: var(--good); }
+  .linerow.popped { border-color: var(--bad); opacity: 0.45; text-decoration: line-through; }
+  .linerow.incoming { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .linerow .sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+  .linerow .eq { color: var(--text); }
+  .linerow .tag { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .linerow.kept .tag { color: var(--good); }
+  .linerow.popped .tag { color: var(--bad); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Convex Hull Trick — Building the Lower Envelope of Lines</h1>
+  <p>A DP transition <b>dp[i] = min<sub>j</sub>(m<sub>j</sub>&middot;x + b<sub>j</sub>)</b> is a query against the <b>lower envelope</b>. Watch the deque add lines, pop the now-useless "bad middle" lines, and answer a query at x.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Play &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Lines:
+      <select id="setSel">
+        <option value="A">Set A (5 lines)</option>
+        <option value="B">Set B (with dominated lines)</option>
+        <option value="C">Set C (fan)</option>
+      </select>
+    </label>
+    <label>query x = <span id="qxVal" class="step-counter">2</span>
+      <input type="range" id="qx" min="-9" max="9" value="2" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Lines &amp; lower envelope</h2>
+      <svg id="plot" viewBox="0 0 460 360" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="interp" id="interpBox">
+        Reading the envelope at <b>x = q</b> gives the minimum line value.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--good)"></span> envelope (kept)</span>
+        <span><span class="swatch" style="background:var(--bad)"></span> popped / useless</span>
+        <span><span class="swatch" style="background:var(--accent)"></span> incoming line</span>
+        <span><span class="swatch" style="background:var(--accent-2)"></span> query x</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Deque of lines (slope order)</h2>
+      <div class="deque" id="deque"></div>
+      <div class="step-counter" id="testInfo" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We insert lines one at a time in decreasing-slope order, popping any middle line the bad-line test says is useless, then query the envelope at x.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Lower envelope = min over lines (MIN queries). The division-free bad-line test pops middle line L2 when
+    <code>(b3-b1)*(m1-m2) &le; (b2-b1)*(m1-m3)</code>. See <code>junior.md</code> and <code>professional.md</code> for the correctness proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Line sets (m, b), inserted in DECREASING slope order ----------
+const SETS = {
+  A: [
+    { m: 3, b: 9 },
+    { m: 1, b: 1 },
+    { m: 0, b: -1 },
+    { m: -1, b: 1 },
+    { m: -2, b: 6 }
+  ],
+  B: [
+    { m: 4, b: 8 },
+    { m: 3, b: 7 },   // likely dominated
+    { m: 1, b: 0 },
+    { m: 0, b: 2 },   // likely dominated
+    { m: -1, b: 0 },
+    { m: -3, b: 7 }
+  ],
+  C: [
+    { m: 2, b: 0 },
+    { m: 1, b: 1 },
+    { m: 0, b: 1.5 },
+    { m: -1, b: 1 },
+    { m: -2, b: 0 }
+  ]
+};
+
+const COLORS = ["#58a6ff", "#d29922", "#3fb950", "#db61a2", "#a371f7", "#f0883e", "#56d4dd"];
+
+// ---------- Plot geometry ----------
+const PLOT = { w: 460, h: 360, pad: 30, xmin: -9, xmax: 9, ymin: -10, ymax: 16 };
+
+function sx(x) {
+  return PLOT.pad + (x - PLOT.xmin) / (PLOT.xmax - PLOT.xmin) * (PLOT.w - 2 * PLOT.pad);
+}
+function sy(y) {
+  return PLOT.h - PLOT.pad - (y - PLOT.ymin) / (PLOT.ymax - PLOT.ymin) * (PLOT.h - 2 * PLOT.pad);
+}
+
+// ---------- Bad-line test (division free; slopes decreasing) ----------
+function bad(l1, l2, l3) {
+  // L2 useless given L1 (before, larger slope) and L3 (after, smaller slope)
+  return (l3.b - l1.b) * (l1.m - l2.m) <= (l2.b - l1.b) * (l1.m - l3.m);
+}
+
+// ---------- Build the step plan ----------
+// Steps replay the insertion of each line: an "incoming" step, zero or more "pop"
+// steps, then a "settle" step. Finally a "query" step.
+function buildPlan(lines, qx) {
+  const steps = [];
+  const deque = []; // {m,b,idx}
+  steps.push({
+    type: "init",
+    deque: deque.map(d => ({ ...d })),
+    incoming: null,
+    popped: [],
+    desc: "Start with an empty deque. We will insert lines in decreasing-slope order."
+  });
+
+  for (let i = 0; i < lines.length; i++) {
+    const inc = { ...lines[i], idx: i };
+    steps.push({
+      type: "incoming",
+      deque: deque.map(d => ({ ...d })),
+      incoming: { ...inc },
+      popped: [],
+      desc: "Incoming line L" + i + ": y = " + fmt(inc.m) + "x + " + fmt(inc.b) +
+            ". Check whether the current back line becomes a useless middle line."
+    });
+    const poppedNow = [];
+    while (deque.length >= 2 &&
+           bad(deque[deque.length - 2], deque[deque.length - 1], inc)) {
+      const dead = deque.pop();
+      poppedNow.push({ ...dead });
+      steps.push({
+        type: "pop",
+        deque: deque.map(d => ({ ...d })),
+        incoming: { ...inc },
+        popped: poppedNow.map(d => ({ ...d })),
+        deadIdx: dead.idx,
+        desc: "Bad-line test fires: L" + dead.idx + " is never the minimum anywhere — pop it."
+      });
+    }
+    deque.push(inc);
+    steps.push({
+      type: "settle",
+      deque: deque.map(d => ({ ...d })),
+      incoming: null,
+      popped: poppedNow.map(d => ({ ...d })),
+      justAdded: i,
+      desc: "Push L" + i + " onto the deque. The envelope now reflects all lines inserted so far."
+    });
+  }
+
+  // query step
+  steps.push({
+    type: "query",
+    deque: deque.map(d => ({ ...d })),
+    incoming: null,
+    popped: [],
+    qx: qx,
+    desc: "Query at x = " + qx + ": read the lowest line at that x. That value is the envelope minimum."
+  });
+  return { steps, finalDeque: deque.map(d => ({ ...d })) };
+}
+
+function fmt(v) {
+  if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+  return String(v);
+}
+
+// ---------- Render the plot ----------
+function renderPlot(step, lines, qx) {
+  const svg = document.getElementById("plot");
+  let parts = [];
+
+  // axes
+  parts.push(axisLine(sx(PLOT.xmin), sy(0), sx(PLOT.xmax), sy(0)));
+  parts.push(axisLine(sx(0), sy(PLOT.ymin), sx(0), sy(PLOT.ymax)));
+  for (let gx = PLOT.xmin; gx <= PLOT.xmax; gx += 3) {
+    parts.push(`<line x1="${sx(gx)}" y1="${PLOT.pad}" x2="${sx(gx)}" y2="${PLOT.h - PLOT.pad}" stroke="#1c2330" stroke-width="1"/>`);
+    parts.push(`<text x="${sx(gx)}" y="${sy(0) + 14}" fill="#8b949e" font-size="10" text-anchor="middle" font-family="monospace">${gx}</text>`);
+  }
+
+  const keptIdx = new Set(step.deque.map(d => d.idx));
+  const poppedIdx = new Set(step.popped.map(d => d.idx));
+
+  // each line as a segment across the plot
+  for (let i = 0; i < lines.length; i++) {
+    // only draw lines already introduced
+    const introduced = step.deque.some(d => d.idx === i) ||
+      (step.incoming && step.incoming.idx === i) ||
+      step.popped.some(d => d.idx === i) ||
+      (step.type === "query" || step.type === "settle") && i <= maxIntroduced(step);
+    if (!introduced) continue;
+    const l = lines[i];
+    const x1 = PLOT.xmin, x2 = PLOT.xmax;
+    const y1 = l.m * x1 + l.b, y2 = l.m * x2 + l.b;
+    let color = COLORS[i % COLORS.length];
+    let width = 1.6, dash = "", opacity = 0.5;
+    if (keptIdx.has(i)) { color = "#3fb950"; width = 2.2; opacity = 0.95; }
+    if (poppedIdx.has(i)) { color = "#f85149"; dash = "4 3"; opacity = 0.5; }
+    if (step.incoming && step.incoming.idx === i) { color = "#58a6ff"; width = 2.6; opacity = 1; }
+    parts.push(`<line x1="${sx(x1)}" y1="${sy(y1)}" x2="${sx(x2)}" y2="${sy(y2)}" stroke="${color}" stroke-width="${width}" stroke-dasharray="${dash}" opacity="${opacity}"/>`);
+    // label near right edge
+    parts.push(`<text x="${sx(x2) - 4}" y="${sy(y2) - 3}" fill="${color}" font-size="10" text-anchor="end" font-family="monospace" opacity="${opacity}">L${i}</text>`);
+  }
+
+  // envelope polyline (over kept lines)
+  if (step.deque.length > 0) {
+    const env = [];
+    for (let px = PLOT.xmin; px <= PLOT.xmax; px += 0.25) {
+      let best = Infinity;
+      for (const d of step.deque) best = Math.min(best, d.m * px + d.b);
+      env.push(`${sx(px)},${sy(best)}`);
+    }
+    parts.push(`<polyline points="${env.join(" ")}" fill="none" stroke="#3fb950" stroke-width="3.2" opacity="0.9"/>`);
+  }
+
+  // query marker
+  if (step.type === "query") {
+    let best = Infinity, bestIdx = -1;
+    for (const d of step.deque) {
+      const v = d.m * qx + d.b;
+      if (v < best) { best = v; bestIdx = d.idx; }
+    }
+    parts.push(`<line x1="${sx(qx)}" y1="${PLOT.pad}" x2="${sx(qx)}" y2="${PLOT.h - PLOT.pad}" stroke="#d29922" stroke-width="1.6" stroke-dasharray="5 4"/>`);
+    parts.push(`<circle cx="${sx(qx)}" cy="${sy(best)}" r="6" fill="#d29922" stroke="#fff" stroke-width="1.5"/>`);
+    parts.push(`<text x="${sx(qx) + 8}" y="${sy(best) - 8}" fill="#d29922" font-size="11" font-family="monospace">min=${fmt(best)} (L${bestIdx})</text>`);
+  }
+
+  svg.innerHTML = parts.join("");
+}
+
+function maxIntroduced(step) {
+  let mx = -1;
+  for (const d of step.deque) mx = Math.max(mx, d.idx);
+  for (const d of step.popped) mx = Math.max(mx, d.idx);
+  if (step.incoming) mx = Math.max(mx, step.incoming.idx);
+  if (step.type === "settle" && step.justAdded != null) mx = Math.max(mx, step.justAdded);
+  return mx;
+}
+
+function axisLine(x1, y1, x2, y2) {
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#30363d" stroke-width="1.5"/>`;
+}
+
+// ---------- Render the deque ----------
+function renderDeque(step, lines) {
+  const el = document.getElementById("deque");
+  let html = "";
+  // kept lines
+  for (const d of step.deque) {
+    const color = "#3fb950";
+    html += `<div class="linerow kept">
+      <span class="sw" style="background:${COLORS[d.idx % COLORS.length]}"></span>
+      <span class="eq">L${d.idx}: y = ${fmt(d.m)}x + ${fmt(d.b)}</span>
+      <span class="tag">on envelope</span></div>`;
+  }
+  // popped (this insertion)
+  for (const d of step.popped) {
+    html += `<div class="linerow popped">
+      <span class="sw" style="background:${COLORS[d.idx % COLORS.length]}"></span>
+      <span class="eq">L${d.idx}: y = ${fmt(d.m)}x + ${fmt(d.b)}</span>
+      <span class="tag">popped (useless)</span></div>`;
+  }
+  // incoming
+  if (step.incoming) {
+    const d = step.incoming;
+    html += `<div class="linerow incoming">
+      <span class="sw" style="background:${COLORS[d.idx % COLORS.length]}"></span>
+      <span class="eq">L${d.idx}: y = ${fmt(d.m)}x + ${fmt(d.b)}</span>
+      <span class="tag">incoming</span></div>`;
+  }
+  if (html === "") html = `<div class="linerow"><span class="eq">(empty deque)</span></div>`;
+  el.innerHTML = html;
+
+  // test info
+  const ti = document.getElementById("testInfo");
+  if (step.type === "incoming" || step.type === "pop") {
+    if (step.deque.length >= 2 && step.incoming) {
+      const l1 = step.deque[step.deque.length - 2];
+      const l2 = step.deque[step.deque.length - 1];
+      const l3 = step.incoming;
+      const lhs = (l3.b - l1.b) * (l1.m - l2.m);
+      const rhs = (l2.b - l1.b) * (l1.m - l3.m);
+      const fires = lhs <= rhs;
+      ti.innerHTML = `bad-line test on (L${l1.idx}, L${l2.idx}, L${l3.idx}): ` +
+        `${fmt(lhs)} ${fires ? "&le;" : "&gt;"} ${fmt(rhs)} &rarr; ` +
+        (fires ? "<span style='color:var(--bad)'>pop L" + l2.idx + "</span>"
+               : "<span style='color:var(--good)'>keep L" + l2.idx + "</span>");
+    } else {
+      ti.innerHTML = "Fewer than two lines on the deque — no middle to test; just push.";
+    }
+  } else {
+    ti.innerHTML = "";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  setKey: "A",
+  qx: 2,
+  lines: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load() {
+  state.lines = SETS[state.setKey];
+  state.plan = buildPlan(state.lines, state.qx);
+  state.stepIdx = 0;
+  applyStep();
+}
+
+function applyStep() {
+  const step = state.plan.steps[state.stepIdx];
+  renderPlot(step, state.lines, state.qx);
+  renderDeque(step, state.lines);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1);
+
+  // interp box
+  const ib = document.getElementById("interpBox");
+  if (step.type === "query") {
+    let best = Infinity, bestIdx = -1;
+    for (const d of step.deque) {
+      const v = d.m * state.qx + d.b;
+      if (v < best) { best = v; bestIdx = d.idx; }
+    }
+    ib.innerHTML = "Envelope at <b>x = " + state.qx + "</b> = <span class='val'>" + fmt(best) +
+      "</span> &mdash; achieved by line <b>L" + bestIdx + "</b> (the lowest line at this x).";
+  } else {
+    ib.innerHTML = "Insert lines in decreasing-slope order; the <b>green</b> curve is the current lower envelope. Reach the <b>query</b> step to read min at x.";
+  }
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause &#9208;" : "Play &#9654;&#9654;";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1200);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.setKey = document.getElementById("setSel").value;
+  state.qx = parseInt(document.getElementById("qx").value, 10);
+  document.getElementById("qxVal").textContent = state.qx;
+  load();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("setSel").addEventListener("change", rebuild);
+document.getElementById("qx").addEventListener("input", () => {
+  document.getElementById("qxVal").textContent = document.getElementById("qx").value;
+});
+document.getElementById("qx").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
