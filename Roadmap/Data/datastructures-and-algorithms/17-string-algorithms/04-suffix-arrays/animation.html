@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Suffix Arrays — Prefix-Doubling Construction & LCP</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 180px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table.grid {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+  }
+  table.grid td, table.grid th {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  table.grid th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  table.grid td.idx { color: var(--muted); }
+  table.grid td.suffix { text-align: left; color: var(--text); letter-spacing: 1px; }
+  table.grid tr.active td { background: var(--hi-row); }
+  table.grid td.pair { color: var(--accent-2); }
+  table.grid td.rankcol { color: var(--good); font-weight: 700; }
+  table.grid td.lcpcol { color: var(--accent); font-weight: 700; }
+  .prefixHi { color: #fff; background: var(--hi-cell); border-radius: 3px; padding: 0 2px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .kbadge {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent-2);
+    font-weight: 700;
+  }
+  .result {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .result b { color: var(--accent); }
+  .result .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Suffix Arrays — Prefix-Doubling Construction &amp; the LCP Array</h1>
+  <p>Sort all suffixes by their first 1, 2, 4, &hellip; characters using rank pairs (rank[i], rank[i+k]). Watch the order refine each round, then read off SA and the Kasai LCP array.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>String:
+      <input type="text" id="strInput" value="banana" maxlength="16" />
+    </label>
+    <span class="kbadge" id="kBadge">k = 1</span>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Suffixes sorted by first <span id="kSpan">1</span> char(s)</h2>
+      <table class="grid" id="suffixTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-row)"></span> current sort key</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> compared prefix (2^t chars)</span>
+        <span><span class="swatch" style="background:var(--panel-2)"></span> header</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Final Suffix Array &amp; LCP</h2>
+      <table class="grid" id="resultTable"></table>
+      <div class="result" id="resultBox">
+        Press <b>Step</b> to begin building the suffix array by prefix doubling.
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We sort suffixes by their first character, then double the compared length each round, sorting by the pair (rank of first k chars, rank of next k chars). When every rank is distinct, the order is the suffix array.</div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>How prefix doubling works</h2>
+    <div class="result" style="margin-top:0;">
+      Round <b>k</b> sorts suffixes by the pair <b>(rank[i], rank[i+k])</b>.<br>
+      &bull; The first component encodes the order by the first <b>k</b> characters.<br>
+      &bull; The second component encodes the next <b>k</b> characters (via suffix i+k's rank).<br>
+      &bull; Together the pair orders by the first <b>2k</b> characters &mdash; in O(1) per comparison, because we compare <b>ranks</b>, never re-scan the string.<br>
+      After each round, ranks are recomputed (equal pairs share a rank) and <b>k</b> doubles: 1 &rarr; 2 &rarr; 4 &rarr; &hellip;
+      Once all ranks are distinct, the order is final. With a comparison sort this is O(n log&sup2; n); with a radix sort on the integer pairs, O(n log n).
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>What SA + LCP unlock</h2>
+    <div class="result" style="margin-top:0;">
+      &bull; <b>Pattern search</b>: two binary searches bracket the contiguous occurrence range &mdash; O(m log n).<br>
+      &bull; <b>Distinct substrings</b>: n(n+1)/2 &minus; &Sigma; LCP, in O(n) once SA and LCP exist.<br>
+      &bull; <b>Longest repeated substring</b>: the maximum entry of the LCP array.<br>
+      &bull; <b>Longest common substring of two strings</b>: build SA + LCP of A # B, take the max LCP over adjacent suffixes from opposite sides of the separator.<br>
+      &bull; <b>BWT / FM-index</b>: BWT[i] = s[SA[i]-1], the spine of compressed full-text search.
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--good)"></span> rank columns</span>
+      <span><span class="swatch" style="background:var(--accent-2)"></span> rank pair (sort key)</span>
+      <span><span class="swatch" style="background:var(--accent)"></span> LCP column</span>
+    </div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Construction is prefix doubling (O(n log&sup2; n) here; O(n log n) with a radix sort).
+    The LCP array is filled by Kasai's O(n) algorithm. Distinct substrings = n(n+1)/2 &minus; &Sigma; LCP.
+    Edit the string above (lowercase letters, up to 16 chars) and press Reset to rebuild. See <code>junior.md</code>, <code>middle.md</code>, and <code>professional.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the full step plan for prefix doubling ----------
+// Each step records: the current k, the rank of each suffix, the pair used,
+// the sorted order (sa), and a narration string. The final steps add LCP.
+
+function clamp(s) {
+  // keep only lowercase letters; fall back to "banana"
+  const t = (s || "").toLowerCase().replace(/[^a-z]/g, "");
+  return t.length ? t.slice(0, 16) : "banana";
+}
+
+function computeRankAfterSort(sa, keyOf) {
+  const n = sa.length;
+  const rank = new Array(n).fill(0);
+  rank[sa[0]] = 0;
+  for (let i = 1; i < n; i++) {
+    const a = keyOf(sa[i - 1]);
+    const b = keyOf(sa[i]);
+    rank[sa[i]] = rank[sa[i - 1]] + (a[0] !== b[0] || a[1] !== b[1] ? 1 : 0);
+  }
+  return rank;
+}
+
+function buildPlan(s) {
+  const n = s.length;
+  const steps = [];
+  let rank = new Array(n);
+  for (let i = 0; i < n; i++) rank[i] = s.charCodeAt(i) - 97; // a->0
+  let sa = Array.from({ length: n }, (_, i) => i);
+
+  // Round 0: sort by single character (k = 1)
+  let k = 1;
+  // initial state before any sort
+  steps.push({
+    type: "init",
+    k: 1,
+    rank: rank.slice(),
+    sa: sa.slice(),
+    pairOf: (i) => [rank[i], -1],
+    prefixLen: 1,
+    desc: "Initial ranks come from the first character of each suffix (a=0, b=1, ...). We will sort by these single-character ranks first."
+  });
+
+  while (true) {
+    const curRank = rank.slice();
+    const second = (i) => (i + k < n ? curRank[i + k] : -1);
+    const keyOf = (i) => [curRank[i], second(i)];
+    // sort by the pair (rank[i], rank[i+k])
+    sa = sa.slice().sort((a, b) => {
+      const ka = keyOf(a), kb = keyOf(b);
+      if (ka[0] !== kb[0]) return ka[0] - kb[0];
+      return ka[1] - kb[1];
+    });
+    steps.push({
+      type: "sort",
+      k: k,
+      rank: curRank,
+      sa: sa.slice(),
+      pairOf: keyOf,
+      prefixLen: Math.min(2 * k, n),
+      desc: "Round k=" + k + ": sort suffixes by the pair (rank of first " + k +
+        " char(s), rank of next " + k + "). This orders them by their first " +
+        Math.min(2 * k, n) + " characters."
+    });
+    // recompute ranks
+    const newRank = computeRankAfterSort(sa, keyOf);
+    rank = newRank;
+    steps.push({
+      type: "rerank",
+      k: k,
+      rank: rank.slice(),
+      sa: sa.slice(),
+      pairOf: keyOf,
+      prefixLen: Math.min(2 * k, n),
+      desc: "Recompute ranks from the new order: adjacent suffixes with an equal pair share a rank; otherwise the rank increases. These ranks feed the next round."
+    });
+    if (rank[sa[n - 1]] === n - 1 || k >= n) break;
+    k <<= 1;
+  }
+
+  // Final SA known. Build rank inverse and LCP via Kasai.
+  const finalSA = sa.slice();
+  const invRank = new Array(n);
+  for (let r = 0; r < n; r++) invRank[finalSA[r]] = r;
+  const lcp = new Array(n).fill(0);
+  let h = 0;
+  for (let i = 0; i < n; i++) {
+    if (invRank[i] > 0) {
+      const j = finalSA[invRank[i] - 1];
+      while (i + h < n && j + h < n && s[i + h] === s[j + h]) h++;
+      lcp[invRank[i]] = h;
+      if (h > 0) h--;
+    } else {
+      h = 0;
+    }
+  }
+  steps.push({
+    type: "lcp",
+    k: k,
+    rank: rank.slice(),
+    sa: finalSA.slice(),
+    pairOf: (i) => [rank[i], -1],
+    prefixLen: 0,
+    lcp: lcp.slice(),
+    desc: "Suffix array complete. Kasai's algorithm fills the LCP array in O(n): LCP[r] is the overlap of adjacent sorted suffixes; the running length drops by at most 1 per position."
+  });
+
+  const total = (n * (n + 1)) / 2;
+  let sumLcp = 0;
+  for (const v of lcp) sumLcp += v;
+  steps.push({
+    type: "done",
+    k: k,
+    rank: rank.slice(),
+    sa: finalSA.slice(),
+    pairOf: (i) => [rank[i], -1],
+    prefixLen: 0,
+    lcp: lcp.slice(),
+    distinct: total - sumLcp,
+    desc: "Done. SA and LCP are ready. Distinct substrings = n(n+1)/2 - sum(LCP) = " +
+      total + " - " + sumLcp + " = " + (total - sumLcp) + "."
+  });
+
+  return { steps, finalSA, lcp };
+}
+
+// ---------- Rendering ----------
+function renderSuffixTable(step, s) {
+  const n = s.length;
+  const table = document.getElementById("suffixTable");
+  // rows in current sorted order
+  let html = "<tr><th>rank</th><th>idx</th><th>suffix</th><th>rank[i]</th><th>(rank, next)</th></tr>";
+  for (let r = 0; r < n; r++) {
+    const i = step.sa[r];
+    const suf = s.slice(i);
+    const pl = step.prefixLen;
+    let shown = "";
+    for (let c = 0; c < suf.length; c++) {
+      if (c < pl) shown += "<span class='prefixHi'>" + suf[c] + "</span>";
+      else shown += suf[c];
+    }
+    const pair = step.pairOf(i);
+    const pairTxt = "(" + pair[0] + ", " + (pair[1] < 0 ? "&minus;" : pair[1]) + ")";
+    const rowCls = (step.type === "sort" || step.type === "rerank") ? "active" : "";
+    html += "<tr class='" + rowCls + "'>" +
+      "<td class='rankcol'>" + r + "</td>" +
+      "<td class='idx'>" + i + "</td>" +
+      "<td class='suffix'>" + shown + "</td>" +
+      "<td class='rankcol'>" + step.rank[i] + "</td>" +
+      "<td class='pair'>" + pairTxt + "</td>" +
+      "</tr>";
+  }
+  table.innerHTML = html;
+  document.getElementById("kSpan").textContent = step.prefixLen || 1;
+}
+
+function renderResultTable(step, s) {
+  const n = s.length;
+  const table = document.getElementById("resultTable");
+  const haveLcp = step.lcp != null;
+  let html = "<tr><th>rank</th><th>SA[rank]</th><th>suffix</th>" +
+    (haveLcp ? "<th>LCP</th>" : "") + "</tr>";
+  for (let r = 0; r < n; r++) {
+    const i = step.sa[r];
+    html += "<tr>" +
+      "<td class='rankcol'>" + r + "</td>" +
+      "<td class='idx'>" + i + "</td>" +
+      "<td class='suffix'>" + s.slice(i) + "</td>" +
+      (haveLcp ? "<td class='lcpcol'>" + step.lcp[r] + "</td>" : "") +
+      "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function describePhase(step) {
+  // a short human-readable phase label for the current step
+  switch (step.type) {
+    case "init": return "initial single-character ranks";
+    case "sort": return "sorting by rank pairs (k = " + step.k + ")";
+    case "rerank": return "recomputing ranks after the sort";
+    case "lcp": return "filling LCP with Kasai";
+    case "done": return "complete: SA + LCP ready";
+    default: return "";
+  }
+}
+
+function renderResultBox(step) {
+  const box = document.getElementById("resultBox");
+  if (step.type === "done") {
+    box.innerHTML = "<b>SA</b> = [" + step.sa.join(", ") + "]<br>" +
+      "<b>LCP</b> = [" + step.lcp.join(", ") + "]<br>" +
+      "distinct substrings = <span class='val'>" + step.distinct + "</span>";
+  } else if (step.type === "lcp") {
+    box.innerHTML = "<b>SA</b> = [" + step.sa.join(", ") + "]<br>" +
+      "Filling <b>LCP</b> with Kasai (overlap of adjacent sorted suffixes).";
+  } else {
+    box.innerHTML = "Sorting in progress &mdash; current order shown left. " +
+      "Suffix array forms once every rank is distinct.";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  s: "banana",
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load(s) {
+  state.s = clamp(s);
+  document.getElementById("strInput").value = state.s;
+  state.plan = buildPlan(state.s);
+  state.stepIdx = 0;
+  applyStep();
+}
+
+function applyStep() {
+  const step = state.plan.steps[state.stepIdx];
+  renderSuffixTable(step, state.s);
+  renderResultTable(step, state.s);
+  renderResultBox(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("kBadge").textContent = "k = " + step.k;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1) +
+    " — " + describePhase(step);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    state.stepIdx = 0;
+    applyStep();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1300);
+}
+
+function reset() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+  }
+  load(document.getElementById("strInput").value);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+  }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", reset);
+document.getElementById("strInput").addEventListener("change", reset);
+
+// ---------- Initial load ----------
+load("banana");
+</script>
+</body>
+</html>
