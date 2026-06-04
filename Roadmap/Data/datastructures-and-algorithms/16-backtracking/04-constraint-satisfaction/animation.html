@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Constraint Satisfaction — Backtracking on Map Coloring</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --col-R: #f85149;
+    --col-G: #3fb950;
+    --col-B: #58a6ff;
+    --hi: rgba(88, 166, 255, 0.22);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+  .domains { display: flex; flex-direction: column; gap: 8px; }
+  .drow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+    transition: all 0.2s ease;
+  }
+  .drow.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .drow.assigned { border-color: var(--good); }
+  .drow.wipeout { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+  .drow .vname { min-width: 38px; font-weight: 700; color: var(--accent-2); }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 24px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    font-weight: 700;
+    color: #0d1117;
+    transition: all 0.2s ease;
+  }
+  .chip.R { background: var(--col-R); }
+  .chip.G { background: var(--col-G); }
+  .chip.B { background: var(--col-B); }
+  .chip.gone { background: transparent; color: var(--muted); border-style: dashed; opacity: 0.4; text-decoration: line-through; }
+  .chip.chosen { outline: 2px solid #fff; }
+  .tag { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.bad { border-left-color: var(--bad); }
+  .narrate.good { border-left-color: var(--good); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stat { font-family: var(--mono); font-size: 13px; color: var(--text); margin-top: 10px; }
+  .stat b { color: var(--accent); }
+  circle.region { stroke-width: 2; transition: fill 0.25s ease, stroke 0.2s ease; }
+  text.rlabel { fill: #fff; font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  line.border { stroke: var(--muted); stroke-width: 2; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Constraint Satisfaction — Backtracking + MRV + Forward Checking</h1>
+  <p>Color the map so adjacent regions differ. Pick the most-constrained region (MRV), try a color, forward-check (shrink neighbor domains), and backtrack on a wipeout.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnPlay">Play &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Map:
+      <select id="mapSel">
+        <option value="aus">Australia (7 regions)</option>
+        <option value="diamond">Diamond (4 regions)</option>
+        <option value="k4">K4 — needs 4 colors (4 regions, 3 colors = fail)</option>
+      </select>
+    </label>
+    <label>Speed
+      <input type="range" id="speed" min="200" max="1600" value="900" step="100" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Map (regions &amp; borders)</h2>
+      <svg id="mapSvg" width="380" height="320" viewBox="0 0 380 320"></svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--col-R)"></span> R</span>
+        <span><span class="swatch" style="background:var(--col-G)"></span> G</span>
+        <span><span class="swatch" style="background:var(--col-B)"></span> B</span>
+        <span><span class="swatch" style="background:var(--panel-2)"></span> unassigned</span>
+      </div>
+      <div class="stat" id="statBox">nodes explored: <b>0</b> &middot; backtracks: <b>0</b></div>
+    </div>
+
+    <div class="card">
+      <h2>Domains (legal colors remaining)</h2>
+      <div class="domains" id="domains"></div>
+      <div class="stat" id="mrvBox"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We use MRV to pick the region with the fewest legal colors, try a color, then forward-check to shrink neighbors' domains.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Constraint: adjacent regions get different colors (a binary <code>&ne;</code> CSP).
+    <b>MRV</b> = pick the variable with the fewest remaining values (fail-first). <b>Forward checking</b> = remove the chosen color from unassigned neighbors; an empty domain (<span style="color:var(--bad)">wipeout</span>) forces a <b>backtrack</b>. See <code>junior.md</code> and <code>middle.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Map definitions ----------
+const MAPS = {
+  aus: {
+    regions: ["WA", "NT", "SA", "Q", "NSW", "V", "T"],
+    pos: {
+      WA: [70, 150], NT: [150, 90], SA: [170, 190],
+      Q: [250, 100], NSW: [280, 190], V: [240, 250], T: [250, 300]
+    },
+    adj: {
+      WA: ["NT", "SA"], NT: ["WA", "SA", "Q"],
+      SA: ["WA", "NT", "Q", "NSW", "V"], Q: ["NT", "SA", "NSW"],
+      NSW: ["SA", "Q", "V"], V: ["SA", "NSW"], T: []
+    },
+    colors: ["R", "G", "B"]
+  },
+  diamond: {
+    regions: ["A", "B", "C", "D"],
+    pos: { A: [190, 60], B: [90, 170], C: [290, 170], D: [190, 280] },
+    adj: { A: ["B", "C"], B: ["A", "C", "D"], C: ["A", "B", "D"], D: ["B", "C"] },
+    colors: ["R", "G", "B"]
+  },
+  k4: {
+    regions: ["A", "B", "C", "D"],
+    pos: { A: [120, 90], B: [260, 90], C: [120, 230], D: [260, 230] },
+    adj: {
+      A: ["B", "C", "D"], B: ["A", "C", "D"],
+      C: ["A", "B", "D"], D: ["A", "B", "C"]
+    },
+    colors: ["R", "G", "B"] // only 3 colors but K4 needs 4 -> demonstrates failure/backtracking
+  }
+};
+
+// ---------- Build the step plan by simulating backtracking + MRV + forward checking ----------
+function buildPlan(map) {
+  const steps = [];
+  const regions = map.regions;
+  const adj = map.adj;
+  const colors = map.colors;
+
+  // domains: region -> array of colors
+  let domains = {};
+  regions.forEach(r => domains[r] = colors.slice());
+  let assign = {};
+  let nodes = 0, backtracks = 0;
+
+  function snapshot(extra) {
+    const dcopy = {};
+    Object.keys(domains).forEach(k => dcopy[k] = domains[k].slice());
+    return Object.assign({
+      domains: dcopy,
+      assign: Object.assign({}, assign),
+      nodes, backtracks
+    }, extra);
+  }
+
+  function selectMRV() {
+    let best = null, bestN = Infinity, bestDeg = -1;
+    for (const r of regions) {
+      if (r in assign) continue;
+      const n = domains[r].length;
+      // degree among unassigned (tie-break)
+      let deg = 0;
+      for (const nb of adj[r]) if (!(nb in assign)) deg++;
+      if (n < bestN || (n === bestN && deg > bestDeg)) {
+        best = r; bestN = n; bestDeg = deg;
+      }
+    }
+    return best;
+  }
+
+  function consistent(r, color) {
+    for (const nb of adj[r]) {
+      if (assign[nb] === color) return false;
+    }
+    return true;
+  }
+
+  let solved = false;
+
+  function bt() {
+    if (Object.keys(assign).length === regions.length) {
+      steps.push(snapshot({
+        type: "solved",
+        current: null, tryColor: null,
+        desc: "All regions assigned and consistent — a valid coloring! Search complete."
+      }));
+      solved = true;
+      return true;
+    }
+    const v = selectMRV();
+    nodes++;
+    steps.push(snapshot({
+      type: "select", current: v, tryColor: null,
+      desc: "MRV picks <b>" + v + "</b> — it has " + domains[v].length +
+            " legal color" + (domains[v].length === 1 ? "" : "s") +
+            " left (most constrained / fail-first)."
+    }));
+
+    for (const color of domains[v].slice()) {
+      if (!consistent(v, color)) {
+        steps.push(snapshot({
+          type: "skip", current: v, tryColor: color,
+          desc: "Trying <b>" + v + " = " + color + "</b> conflicts with an assigned neighbor — skip."
+        }));
+        continue;
+      }
+      // assign
+      assign[v] = color;
+      steps.push(snapshot({
+        type: "assign", current: v, tryColor: color,
+        desc: "Assign <b>" + v + " = " + color + "</b> (consistent so far). Now forward-check its neighbors."
+      }));
+
+      // forward check
+      const pruned = {};
+      let wipeout = null;
+      for (const nb of adj[v]) {
+        if (nb in assign) continue;
+        if (domains[nb].includes(color)) {
+          domains[nb] = domains[nb].filter(c => c !== color);
+          pruned[nb] = color;
+          if (domains[nb].length === 0) wipeout = nb;
+        }
+      }
+      steps.push(snapshot({
+        type: wipeout ? "wipeout" : "forward",
+        current: v, tryColor: color, wipeRegion: wipeout,
+        desc: wipeout
+          ? "Forward checking emptied <b>" + wipeout + "</b>'s domain — a <span style='color:var(--bad)'>wipeout</span>! This path is doomed; backtrack."
+          : "Forward checking removed <b>" + color + "</b> from unassigned neighbors. No wipeout — recurse deeper."
+      }));
+
+      if (!wipeout) {
+        if (bt()) return true;
+      }
+
+      // undo forward check + assignment (backtrack)
+      for (const nb in pruned) {
+        domains[nb].push(pruned[nb]);
+      }
+      delete assign[v];
+      backtracks++;
+      steps.push(snapshot({
+        type: "backtrack", current: v, tryColor: color,
+        desc: "Backtrack: undo <b>" + v + " = " + color +
+              "</b> and restore neighbors' domains. Try " + v + "'s next color."
+      }));
+    }
+    return false;
+  }
+
+  // init step
+  steps.push(snapshot({
+    type: "init", current: null, tryColor: null,
+    desc: "Start: every region's domain is {R, G, B}; nothing assigned yet."
+  }));
+  bt();
+  if (!solved) {
+    steps.push(snapshot({
+      type: "fail", current: null, tryColor: null,
+      desc: "Exhausted all options without a valid coloring — this map is NOT colorable with these colors."
+    }));
+  }
+  return steps;
+}
+
+// ---------- Rendering ----------
+const COLOR_VAR = { R: "var(--col-R)", G: "var(--col-G)", B: "var(--col-B)" };
+
+function renderMap(map, step) {
+  const svg = document.getElementById("mapSvg");
+  svg.innerHTML = "";
+  const adj = map.adj, pos = map.pos;
+  const drawn = new Set();
+  // borders
+  for (const r of map.regions) {
+    for (const nb of adj[r]) {
+      const key = [r, nb].sort().join("-");
+      if (drawn.has(key)) continue;
+      drawn.add(key);
+      const [x1, y1] = pos[r], [x2, y2] = pos[nb];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+      line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+      line.setAttribute("class", "border");
+      svg.appendChild(line);
+    }
+  }
+  // regions
+  for (const r of map.regions) {
+    const [x, y] = pos[r];
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 22);
+    c.setAttribute("class", "region");
+    const assigned = step.assign[r];
+    c.setAttribute("fill", assigned ? COLOR_VAR[assigned] : "var(--panel-2)");
+    let stroke = "var(--border)";
+    if (r === step.current) stroke = "var(--accent)";
+    if (step.wipeRegion === r) stroke = "var(--bad)";
+    c.setAttribute("stroke", stroke);
+    if (r === step.current || step.wipeRegion === r) c.setAttribute("stroke-width", "4");
+    svg.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "rlabel");
+    t.textContent = r;
+    svg.appendChild(t);
+  }
+}
+
+function renderDomains(map, step) {
+  const box = document.getElementById("domains");
+  box.innerHTML = "";
+  for (const r of map.regions) {
+    const row = document.createElement("div");
+    row.className = "drow";
+    if (r === step.current) row.classList.add("current");
+    if (r in step.assign) row.classList.add("assigned");
+    if (step.wipeRegion === r) { row.classList.add("wipeout"); row.classList.remove("current"); }
+
+    const name = document.createElement("span");
+    name.className = "vname";
+    name.textContent = r;
+    row.appendChild(name);
+
+    const dom = step.domains[r];
+    for (const col of map.colors) {
+      const chip = document.createElement("span");
+      const present = dom.includes(col);
+      chip.className = "chip " + col + (present ? "" : " gone");
+      if (step.assign[r] === col) chip.classList.add("chosen");
+      if (r === step.current && step.tryColor === col) chip.classList.add("chosen");
+      chip.textContent = col;
+      row.appendChild(chip);
+    }
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    if (r in step.assign) tag.textContent = "= " + step.assign[r];
+    else tag.textContent = "|D| = " + dom.length;
+    row.appendChild(tag);
+
+    box.appendChild(row);
+  }
+}
+
+// ---------- State ----------
+const state = {
+  map: null,
+  steps: [],
+  idx: 0,
+  playing: false,
+  timer: null
+};
+
+function loadMap(key) {
+  state.map = MAPS[key];
+  state.steps = buildPlan(state.map);
+  state.idx = 0;
+  applyStep();
+}
+
+function applyStep() {
+  const step = state.steps[state.idx];
+  renderMap(state.map, step);
+  renderDomains(state.map, step);
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.steps.length - 1);
+  const nar = document.getElementById("narrate");
+  nar.innerHTML = step.desc;
+  nar.className = "narrate";
+  if (step.type === "wipeout" || step.type === "backtrack" || step.type === "fail") nar.classList.add("bad");
+  if (step.type === "solved") nar.classList.add("good");
+  document.getElementById("statBox").innerHTML =
+    "nodes explored: <b>" + step.nodes + "</b> &middot; backtracks: <b>" + step.backtracks + "</b>";
+  document.getElementById("mrvBox").innerHTML =
+    step.current ? "Current variable: <b>" + step.current + "</b>" +
+      (step.tryColor ? " &middot; trying color <b>" + step.tryColor + "</b>" : "")
+    : (step.type === "solved" ? "Solution found." : (step.type === "fail" ? "No solution." : ""));
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) {
+    state.idx++;
+    applyStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.playing;
+  document.getElementById("btnPlay").textContent = state.playing ? "Pause ⏸" : "Play ▶▶";
+}
+
+function play() {
+  if (state.playing) {
+    clearInterval(state.timer);
+    state.playing = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) {
+    state.idx = 0;
+    applyStep();
+  }
+  state.playing = true;
+  updateButtons();
+  const speed = parseInt(document.getElementById("speed").value, 10);
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.playing = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, speed);
+}
+
+function reset() {
+  if (state.playing) { clearInterval(state.timer); state.playing = false; }
+  loadMap(document.getElementById("mapSel").value);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.playing) { clearInterval(state.timer); state.playing = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnPlay").addEventListener("click", play);
+document.getElementById("btnReset").addEventListener("click", reset);
+document.getElementById("mapSel").addEventListener("change", reset);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.playing) { clearInterval(state.timer); state.playing = false; play(); }
+});
+
+// ---------- Initial ----------
+reset();
+</script>
+</body>
+</html>
