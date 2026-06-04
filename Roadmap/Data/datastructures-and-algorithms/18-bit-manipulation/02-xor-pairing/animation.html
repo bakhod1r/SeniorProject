@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>XOR Pairing &amp; XOR Identities — Fold and Split</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --bit-on: rgba(63, 185, 80, 0.85);
+    --bit-off: rgba(48, 54, 61, 0.6);
+    --groupA: rgba(88, 166, 255, 0.22);
+    --groupB: rgba(210, 153, 34, 0.22);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 250px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .arr-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .cell {
+    min-width: 46px;
+    text-align: center;
+    padding: 8px 6px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 15px;
+    transition: all 0.2s ease;
+  }
+  .cell .idx { display: block; font-size: 10px; color: var(--muted); }
+  .cell.current { border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; color: #fff; }
+  .cell.done { opacity: 0.45; }
+  .cell.groupA { background: var(--groupA); border-color: var(--accent); }
+  .cell.groupB { background: var(--groupB); border-color: var(--accent-2); }
+  .bits {
+    display: flex;
+    gap: 4px;
+    font-family: var(--mono);
+    margin: 6px 0;
+  }
+  .bit {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 700;
+    transition: all 0.25s ease;
+  }
+  .bit.on { background: var(--bit-on); color: #07210f; }
+  .bit.off { background: var(--bit-off); color: var(--muted); }
+  .bit.flip { box-shadow: 0 0 0 2px var(--accent-2); }
+  .bitlabel { width: 30px; text-align: center; font-size: 10px; color: var(--muted); font-family: var(--mono); }
+  .acc-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .acc-val {
+    font-family: var(--mono);
+    font-size: 18px;
+    color: var(--good);
+    font-weight: 700;
+    min-width: 60px;
+  }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .split-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+  @media (max-width: 760px) { .split-cols { grid-template-columns: 1fr; } }
+  .grpbox { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .grpbox.A { border-color: var(--accent); }
+  .grpbox.B { border-color: var(--accent-2); }
+  .grpbox h3 { margin: 0 0 8px; font-size: 12px; }
+  .grpbox.A h3 { color: var(--accent); }
+  .grpbox.B h3 { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>XOR Pairing &mdash; Fold the Array, Split the Singles</h1>
+  <p>Watch <b>XOR-all</b> fold an array into one accumulator (pairs cancel via x^x=0), then watch the <b>two-singles split-by-a-set-bit</b> route the two unique values into separate groups.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Mode:
+      <select id="modeSel">
+        <option value="xorall">XOR-all (one single)</option>
+        <option value="twosingles">Two singles (split by bit)</option>
+      </select>
+    </label>
+    <label>Array: <input type="text" id="arrInput" value="4,1,2,1,2" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card">
+    <h2>Array (editable above)</h2>
+    <div class="arr-row" id="arrRow"></div>
+    <div class="acc-line">
+      <span class="step-counter">accumulator =</span>
+      <span class="acc-val" id="accVal">0</span>
+      <div class="bits" id="accBits"></div>
+    </div>
+    <div class="bits" id="bitLabels" style="margin-top:2px;"></div>
+    <div class="interp" id="interpBox">
+      Press <b>Step</b> to fold the first element into the accumulator.
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--good)"></span> current element</span>
+      <span><span class="swatch" style="background:var(--bit-on)"></span> bit = 1</span>
+      <span><span class="swatch" style="background:var(--bit-off)"></span> bit = 0</span>
+      <span><span class="swatch" style="background:var(--groupA)"></span> group A (bit set)</span>
+      <span><span class="swatch" style="background:var(--groupB)"></span> group B (bit clear)</span>
+    </div>
+  </div>
+
+  <div class="card" id="splitCard" style="display:none;">
+    <h2>Split by a set bit of (a ^ b)</h2>
+    <div class="step-counter" id="splitInfo"></div>
+    <div class="split-cols">
+      <div class="grpbox A">
+        <h3>Group A &mdash; differing bit SET</h3>
+        <div class="arr-row" id="groupARow"></div>
+        <div class="acc-line">
+          <span class="step-counter">XOR(A) =</span>
+          <span class="acc-val" id="accAVal" style="color:var(--accent)">0</span>
+        </div>
+      </div>
+      <div class="grpbox B">
+        <h3>Group B &mdash; differing bit CLEAR</h3>
+        <div class="arr-row" id="groupBRow"></div>
+        <div class="acc-line">
+          <span class="step-counter">XOR(B) =</span>
+          <span class="acc-val" id="accBVal" style="color:var(--accent-2)">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We compute the XOR of every element. Even-count values cancel (x^x=0); the odd one survives (x^0=x).</div>
+
+  <div class="footnote">
+    Self-contained visualization. Counting/parity semantics over GF(2): XOR records per-bit parity, so values appearing an even number of times vanish and the odd one(s) remain.
+    See <code>junior.md</code> and <code>professional.md</code> for the proof that XOR-all returns the odd-count element, and that splitting on a bit of <code>a^b</code> separates two singles.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Bit-width for display ----------
+const WIDTH = 6; // show 6 bits (covers 0..63 used in demos)
+
+function toBits(x) {
+  const arr = [];
+  for (let b = WIDTH - 1; b >= 0; b--) arr.push((x >> b) & 1);
+  return arr; // high -> low
+}
+
+function lowestSetBit(x) { return x & (-x); }
+
+// ---------- Parse the editable array ----------
+function parseArray(text) {
+  const parts = text.split(/[,\s]+/).map(s => s.trim()).filter(s => s.length > 0);
+  const nums = [];
+  for (const p of parts) {
+    const v = parseInt(p, 10);
+    if (!isNaN(v) && v >= 0 && v < (1 << WIDTH)) nums.push(v);
+  }
+  return nums.length > 0 ? nums : [4, 1, 2, 1, 2];
+}
+
+// ---------- Build the step plan ----------
+// XOR-all: one step per element, folding into the accumulator.
+function buildXorAllPlan(nums) {
+  const steps = [];
+  let acc = 0;
+  steps.push({
+    type: "init", acc: 0, cur: -1,
+    desc: "Start: accumulator = 0 (the identity element, since x ^ 0 = x)."
+  });
+  for (let i = 0; i < nums.length; i++) {
+    const before = acc;
+    acc ^= nums[i];
+    steps.push({
+      type: "fold", acc: acc, cur: i, before: before, value: nums[i],
+      desc: "Fold nums[" + i + "] = " + nums[i] + " into the accumulator: " +
+            before + " ^ " + nums[i] + " = " + acc + ". Flipped bits where they differ."
+    });
+  }
+  steps.push({
+    type: "done", acc: acc, cur: -1,
+    desc: "Done. accumulator = " + acc + " is the element with ODD count; all paired values cancelled (x ^ x = 0)."
+  });
+  return { steps, mode: "xorall", result: acc };
+}
+
+// Two-singles: fold to get a^b, isolate a bit, then partition and fold each group.
+function buildTwoSinglesPlan(nums) {
+  const steps = [];
+  let acc = 0;
+  steps.push({
+    type: "init", acc: 0, cur: -1, phase: "fold",
+    desc: "Phase 1: XOR-all to get a ^ b (the two singles combined)."
+  });
+  for (let i = 0; i < nums.length; i++) {
+    const before = acc;
+    acc ^= nums[i];
+    steps.push({
+      type: "fold", acc: acc, cur: i, before: before, value: nums[i], phase: "fold",
+      desc: "Fold nums[" + i + "] = " + nums[i] + ": " + before + " ^ " + nums[i] + " = " + acc + "."
+    });
+  }
+  const xorAll = acc;
+  const diff = lowestSetBit(xorAll);
+  steps.push({
+    type: "isolate", acc: xorAll, cur: -1, diff: diff, phase: "isolate",
+    desc: "a ^ b = " + xorAll + ". Isolate its lowest set bit with x & (-x) = " + diff +
+          ". That bit is a position where a and b differ."
+  });
+  // partition
+  let aXor = 0, bXor = 0;
+  const groupA = [], groupB = [];
+  for (let i = 0; i < nums.length; i++) {
+    const inA = (nums[i] & diff) !== 0;
+    if (inA) { aXor ^= nums[i]; groupA.push(i); }
+    else { bXor ^= nums[i]; groupB.push(i); }
+    steps.push({
+      type: "partition", acc: xorAll, cur: i, diff: diff,
+      inA: inA, aXor: aXor, bXor: bXor,
+      groupA: groupA.slice(), groupB: groupB.slice(), phase: "partition",
+      desc: "nums[" + i + "] = " + nums[i] + (inA
+        ? " has the differing bit SET → group A. XOR(A) = " + aXor
+        : " has the differing bit CLEAR → group B. XOR(B) = " + bXor) + "."
+    });
+  }
+  steps.push({
+    type: "done", acc: xorAll, cur: -1, diff: diff,
+    aXor: aXor, bXor: bXor, groupA: groupA.slice(), groupB: groupB.slice(), phase: "partition",
+    desc: "Done. The two singles are " + aXor + " and " + bXor +
+          ". Each group reduced to a single-number problem; paired duplicates cancelled within their group."
+  });
+  return { steps, mode: "twosingles", result: [aXor, bXor], diff: diff };
+}
+
+// ---------- Render helpers ----------
+function renderArray(rowEl, nums, opts) {
+  opts = opts || {};
+  rowEl.innerHTML = "";
+  for (let i = 0; i < nums.length; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if (opts.current === i) cell.classList.add("current");
+    if (opts.done && opts.done.has(i)) cell.classList.add("done");
+    if (opts.groupA && opts.groupA.has(i)) cell.classList.add("groupA");
+    if (opts.groupB && opts.groupB.has(i)) cell.classList.add("groupB");
+    cell.innerHTML = "<span class='idx'>[" + i + "]</span>" + nums[i];
+    rowEl.appendChild(cell);
+  }
+}
+
+function renderBits(containerEl, value, flipMask) {
+  containerEl.innerHTML = "";
+  const bits = toBits(value);
+  for (let k = 0; k < bits.length; k++) {
+    const b = document.createElement("div");
+    b.className = "bit " + (bits[k] ? "on" : "off");
+    const bitPos = WIDTH - 1 - k;
+    if (flipMask && ((flipMask >> bitPos) & 1)) b.classList.add("flip");
+    b.textContent = bits[k];
+    containerEl.appendChild(b);
+  }
+}
+
+function renderBitLabels(containerEl) {
+  containerEl.innerHTML = "";
+  for (let b = WIDTH - 1; b >= 0; b--) {
+    const lbl = document.createElement("div");
+    lbl.className = "bitlabel";
+    lbl.textContent = "b" + b;
+    containerEl.appendChild(lbl);
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  nums: [],
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadPlan() {
+  const mode = document.getElementById("modeSel").value;
+  state.nums = parseArray(document.getElementById("arrInput").value);
+  state.plan = (mode === "twosingles")
+    ? buildTwoSinglesPlan(state.nums)
+    : buildXorAllPlan(state.nums);
+  state.stepIdx = 0;
+  document.getElementById("splitCard").style.display =
+    (mode === "twosingles") ? "block" : "none";
+  renderBitLabels(document.getElementById("bitLabels"));
+  applyStep(0);
+  updateButtons();
+}
+
+function applyStep(idx) {
+  const step = state.plan.steps[idx];
+  state.stepIdx = idx;
+  const done = new Set();
+  // mark folded elements as done for xor-all style
+  if (state.plan.mode === "xorall") {
+    for (let s = 1; s <= idx; s++) {
+      const st = state.plan.steps[s];
+      if (st.type === "fold") done.add(st.cur);
+    }
+  }
+  const opts = { current: step.cur, done: done };
+
+  // group highlighting for two-singles partition
+  if (state.plan.mode === "twosingles" && step.groupA) {
+    opts.groupA = new Set(step.groupA);
+    opts.groupB = new Set(step.groupB);
+  }
+  renderArray(document.getElementById("arrRow"), state.nums, opts);
+
+  // accumulator + bits, with flip highlight on the just-folded value
+  const flip = (step.type === "fold") ? step.value : 0;
+  document.getElementById("accVal").textContent = step.acc;
+  renderBits(document.getElementById("accBits"), step.acc, flip);
+
+  // interpretation box
+  let interp;
+  if (step.type === "done" && state.plan.mode === "xorall") {
+    interp = "Result: the single (odd-count) element is <span class='val'>" +
+             step.acc + "</span>.";
+  } else if (step.type === "fold") {
+    interp = "Folded <b>nums[" + step.cur + "] = " + step.value +
+             "</b>. Accumulator is now <span class='val'>" + step.acc + "</span>.";
+  } else if (step.type === "isolate") {
+    interp = "a ^ b = <b>" + step.acc + "</b>; lowest set bit (splitter) = <span class='val'>" +
+             step.diff + "</span>.";
+  } else if (step.type === "partition") {
+    interp = "Routing into groups by bit " + step.diff +
+             ". XOR(A) = <b>" + step.aXor + "</b>, XOR(B) = <b>" + step.bXor + "</b>.";
+  } else if (step.type === "done" && state.plan.mode === "twosingles") {
+    interp = "The two singles are <span class='val'>" + step.aXor + "</span> and <span class='val'>" +
+             step.bXor + "</span>.";
+  } else {
+    interp = "Accumulator starts at 0 (identity element).";
+  }
+  document.getElementById("interpBox").innerHTML = interp;
+
+  // two-singles split panel
+  if (state.plan.mode === "twosingles") {
+    const groupA = step.groupA || [];
+    const groupB = step.groupB || [];
+    renderArray(document.getElementById("groupARow"), groupA.map(i => state.nums[i]), {});
+    renderArray(document.getElementById("groupBRow"), groupB.map(i => state.nums[i]), {});
+    document.getElementById("accAVal").textContent = (step.aXor !== undefined) ? step.aXor : 0;
+    document.getElementById("accBVal").textContent = (step.bXor !== undefined) ? step.bXor : 0;
+    document.getElementById("splitInfo").textContent =
+      (step.diff !== undefined)
+        ? "splitter bit mask = " + step.diff + " (lowest differing bit of a^b)"
+        : "fold first to obtain a ^ b...";
+  }
+
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    applyStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadPlan();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("arrInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
