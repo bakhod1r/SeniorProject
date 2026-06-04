@@ -7,6 +7,10 @@
 - 9 output files per topic: junior.md, middle.md, senior.md, professional.md, interview.md, tasks.md, find-bug.md, optimize.md, specification.md
 - Keep {{TOPIC_NAME}} placeholder throughout
 - Include Mermaid diagrams in each template
+- All content must be generated in **English**
+- **Table of Contents: REQUIRED** on the four level files (`junior.md`, `middle.md`, `senior.md`, `professional.md`) as a numbered TOC linking each section; **OPTIONAL** on practice files (`tasks.md`, `find-bug.md`, `optimize.md`)
+- **Depth / length:** each level file (`junior.md`, `middle.md`, `senior.md`, `professional.md`) must be substantial — target at least ~520 lines of genuine content (no filler), with multiple worked code examples, at least one Mermaid diagram, and at least one comparison table where the topic allows
+- **Level handoff:** every level file ends with a **`Next step:`** line linking to the next level in the progression (junior → middle → senior → professional → …)
 
 ### Topic Structure
 

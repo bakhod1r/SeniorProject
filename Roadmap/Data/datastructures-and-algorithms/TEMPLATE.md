@@ -14,7 +14,10 @@
 | **Languages** | All code must be in **Go**, **Java**, **Python** (in that order) |
 | **Visualization** | `animation.html` — **Required** for DS/algorithm topics (arrays, linked lists, stacks, queues, hash tables, sorting, searching, trees, graphs, Big-O, asymptotic notation). **Skip** for pure theory topics (syntax, pseudo code, OOP, control structures) |
 | **Code Fences** | `go`, `java`, `python` for implementations, `text` for pseudocode |
-| **Table of Contents** | Optional — omit for `tasks.md` |
+| **Language** | All content must be generated in **English** |
+| **Table of Contents** | **REQUIRED** on the four level files (`junior.md`, `middle.md`, `senior.md`, `professional.md`) as a numbered TOC linking each section. **OPTIONAL** on practice files — omit for `tasks.md` |
+| **Depth / Length** | Each level file (`junior.md`, `middle.md`, `senior.md`, `professional.md`) must be substantial — target at least **~520 lines** of genuine content (no filler), with multiple worked code examples, at least one Mermaid diagram, and at least one comparison table where the topic allows |
+| **Level Handoff** | Every level file ends with a **`Next step:`** line linking to the next level in the progression (junior → middle → senior → professional → …) |
 
 ### Topic Structure
 

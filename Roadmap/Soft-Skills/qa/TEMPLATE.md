@@ -10,6 +10,10 @@
 - Keep `{{TOPIC_NAME}}` placeholder throughout all generated files
 - `professional.md` = Mastery / Leadership level (NOT compiler internals)
 - Section renames: "Code Examples" → **"Example Artifacts / Templates"** | "Error Handling" → **"Common Failure Modes and Recovery"** | "Performance Tips" → **"Effectiveness and Efficiency Tips"** | "Debugging Guide" → **"Diagnosing Team / Process Problems"** | "Comparison with Other Languages" → **"Comparison with Alternative Methodologies / Tools"**
+- **Table of Contents:** REQUIRED on the four level files (`junior.md`, `middle.md`, `senior.md`, `professional.md`) as a numbered TOC linking each section; OPTIONAL on practice files (`tasks.md`, `find-bug.md`, `optimize.md`)
+- **Depth / Length:** each level file (`junior.md`, `middle.md`, `senior.md`, `professional.md`) is substantial — target at least ~520 lines of genuine content (no filler), with multiple worked examples/artifacts, at least one Mermaid diagram, and at least one comparison table where the topic allows
+- **Level handoff:** every level file ends with a "**Next step:**" line linking to the next level in the progression (junior → middle → senior → professional → …)
+- All content must be generated in **English**
 
 ### Topic Structure
 
