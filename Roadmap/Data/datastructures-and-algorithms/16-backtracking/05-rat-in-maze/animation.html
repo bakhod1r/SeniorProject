@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rat in a Maze — Grid Path Backtracking</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --wall: #2d333b;
+    --open: #0f1620;
+    --visited: rgba(88, 166, 255, 0.30);
+    --path: rgba(63, 185, 80, 0.45);
+    --rat: rgba(210, 153, 34, 0.85);
+    --deadend: rgba(248, 81, 73, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid { border-collapse: collapse; }
+  .grid td {
+    width: 46px;
+    height: 46px;
+    text-align: center;
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--open);
+    transition: background 0.18s ease, color 0.18s ease;
+    position: relative;
+  }
+  .grid td.wall { background: var(--wall); color: var(--muted); }
+  .grid td.visited { background: var(--visited); }
+  .grid td.path { background: var(--path); color: #fff; font-weight: 700; }
+  .grid td.rat { background: var(--rat); color: #11161d; font-weight: 800; }
+  .grid td.deadend { background: var(--deadend); }
+  .grid td.goal { outline: 2px solid var(--good); outline-offset: -3px; }
+  .grid td.start { outline: 2px dashed var(--accent); outline-offset: -3px; }
+  .stack {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 6px;
+    margin-top: 6px;
+    min-height: 60px;
+  }
+  .frame {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .frame.top { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+  .frame .cell { color: var(--accent); font-weight: 700; min-width: 60px; }
+  .frame .mv { color: var(--muted); }
+  .pathstr {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 4px;
+    color: var(--good);
+    min-height: 26px;
+    margin-top: 4px;
+  }
+  .pathstr .empty { color: var(--muted); letter-spacing: 0; font-size: 13px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stat {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .stat b { color: var(--accent); }
+  .stat .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rat in a Maze — DFS Backtracking with a Visited Matrix</h1>
+  <p>The rat explores from the top-left cell to the bottom-right, trying <b>D, L, R, U</b> in order. Watch the path stack grow, cells get <b>marked</b> visited, and dead ends trigger the <b>un-mark</b> backtrack.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Maze:
+      <select id="mazeSel">
+        <option value="m1">Maze A (5&times;5, classic)</option>
+        <option value="m2">Maze B (4&times;4, branchy)</option>
+        <option value="m3">Maze C (5&times;5, dead ends)</option>
+        <option value="m4">Maze D (4&times;5, no path)</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Maze &amp; rat exploration</h2>
+      <table class="grid" id="gridTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--wall)"></span> wall</span>
+        <span><span class="swatch" style="background:var(--rat)"></span> rat (current)</span>
+        <span><span class="swatch" style="background:var(--visited)"></span> visited (on trail)</span>
+        <span><span class="swatch" style="background:var(--path)"></span> found path</span>
+        <span><span class="swatch" style="background:var(--deadend)"></span> dead end</span>
+      </div>
+      <div class="stat" id="statBox">
+        Cells explored: <b><span id="explored">0</span></b> &middot;
+        Backtracks: <b><span id="backtracks">0</span></b>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Path stack (current trail)</h2>
+      <div class="pathstr" id="pathStr"><span class="empty">(empty &mdash; rat at start)</span></div>
+      <div class="step-counter" style="margin:8px 0 4px;">Recursion stack (top = current cell):</div>
+      <div class="stack" id="stackView"></div>
+      <div class="stat" id="resultBox" style="margin-top:14px;">
+        Status: <span class="val" id="statusTxt">searching&hellip;</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. The rat runs DFS: it marks each cell visited, tries directions D, L, R, U, and un-marks a cell when it backtracks out of a dead end.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Directions tried in order <b>D, L, R, U</b>, so the first path found is the lexicographically smallest.
+    Marking a cell adds it to the current trail; the <b>un-mark</b> on backtrack removes it so other branches may reuse it.
+    See <code>junior.md</code> and <code>professional.md</code> for the visited-matrix invariant (visited set = current recursion stack).
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Maze definitions (1 = open, 0 = wall) ----------
+const MAZES = {
+  m1: {
+    grid: [
+      [1, 0, 1, 1, 1],
+      [1, 1, 1, 0, 1],
+      [0, 1, 0, 1, 1],
+      [1, 1, 0, 0, 1],
+      [1, 0, 1, 1, 1]
+    ],
+    name: "Maze A (5x5 classic)"
+  },
+  m2: {
+    grid: [
+      [1, 1, 0, 1],
+      [1, 1, 1, 1],
+      [0, 1, 0, 1],
+      [1, 1, 1, 1]
+    ],
+    name: "Maze B (4x4 branchy)"
+  },
+  m3: {
+    grid: [
+      [1, 1, 1, 0, 1],
+      [0, 0, 1, 0, 1],
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1]
+    ],
+    name: "Maze C (5x5 dead ends)"
+  },
+  m4: {
+    grid: [
+      [1, 1, 0, 0, 0],
+      [0, 1, 0, 1, 1],
+      [0, 1, 0, 1, 0],
+      [0, 0, 0, 1, 1]
+    ],
+    name: "Maze D (no path)"
+  }
+};
+
+// Directions: D, L, R, U  (alphabetical -> lexicographically smallest path)
+const DR = [1, 0, 0, -1];
+const DC = [0, -1, 1, 0];
+const DIRS = ["D", "L", "R", "U"];
+
+// ---------- Build the step plan via recorded backtracking ----------
+// We run the backtracking DFS once and record every discrete action as a
+// step, so the UI can replay it forward with Step/Run controls.
+function buildPlan(grid) {
+  const n = grid.length;
+  const m = grid[0].length;
+  const visited = [];
+  for (let i = 0; i < n; i++) visited.push(new Array(m).fill(false));
+  const steps = [];
+  let explored = 0;
+  let backtracks = 0;
+  const path = [];        // array of "D/L/R/U" letters
+  const stack = [];       // array of {r,c}
+
+  function snapshot(extra) {
+    const visCopy = visited.map(row => row.slice());
+    return Object.assign({
+      visited: visCopy,
+      stack: stack.map(s => ({ r: s.r, c: s.c })),
+      path: path.slice(),
+      explored: explored,
+      backtracks: backtracks
+    }, extra);
+  }
+
+  const startOpen = grid[0][0] === 1 && grid[n - 1][m - 1] === 1;
+  steps.push(snapshot({
+    rat: null, dead: null, found: false, done: !startOpen,
+    desc: startOpen
+      ? "Start the DFS at (0,0). We will mark each cell, try D, L, R, U, and un-mark on backtrack."
+      : "The start or goal cell is blocked, so there is NO PATH. (Nothing to search.)"
+  }));
+
+  let foundPath = false;
+
+  function dfs(r, c) {
+    if (foundPath) return true;
+    if (r < 0 || r >= n || c < 0 || c >= m) return false;
+    if (grid[r][c] === 0 || visited[r][c]) return false;
+
+    // enter cell: mark + push
+    visited[r][c] = true;
+    stack.push({ r, c });
+    explored++;
+    steps.push(snapshot({
+      rat: { r, c }, dead: null, found: false, done: false,
+      desc: "Enter (" + r + "," + c + "): mark it visited and push onto the path stack."
+    }));
+
+    if (r === n - 1 && c === m - 1) {
+      foundPath = true;
+      steps.push(snapshot({
+        rat: { r, c }, dead: null, found: true, done: true,
+        desc: "Reached the goal (" + r + "," + c + ")! The path stack holds the answer: " +
+              (path.join("") || "(start = goal)") + "."
+      }));
+      return true;
+    }
+
+    for (let d = 0; d < 4; d++) {
+      const nr = r + DR[d];
+      const nc = c + DC[d];
+      path.push(DIRS[d]);
+      steps.push(snapshot({
+        rat: { r, c }, dead: null, found: false, done: false,
+        desc: "From (" + r + "," + c + ") try " + DIRS[d] + " -> (" + nr + "," + nc + ")."
+      }));
+      if (dfs(nr, nc)) {
+        return true;
+      }
+      path.pop();
+      if (foundPath) return true;
+    }
+
+    // dead end: un-mark + pop (the backtrack)
+    visited[r][c] = false;
+    stack.pop();
+    backtracks++;
+    steps.push(snapshot({
+      rat: stack.length ? stack[stack.length - 1] : null,
+      dead: { r, c }, found: false, done: false,
+      desc: "Dead end at (" + r + "," + c + "): no direction worked. UN-mark it (remove from trail) and back up."
+    }));
+    return false;
+  }
+
+  if (startOpen) {
+    dfs(0, 0);
+    if (!foundPath) {
+      steps.push(snapshot({
+        rat: null, dead: null, found: false, done: true,
+        desc: "The whole grid was explored and un-marked. NO PATH exists from start to goal."
+      }));
+    }
+  }
+  return { steps, n, m, grid, foundPath: () => steps[steps.length - 1].found };
+}
+
+// ---------- Rendering ----------
+function renderGrid(plan, step) {
+  const table = document.getElementById("gridTable");
+  const n = plan.n, m = plan.m, grid = plan.grid;
+  // build a quick lookup of which cells are on the current path stack
+  const onStack = {};
+  step.stack.forEach((s, i) => { onStack[s.r + "," + s.c] = i; });
+  const ratKey = step.rat ? step.rat.r + "," + step.rat.c : null;
+  const deadKey = step.dead ? step.dead.r + "," + step.dead.c : null;
+
+  let html = "";
+  for (let r = 0; r < n; r++) {
+    html += "<tr>";
+    for (let c = 0; c < m; c++) {
+      const key = r + "," + c;
+      let cls = [];
+      if (grid[r][c] === 0) cls.push("wall");
+      if (r === 0 && c === 0) cls.push("start");
+      if (r === n - 1 && c === m - 1) cls.push("goal");
+      if (step.visited[r][c]) cls.push("visited");
+      if (step.found && (key in onStack)) cls.push("path");
+      if (deadKey === key) cls.push("deadend");
+      if (ratKey === key) cls.push("rat");
+      let label = "";
+      if (grid[r][c] === 0) label = "#";
+      else if (ratKey === key) label = "R";
+      else if (key in onStack) label = "" + onStack[key];
+      html += "<td class='" + cls.join(" ") + "'>" + label + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function renderStack(step) {
+  const view = document.getElementById("stackView");
+  if (step.stack.length === 0) {
+    view.innerHTML = "<div class='frame'><span class='mv'>(stack empty)</span></div>";
+  } else {
+    let html = "";
+    step.stack.forEach((s, i) => {
+      const isTop = i === step.stack.length - 1;
+      const mv = i === 0 ? "start" : "move " + step.path[i - 1];
+      html += "<div class='frame" + (isTop ? " top" : "") + "'>" +
+              "<span class='cell'>(" + s.r + "," + s.c + ")</span>" +
+              "<span class='mv'>" + mv + "</span></div>";
+    });
+    view.innerHTML = html;
+  }
+  const ps = document.getElementById("pathStr");
+  if (step.path.length === 0) {
+    ps.innerHTML = "<span class='empty'>(empty &mdash; rat at start)</span>";
+  } else {
+    ps.textContent = step.path.join("");
+  }
+}
+
+function renderStats(step) {
+  document.getElementById("explored").textContent = step.explored;
+  document.getElementById("backtracks").textContent = step.backtracks;
+  const status = document.getElementById("statusTxt");
+  if (step.found) {
+    status.textContent = "PATH FOUND: " + (step.path.join("") || "(start = goal)");
+    status.style.color = "var(--good)";
+  } else if (step.done) {
+    status.textContent = "NO PATH";
+    status.style.color = "var(--bad)";
+  } else {
+    status.textContent = "searching...";
+    status.style.color = "var(--accent-2)";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadMaze(key) {
+  state.plan = buildPlan(MAZES[key].grid);
+  state.stepIdx = 0;
+  gotoStep(0);
+}
+
+function gotoStep(idx) {
+  if (!state.plan) return;
+  if (idx < 0) idx = 0;
+  if (idx >= state.plan.steps.length) idx = state.plan.steps.length - 1;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  renderGrid(state.plan, step);
+  renderStack(step);
+  renderStats(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    gotoStep(0); // restart from the beginning if at the end
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 750);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const key = document.getElementById("mazeSel").value;
+  loadMaze(key);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("mazeSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
