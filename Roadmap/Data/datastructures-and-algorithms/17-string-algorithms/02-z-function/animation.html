@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Z-Function — Linear-Time Computation with the [l, r] Z-Box</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --box: rgba(210, 153, 34, 0.20);
+    --boxborder: #d29922;
+    --cur: rgba(88, 166, 255, 0.30);
+    --match: rgba(63, 185, 80, 0.35);
+    --mismatch: rgba(248, 81, 73, 0.35);
+    --prefix: rgba(88, 166, 255, 0.14);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 220px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .strip {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .cell {
+    width: 38px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: var(--mono);
+  }
+  .cell .idx { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .cell .ch {
+    width: 36px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+  .cell .zv {
+    margin-top: 4px;
+    font-size: 13px;
+    height: 20px;
+    color: var(--good);
+    font-weight: 700;
+  }
+  .cell .zv.pending { color: var(--muted); }
+  /* highlight classes */
+  .ch.prefix { background: var(--prefix); }
+  .ch.box { background: var(--box); border-color: var(--boxborder); }
+  .ch.cur { background: var(--cur); border-color: var(--accent); color: #fff; }
+  .ch.cmpA { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ch.cmpB { background: var(--accent-2); color: #0d1117; border-color: var(--accent-2); }
+  .ch.matched { background: var(--match); border-color: var(--good); }
+  .ch.mismatch { background: var(--mismatch); border-color: var(--bad); color: #fff; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .vars {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  .vars .v { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; }
+  .vars .v b { color: var(--accent-2); }
+  .vars .v .val { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-top: 4px;
+    font-size: 14px;
+    min-height: 52px;
+  }
+  .narrate .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 4px;
+    margin-right: 8px;
+    text-transform: uppercase;
+  }
+  .tag.copy { background: var(--accent); color: #0d1117; }
+  .tag.extend { background: var(--accent-2); color: #0d1117; }
+  .tag.scratch { background: var(--good); color: #0d1117; }
+  .tag.box { background: var(--bad); color: #fff; }
+  .tag.done { background: #8b949e; color: #0d1117; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .codebox {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 12px;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--muted);
+  }
+  .codebox .hl { background: rgba(88,166,255,0.18); color: var(--text); display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>The Z-Function — Linear-Time Computation with the [l, r] Z-Box</h1>
+  <p>z[i] = length of the longest substring starting at i that matches a <b>prefix</b> of s. Watch the box reuse make the whole array O(n).</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="aabxaayaab">aabxaayaab</option>
+        <option value="aaaaa">aaaaa (all same)</option>
+        <option value="abacaba">abacaba</option>
+        <option value="ababab">ababab (periodic)</option>
+        <option value="aabaab">aabaab</option>
+        <option value="abcdef">abcdef (no repeat)</option>
+      </select>
+    </label>
+    <label>s = <input type="text" id="strInput" value="aabxaayaab" maxlength="26" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card">
+    <h2>String, current i, the [l, r) Z-box, and z values</h2>
+    <div class="strip" id="strip"></div>
+    <div class="vars">
+      <div class="v"><b>i</b> = <span class="val" id="vi">-</span></div>
+      <div class="v"><b>l</b> = <span class="val" id="vl">0</span></div>
+      <div class="v"><b>r</b> = <span class="val" id="vr">0</span> <span style="color:var(--muted)">(exclusive)</span></div>
+      <div class="v"><b>mirror</b> i&minus;l = <span class="val" id="vmir">-</span></div>
+      <div class="v"><b>z[i]</b> = <span class="val" id="vz">-</span></div>
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--prefix)"></span> prefix being compared</span>
+      <span><span class="swatch" style="background:var(--box);border-color:var(--boxborder)"></span> Z-box [l, r)</span>
+      <span><span class="swatch" style="background:var(--cur);border-color:var(--accent)"></span> current i</span>
+      <span><span class="swatch" style="background:var(--match);border-color:var(--good)"></span> matched</span>
+      <span><span class="swatch" style="background:var(--mismatch);border-color:var(--bad)"></span> mismatch</span>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    Press <b>Step</b> to begin. We process i = 1, 2, &hellip;, n&minus;1. Inside the box we <b>copy</b> z[i&minus;l] clamped to the edge; otherwise we <b>extend</b> by explicit comparison. The right edge r only ever moves forward &rarr; O(n).
+  </div>
+
+  <div class="card">
+    <h2>The algorithm (current line highlighted)</h2>
+    <div class="codebox" id="codebox"></div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. <code>r</code> is stored <b>exclusive</b> (one past the last matching index), so the copy clamp is
+    <code>z[i] = min(r - i, z[i - l])</code>. The Z-box <code>s[l..r-1]</code> always equals the prefix <code>s[0..r-l-1]</code>;
+    that invariant is why copying z[i&minus;l] is valid. See <code>junior.md</code> and <code>professional.md</code> for the
+    correctness proof and the amortized r-pointer argument that makes this linear.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- The annotated source shown in the code box ----------
+const CODE_LINES = [
+  "z[0] = 0;  l = 0;  r = 0          // r exclusive",        // 0
+  "for i = 1 .. n-1:",                                        // 1
+  "    if i < r:                      // inside the box",     // 2
+  "        z[i] = min(r - i, z[i-l])  // copy, clamped",      // 3
+  "    while i+z[i] < n and s[z[i]] == s[i+z[i]]:",           // 4
+  "        z[i] = z[i] + 1            // extend",             // 5
+  "    if i + z[i] > r:",                                     // 6
+  "        l = i;  r = i + z[i]       // grow the box"        // 7
+];
+
+// ---------- Build the full step plan for a string ----------
+// Each step is a snapshot: which characters to highlight, current vars,
+// the partial z array, a narration string and a code-line index.
+function buildPlan(s) {
+  const n = s.length;
+  const steps = [];
+  const z = new Array(n).fill(null);
+  if (n > 0) z[0] = 0;
+  let l = 0, r = 0;
+
+  const snap = (extra) => {
+    const base = {
+      z: z.slice(),
+      l: l, r: r,
+      i: extra.i !== undefined ? extra.i : null,
+      mirror: extra.mirror !== undefined ? extra.mirror : null,
+      cmpA: extra.cmpA !== undefined ? extra.cmpA : null,   // prefix index being compared
+      cmpB: extra.cmpB !== undefined ? extra.cmpB : null,   // suffix index being compared
+      matched: extra.matched || [],                          // list of suffix indices confirmed matched this z[i]
+      mism: extra.mism !== undefined ? extra.mism : null,
+      tag: extra.tag || "scratch",
+      line: extra.line,
+      zi: extra.zi !== undefined ? extra.zi : null,
+      desc: extra.desc
+    };
+    steps.push(base);
+  };
+
+  // initial snapshot
+  snap({
+    line: 0, tag: "scratch",
+    desc: "Initialize: z[0] = 0, and the box is empty (l = r = 0). We read s from the prefix forward."
+  });
+
+  for (let i = 1; i < n; i++) {
+    let zi = 0;
+    const matched = [];
+    snap({ i, line: 1, tag: "scratch", mirror: (i < r ? i - l : null), zi: 0,
+      desc: "Now i = " + i + ". Is i inside the box [l, r) = [" + l + ", " + r + ")? " + (i < r ? "Yes." : "No.") });
+
+    if (i < r) {
+      const mir = i - l;
+      const copied = Math.min(r - i, z[mir]);
+      zi = copied;
+      snap({ i, line: 3, tag: "copy", mirror: mir, zi,
+        cmpA: null, cmpB: null,
+        desc: "Inside the box. Mirror index i−l = " + mir + " has z = " + z[mir] +
+              ". Clamp to box edge r−i = " + (r - i) + " → copy z[" + i + "] = min(" +
+              (r - i) + ", " + z[mir] + ") = " + zi + " for free." });
+    }
+
+    // extend loop
+    let extending = true;
+    while (extending) {
+      const a = zi;          // prefix index
+      const b = i + zi;      // suffix index
+      if (b < n && s[a] === s[b]) {
+        matched.push(b);
+        zi++;
+        snap({ i, line: 5, tag: "extend", mirror: (i < r ? i - l : null), zi,
+          cmpA: a, cmpB: b, matched: matched.slice(),
+          desc: "Extend: s[" + a + "]='" + s[a] + "' == s[" + b + "]='" + s[b] +
+                "' → match, z[" + i + "] grows to " + zi + "." });
+      } else {
+        const reason = (b >= n) ? "ran off the end of s" :
+          ("s[" + a + "]='" + s[a] + "' ≠ s[" + b + "]='" + s[b] + "'");
+        snap({ i, line: 4, tag: "extend", mirror: (i < r ? i - l : null), zi,
+          cmpA: (b < n ? a : null), cmpB: (b < n ? b : null), matched: matched.slice(),
+          mism: (b < n ? b : null),
+          desc: "Stop extending: " + reason + ". So z[" + i + "] = " + zi + "." });
+        extending = false;
+      }
+    }
+
+    // commit z[i]
+    z[i] = zi;
+
+    // grow box?
+    if (i + zi > r) {
+      const oldR = r;
+      l = i; r = i + zi;
+      snap({ i, line: 7, tag: "box", mirror: null, zi, matched: matched.slice(),
+        desc: "i + z[i] = " + (i + zi) + " > old r = " + oldR +
+              " → grow the box to [l, r) = [" + l + ", " + r + "). The right edge moved forward (never back)." });
+    } else {
+      snap({ i, line: 6, tag: "scratch", mirror: null, zi, matched: matched.slice(),
+        desc: "i + z[i] = " + (i + zi) + " is not past r = " + r + ", so the box stays [" + l + ", " + r + ")." });
+    }
+  }
+
+  snap({ i: null, line: 1, tag: "done", zi: null,
+    desc: "Done. The full Z-array is computed in O(n): every successful comparison pushed r forward, and r only ever advances to at most n." });
+
+  return steps;
+}
+
+// ---------- Rendering ----------
+const els = {
+  strip: document.getElementById("strip"),
+  vi: document.getElementById("vi"),
+  vl: document.getElementById("vl"),
+  vr: document.getElementById("vr"),
+  vmir: document.getElementById("vmir"),
+  vz: document.getElementById("vz"),
+  narrate: document.getElementById("narrate"),
+  codebox: document.getElementById("codebox"),
+  stepInfo: document.getElementById("stepInfo")
+};
+
+function renderCode(activeLine) {
+  let html = "";
+  for (let i = 0; i < CODE_LINES.length; i++) {
+    const cls = (i === activeLine) ? "hl" : "";
+    const text = CODE_LINES[i]
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    html += "<span class='" + cls + "'>" + text + "</span>";
+  }
+  els.codebox.innerHTML = html;
+}
+
+function renderStrip(step) {
+  const s = state.s;
+  const n = s.length;
+  let html = "";
+  for (let idx = 0; idx < n; idx++) {
+    const classes = ["ch"];
+
+    // box shading: [l, r)
+    if (idx >= step.l && idx < step.r) classes.push("box");
+
+    // the prefix character currently being compared (cmpA)
+    if (step.cmpA !== null && idx === step.cmpA) classes.push("cmpA");
+    // the suffix character currently being compared (cmpB)
+    if (step.cmpB !== null && idx === step.cmpB) classes.push("cmpB");
+
+    // matched suffix cells for the current z[i]
+    if (step.matched && step.matched.indexOf(idx) !== -1) classes.push("matched");
+    if (step.mism !== null && idx === step.mism) classes.push("mismatch");
+
+    // current i (drawn last so it wins visually unless comparing)
+    if (step.i !== null && idx === step.i &&
+        step.cmpA === null && step.cmpB === null) classes.push("cur");
+
+    const zval = step.z[idx];
+    const zHtml = (zval === null)
+      ? "<span class='zv pending'>&middot;</span>"
+      : "<span class='zv'>" + zval + "</span>";
+
+    html += "<div class='cell'>" +
+              "<span class='idx'>" + idx + "</span>" +
+              "<span class='" + classes.join(" ") + "'>" + escapeChar(s[idx]) + "</span>" +
+              zHtml +
+            "</div>";
+  }
+  els.strip.innerHTML = html;
+}
+
+function escapeChar(c) {
+  if (c === "<") return "&lt;";
+  if (c === ">") return "&gt;";
+  if (c === "&") return "&amp;";
+  if (c === " ") return "&middot;";
+  return c;
+}
+
+function renderStep(step) {
+  renderStrip(step);
+  renderCode(step.line);
+  els.vi.textContent = (step.i === null) ? "—" : step.i;
+  els.vl.textContent = step.l;
+  els.vr.textContent = step.r;
+  els.vmir.textContent = (step.mirror === null || step.mirror === undefined) ? "—" : step.mirror;
+  els.vz.textContent = (step.zi === null || step.zi === undefined) ? "—" : step.zi;
+  const tagLabel = {
+    copy: "copy", extend: "extend", scratch: "scan", box: "grow box", done: "done"
+  }[step.tag] || step.tag;
+  els.narrate.innerHTML = "<span class='tag " + step.tag + "'>" + tagLabel + "</span>" + step.desc;
+  els.stepInfo.textContent = "step " + state.stepIdx + " / " + (state.plan.length - 1);
+}
+
+// ---------- State + controls ----------
+const state = {
+  s: "aabxaayaab",
+  plan: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load(s) {
+  if (s.length === 0) s = "a";
+  state.s = s;
+  state.plan = buildPlan(s);
+  state.stepIdx = 0;
+  renderStep(state.plan[0]);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  renderStep(state.plan[idx]);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 950);
+}
+
+function rebuild() {
+  let s = document.getElementById("strInput").value;
+  // restrict to a clean visualization length
+  if (s.length > 26) s = s.slice(0, 26);
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  load(s);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("presetSel").addEventListener("change", (e) => {
+  document.getElementById("strInput").value = e.target.value;
+  rebuild();
+});
+document.getElementById("strInput").addEventListener("change", rebuild);
+document.getElementById("strInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") rebuild();
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
