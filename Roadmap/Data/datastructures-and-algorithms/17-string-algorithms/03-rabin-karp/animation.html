@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rabin-Karp — Rolling-Hash String Matching</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-win: rgba(88, 166, 255, 0.22);
+    --hi-out: rgba(248, 81, 73, 0.30);
+    --hi-in: rgba(63, 185, 80, 0.30);
+    --hi-hit: rgba(210, 153, 34, 0.30);
+    --hi-match: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  #textInput { width: 260px; }
+  #patInput { width: 120px; }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tape { display: flex; flex-wrap: wrap; gap: 4px; font-family: var(--mono); }
+  .cell {
+    width: 30px;
+    height: 38px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    transition: background 0.2s ease, border-color 0.2s ease;
+    position: relative;
+  }
+  .cell .ch { font-size: 15px; color: var(--text); font-weight: 600; }
+  .cell .ix { font-size: 9px; color: var(--muted); }
+  .cell.win { background: var(--hi-win); border-color: var(--accent); }
+  .cell.out { background: var(--hi-out); border-color: var(--bad); }
+  .cell.in  { background: var(--hi-in); border-color: var(--good); }
+  .cell.hit { background: var(--hi-hit); border-color: var(--accent-2); }
+  .cell.match { background: var(--hi-match); border-color: var(--good); }
+  .cell.match .ch { color: #fff; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .hashbox {
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 12px 14px;
+  }
+  .hashbox .row { display: flex; justify-content: space-between; margin: 4px 0; }
+  .hashbox .lab { color: var(--muted); }
+  .hashbox .val { color: var(--accent-2); font-weight: 700; }
+  .hashbox .val.eq { color: var(--good); }
+  .hashbox .val.ne { color: var(--bad); }
+  .formula {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    line-height: 1.7;
+  }
+  .formula b { color: var(--accent); }
+  .formula .out { color: var(--bad); font-weight: 700; }
+  .formula .in { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.hit { border-left-color: var(--accent-2); }
+  .narrate.match { border-left-color: var(--good); }
+  .narrate.spurious { border-left-color: var(--bad); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .matches {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--good);
+    margin-top: 8px;
+    min-height: 18px;
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .params { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rabin-Karp — Rolling-Hash String Matching</h1>
+  <p>Slide a length-m window over the text, roll the hash in O(1) (remove the <span style="color:#f85149">leading</span> char, add the <span style="color:#3fb950">trailing</span> char), compare to the pattern hash, and <b>verify</b> on a hit.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Text: <input type="text" id="textInput" value="abracadabra" /></label>
+    <label>Pattern: <input type="text" id="patInput" value="abra" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card">
+    <h2>Text tape (window highlighted)</h2>
+    <div class="tape" id="textTape"></div>
+    <div class="params" id="paramInfo"></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--hi-win)"></span> current window</span>
+      <span><span class="swatch" style="background:var(--hi-out)"></span> leaving char</span>
+      <span><span class="swatch" style="background:var(--hi-in)"></span> entering char</span>
+      <span><span class="swatch" style="background:var(--hi-hit)"></span> hash hit (candidate)</span>
+      <span><span class="swatch" style="background:var(--hi-match)"></span> verified match</span>
+    </div>
+    <div class="matches" id="matchList"></div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Pattern &amp; hashes</h2>
+      <div class="tape" id="patTape" style="margin-bottom:12px;"></div>
+      <div class="hashbox">
+        <div class="row"><span class="lab">hash(pattern)</span><span class="val" id="patHashVal">-</span></div>
+        <div class="row"><span class="lab">hash(window)</span><span class="val" id="winHashVal">-</span></div>
+        <div class="row"><span class="lab">equal?</span><span class="val" id="eqVal">-</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Rolling update (O(1))</h2>
+      <div class="formula" id="rollFormula">Press Step to begin.</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We hash the pattern once, hash the first window, then roll across the text. Each hit is verified character by character.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Uses base = 256 and a small prime modulus for readable hash values
+    (real implementations use a large prime near 10<sup>9</sup> or 2<sup>61</sup>&minus;1). The <b>verify</b> step compares characters
+    on every hash hit, so collisions never produce a false reported match. See <code>junior.md</code> and <code>professional.md</code>
+    for the rolling-update derivation and the collision-probability bound.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Hash parameters (small modulus for readable numbers) ----------
+const BASE = 256;
+const MOD = 2_038_074_743; // a prime; small enough to show, large enough to rarely collide
+
+function charCode(c) { return c.charCodeAt(0); }
+
+function hornerHash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * BASE + charCode(s[i])) % MOD;
+  }
+  return h;
+}
+
+function highPow(m) {
+  let h = 1;
+  for (let i = 0; i < m - 1; i++) h = (h * BASE) % MOD;
+  return h;
+}
+
+// safe modular multiply for our modulus (< 2^31, product < 2^62 — JS doubles lose precision,
+// so do it via BigInt for correctness in the visualization)
+function mul(a, b) {
+  return Number((BigInt(a) * BigInt(b)) % BigInt(MOD));
+}
+function hornerHashSafe(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (mul(h, BASE) + charCode(s[i])) % MOD;
+  return h;
+}
+function highPowSafe(m) {
+  let h = 1;
+  for (let i = 0; i < m - 1; i++) h = mul(h, BASE);
+  return h;
+}
+
+// ---------- Build the step plan ----------
+function buildPlan(text, pat) {
+  const steps = [];
+  const n = text.length, m = pat.length;
+  if (m === 0 || m > n) {
+    steps.push({ type: "invalid", desc: m === 0
+      ? "Empty pattern — nothing to search for. Edit the pattern field."
+      : "Pattern is longer than the text — no window fits. Edit the inputs." });
+    return { steps, n, m };
+  }
+  const hp = highPowSafe(m);
+  const patHash = hornerHashSafe(pat);
+  let winHash = hornerHashSafe(text.slice(0, m));
+
+  steps.push({
+    type: "init", i: 0, winHash, patHash, hp, leaving: null, entering: null,
+    desc: "Hash the pattern (once) and the first window T[0.." + (m - 1) + "]. " +
+          "Both cost O(m). Now compare their hashes."
+  });
+
+  for (let i = 0; i + m <= n; i++) {
+    const eq = (winHash === patHash);
+    // compare step
+    steps.push({
+      type: eq ? "hit" : "nohit",
+      i, winHash, patHash, hp, leaving: null, entering: null,
+      desc: eq
+        ? "Hash hit at index " + i + "! hash(window) == hash(pattern) = " + patHash +
+          ". This is only a CANDIDATE — we must verify the characters."
+        : "hash(window)=" + winHash + " ≠ hash(pattern)=" + patHash +
+          ". The strings differ; skip with no character comparison."
+    });
+    if (eq) {
+      const real = text.slice(i, i + m) === pat;
+      steps.push({
+        type: real ? "match" : "spurious",
+        i, winHash, patHash, hp, leaving: null, entering: null, verified: true,
+        desc: real
+          ? "Verify: T[" + i + ".." + (i + m - 1) + "] = \"" + text.slice(i, i + m) +
+            "\" equals the pattern. CONFIRMED match at index " + i + "."
+          : "Verify: T[" + i + ".." + (i + m - 1) + "] = \"" + text.slice(i, i + m) +
+            "\" differs from the pattern. SPURIOUS hit (a collision) — discard."
+      });
+    }
+    // roll to next window
+    if (i + m < n) {
+      const leaving = i, entering = i + m;
+      const prev = winHash;
+      let h = ((winHash - mul(charCode(text[i]), hp)) % MOD + MOD) % MOD;
+      h = (mul(h, BASE) + charCode(text[entering])) % MOD;
+      const after = h;
+      steps.push({
+        type: "roll", i: i + 1, winHash: after, patHash, hp,
+        leaving, entering, prevHash: prev,
+        desc: "Roll the window forward in O(1): remove leading char '" + text[leaving] +
+              "', shift × base, add trailing char '" + text[entering] + "'."
+      });
+      winHash = after;
+    }
+  }
+  steps.push({ type: "done", i: n - m, winHash, patHash, hp, leaving: null, entering: null,
+    desc: "Reached the end of the text. Search complete." });
+  return { steps, n, m };
+}
+
+// ---------- Rendering ----------
+function renderTape(container, str, opts) {
+  opts = opts || {};
+  container.innerHTML = "";
+  for (let i = 0; i < str.length; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if (opts.winStart != null && i >= opts.winStart && i < opts.winStart + opts.winLen) {
+      cell.classList.add("win");
+    }
+    if (opts.cls && opts.cls[i]) cell.classList.add(opts.cls[i]);
+    if (i === opts.leaving) cell.classList.add("out");
+    if (i === opts.entering) cell.classList.add("in");
+    const ch = document.createElement("div");
+    ch.className = "ch";
+    ch.textContent = str[i] === " " ? "␣" : str[i];
+    const ix = document.createElement("div");
+    ix.className = "ix";
+    ix.textContent = i;
+    cell.appendChild(ch);
+    cell.appendChild(ix);
+    container.appendChild(cell);
+  }
+}
+
+function applyStep(step) {
+  const text = state.text, pat = state.pat, m = state.m;
+  document.getElementById("paramInfo").textContent =
+    "base = " + BASE + "   modulus = " + MOD + "   m = " + m + "   base^(m-1) mod p = " + (step.hp != null ? step.hp : "-");
+
+  if (step.type === "invalid") {
+    renderTape(document.getElementById("textTape"), text, {});
+    renderTape(document.getElementById("patTape"), pat, {});
+    document.getElementById("patHashVal").textContent = "-";
+    document.getElementById("winHashVal").textContent = "-";
+    document.getElementById("eqVal").textContent = "-";
+    document.getElementById("rollFormula").textContent = "—";
+    setNarrate(step);
+    return;
+  }
+
+  // text tape highlighting
+  const cls = {};
+  if (step.type === "hit") for (let j = 0; j < m; j++) cls[step.i + j] = "hit";
+  if (step.type === "match") for (let j = 0; j < m; j++) cls[step.i + j] = "match";
+  if (step.type === "spurious") for (let j = 0; j < m; j++) cls[step.i + j] = "hit";
+
+  renderTape(document.getElementById("textTape"), text, {
+    winStart: step.i, winLen: m, cls,
+    leaving: step.leaving, entering: step.entering
+  });
+  renderTape(document.getElementById("patTape"), pat, {});
+
+  // hash box
+  document.getElementById("patHashVal").textContent = step.patHash;
+  document.getElementById("winHashVal").textContent = step.winHash;
+  const eqEl = document.getElementById("eqVal");
+  if (step.winHash === step.patHash) {
+    eqEl.textContent = "YES (candidate → verify)";
+    eqEl.className = "val eq";
+  } else {
+    eqEl.textContent = "no";
+    eqEl.className = "val ne";
+  }
+
+  // roll formula
+  const fEl = document.getElementById("rollFormula");
+  if (step.type === "roll") {
+    fEl.innerHTML =
+      "h = ((h − <span class='out'>'" + text[step.leaving] + "'</span>·base^(m-1)) · base + <span class='in'>'" + text[step.entering] + "'</span>) mod p\n" +
+      "prev hash = " + step.prevHash + "\n" +
+      "→ remove leading <span class='out'>'" + text[step.leaving] + "'</span> (index " + step.leaving + ")\n" +
+      "→ shift × " + BASE + ", add trailing <span class='in'>'" + step.entering + "' = '" + text[step.entering] + "'</span>\n" +
+      "new hash = <b>" + step.winHash + "</b>";
+  } else if (step.type === "init") {
+    fEl.innerHTML = "hash(s) = (…((s[0]·base + s[1])·base + s[2])…) mod p   <b>(Horner)</b>\n" +
+      "Computed pattern hash and first window hash, each O(m).";
+  } else if (step.type === "hit" || step.type === "match" || step.type === "spurious") {
+    fEl.innerHTML = "Hashes equal → <b>verify</b> by comparing the " + m + " characters directly.\n" +
+      "Hashing is necessary but not sufficient: only verification confirms a real match.";
+  } else if (step.type === "done") {
+    fEl.innerHTML = "Search finished. Expected total time O(n + m).";
+  } else {
+    fEl.innerHTML = "Hashes differ → no match here. Skip in O(1), no character comparison.";
+  }
+
+  setNarrate(step);
+  renderMatches();
+}
+
+function setNarrate(step) {
+  const el = document.getElementById("narrate");
+  el.className = "narrate";
+  if (step.type === "hit") el.classList.add("hit");
+  if (step.type === "match") el.classList.add("match");
+  if (step.type === "spurious") el.classList.add("spurious");
+  el.innerHTML = step.desc;
+}
+
+function renderMatches() {
+  const found = [];
+  for (let s = 0; s <= state.stepIdx; s++) {
+    const st = state.plan.steps[s];
+    if (st.type === "match") found.push(st.i);
+  }
+  const el = document.getElementById("matchList");
+  el.textContent = found.length
+    ? "verified matches at indices: " + found.join(", ")
+    : "verified matches: (none yet)";
+}
+
+// ---------- State + driver ----------
+const state = {
+  text: "", pat: "", n: 0, m: 0,
+  plan: null, stepIdx: 0, running: false, timer: null
+};
+
+function gotoStep(idx) {
+  if (!state.plan || idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.text = document.getElementById("textInput").value;
+  state.pat = document.getElementById("patInput").value;
+  state.plan = buildPlan(state.text, state.pat);
+  state.n = state.plan.n;
+  state.m = state.plan.m;
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("textInput").addEventListener("change", rebuild);
+document.getElementById("patInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
