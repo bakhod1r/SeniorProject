@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Branch and Bound — 0/1 Knapsack Search Tree</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --prune: #f85149;
+    --incumbent: #a371f7;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg#tree { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+  .nodebox { transition: opacity 0.25s ease; }
+  rect.node {
+    fill: var(--panel-2);
+    stroke: var(--border);
+    stroke-width: 1.5;
+    rx: 6;
+  }
+  rect.node.current { stroke: var(--accent); stroke-width: 2.5; }
+  rect.node.feasleaf { stroke: var(--good); stroke-width: 2; }
+  rect.node.pruned { stroke: var(--prune); stroke-width: 2; }
+  rect.node.infeasible { stroke: var(--bad); stroke-width: 2; stroke-dasharray: 4 3; }
+  rect.node.newbest { fill: rgba(163, 113, 247, 0.25); stroke: var(--incumbent); stroke-width: 2.5; }
+  text.nlabel { fill: var(--text); font-size: 10px; font-family: var(--mono); }
+  text.nbound { fill: var(--accent-2); font-size: 10px; font-family: var(--mono); font-weight: 700; }
+  line.link { stroke: var(--muted); stroke-width: 1.5; }
+  line.link.take { stroke: var(--good); }
+  line.link.skip { stroke: var(--muted); stroke-dasharray: 3 3; }
+  line.pruneX { stroke: var(--prune); stroke-width: 2.5; }
+  text.edgelbl { fill: var(--muted); font-size: 9px; font-family: var(--mono); }
+  .stat { font-family: var(--mono); font-size: 14px; margin: 6px 0; }
+  .stat b { color: var(--accent); }
+  .stat .inc { color: var(--incumbent); font-weight: 700; }
+  .stat .bnd { color: var(--accent-2); font-weight: 700; }
+  table.items { border-collapse: collapse; font-family: var(--mono); font-size: 12px; margin-top: 8px; width: 100%; }
+  table.items th, table.items td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
+  table.items th { color: var(--muted); background: var(--panel-2); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.prune { border-left-color: var(--prune); }
+  .narrate.best { border-left-color: var(--incumbent); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Branch and Bound — 0/1 Knapsack Search Tree</h1>
+  <p>At each node we compute the <b>fractional (optimistic) bound</b>. If bound &le; <b>incumbent</b> (best-so-far), the whole subtree is <b style="color:#f85149">pruned</b> (crossed out). Watch the incumbent tighten and pruning kick in.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Instance:
+      <select id="instSel">
+        <option value="demo">Demo (4 items, W=10)</option>
+        <option value="classic">Classic (3 items, W=50)</option>
+        <option value="tight">Tight ratios (4 items, W=8)</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Search tree (take = solid green, skip = dashed)</h2>
+      <svg id="tree" viewBox="0 0 760 460" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> current node</span>
+        <span><span class="swatch" style="background:rgba(163,113,247,0.25);border-color:var(--incumbent)"></span> new incumbent</span>
+        <span><span class="swatch" style="border-color:var(--prune)"></span> pruned (bound &le; best)</span>
+        <span><span class="swatch" style="border-color:var(--bad);border-style:dashed"></span> infeasible (overflow)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>State</h2>
+      <div class="stat">capacity W = <b id="capVal">10</b></div>
+      <div class="stat">incumbent (best) = <span class="inc" id="incVal">0</span></div>
+      <div class="stat">node bound = <span class="bnd" id="bndVal">&mdash;</span></div>
+      <div class="stat">nodes visited = <b id="nodesVal">0</b></div>
+      <div class="stat">subtrees pruned = <b id="prunedVal">0</b></div>
+      <table class="items" id="itemTbl"></table>
+      <div class="step-counter" id="orderNote" style="margin-top:8px;">items sorted by value/weight ratio</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We branch <code>take</code> / <code>skip</code> on each item, computing a fractional upper bound and pruning any subtree that cannot beat the incumbent.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The fractional bound = value taken + greedily-packed whole remaining items + a fraction of the next item that overflows; it is an admissible <b>upper</b> bound, so a subtree with <code>bound &le; best</code> can never improve the answer and is safely pruned. See <code>junior.md</code> and <code>professional.md</code> for the optimality proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Instances ----------
+const INSTANCES = {
+  demo:    { W: 10, items: [[10,2],[10,4],[12,6],[18,9]] },
+  classic: { W: 50, items: [[60,10],[100,20],[120,30]] },
+  tight:   { W: 8,  items: [[8,2],[7,2],[6,3],[5,3]] }
+};
+
+// ---------- Fractional bound ----------
+function bound(items, idx, value, weight, W) {
+  if (weight >= W) return value;
+  let b = value, tot = weight;
+  for (let i = idx; i < items.length; i++) {
+    const [v, w] = items[i];
+    if (tot + w <= W) { tot += w; b += v; }
+    else { b += (W - tot) * v / w; return b; }
+  }
+  return b;
+}
+
+// ---------- Build the full B&B trace (DFS) ----------
+// Each tree node: id, parent, depth, take(bool|null for root), value, weight,
+//                 boundVal, x/y (layout). Steps reference node ids + actions.
+function buildTrace(inst) {
+  const items = inst.items.slice().sort((a, b) => (b[0] / b[1]) - (a[0] / a[1]));
+  const W = inst.W;
+  const n = items.length;
+  const nodes = [];
+  const steps = [];
+  let best = 0;
+  let nextId = 0;
+
+  function addNode(parent, take, value, weight, depth) {
+    const id = nextId++;
+    nodes.push({ id, parent, take, value, weight, depth,
+                 boundVal: null, status: "open" });
+    return id;
+  }
+
+  // recursive DFS that records steps
+  function dfs(id, idx, value, weight) {
+    const node = nodes[id];
+    // visit
+    steps.push({ kind: "visit", id, value, weight, best });
+    if (value > best) {
+      best = value;
+      node.status = "best";
+      steps.push({ kind: "newbest", id, best });
+    }
+    if (idx === n) {
+      if (node.status !== "best") node.status = "leaf";
+      steps.push({ kind: "leaf", id, best });
+      return;
+    }
+    const bnd = bound(items, idx, value, weight, W);
+    node.boundVal = bnd;
+    steps.push({ kind: "bound", id, bound: bnd, best });
+    if (bnd <= best) {
+      node.status = "pruned";
+      steps.push({ kind: "prune", id, bound: bnd, best });
+      return;
+    }
+    // branch: take
+    const [v, w] = items[idx];
+    if (weight + w <= W) {
+      const tid = addNode(id, true, value + v, weight + w, node.depth + 1);
+      steps.push({ kind: "branch", id: tid, parent: id, take: true });
+      dfs(tid, idx + 1, value + v, weight + w);
+    } else {
+      // infeasible take: create a marker node
+      const tid = addNode(id, true, value, weight, node.depth + 1);
+      nodes[tid].infeasible = true;
+      nodes[tid].status = "infeasible";
+      steps.push({ kind: "infeasible", id: tid, parent: id });
+    }
+    // branch: skip
+    const sid = addNode(id, false, value, weight, node.depth + 1);
+    steps.push({ kind: "branch", id: sid, parent: id, take: false });
+    dfs(sid, idx + 1, value, weight);
+  }
+
+  const root = addNode(-1, null, 0, 0, 0);
+  dfs(root, 0, 0, 0);
+  steps.push({ kind: "done", best });
+
+  layoutTree(nodes);
+  return { items, W, n, nodes, steps };
+}
+
+// ---------- Tree layout (assign x by in-order leaf index, y by depth) ----------
+function layoutTree(nodes) {
+  const childrenOf = {};
+  nodes.forEach(nd => { childrenOf[nd.id] = []; });
+  nodes.forEach(nd => { if (nd.parent >= 0) childrenOf[nd.parent].push(nd.id); });
+  let leafX = 0;
+  const xspan = 70, ytop = 34, ystep = 78;
+  function assign(id) {
+    const kids = childrenOf[id];
+    if (kids.length === 0) {
+      nodes[id].x = 40 + leafX * xspan;
+      leafX++;
+    } else {
+      kids.forEach(assign);
+      const xs = kids.map(k => nodes[k].x);
+      nodes[id].x = (Math.min(...xs) + Math.max(...xs)) / 2;
+    }
+    nodes[id].y = ytop + nodes[id].depth * ystep;
+  }
+  const root = nodes.find(nd => nd.parent < 0);
+  assign(root.id);
+  // normalize width into viewBox 0..760
+  const maxX = Math.max(...nodes.map(nd => nd.x));
+  const scale = maxX > 700 ? 700 / maxX : 1;
+  nodes.forEach(nd => { nd.x = 40 + (nd.x - 40) * scale; });
+}
+
+// ---------- Rendering ----------
+const svg = document.getElementById("tree");
+const SVGNS = "http://www.w3.org/2000/svg";
+let state = null;
+
+function el(tag, attrs, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function renderTree() {
+  svg.innerHTML = "";
+  const { nodes } = state.trace;
+  // links first
+  nodes.forEach(nd => {
+    if (nd.parent < 0) return;
+    if (!nd.shown) return;
+    const p = nodes[nd.parent];
+    const cls = nd.take ? "link take" : "link skip";
+    svg.appendChild(el("line", { x1: p.x, y1: p.y + 14, x2: nd.x, y2: nd.y - 14, class: cls }));
+    const mx = (p.x + nd.x) / 2, my = (p.y + nd.y) / 2;
+    svg.appendChild(el("text", { x: mx + 3, y: my, class: "edgelbl" },
+      nd.take ? "take" : "skip"));
+  });
+  // nodes
+  nodes.forEach(nd => {
+    if (!nd.shown) return;
+    const g = el("g", { class: "nodebox" });
+    let cls = "node";
+    if (nd.id === state.currentId) cls += " current";
+    if (nd.status === "pruned") cls += " pruned";
+    else if (nd.status === "infeasible") cls += " infeasible";
+    else if (nd.status === "best" && nd.id === state.lastBestId) cls += " newbest";
+    else if (nd.status === "leaf" || nd.status === "best") cls += " feasleaf";
+    const w = 58, h = 28;
+    g.appendChild(el("rect", { x: nd.x - w / 2, y: nd.y - h / 2, width: w, height: h, class: cls, rx: 6 }));
+    if (nd.infeasible) {
+      g.appendChild(el("text", { x: nd.x, y: nd.y + 3, class: "nlabel", "text-anchor": "middle", fill: "#f85149" }, "X full"));
+    } else {
+      g.appendChild(el("text", { x: nd.x, y: nd.y - 1, class: "nlabel", "text-anchor": "middle" },
+        "v=" + nd.value + " w=" + nd.weight));
+      const bt = nd.boundVal != null ? ("b=" + nd.boundVal.toFixed(1)) : "";
+      g.appendChild(el("text", { x: nd.x, y: nd.y + 10, class: "nbound", "text-anchor": "middle" }, bt));
+    }
+    svg.appendChild(g);
+    // prune cross-out
+    if (nd.status === "pruned" && nd.pruneShown) {
+      svg.appendChild(el("line", { x1: nd.x - 32, y1: nd.y - 16, x2: nd.x + 32, y2: nd.y + 16, class: "pruneX" }));
+      svg.appendChild(el("line", { x1: nd.x - 32, y1: nd.y + 16, x2: nd.x + 32, y2: nd.y - 16, class: "pruneX" }));
+    }
+  });
+}
+
+function renderItems() {
+  const tbl = document.getElementById("itemTbl");
+  let html = "<tr><th>#</th><th>value</th><th>weight</th><th>ratio</th></tr>";
+  state.trace.items.forEach((it, i) => {
+    html += "<tr><td>" + i + "</td><td>" + it[0] + "</td><td>" + it[1] +
+            "</td><td>" + (it[0] / it[1]).toFixed(2) + "</td></tr>";
+  });
+  tbl.innerHTML = html;
+}
+
+function renderStats() {
+  document.getElementById("capVal").textContent = state.trace.W;
+  document.getElementById("incVal").textContent = state.best;
+  document.getElementById("bndVal").innerHTML = state.curBound == null ? "&mdash;" : state.curBound.toFixed(2);
+  document.getElementById("nodesVal").textContent = state.nodesVisited;
+  document.getElementById("prunedVal").textContent = state.prunedCount;
+}
+
+// ---------- Step machine ----------
+function applyStep(step) {
+  const { nodes } = state.trace;
+  const narrate = document.getElementById("narrate");
+  narrate.className = "narrate";
+  switch (step.kind) {
+    case "branch":
+      nodes[step.id].shown = true;
+      break;
+    case "infeasible":
+      nodes[step.id].shown = true;
+      nodes[step.id].status = "infeasible";
+      narrate.innerHTML = "Branch <b>take</b> would overflow capacity &rarr; <b style='color:#f85149'>infeasible</b>, skip this child.";
+      break;
+    case "visit": {
+      state.currentId = step.id;
+      state.nodesVisited++;
+      const nd = nodes[step.id];
+      narrate.innerHTML = "Visit node (value=" + step.value + ", weight=" + step.weight +
+        "). Current incumbent best = <span style='color:#a371f7'>" + step.best + "</span>.";
+      break;
+    }
+    case "newbest": {
+      state.best = step.best;
+      state.lastBestId = step.id;
+      nodes[step.id].status = "best";
+      narrate.className = "narrate best";
+      narrate.innerHTML = "&#11088; New <b style='color:#a371f7'>incumbent</b>! best = " + step.best +
+        ". A stronger incumbent makes the prune test stricter.";
+      break;
+    }
+    case "bound": {
+      state.curBound = step.bound;
+      nodes[step.id].boundVal = step.bound;
+      narrate.innerHTML = "Compute fractional <b style='color:#d29922'>bound = " + step.bound.toFixed(2) +
+        "</b> vs incumbent " + step.best + ".";
+      break;
+    }
+    case "prune": {
+      nodes[step.id].status = "pruned";
+      nodes[step.id].pruneShown = true;
+      state.prunedCount++;
+      state.curBound = step.bound;
+      narrate.className = "narrate prune";
+      narrate.innerHTML = "&#9986; <b style='color:#f85149'>Prune!</b> bound " + step.bound.toFixed(2) +
+        " &le; best " + step.best + " &rarr; this whole subtree cannot beat the incumbent. Cross it out.";
+      break;
+    }
+    case "leaf":
+      narrate.innerHTML = "Leaf reached: all items decided. Incumbent best = " + step.best + ".";
+      break;
+    case "done":
+      state.currentId = -1;
+      state.best = step.best;
+      narrate.className = "narrate best";
+      narrate.innerHTML = "&#9989; Done. Provably optimal value = <b style='color:#a371f7'>" + step.best +
+        "</b>. Pruned " + state.prunedCount + " subtree(s); visited " + state.nodesVisited + " nodes.";
+      break;
+  }
+  renderTree();
+  renderStats();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.trace.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.trace.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.trace.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.trace.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.trace.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.trace.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.trace.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+function rebuild() {
+  const key = document.getElementById("instSel").value;
+  if (state && state.running) { clearInterval(state.timer); }
+  const trace = buildTrace(INSTANCES[key]);
+  // reset per-node display flags
+  trace.nodes.forEach(nd => { nd.shown = false; nd.pruneShown = false;
+    nd.status = nd.infeasible ? "infeasible" : "open"; nd.boundVal = null; });
+  // root visible from the start
+  const root = trace.nodes.find(nd => nd.parent < 0);
+  root.shown = true;
+  state = {
+    trace, stepIdx: -1, running: false, timer: null,
+    currentId: root.id, lastBestId: -1, best: 0,
+    curBound: null, nodesVisited: 0, prunedCount: 0
+  };
+  renderItems();
+  renderTree();
+  renderStats();
+  gotoStep(0);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("instSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
