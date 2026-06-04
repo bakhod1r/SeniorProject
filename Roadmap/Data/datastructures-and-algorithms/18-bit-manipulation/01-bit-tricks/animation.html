@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bit Tricks — Interactive Bit Manipulation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --on: #1f6feb;
+    --on-glow: rgba(31, 111, 235, 0.55);
+    --hi: rgba(210, 153, 34, 0.30);
+    --lowbit: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: var(--on); border-color: var(--on); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 130px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="number"].small { width: 64px; }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bitrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    font-family: var(--mono);
+  }
+  .byte-group { display: flex; gap: 3px; padding: 0 6px; }
+  .byte-group + .byte-group { border-left: 1px dashed var(--border); }
+  .cell {
+    width: 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .bit {
+    width: 26px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+    transition: all 0.25s ease;
+  }
+  .bit.one {
+    background: var(--on);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 8px var(--on-glow);
+  }
+  .bit.hi { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+  .bit.lowbit { background: var(--good); border-color: var(--good); color: #04210d; box-shadow: 0 0 10px rgba(63,185,80,0.6); }
+  .bit.flash { animation: flash 0.5s ease; }
+  @keyframes flash {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.25); background: var(--accent-2); color:#000; }
+    100% { transform: scale(1); }
+  }
+  .idx { font-size: 9px; color: var(--muted); font-family: var(--mono); }
+  .readout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .readout .item { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; }
+  .readout .item span.k { color: var(--muted); }
+  .readout .item span.v { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-top: 14px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .pcounter {
+    font-family: var(--mono);
+    font-size: 26px;
+    color: var(--good);
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  .footnote code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bit Tricks — Watch Operations on a 32-bit Integer</h1>
+  <p>Edit the number, pick an operation, and step through it bit by bit. Lit cells are 1, dark cells are 0. Two's complement; bit 0 is on the right.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>x = <input type="number" id="xInput" value="44" min="0" max="4294967295" /></label>
+    <label>op:
+      <select id="opSel">
+        <option value="set">Set bit i</option>
+        <option value="clear">Clear bit i</option>
+        <option value="toggle">Toggle bit i</option>
+        <option value="dropLow">x &amp; (x-1) — clear lowest set bit</option>
+        <option value="isoLow">x &amp; -x — isolate lowest set bit</option>
+        <option value="popcount">Popcount (Kernighan loop)</option>
+      </select>
+    </label>
+    <label>i = <input type="number" id="iInput" class="small" value="1" min="0" max="31" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card">
+    <h2>Bit cells (positions 31 &rarr; 0)</h2>
+    <div class="bitrow" id="bitRow"></div>
+    <div class="readout">
+      <div class="item"><span class="k">dec</span> = <span class="v" id="roDec">44</span></div>
+      <div class="item"><span class="k">hex</span> = <span class="v" id="roHex">0x2C</span></div>
+      <div class="item"><span class="k">bin</span> = <span class="v" id="roBin">101100</span></div>
+      <div class="item"><span class="k">popcount</span> = <span class="v" id="roPop">3</span></div>
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--on)"></span> bit = 1</span>
+      <span><span class="swatch" style="background:var(--panel-2)"></span> bit = 0</span>
+      <span><span class="swatch" style="background:var(--good)"></span> isolated lowest set bit</span>
+      <span><span class="swatch" style="background:var(--panel-2);outline:2px solid var(--accent-2)"></span> target bit i</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Operation &amp; running count <span class="pcounter" id="liveCount"></span></h2>
+    <div class="narrate" id="narrate">Press <b>Step</b> to begin. Choose an operation above; the cells animate one transformation per step.</div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Values are 32-bit unsigned; negation <code>-x</code> is computed mod 2<sup>32</sup> (two's complement).
+    The Kernighan popcount loop runs <code>x &amp;= x-1</code> once per set bit. See <code>junior.md</code> and <code>professional.md</code>
+    for proofs that <code>x &amp; (x-1)</code> clears, and <code>x &amp; -x</code> isolates, the lowest set bit.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const WIDTH = 32;
+const MASK = 0xFFFFFFFF; // 32-bit mask
+
+// ---------- State ----------
+const state = {
+  x0: 44,        // original input
+  op: "set",
+  i: 1,
+  plan: [],      // sequence of frames
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// A frame: { x, hi (bit index or -1), lowbit (bit index or -1),
+//            flash (bit index or -1), count (number or null), desc }
+
+// ---------- Helpers ----------
+function toUnsigned(v) { return v >>> 0; }
+
+function neg32(x) {
+  // two's complement negation within 32 bits
+  return ((~x) + 1) >>> 0;
+}
+
+function popcount(x) {
+  x = x >>> 0;
+  let c = 0;
+  while (x !== 0) {
+    x &= (x - 1) >>> 0;
+    x = x >>> 0;
+    c++;
+  }
+  return c;
+}
+
+function ctz(x) {
+  x = x >>> 0;
+  if (x === 0) return -1;
+  let i = 0;
+  while (((x >>> i) & 1) === 0) i++;
+  return i;
+}
+
+function bin(x) { return (x >>> 0).toString(2); }
+function hex(x) { return "0x" + (x >>> 0).toString(16).toUpperCase(); }
+
+// ---------- Build the step plan per operation ----------
+function buildPlan(x0, op, i) {
+  const frames = [];
+  const startX = x0 >>> 0;
+
+  frames.push({
+    x: startX, hi: -1, lowbit: -1, flash: -1, count: null,
+    desc: "Start. x = " + startX + " (" + hex(startX) + "). Operation: <b>" + opLabel(op) + "</b>."
+  });
+
+  if (op === "set") {
+    frames.push({
+      x: startX, hi: i, lowbit: -1, flash: -1, count: null,
+      desc: "Build the mask <code>1 << " + i + "</code> — a single 1 at position " + i + " (highlighted)."
+    });
+    const r = (startX | (1 << i)) >>> 0;
+    frames.push({
+      x: r, hi: i, lowbit: -1, flash: i, count: null,
+      desc: "OR with the mask forces bit " + i + " to 1: <code>x | (1 << " + i + ")</code> = " + r + "."
+    });
+  } else if (op === "clear") {
+    frames.push({
+      x: startX, hi: i, lowbit: -1, flash: -1, count: null,
+      desc: "Build the inverse mask <code>~(1 << " + i + ")</code> — every bit is 1 except position " + i + "."
+    });
+    const r = (startX & ~(1 << i)) >>> 0;
+    frames.push({
+      x: r, hi: i, lowbit: -1, flash: i, count: null,
+      desc: "AND with the inverse mask forces bit " + i + " to 0: <code>x & ~(1 << " + i + ")</code> = " + r + "."
+    });
+  } else if (op === "toggle") {
+    frames.push({
+      x: startX, hi: i, lowbit: -1, flash: -1, count: null,
+      desc: "Build the mask <code>1 << " + i + "</code> at position " + i + " (highlighted)."
+    });
+    const r = (startX ^ (1 << i)) >>> 0;
+    frames.push({
+      x: r, hi: i, lowbit: -1, flash: i, count: null,
+      desc: "XOR with the mask flips bit " + i + ": <code>x ^ (1 << " + i + ")</code> = " + r + "."
+    });
+  } else if (op === "dropLow") {
+    if (startX === 0) {
+      frames.push({ x: 0, hi: -1, lowbit: -1, flash: -1, count: null,
+        desc: "x is 0 — there is no lowest set bit to clear. Result stays 0." });
+    } else {
+      const s = ctz(startX);
+      frames.push({
+        x: startX, hi: -1, lowbit: s, flash: -1, count: null,
+        desc: "Lowest set bit is at position " + s + " (green). We will clear it with <code>x & (x - 1)</code>."
+      });
+      const xm1 = (startX - 1) >>> 0;
+      frames.push({
+        x: xm1, hi: -1, lowbit: -1, flash: s, count: null,
+        desc: "<code>x - 1</code> = " + xm1 + ": bit " + s + " became 0 and the zeros below it became 1s (borrow ripple)."
+      });
+      const r = (startX & xm1) >>> 0;
+      frames.push({
+        x: r, hi: -1, lowbit: -1, flash: s, count: null,
+        desc: "<code>x & (x-1)</code> = " + r + ". The lowest set bit is gone; popcount dropped by exactly 1."
+      });
+    }
+  } else if (op === "isoLow") {
+    if (startX === 0) {
+      frames.push({ x: 0, hi: -1, lowbit: -1, flash: -1, count: null,
+        desc: "x is 0 — <code>x & -x</code> = 0 (no bit to isolate)." });
+    } else {
+      const s = ctz(startX);
+      const negx = neg32(startX);
+      frames.push({
+        x: negx, hi: -1, lowbit: s, flash: -1, count: null,
+        desc: "Compute <code>-x = ~x + 1</code> = " + negx + " (" + hex(negx) + ") in 32-bit two's complement."
+      });
+      const r = (startX & negx) >>> 0;
+      frames.push({
+        x: r, hi: -1, lowbit: s, flash: s, count: null,
+        desc: "<code>x & -x</code> = " + r + " = 2^" + s + ". Only the lowest set bit survives (green)."
+      });
+    }
+  } else if (op === "popcount") {
+    let cur = startX;
+    let count = 0;
+    frames.push({
+      x: cur, hi: -1, lowbit: cur === 0 ? -1 : ctz(cur), flash: -1, count: 0,
+      desc: "Kernighan's loop: repeatedly run <code>x &= x-1</code>, counting once per iteration. count = 0."
+    });
+    while (cur !== 0) {
+      const s = ctz(cur);
+      const next = (cur & (cur - 1)) >>> 0;
+      count++;
+      frames.push({
+        x: next, hi: -1, lowbit: next === 0 ? -1 : ctz(next), flash: s, count: count,
+        desc: "Cleared the lowest set bit (position " + s + ") with <code>x &= x-1</code>. count = " + count + "."
+      });
+      cur = next;
+    }
+    frames.push({
+      x: 0, hi: -1, lowbit: -1, flash: -1, count: count,
+      desc: "x is now 0 — loop ends. <b>popcount = " + count + "</b> (it ran exactly popcount times)."
+    });
+  }
+
+  return frames;
+}
+
+function opLabel(op) {
+  return {
+    set: "Set bit i (x | (1<<i))",
+    clear: "Clear bit i (x & ~(1<<i))",
+    toggle: "Toggle bit i (x ^ (1<<i))",
+    dropLow: "Clear lowest set bit (x & (x-1))",
+    isoLow: "Isolate lowest set bit (x & -x)",
+    popcount: "Popcount via Kernighan"
+  }[op];
+}
+
+// ---------- Rendering ----------
+function renderBits(frame) {
+  const row = document.getElementById("bitRow");
+  row.innerHTML = "";
+  const x = frame.x >>> 0;
+  for (let g = 0; g < 4; g++) {           // 4 byte groups, high to low
+    const group = document.createElement("div");
+    group.className = "byte-group";
+    for (let b = 0; b < 8; b++) {
+      const pos = 31 - (g * 8 + b);       // bit position, high to low
+      const bitVal = (x >>> pos) & 1;
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      const bit = document.createElement("div");
+      bit.className = "bit" + (bitVal ? " one" : "");
+      if (pos === frame.hi) bit.className += " hi";
+      if (pos === frame.lowbit) bit.className += " lowbit";
+      if (pos === frame.flash) bit.className += " flash";
+      bit.textContent = bitVal;
+      const idx = document.createElement("div");
+      idx.className = "idx";
+      idx.textContent = pos;
+      cell.appendChild(bit);
+      cell.appendChild(idx);
+      group.appendChild(cell);
+    }
+    row.appendChild(group);
+  }
+  document.getElementById("roDec").textContent = x;
+  document.getElementById("roHex").textContent = hex(x);
+  document.getElementById("roBin").textContent = bin(x);
+  document.getElementById("roPop").textContent = popcount(x);
+  document.getElementById("liveCount").textContent =
+    (frame.count === null) ? "" : "count = " + frame.count;
+}
+
+function applyFrame(idx) {
+  const frame = state.plan[idx];
+  renderBits(frame);
+  document.getElementById("narrate").innerHTML = frame.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.length - 1);
+  updateButtons();
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) {
+    state.stepIdx++;
+    applyFrame(state.stepIdx);
+  }
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+function rebuild() {
+  let x = parseInt(document.getElementById("xInput").value, 10);
+  if (isNaN(x) || x < 0) x = 0;
+  if (x > MASK) x = MASK;
+  document.getElementById("xInput").value = x;
+  let i = parseInt(document.getElementById("iInput").value, 10);
+  if (isNaN(i) || i < 0) i = 0;
+  if (i > 31) i = 31;
+  document.getElementById("iInput").value = i;
+
+  state.x0 = x >>> 0;
+  state.op = document.getElementById("opSel").value;
+  state.i = i;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.plan = buildPlan(state.x0, state.op, state.i);
+  state.stepIdx = 0;
+  applyFrame(0);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("opSel").addEventListener("change", rebuild);
+document.getElementById("xInput").addEventListener("change", rebuild);
+document.getElementById("iInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
