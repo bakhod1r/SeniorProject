@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Knuth-Morris-Pratt (KMP) — String Matching Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-match: rgba(63, 185, 80, 0.40);
+    --hi-cmp: rgba(88, 166, 255, 0.40);
+    --hi-bad: rgba(248, 81, 73, 0.40);
+    --hi-lps: rgba(210, 153, 34, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  #textInput { width: 280px; }
+  #patInput { width: 150px; }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tape {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0;
+    font-family: var(--mono);
+    padding-bottom: 6px;
+  }
+  .cell {
+    min-width: 30px;
+    width: 30px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-right: none;
+    font-size: 16px;
+    position: relative;
+    background: var(--bg);
+    transition: background 0.15s ease;
+  }
+  .cell:last-child { border-right: 1px solid var(--border); }
+  .cell.matched { background: var(--hi-match); color: #fff; font-weight: 700; }
+  .cell.cmp { background: var(--hi-cmp); color: #fff; font-weight: 700; }
+  .cell.bad { background: var(--hi-bad); color: #fff; font-weight: 700; }
+  .cell.lps { background: var(--hi-lps); }
+  .idxrow .cell { height: 18px; font-size: 10px; color: var(--muted); background: transparent; border: none; }
+  .patrow { margin-top: 4px; }
+  .label { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  .lpsrow { margin-top: 10px; }
+  .lpsrow .cell { height: 30px; font-size: 13px; color: var(--accent-2); }
+  .lpsrow .cell.used { background: var(--hi-lps); color: #fff; font-weight: 700; border-color: var(--accent-2); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 14px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate .good { color: var(--good); font-weight: 700; }
+  .narrate .bad { color: var(--bad); font-weight: 700; }
+  .narrate .lpsval { color: var(--accent-2); font-weight: 700; }
+  .stats {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .stats span b { color: var(--accent); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .matches { font-family: var(--mono); font-size: 13px; color: var(--good); margin-top: 10px; min-height: 20px; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Knuth-Morris-Pratt — Matching Without Re-Reading</h1>
+  <p>On a mismatch, KMP slides the pattern by the failure link <code>lps[j-1]</code> instead of restarting. The text pointer never moves backward, giving O(n + m).</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Text: <input type="text" id="textInput" value="ABABABABCABAB" /></label>
+    <label>Pattern: <input type="text" id="patInput" value="ABABC" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card">
+    <h2>Text &amp; pattern alignment</h2>
+    <div class="label">Text T (index i scans forward, never backward)</div>
+    <div class="tape idxrow" id="textIdx"></div>
+    <div class="tape" id="textTape"></div>
+    <div class="label patrow">Pattern P (slides right via the failure link on mismatch)</div>
+    <div class="tape" id="patTape"></div>
+    <div class="stats">
+      <span>i = <b id="iVal">0</b></span>
+      <span>j (matched length) = <b id="jVal">0</b></span>
+      <span>pattern offset = <b id="offVal">0</b></span>
+      <span>comparisons = <b id="cmpVal">0</b></span>
+    </div>
+    <div class="matches" id="matchList">matches: (none yet)</div>
+  </div>
+
+  <div class="card">
+    <h2>Prefix function (lps array of the pattern)</h2>
+    <div class="tape idxrow" id="lpsIdx"></div>
+    <div class="tape" id="lpsPat"></div>
+    <div class="tape lpsrow" id="lpsVals"></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--hi-match)"></span> matched</span>
+      <span><span class="swatch" style="background:var(--hi-cmp)"></span> comparing</span>
+      <span><span class="swatch" style="background:var(--hi-bad)"></span> mismatch</span>
+      <span><span class="swatch" style="background:var(--hi-lps)"></span> lps value used</span>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We compare T[i] with P[j]; on a mismatch we set <code>j = lps[j-1]</code> and keep i fixed.</div>
+
+  <div class="card">
+    <h2>How to read this animation</h2>
+    <ul style="margin:0; padding-left:18px; font-size:13px; color:var(--muted); line-height:1.7;">
+      <li><b style="color:var(--good)">Green</b> cells are characters already matched between the text and the pattern.</li>
+      <li><b style="color:var(--accent)">Blue</b> marks the current comparison <code>T[i]</code> vs <code>P[j]</code>.</li>
+      <li><b style="color:var(--bad)">Red</b> marks a mismatch — the moment KMP slides the pattern.</li>
+      <li><b style="color:var(--accent-2)">Gold</b> highlights the <code>lps</code> value used to decide how far to slide.</li>
+      <li>Watch the <b>pattern offset</b> stat: on a mismatch it jumps forward by more than 1, yet the text index <code>i</code> never decreases.</li>
+      <li>After a full match, <code>j</code> becomes <code>lps[j-1]</code> (not 0) so overlapping matches are still found.</li>
+      <li>Edit the <b>Text</b> and <b>Pattern</b> fields and press Reset to try your own inputs (try a repetitive pattern like <code>ABAB</code>).</li>
+    </ul>
+    <p style="margin:12px 0 0; font-size:13px; color:var(--muted);">
+      The <code>lps</code> panel below the tapes shows the prefix function of the pattern: <code>lps[i]</code> is the length of the
+      longest proper prefix of <code>P[0..i]</code> that is also a suffix. On a mismatch at pattern index <code>j</code>, KMP reads
+      <code>lps[j-1]</code> (highlighted gold) and that becomes the new <code>j</code> &mdash; the pattern visually slides right by
+      <code>j - lps[j-1]</code> positions, never restarting at the beginning. This is precisely why the algorithm is linear:
+      no text character is ever compared as a fresh start twice.
+    </p>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. The pattern offset shown is <code>i - j</code>; on a mismatch the offset jumps forward by the failure link instead of by 1.
+    See <code>junior.md</code> for the walkthrough and <code>professional.md</code> for the proof that the text index never moves backward.
+    The comparison counter at the top stays linear in the input size — drive <code>k</code> with a long repetitive text to see it never blow up quadratically.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the prefix function (lps) ----------
+function buildLPS(p) {
+  const m = p.length;
+  const lps = new Array(m).fill(0);
+  let len = 0;
+  for (let i = 1; i < m; i++) {
+    while (len > 0 && p[i] !== p[len]) {
+      len = lps[len - 1];
+    }
+    if (p[i] === p[len]) {
+      len++;
+    }
+    lps[i] = len;
+  }
+  return lps;
+}
+
+// ---------- Build the step plan for the matcher ----------
+// Each step records i, j, the action, comparison result, and any lps fall-back,
+// so we can render the matcher one micro-operation at a time.
+function buildPlan(t, p) {
+  const steps = [];
+  const lps = buildLPS(p);
+  const n = t.length, m = p.length;
+  const matches = [];
+  let j = 0;
+  let comparisons = 0;
+
+  steps.push({
+    i: 0, j: 0, type: "init", cmp: false, lpsUsed: -1,
+    matches: matches.slice(), comparisons,
+    desc: "Start: i = 0, j = 0. j is how many pattern characters currently match. We scan the text left to right."
+  });
+
+  if (m === 0) {
+    steps.push({ i: 0, j: 0, type: "done", cmp: false, lpsUsed: -1, matches: matches.slice(), comparisons,
+      desc: "Empty pattern — nothing to match." });
+    return { steps, lps, matches };
+  }
+
+  for (let i = 0; i < n; i++) {
+    // fall-back loop on mismatch
+    while (j > 0 && t[i] !== p[j]) {
+      comparisons++;
+      const oldJ = j;
+      const newJ = lps[j - 1];
+      steps.push({
+        i, j, type: "mismatch", cmp: true, lpsUsed: oldJ - 1, fallTo: newJ,
+        matches: matches.slice(), comparisons,
+        desc: "Mismatch: T[" + i + "]='" + t[i] + "' ≠ P[" + oldJ + "]='" + p[oldJ] +
+              "'. Slide the pattern: j = lps[" + (oldJ - 1) + "] = " + newJ +
+              ". The already-matched prefix re-aligns; i stays at " + i + "."
+      });
+      j = newJ;
+    }
+    // compare T[i] vs P[j]
+    comparisons++;
+    if (t[i] === p[j]) {
+      j++;
+      steps.push({
+        i, j, type: "match", cmp: true, lpsUsed: -1, matched: true,
+        matches: matches.slice(), comparisons,
+        desc: "Match: T[" + i + "]='" + t[i] + "' = P[" + (j - 1) + "]. Advance j to " + j +
+              ". Both pointers move forward together."
+      });
+    } else {
+      // j must be 0 here (loop above exhausted fall-backs)
+      steps.push({
+        i, j, type: "stay", cmp: true, lpsUsed: -1, matched: false,
+        matches: matches.slice(), comparisons,
+        desc: "Mismatch at j = 0: T[" + i + "]='" + t[i] + "' ≠ P[0]='" + p[0] +
+              "'. Nowhere to fall back; just advance i."
+      });
+    }
+    if (j === m) {
+      const start = i - m + 1;
+      matches.push(start);
+      const fallTo = lps[j - 1];
+      steps.push({
+        i, j, type: "found", cmp: false, lpsUsed: m - 1, fallTo,
+        matches: matches.slice(), comparisons,
+        desc: "Full match at index " + start + "! Set j = lps[" + (m - 1) + "] = " + fallTo +
+              " to keep searching for overlapping matches (do not reset to 0)."
+      });
+      j = fallTo;
+    }
+  }
+
+  steps.push({
+    i: n, j, type: "done", cmp: false, lpsUsed: -1,
+    matches: matches.slice(), comparisons,
+    desc: "Done. Scanned the whole text in one forward pass. Total matches: " + matches.length +
+          ". Total comparisons: " + comparisons + " (linear in n + m)."
+  });
+  return { steps, lps, matches };
+}
+
+// ---------- Rendering ----------
+function makeTape(container, chars, opts) {
+  opts = opts || {};
+  container.innerHTML = "";
+  for (let k = 0; k < chars.length; k++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.textContent = chars[k];
+    if (opts.classFor) {
+      const extra = opts.classFor(k);
+      if (extra) c.className += " " + extra;
+    }
+    container.appendChild(c);
+  }
+}
+
+function renderStatic() {
+  const t = state.t, p = state.p;
+  // text index row
+  makeTape(document.getElementById("textIdx"),
+    Array.from({ length: t.length }, (_, k) => k));
+  // lps panel (static pattern + lps values)
+  makeTape(document.getElementById("lpsIdx"),
+    Array.from({ length: p.length }, (_, k) => k));
+  makeTape(document.getElementById("lpsPat"), p.split(""));
+}
+
+function renderStep(step) {
+  const t = state.t, p = state.p, m = p.length;
+  const i = step.i, j = step.j;
+  const offset = i - j; // where P[0] currently sits under the text
+
+  // ----- text tape -----
+  makeTape(document.getElementById("textTape"), t.split(""), {
+    classFor: (k) => {
+      if (step.type === "found" && k >= offset && k < offset + m) return "matched";
+      if (k >= offset && k < i) return "matched";       // already matched prefix
+      if (k === i && step.cmp) {
+        return step.type === "match" ? "matched"
+             : (step.type === "mismatch" || step.type === "stay") ? "bad" : "cmp";
+      }
+      return "";
+    }
+  });
+
+  // ----- pattern tape, shifted to the right by `offset` blank cells -----
+  const patCells = [];
+  for (let k = 0; k < offset; k++) patCells.push("");
+  for (let k = 0; k < m; k++) patCells.push(p[k]);
+  makeTape(document.getElementById("patTape"), patCells, {
+    classFor: (k) => {
+      const pk = k - offset;            // index within the pattern
+      if (pk < 0 || pk >= m) return "";
+      if (step.type === "found") return "matched";
+      if (pk < j) return "matched";
+      if (pk === j && step.cmp) {
+        return step.type === "match" ? "matched"
+             : (step.type === "mismatch" || step.type === "stay") ? "bad" : "cmp";
+      }
+      return "";
+    }
+  });
+
+  // ----- lps values row, highlight the one being used -----
+  makeTape(document.getElementById("lpsVals"), state.lps.map(String), {
+    classFor: (k) => (k === step.lpsUsed ? "used" : "")
+  });
+  // also tint the pattern char in the lps panel that we fall back to
+  makeTape(document.getElementById("lpsPat"), p.split(""), {
+    classFor: (k) => (k === step.lpsUsed ? "lps" : "")
+  });
+
+  // ----- stats -----
+  document.getElementById("iVal").textContent = step.i;
+  document.getElementById("jVal").textContent = step.j;
+  document.getElementById("offVal").textContent = offset < 0 ? 0 : offset;
+  document.getElementById("cmpVal").textContent = step.comparisons;
+
+  // ----- matches -----
+  const ml = document.getElementById("matchList");
+  ml.textContent = step.matches.length
+    ? "matches at index: " + step.matches.join(", ")
+    : "matches: (none yet)";
+
+  // ----- narration -----
+  document.getElementById("narrate").innerHTML = step.desc
+    .replace(/Match:/g, "<span class='good'>Match:</span>")
+    .replace(/Mismatch/g, "<span class='bad'>Mismatch</span>")
+    .replace(/Full match/g, "<span class='good'>Full match</span>");
+}
+
+// ---------- State ----------
+const state = {
+  t: "",
+  p: "",
+  lps: [],
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load() {
+  let t = document.getElementById("textInput").value || "";
+  let p = document.getElementById("patInput").value || "";
+  // cap sizes so the tape stays readable
+  if (t.length > 40) t = t.slice(0, 40);
+  if (p.length > 20) p = p.slice(0, 20);
+  state.t = t;
+  state.p = p;
+  const plan = buildPlan(t, p);
+  state.lps = plan.lps;
+  state.steps = plan.steps;
+  state.stepIdx = 0;
+  renderStatic();
+  gotoStep(0);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  renderStep(state.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) {
+    load(); // restart from the beginning
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+  }
+  load();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+  }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("textInput").addEventListener("change", rebuild);
+document.getElementById("patInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
