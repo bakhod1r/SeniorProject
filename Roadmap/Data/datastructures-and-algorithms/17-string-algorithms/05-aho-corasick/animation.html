@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aho-Corasick — Multi-Pattern String Matching</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --fail: #db61a2;
+    --hi-node: rgba(63, 185, 80, 0.85);
+    --hi-soft: rgba(88, 166, 255, 0.25);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  #patInput { width: 220px; }
+  #textInput { width: 200px; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .tape {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 16px;
+    margin-top: 4px;
+  }
+  .tape .ch {
+    width: 26px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--text);
+  }
+  .tape .ch.cur { border-color: var(--accent); background: var(--hi-soft); color: #fff; font-weight: 700; }
+  .tape .ch.done { color: var(--muted); }
+  .matches {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  .matches .hit { color: var(--good); }
+  .matches .none { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  circle.node { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; }
+  circle.node.term { fill: #19311f; stroke: var(--good); }
+  circle.node.active { fill: var(--hi-node); stroke: #fff; stroke-width: 3; }
+  text.nlabel { fill: #fff; font-size: 12px; font-weight: 700; font-family: var(--mono); pointer-events: none; }
+  line.tedge { stroke: var(--muted); stroke-width: 2; marker-end: url(#arrow); }
+  text.elabel { fill: var(--accent-2); font-size: 12px; font-weight: 700; font-family: var(--mono); }
+  path.failedge { stroke: var(--fail); stroke-width: 1.6; fill: none; marker-end: url(#arrowf); stroke-dasharray: 4 3; opacity: 0.8; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Aho-Corasick — One Trie, Failure Links, One Linear Scan</h1>
+  <p>Build a trie of all patterns, compute <b>failure links</b> (the multi-pattern KMP prefix function) by BFS, then scan the text following goto/failure transitions and firing matches via output links.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Patterns: <input type="text" id="patInput" value="he she his hers" /></label>
+    <label>Text: <input type="text" id="textInput" value="ushers" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Automaton (trie + failure links)</h2>
+      <svg id="graphSvg" viewBox="0 0 560 360" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#8b949e"/>
+          </marker>
+          <marker id="arrowf" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#db61a2"/>
+          </marker>
+        </defs>
+        <g id="failLayer"></g>
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> trie node</span>
+        <span><span class="swatch" style="background:#19311f;border-color:var(--good)"></span> pattern end</span>
+        <span><span class="swatch" style="background:var(--hi-node)"></span> current state</span>
+        <span><span class="swatch" style="background:var(--fail)"></span> failure link</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Scan of the text</h2>
+      <div class="tape" id="tape"></div>
+      <div class="interp" id="interpBox">
+        Current automaton state and the patterns ending here will show up as the scan advances.
+      </div>
+      <div class="step-counter" style="margin-top:12px;">Matches found (pattern @ end index):</div>
+      <div class="matches" id="matchList"><span class="none">none yet</span></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We first build the trie and failure links, then scan the text one character at a time.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Lowercase alphabet (a&ndash;z). Failure links (pink dashed) are the multi-pattern generalization of KMP's prefix function, built by BFS.
+    A match at the current state fires via output links, so overlapping patterns (e.g. <code>he</code> inside <code>she</code>) are all reported. See <code>junior.md</code> and <code>professional.md</code> for the construction and the proof that the scan is <code>O(n + z)</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const SIGMA = 26;
+
+// ---------- Automaton construction ----------
+function buildAutomaton(patterns) {
+  const next = [];     // next[node][c]
+  const fail = [];
+  const out = [];      // pattern ids ending exactly here (own)
+  const merged = [];   // merged outputs (own + via fail)
+  const parent = [];   // parent node (for layout)
+  const pchar = [];    // char from parent
+  const plen = [];     // pattern length by id
+
+  function newNode(par, ch) {
+    next.push(new Array(SIGMA).fill(-1));
+    fail.push(0);
+    out.push([]);
+    merged.push([]);
+    parent.push(par);
+    pchar.push(ch);
+    return next.length - 1;
+  }
+  newNode(-1, -1); // root = 0
+
+  patterns.forEach((p, id) => {
+    plen.push(p.length);
+    let cur = 0;
+    for (const ch of p) {
+      const c = ch.charCodeAt(0) - 97;
+      if (c < 0 || c >= SIGMA) continue;
+      if (next[cur][c] === -1) next[cur][c] = newNode(cur, c);
+      cur = next[cur][c];
+    }
+    out[cur].push(id);
+  });
+
+  // BFS to build failure links + complete goto + merged outputs
+  const bfsOrder = [];
+  const queue = [];
+  for (let c = 0; c < SIGMA; c++) {
+    if (next[0][c] === -1) next[0][c] = 0;
+    else { fail[next[0][c]] = 0; queue.push(next[0][c]); }
+  }
+  let head = 0;
+  while (head < queue.length) {
+    const u = queue[head++];
+    bfsOrder.push(u);
+    merged[u] = out[u].concat(merged[fail[u]]);
+    for (let c = 0; c < SIGMA; c++) {
+      const v = next[u][c];
+      if (v === -1) next[u][c] = next[fail[u]][c];
+      else { fail[v] = next[fail[u]][c]; queue.push(v); }
+    }
+  }
+  // root merged is just its own (empty)
+  merged[0] = out[0].slice();
+
+  return { next, fail, out, merged, parent, pchar, plen, count: next.length, bfsOrder };
+}
+
+// ---------- Layout: assign positions by depth (BFS tree of real trie edges) ----------
+function layout(au) {
+  const n = au.count;
+  const depth = new Array(n).fill(0);
+  const children = Array.from({ length: n }, () => []);
+  // reconstruct real trie tree via parent[]
+  for (let v = 1; v < n; v++) {
+    children[au.parent[v]].push(v);
+    depth[v] = depth[au.parent[v]] + 1;
+  }
+  // group nodes by depth
+  const byDepth = {};
+  let maxDepth = 0;
+  for (let v = 0; v < n; v++) {
+    (byDepth[depth[v]] = byDepth[depth[v]] || []).push(v);
+    if (depth[v] > maxDepth) maxDepth = depth[v];
+  }
+  const pos = new Array(n);
+  const W = 560, H = 360, padX = 40, padY = 36;
+  const levelGap = maxDepth > 0 ? (H - 2 * padY) / maxDepth : 0;
+  for (let d = 0; d <= maxDepth; d++) {
+    const row = byDepth[d] || [];
+    const gap = (W - 2 * padX) / (row.length + 1);
+    row.forEach((v, i) => {
+      pos[v] = [padX + gap * (i + 1), padY + levelGap * d];
+    });
+  }
+  return { pos, depth };
+}
+
+// ---------- Build the step plan ----------
+// Phase A: reveal failure links one BFS node at a time.
+// Phase B: scan the text one character at a time.
+function buildPlan(au, text) {
+  const steps = [];
+  steps.push({
+    phase: "build",
+    revealUpto: 0,
+    state: -1,
+    pos: -1,
+    desc: "Trie of all patterns is built. Now we compute failure links in BFS order. fail(u) points to the longest proper suffix of u that is also a trie prefix."
+  });
+  // reveal failure links progressively
+  au.bfsOrder.forEach((u, idx) => {
+    steps.push({
+      phase: "build",
+      revealUpto: idx + 1,
+      revealNode: u,
+      state: -1,
+      pos: -1,
+      desc: "Failure link of node " + u + " set to node " + au.fail[u] + " (its longest suffix that is a trie prefix)."
+    });
+  });
+  steps.push({
+    phase: "scanStart",
+    revealUpto: au.bfsOrder.length,
+    state: 0,
+    pos: -1,
+    desc: "All failure links are in place. Begin scanning the text from the root (state 0). Each character takes one goto transition."
+  });
+  // scan
+  let cur = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i) - 97;
+    let prev = cur;
+    if (c < 0 || c >= SIGMA) {
+      cur = 0;
+      steps.push({
+        phase: "scan", revealUpto: au.bfsOrder.length, state: 0, pos: i,
+        emitted: [], prev,
+        desc: "Character '" + text[i] + "' is outside the alphabet; reset to the root."
+      });
+      continue;
+    }
+    cur = au.next[prev][c];
+    const ids = au.merged[cur];
+    const emitted = ids.map(id => ({ id, end: i, start: i - au.plen[id] + 1 }));
+    steps.push({
+      phase: "scan", revealUpto: au.bfsOrder.length, state: cur, pos: i,
+      emitted, prev,
+      desc: "Read '" + text[i] + "': goto(state " + prev + ", '" + text[i] + "') = state " + cur + "."
+        + (emitted.length ? " Output links fire " + emitted.length + " match(es) ending at index " + i + "." : " No pattern ends here.")
+    });
+  }
+  steps.push({
+    phase: "done", revealUpto: au.bfsOrder.length, state: cur, pos: text.length,
+    desc: "Scan complete. Every occurrence of every pattern was found in a single left-to-right pass, O(n + z)."
+  });
+  return steps;
+}
+
+// ---------- Rendering ----------
+function renderGraph(au, lay, activeState, revealUpto, revealNode) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  const failLayer = document.getElementById("failLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  failLayer.innerHTML = "";
+  const NS = "http://www.w3.org/2000/svg";
+  const pos = lay.pos;
+
+  // real trie edges
+  for (let v = 1; v < au.count; v++) {
+    const p = au.parent[v];
+    const [x1, y1] = pos[p], [x2, y2] = pos[v];
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const line = document.createElementNS(NS, "line");
+    line.setAttribute("x1", x1 + ux * 15); line.setAttribute("y1", y1 + uy * 15);
+    line.setAttribute("x2", x2 - ux * 17); line.setAttribute("y2", y2 - uy * 17);
+    line.setAttribute("class", "tedge");
+    edgeLayer.appendChild(line);
+    const lab = document.createElementNS(NS, "text");
+    lab.setAttribute("x", (x1 + x2) / 2 + 6);
+    lab.setAttribute("y", (y1 + y2) / 2);
+    lab.setAttribute("class", "elabel");
+    lab.textContent = String.fromCharCode(97 + au.pchar[v]);
+    edgeLayer.appendChild(lab);
+  }
+
+  // failure links (only those revealed so far, skip links to root for clarity unless from depth-1)
+  const revealedSet = new Set(au.bfsOrder.slice(0, revealUpto));
+  for (const u of revealedSet) {
+    const f = au.fail[u];
+    if (f === u) continue;
+    if (f === 0 && lay.depth[u] <= 1) continue; // de-clutter trivial root fails
+    const [x1, y1] = pos[u], [x2, y2] = pos[f];
+    const path = document.createElementNS(NS, "path");
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 22;
+    path.setAttribute("d", "M" + x1 + "," + y1 + " Q" + mx + "," + my + " " + x2 + "," + y2);
+    path.setAttribute("class", "failedge");
+    failLayer.appendChild(path);
+  }
+
+  // nodes
+  for (let v = 0; v < au.count; v++) {
+    const [x, y] = pos[v];
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 13);
+    let cls = "node";
+    if (au.out[v].length > 0) cls += " term";
+    if (v === activeState) cls += " active";
+    c.setAttribute("class", cls);
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "nlabel");
+    t.textContent = v;
+    nodeLayer.appendChild(t);
+  }
+}
+
+function renderTape(text, pos) {
+  const tape = document.getElementById("tape");
+  let html = "";
+  for (let i = 0; i < text.length; i++) {
+    let cls = "ch";
+    if (i === pos) cls += " cur";
+    else if (i < pos) cls += " done";
+    html += "<span class='" + cls + "'>" + text[i] + "</span>";
+  }
+  tape.innerHTML = html || "<span class='none'>(empty text)</span>";
+}
+
+// ---------- State ----------
+const state = {
+  au: null, lay: null, plan: null, text: "", patterns: [],
+  stepIdx: 0, running: false, timer: null, matches: []
+};
+
+function loadAll() {
+  const patStr = document.getElementById("patInput").value.trim().toLowerCase();
+  state.patterns = patStr.split(/\s+/).filter(p => p.length > 0 && /^[a-z]+$/.test(p));
+  if (state.patterns.length === 0) state.patterns = ["he"];
+  state.text = document.getElementById("textInput").value.trim().toLowerCase().replace(/[^a-z]/g, "");
+  state.au = buildAutomaton(state.patterns);
+  state.lay = layout(state.au);
+  state.plan = buildPlan(state.au, state.text);
+  state.stepIdx = 0;
+  state.matches = [];
+  applyStep(0);
+}
+
+function applyStep(idx) {
+  const step = state.plan[idx];
+  state.stepIdx = idx;
+  // recompute matches up to this scan step
+  state.matches = [];
+  for (let s = 0; s <= idx; s++) {
+    const st = state.plan[s];
+    if (st.emitted) for (const e of st.emitted) state.matches.push(e);
+  }
+  renderGraph(state.au, state.lay, step.state, step.revealUpto, step.revealNode);
+  renderTape(state.text, step.pos);
+
+  // interpretation box
+  const interp = document.getElementById("interpBox");
+  if (step.phase === "build" || step.phase === "scanStart") {
+    interp.innerHTML = "Building the automaton. Failure links revealed: <b>" +
+      step.revealUpto + "</b> / " + state.au.bfsOrder.length + ".";
+  } else {
+    const ids = state.au.merged[step.state] || [];
+    const names = ids.map(id => "<span class='val'>" + state.patterns[id] + "</span>").join(", ");
+    interp.innerHTML = "State <b>" + step.state + "</b> after reading index <b>" +
+      (step.pos >= 0 ? step.pos : "—") + "</b>. Patterns ending here: " +
+      (names || "<span class='none'>none</span>") + ".";
+  }
+
+  // match list
+  const ml = document.getElementById("matchList");
+  if (state.matches.length === 0) {
+    ml.innerHTML = "<span class='none'>none yet</span>";
+  } else {
+    ml.innerHTML = state.matches
+      .map(m => "<div class='hit'>\"" + state.patterns[m.id] + "\" @ end " + m.end +
+        " (start " + m.start + ")</div>")
+      .join("");
+  }
+
+  document.getElementById("stepInfo").textContent = "step " + idx + " / " + (state.plan.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) applyStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadAll();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("patInput").addEventListener("change", rebuild);
+document.getElementById("textInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
