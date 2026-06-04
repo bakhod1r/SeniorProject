@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Word Search — DFS Backtracking on a Grid</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --path: rgba(88, 166, 255, 0.30);
+    --cur: rgba(210, 153, 34, 0.55);
+    --found: rgba(63, 185, 80, 0.55);
+    --fail: rgba(248, 81, 73, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 20px;
+    margin: 0 auto;
+  }
+  .grid td {
+    border: 1px solid var(--border);
+    width: 48px;
+    height: 48px;
+    text-align: center;
+    color: var(--text);
+    font-weight: 700;
+    transition: background 0.2s ease, color 0.2s ease;
+    position: relative;
+  }
+  .grid td.path { background: var(--path); }
+  .grid td.cur { background: var(--cur); color: #fff; }
+  .grid td.found { background: var(--found); color: #fff; }
+  .grid td.fail { background: var(--fail); color: #fff; }
+  .grid td.marked { color: var(--bad); }
+  .grid td .ord {
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .word {
+    font-family: var(--mono);
+    font-size: 22px;
+    letter-spacing: 6px;
+    margin: 8px 0 4px;
+    text-align: center;
+  }
+  .word .done { color: var(--good); font-weight: 700; }
+  .word .next { color: var(--accent-2); font-weight: 700; text-decoration: underline; }
+  .word .todo { color: var(--muted); }
+  .progress {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.ok { border-left-color: var(--good); }
+  .narrate.no { border-left-color: var(--bad); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); justify-content: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stack {
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .frame {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    margin-bottom: 6px;
+  }
+  .frame.top { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+  .frame .cell { color: var(--accent); font-weight: 700; min-width: 64px; }
+  .frame .ch { color: var(--accent-2); font-weight: 700; }
+  .frame .empty { color: var(--muted); font-style: italic; }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+<body>
+<header>
+  <h1>Word Search — DFS Backtracking on a Grid</h1>
+  <p>Start a DFS from a matching cell; <b>mark</b> the current cell, explore four neighbors for the next letter, and <b>unmark</b> (backtrack) on a dead end. Watch the path grow, retreat, and finally spell the word.</p>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="abcced">Grid 3&times;4 &mdash; "ABCCED" (found)</option>
+        <option value="see">Grid 3&times;4 &mdash; "SEE" (found)</option>
+        <option value="abcb">Grid 3&times;4 &mdash; "ABCB" (fails: reuse)</option>
+        <option value="oath">Grid 4&times;4 &mdash; "OATH" (found)</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Grid &amp; current DFS path</h2>
+      <div class="progress" id="progress">matched prefix shown below</div>
+      <div class="word" id="wordView"></div>
+      <table class="grid" id="gridTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--path)"></span> on path</span>
+        <span><span class="swatch" style="background:var(--cur)"></span> current cell</span>
+        <span><span class="swatch" style="background:var(--found)"></span> found word</span>
+        <span><span class="swatch" style="background:var(--fail)"></span> dead end</span>
+      </div>
+      <div class="interp" id="interpBox">
+        Reading the path: cells are visited in order; numbers are the step they joined the path.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recursion stack (current path)</h2>
+      <div class="stack" id="stackView"></div>
+      <div class="step-counter" id="stackInfo" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We try the word from each matching start cell, marking and unmarking cells as the DFS explores and backtracks.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Adjacency is 4-directional (up/down/left/right); cells may not be reused within a path.
+    A marked cell is shown in red text; on backtrack it is restored. See <code>junior.md</code> for the template and <code>professional.md</code> for the correctness and restoration-invariant proofs.
+  </div>
+
+<script>
+"use strict";
+
+// ---------- Presets: grid + word ----------
+const PRESETS = {
+  abcced: {
+    grid: ["ABCE", "SFCS", "ADEE"],
+    word: "ABCCED",
+    name: "ABCCED on a 3x4 board (found)"
+  },
+  see: {
+    grid: ["ABCE", "SFCS", "ADEE"],
+    word: "SEE",
+    name: "SEE on a 3x4 board (found)"
+  },
+  abcb: {
+    grid: ["ABCE", "SFCS", "ADEE"],
+    word: "ABCB",
+    name: "ABCB on a 3x4 board (fails: would reuse the B cell)"
+  },
+  oath: {
+    grid: ["OAAN", "ETAE", "IHKR"],
+    word: "OATH",
+    name: "OATH on a 4x3 board (found)"
+  }
+};
+
+const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+// ---------- Build the step plan by instrumenting the DFS ----------
+// Each step records: the action, the current path (cells in order),
+// the matched prefix length, the focus cell, and a narration string.
+function buildPlan(gridRows, word) {
+  const grid = gridRows.map(r => r.split(""));
+  const rows = grid.length;
+  const cols = grid[0].length;
+  const marked = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  const steps = [];
+  let finished = false; // stop recording once we find the word
+
+  function snapshot(extra) {
+    return Object.assign({
+      path: path.map(p => [p[0], p[1]]),
+      matched: path.length,
+      stack: path.map((p, i) => ({ r: p[0], c: p[1], ch: word[i] }))
+    }, extra);
+  }
+
+  const path = [];
+
+  function dfs(r, c, idx) {
+    if (finished) return true;
+    // success base case
+    if (idx === word.length) {
+      steps.push(snapshot({
+        type: "found",
+        focus: null,
+        desc: "Matched all " + word.length + " characters of \"" + word + "\". The word EXISTS. Path highlighted green."
+      }));
+      finished = true;
+      return true;
+    }
+    // out of bounds
+    if (r < 0 || r >= rows || c < 0 || c >= cols) {
+      return false;
+    }
+    // mismatch / already marked
+    if (marked[r][c]) {
+      steps.push(snapshot({
+        type: "blocked",
+        focus: [r, c],
+        desc: "Cell (" + r + "," + c + ") is already on the path (marked) — cannot reuse it. This branch fails."
+      }));
+      return false;
+    }
+    if (grid[r][c] !== word[idx]) {
+      steps.push(snapshot({
+        type: "mismatch",
+        focus: [r, c],
+        desc: "Cell (" + r + "," + c + ") holds '" + grid[r][c] + "' but we need '" + word[idx] + "'. Mismatch — this branch fails."
+      }));
+      return false;
+    }
+    // MARK and descend
+    marked[r][c] = true;
+    path.push([r, c]);
+    steps.push(snapshot({
+      type: "mark",
+      focus: [r, c],
+      desc: "Match '" + word[idx] + "' at (" + r + "," + c + "). MARK the cell and recurse for the next character."
+    }));
+    let found = false;
+    for (const [dr, dc] of DIRS) {
+      if (dfs(r + dr, c + dc, idx + 1)) { found = true; break; }
+      if (finished) { found = true; break; }
+    }
+    if (!found) {
+      // UNMARK (backtrack)
+      marked[r][c] = false;
+      path.pop();
+      steps.push(snapshot({
+        type: "unmark",
+        focus: [r, c],
+        desc: "No neighbor of (" + r + "," + c + ") completes the word. UNMARK (backtrack) and let other paths reuse this cell."
+      }));
+    }
+    return found;
+  }
+
+  // initial snapshot
+  steps.push({
+    type: "init",
+    path: [],
+    matched: 0,
+    stack: [],
+    focus: null,
+    desc: "Start. We scan the grid for the first letter '" + word[0] + "' and launch a DFS from each match."
+  });
+
+  for (let r = 0; r < rows && !finished; r++) {
+    for (let c = 0; c < cols && !finished; c++) {
+      if (grid[r][c] === word[0]) {
+        steps.push({
+          type: "start",
+          path: [],
+          matched: 0,
+          stack: [],
+          focus: [r, c],
+          desc: "Cell (" + r + "," + c + ") holds the first letter '" + word[0] + "'. Begin a DFS here."
+        });
+        dfs(r, c, 0);
+      }
+    }
+  }
+
+  if (!finished) {
+    steps.push({
+      type: "absent",
+      path: [],
+      matched: 0,
+      stack: [],
+      focus: null,
+      desc: "Every start cell was exhausted without completing \"" + word + "\". The word does NOT exist in the grid."
+    });
+  }
+
+  return { steps, grid, rows, cols, word };
+}
+
+// ---------- Render ----------
+function renderGrid(step) {
+  const g = state.plan.grid;
+  const rows = state.plan.rows;
+  const cols = state.plan.cols;
+  const onPath = {};
+  step.path.forEach((p, i) => { onPath[p[0] + "," + p[1]] = i + 1; });
+  const last = step.path.length ? step.path[step.path.length - 1] : null;
+
+  let html = "";
+  for (let r = 0; r < rows; r++) {
+    html += "<tr>";
+    for (let c = 0; c < cols; c++) {
+      let cls = "";
+      const key = r + "," + c;
+      const ordNum = onPath[key];
+      if (step.type === "found" && ordNum) {
+        cls = "found";
+      } else if (last && last[0] === r && last[1] === c && (step.type === "mark")) {
+        cls = "cur";
+      } else if (ordNum) {
+        cls = "path";
+      }
+      if (step.focus && step.focus[0] === r && step.focus[1] === c &&
+          (step.type === "mismatch" || step.type === "blocked")) {
+        cls = "fail";
+      }
+      if (step.focus && step.focus[0] === r && step.focus[1] === c && step.type === "unmark") {
+        cls = "fail";
+      }
+      const ord = ordNum ? "<span class='ord'>" + ordNum + "</span>" : "";
+      html += "<td class='" + cls + "'>" + ord + g[r][c] + "</td>";
+    }
+    html += "</tr>";
+  }
+  document.getElementById("gridTable").innerHTML = html;
+}
+
+function renderWord(step) {
+  const word = state.plan.word;
+  const m = step.matched;
+  let html = "";
+  for (let i = 0; i < word.length; i++) {
+    let cls = "todo";
+    if (i < m) cls = "done";
+    else if (i === m && step.type !== "found" && step.type !== "absent") cls = "next";
+    html += "<span class='" + cls + "'>" + word[i] + "</span>";
+  }
+  document.getElementById("wordView").innerHTML = html;
+  document.getElementById("progress").textContent =
+    "matched " + m + " / " + word.length + " characters";
+}
+
+function renderStack(step) {
+  const view = document.getElementById("stackView");
+  if (!step.stack.length) {
+    view.innerHTML = "<div class='frame'><span class='empty'>(stack empty — no active DFS frame)</span></div>";
+    document.getElementById("stackInfo").textContent = "depth 0";
+    return;
+  }
+  let html = "";
+  for (let i = 0; i < step.stack.length; i++) {
+    const f = step.stack[i];
+    const topCls = (i === step.stack.length - 1) ? " top" : "";
+    html += "<div class='frame" + topCls + "'>" +
+      "<span class='cell'>(" + f.r + "," + f.c + ")</span>" +
+      "<span>matched <span class='ch'>'" + f.ch + "'</span> (index " + i + ")</span>" +
+      "</div>";
+  }
+  view.innerHTML = html;
+  document.getElementById("stackInfo").textContent = "depth " + step.stack.length +
+    "  —  marked cells = path cells (the no-reuse invariant)";
+}
+
+function applyStep(step) {
+  renderGrid(step);
+  renderWord(step);
+  renderStack(step);
+  const narrate = document.getElementById("narrate");
+  narrate.className = "narrate";
+  if (step.type === "found") narrate.classList.add("ok");
+  if (step.type === "absent") narrate.classList.add("no");
+  narrate.innerHTML = step.desc;
+
+  const interp = document.getElementById("interpBox");
+  if (step.type === "found") {
+    interp.innerHTML = "Result: <b>\"" + state.plan.word + "\"</b> = <span class='val'>FOUND</span> " +
+      "via a length-" + state.plan.word.length + " path of distinct cells.";
+  } else if (step.type === "absent") {
+    interp.innerHTML = "Result: <b>\"" + state.plan.word + "\"</b> = <span class='val' style='color:var(--bad)'>NOT FOUND</span>.";
+  } else {
+    interp.innerHTML = "Path so far spells the matched prefix; the <b>marked</b> cells are exactly the cells on the current path " +
+      "(no cell is reused).";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load(presetKey) {
+  const p = PRESETS[presetKey];
+  state.plan = buildPlan(p.grid, p.word);
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const key = document.getElementById("presetSel").value;
+  load(key);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("presetSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
