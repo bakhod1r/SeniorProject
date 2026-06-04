@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Binary Trie &amp; XOR Linear Basis — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 200px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  circle.tnode { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.5; transition: all 0.2s ease; }
+  circle.tnode.on { stroke: var(--accent); }
+  circle.tnode.path { fill: #1f6feb; stroke: var(--accent); }
+  circle.tnode.chosen { fill: var(--good); stroke: var(--good); }
+  line.tedge { stroke: var(--muted); stroke-width: 1.6; transition: all 0.2s ease; }
+  line.tedge.path { stroke: var(--accent); stroke-width: 3; }
+  line.tedge.chosen { stroke: var(--good); stroke-width: 3.5; }
+  text.elabel { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  text.elabel.chosen { fill: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .bits {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin: 8px 0;
+  }
+  .bits .on { color: var(--good); font-weight: 700; }
+  .bits .off { color: var(--muted); }
+  .bits .cur { text-decoration: underline; color: var(--accent); }
+  .xorbox {
+    margin-top: 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .xorbox b { color: var(--accent); }
+  .xorbox .val { color: var(--good); font-weight: 700; }
+  .basisrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+  .basisrow.pivot { border-color: var(--good); }
+  .basisrow .pos { color: var(--accent-2); min-width: 52px; }
+  .basisrow .vec { color: var(--text); }
+  .basisrow.empty { opacity: 0.4; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Binary Trie &amp; XOR Linear Basis — Greedy Opposite-Bit Walk</h1>
+  <p>Insert numbers MSB-first into a 0/1 trie, then watch a query walk down choosing the <b>opposite</b> bit to maximize XOR. Switch modes to build the linear basis by reducing each value.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Mode:
+      <select id="modeSel">
+        <option value="trie">Trie max-XOR query</option>
+        <option value="basis">Linear basis build</option>
+      </select>
+    </label>
+    <label>Numbers: <input type="text" id="numsInput" value="3 10 5 25 2 8" /></label>
+    <label>Query x: <input type="number" id="qInput" value="5" min="0" max="31" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2 id="leftTitle">Binary trie (MSB-first, B = 5)</h2>
+      <svg id="svg" viewBox="0 0 560 360" preserveAspectRatio="xMidYMid meet">
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:#1f6feb"></span> query path</span>
+        <span><span class="swatch" style="background:var(--good)"></span> chosen (opposite) edge</span>
+        <span><span class="swatch" style="background:var(--panel-2)"></span> trie node</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="rightTitle">Query progress</h2>
+      <div class="step-counter" id="qLabel"></div>
+      <div class="bits" id="qBits"></div>
+      <div class="step-counter">partner being traced (best y so far):</div>
+      <div class="bits" id="pBits"></div>
+      <div class="step-counter">XOR so far (x ^ y):</div>
+      <div class="bits" id="xBits"></div>
+      <div class="xorbox" id="xorBox">Press <b>Step</b> to begin the greedy walk.</div>
+      <div id="basisPanel" style="display:none; margin-top:12px;">
+        <div class="step-counter">basis slots (pivot bit : vector):</div>
+        <div id="basisList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We insert each number into the trie from the most-significant bit down. Then a query value walks the trie, always trying to take the bit <b>opposite</b> to its own to make the XOR as large as possible.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The trie answers <b>max XOR of the query against the stored set</b> (a pair question); the basis answers <b>max XOR of any subset</b>. See <code>junior.md</code> and <code>professional.md</code> for the proof that the greedy opposite-bit walk is optimal (most-significant differing bit dominates).
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const B = 5; // bit-width for the visualization (values < 32)
+
+// ---------- Trie model (array-pooled) ----------
+function makeTrie() {
+  return { ch: [[-1, -1]], leaf: [-1] }; // node 0 = root; leaf stores the value at a complete path
+}
+function trieInsert(t, x) {
+  let node = 0;
+  for (let i = B - 1; i >= 0; i--) {
+    const b = (x >> i) & 1;
+    if (t.ch[node][b] === -1) {
+      t.ch.push([-1, -1]);
+      t.leaf.push(-1);
+      t.ch[node][b] = t.ch.length - 1;
+    }
+    node = t.ch[node][b];
+  }
+  t.leaf[node] = x;
+}
+
+// Compute layout positions for every trie node via a DFS that spreads leaves evenly.
+function layoutTrie(t) {
+  const pos = {};
+  const W = 560, topY = 30, rowH = 58;
+  // count leaves under each node to assign x-slots
+  let slot = 0;
+  function assign(node, depth) {
+    const c0 = t.ch[node][0], c1 = t.ch[node][1];
+    if (c0 === -1 && c1 === -1) {
+      pos[node] = { x: 0, y: topY + depth * rowH, slot: slot++ };
+      return;
+    }
+    const kids = [];
+    if (c0 !== -1) { assign(c0, depth + 1); kids.push(c0); }
+    if (c1 !== -1) { assign(c1, depth + 1); kids.push(c1); }
+    const avg = kids.reduce((s, k) => s + pos[k].x, 0) / kids.length;
+    pos[node] = { x: avg, y: topY + depth * rowH };
+  }
+  // first pass to count leaf slots and place leaves
+  assign(0, 0);
+  // now spread by slot index across width
+  const leaves = Object.keys(pos).filter(k => pos[k].slot !== undefined);
+  const n = Math.max(1, leaves.length);
+  const gap = (W - 60) / (n);
+  leaves.forEach(k => { pos[k].x = 30 + (pos[k].slot + 0.5) * gap; });
+  // recompute internal x as average of children (bottom-up)
+  function fix(node) {
+    const c0 = t.ch[node][0], c1 = t.ch[node][1];
+    const kids = [];
+    if (c0 !== -1) { fix(c0); kids.push(c0); }
+    if (c1 !== -1) { fix(c1); kids.push(c1); }
+    if (kids.length) pos[node].x = kids.reduce((s, k) => s + pos[k].x, 0) / kids.length;
+  }
+  fix(0);
+  return pos;
+}
+
+// ---------- Build the query walk plan ----------
+function buildTriePlan(nums, x) {
+  const t = makeTrie();
+  for (const v of nums) trieInsert(t, v);
+  const pos = layoutTrie(t);
+  const steps = [];
+  steps.push({
+    type: "init",
+    node: 0, depth: -1, xorBits: [], partnerBits: [],
+    desc: "Trie built from [" + nums.join(", ") + "]. Start the query at the root. We read x = " + x + " from the top bit down."
+  });
+  let node = 0;
+  const xorBits = [];
+  const partnerBits = [];
+  for (let i = B - 1; i >= 0; i--) {
+    const b = (x >> i) & 1;
+    const want = 1 - b;
+    let took, chose;
+    if (t.ch[node][want] !== -1) {
+      node = t.ch[node][want];
+      took = want; chose = 1;
+    } else {
+      node = t.ch[node][b];
+      took = b; chose = 0;
+    }
+    xorBits.push(chose);
+    partnerBits.push(took);
+    const bitPos = i;
+    steps.push({
+      type: "walk",
+      node, depth: B - 1 - i, bitPos,
+      xorBits: xorBits.slice(),
+      partnerBits: partnerBits.slice(),
+      chose,
+      desc: "Bit " + bitPos + ": x has " + b + ", we want the opposite (" + want + "). " +
+            (chose === 1
+              ? "Opposite child exists → take it. XOR bit = <b>1</b>."
+              : "Opposite child missing → forced to follow " + b + ". XOR bit = 0.")
+    });
+  }
+  const partner = parseInt(partnerBits.join(""), 2);
+  const xorVal = x ^ partner;
+  steps.push({
+    type: "done",
+    node, depth: B, xorBits: xorBits.slice(), partnerBits: partnerBits.slice(),
+    partner, xorVal,
+    desc: "Reached a leaf: best partner y = " + partner + ". Maximum XOR = " + x + " ^ " + partner + " = <b>" + xorVal + "</b>."
+  });
+  return { t, pos, steps, x, partner: parseInt(partnerBits.join("") || "0", 2) };
+}
+
+// ---------- Build the basis plan ----------
+function buildBasisPlan(nums) {
+  const basis = new Array(B).fill(0);
+  const steps = [];
+  steps.push({ type: "init", basis: basis.slice(), desc: "Start with an empty basis (" + B + " slots, one per bit position). We reduce each number against existing pivots." });
+  for (const v0 of nums) {
+    let x = v0;
+    const trace = [];
+    let installed = -1, dependent = false;
+    for (let i = B - 1; i >= 0; i--) {
+      if (((x >> i) & 1) === 0) continue;
+      if (basis[i] === 0) { basis[i] = x; installed = i; break; }
+      trace.push({ i, before: x, by: basis[i] });
+      x ^= basis[i];
+      if (x === 0) { dependent = true; break; }
+    }
+    if (x === 0 && installed === -1) dependent = true;
+    steps.push({
+      type: "add",
+      basis: basis.slice(),
+      value: v0, installed, dependent,
+      desc: dependent
+        ? "Insert " + v0 + ": it reduced to 0 against existing pivots → <b>dependent</b>, basis unchanged (rank stays the same)."
+        : "Insert " + v0 + ": after reducing, a new pivot was installed at bit " + installed + " → <b>rank increases</b>."
+    });
+  }
+  let res = 0;
+  for (let i = B - 1; i >= 0; i--) if (basis[i] && (res ^ basis[i]) > res) res ^= basis[i];
+  const rank = basis.filter(v => v !== 0).length;
+  steps.push({
+    type: "done",
+    basis: basis.slice(), rank, maxXor: res,
+    desc: "Done. rank = " + rank + ", so there are 2^" + rank + " = " + (1 << rank) + " distinct subset XORs. Max subset XOR = <b>" + res + "</b>."
+  });
+  return { steps, basis };
+}
+
+// ---------- Rendering ----------
+function pad(x, w) { let s = (x >>> 0).toString(2); while (s.length < w) s = "0" + s; return s.slice(-w); }
+
+function renderTrie(plan, step) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  const t = plan.t, pos = plan.pos;
+  // determine path nodes up to current step
+  const pathNodes = new Set();
+  let chosenEdges = {}; // "parent-child" -> chose flag
+  let cur = 0;
+  pathNodes.add(0);
+  if (step.type === "walk" || step.type === "done") {
+    // reconstruct path from partnerBits collected so far
+    let node = 0;
+    pathNodes.add(0);
+    for (let k = 0; k < step.partnerBits.length; k++) {
+      const bit = step.partnerBits[k];
+      const child = t.ch[node][bit];
+      if (child === -1) break;
+      chosenEdges[node + "-" + child] = step.xorBits[k];
+      pathNodes.add(child);
+      node = child;
+    }
+  }
+  // edges
+  for (let node = 0; node < t.ch.length; node++) {
+    for (let b = 0; b < 2; b++) {
+      const child = t.ch[node][b];
+      if (child === -1) continue;
+      const p = pos[node], c = pos[child];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", p.x); line.setAttribute("y1", p.y);
+      line.setAttribute("x2", c.x); line.setAttribute("y2", c.y);
+      let cls = "tedge";
+      const key = node + "-" + child;
+      if (key in chosenEdges) cls += chosenEdges[key] === 1 ? " chosen" : " path";
+      line.setAttribute("class", cls);
+      edgeLayer.appendChild(line);
+      // bit label
+      const tx = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      tx.setAttribute("x", (p.x + c.x) / 2 + (b === 0 ? -10 : 8));
+      tx.setAttribute("y", (p.y + c.y) / 2);
+      tx.setAttribute("class", "elabel" + ((key in chosenEdges && chosenEdges[key] === 1) ? " chosen" : ""));
+      tx.textContent = b;
+      edgeLayer.appendChild(tx);
+    }
+  }
+  // nodes
+  for (let node = 0; node < t.ch.length; node++) {
+    const p = pos[node];
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", p.x); c.setAttribute("cy", p.y);
+    c.setAttribute("r", t.leaf[node] !== -1 ? 13 : 8);
+    let cls = "tnode";
+    if (pathNodes.has(node)) cls += " path";
+    if ((step.type === "done") && node === step.node) cls += " chosen";
+    c.setAttribute("class", cls);
+    nodeLayer.appendChild(c);
+    if (t.leaf[node] !== -1) {
+      const tx = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      tx.setAttribute("x", p.x); tx.setAttribute("y", p.y + 4);
+      tx.setAttribute("text-anchor", "middle");
+      tx.setAttribute("class", "elabel");
+      tx.setAttribute("style", "fill:#fff;font-weight:700;");
+      tx.textContent = t.leaf[node];
+      nodeLayer.appendChild(tx);
+    }
+  }
+}
+
+function renderBitRow(elId, bits, curIdx, totalLen) {
+  const el = document.getElementById(elId);
+  let html = "";
+  for (let i = 0; i < totalLen; i++) {
+    if (i < bits.length) {
+      const v = bits[i];
+      let cls = v ? "on" : "off";
+      if (i === curIdx) cls += " cur";
+      html += "<span class='" + cls + "'>" + v + "</span>";
+    } else {
+      html += "<span class='off'>&middot;</span>";
+    }
+  }
+  el.innerHTML = html;
+}
+
+function renderBasis(step) {
+  const list = document.getElementById("basisList");
+  list.innerHTML = "";
+  for (let i = B - 1; i >= 0; i--) {
+    const row = document.createElement("div");
+    const v = step.basis[i];
+    row.className = "basisrow" + (v ? " pivot" : " empty");
+    row.innerHTML = "<span class='pos'>bit " + i + "</span><span class='vec'>" +
+      (v ? pad(v, B) + " (" + v + ")" : "— empty") + "</span>";
+    list.appendChild(row);
+  }
+}
+
+// ---------- State ----------
+const state = { mode: "trie", plan: null, stepIdx: 0, running: false, timer: null };
+
+function parseNums() {
+  const raw = document.getElementById("numsInput").value.trim();
+  let nums = raw.split(/[\s,]+/).map(s => parseInt(s, 10)).filter(v => !isNaN(v) && v >= 0 && v < (1 << B));
+  if (nums.length === 0) nums = [3, 10, 5, 25, 2, 8].filter(v => v < (1 << B));
+  return nums;
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.mode = document.getElementById("modeSel").value;
+  const nums = parseNums();
+  if (state.mode === "trie") {
+    let x = parseInt(document.getElementById("qInput").value, 10);
+    if (isNaN(x) || x < 0) x = 0;
+    if (x >= (1 << B)) x = (1 << B) - 1;
+    state.plan = buildTriePlan(nums, x);
+    document.getElementById("leftTitle").textContent = "Binary trie (MSB-first, B = " + B + ")";
+    document.getElementById("rightTitle").textContent = "Query progress";
+    document.getElementById("basisPanel").style.display = "none";
+    document.getElementById("svg").style.display = "";
+  } else {
+    state.plan = buildBasisPlan(nums);
+    document.getElementById("leftTitle").textContent = "Linear basis build (reduction over GF(2))";
+    document.getElementById("rightTitle").textContent = "Basis progress";
+    document.getElementById("basisPanel").style.display = "";
+    document.getElementById("svg").style.display = "none";
+  }
+  state.stepIdx = 0;
+  applyStep();
+  updateButtons();
+}
+
+function applyStep() {
+  const step = state.plan.steps[state.stepIdx];
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+
+  if (state.mode === "trie") {
+    renderTrie(state.plan, step);
+    const x = state.plan.x;
+    document.getElementById("qLabel").textContent = "x = " + x + " = " + pad(x, B) + "₂";
+    renderBitRow("qBits", pad(x, B).split("").map(Number),
+      step.type === "walk" ? step.depth : -1, B);
+    renderBitRow("pBits", step.partnerBits || [], (step.partnerBits ? step.partnerBits.length - 1 : -1), B);
+    renderBitRow("xBits", step.xorBits || [], (step.xorBits ? step.xorBits.length - 1 : -1), B);
+    if (step.type === "done") {
+      document.getElementById("xorBox").innerHTML =
+        "Best partner <b>y = " + step.partner + "</b>; maximum XOR = <span class='val'>" + step.xorVal + "</span> = " + pad(step.xorVal, B) + "₂.";
+    } else if (step.type === "walk") {
+      const sofar = parseInt((step.xorBits.join("") || "0"), 2);
+      document.getElementById("xorBox").innerHTML =
+        "After bit " + step.bitPos + ", XOR accumulated so far = <span class='val'>" + sofar + "</span> (" + pad(sofar, B) + "₂).";
+    } else {
+      document.getElementById("xorBox").innerHTML = "Walk starts at the root. We will pick the opposite bit whenever a child exists.";
+    }
+  } else {
+    renderBasis(step);
+    document.getElementById("qLabel").textContent =
+      step.type === "done" ? ("rank = " + step.rank + ", distinct XORs = " + (1 << step.rank))
+      : (step.type === "add" ? ("inserting " + step.value) : "empty basis");
+    document.getElementById("qBits").innerHTML = "";
+    document.getElementById("pBits").innerHTML = "";
+    document.getElementById("xBits").innerHTML = "";
+    if (step.type === "done") {
+      document.getElementById("xorBox").innerHTML =
+        "Max subset XOR = <span class='val'>" + step.maxXor + "</span> = " + pad(step.maxXor, B) + "₂. Distinct achievable XORs = 2^" + step.rank + " = " + (1 << step.rank) + ".";
+    } else if (step.type === "add") {
+      document.getElementById("xorBox").innerHTML = step.dependent
+        ? ("Value " + step.value + " was <b>dependent</b> — reducible to 0 by existing pivots.")
+        : ("Value " + step.value + " installed a new pivot at bit " + step.installed + ".");
+    } else {
+      document.getElementById("xorBox").innerHTML = "Empty basis. Each insert reduces the value against existing pivots from the top bit down.";
+    }
+  }
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep();
+  }
+  updateButtons();
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    state.stepIdx = 0;
+    applyStep();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("numsInput").addEventListener("change", rebuild);
+document.getElementById("qInput").addEventListener("change", rebuild);
+
+// ---------- Initial ----------
+rebuild();
+</script>
+</body>
+</html>
