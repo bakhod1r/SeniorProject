@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>N-Queens — Backtracking Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-col: rgba(210, 153, 34, 0.28);
+    --hi-diag: rgba(248, 81, 73, 0.26);
+    --hi-place: rgba(63, 185, 80, 0.40);
+    --light-sq: #1b2230;
+    --dark-sq: #11161d;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .board-area { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.fail { border-left-color: var(--bad); }
+  .narrate.win { border-left-color: var(--good); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stats {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .stats .box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 10px;
+  }
+  .stats .box b { color: var(--accent); }
+  .stats .box .v { color: var(--good); font-weight: 700; }
+  .pos {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    word-break: break-all;
+  }
+  .pos b { color: var(--accent); }
+  .sets { margin-top: 12px; }
+  .setrow { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-family: var(--mono); font-size: 12px; }
+  .setrow .lab { min-width: 52px; color: var(--muted); }
+  .bitcell {
+    width: 22px; height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    text-align: center;
+    line-height: 22px;
+    font-size: 11px;
+    background: var(--panel-2);
+  }
+  .bitcell.on { background: var(--hi-diag); color: #fff; font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  rect.cell { stroke: var(--border); stroke-width: 1; }
+  rect.hcol { fill: var(--hi-col) !important; }
+  rect.hdiag { fill: var(--hi-diag) !important; }
+  rect.htry { fill: var(--hi-place) !important; }
+  text.queen { font-size: 22px; }
+  text.coord { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <h1>N-Queens — Backtracking, Row by Row</h1>
+  <p>Place one queen per row. Before each placement, check the column, main diagonal (r&minus;c), and anti-diagonal (r+c). On a dead-end row, <b>backtrack</b>: lift the last queen and try the next column.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>N = <input type="number" id="nInput" value="6" min="1" max="10" /></label>
+    <label>speed
+      <input type="range" id="speed" min="120" max="1200" value="600" />
+    </label>
+    <label>mode
+      <select id="modeSel">
+        <option value="one">find one</option>
+        <option value="all">count all</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Board (current attack highlights)</h2>
+      <div class="board-area">
+        <svg id="boardSvg" width="360" height="360" viewBox="0 0 360 360"></svg>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-col)"></span> attacked column</span>
+        <span><span class="swatch" style="background:var(--hi-diag)"></span> attacked diagonals</span>
+        <span><span class="swatch" style="background:var(--hi-place)"></span> trying this square</span>
+        <span>&#9819; placed queen</span>
+      </div>
+      <div class="narrate" id="narrate">Press <b>Step</b> to begin. We try columns left to right in each row; the first safe square gets a queen.</div>
+    </div>
+
+    <div class="card">
+      <h2>Search state</h2>
+      <div class="stats">
+        <div class="box"><b>row</b> <span class="v" id="stRow">0</span></div>
+        <div class="box"><b>trying col</b> <span class="v" id="stCol">&mdash;</span></div>
+        <div class="box"><b>nodes</b> <span class="v" id="stNodes">0</span></div>
+        <div class="box"><b>backtracks</b> <span class="v" id="stBack">0</span></div>
+        <div class="box"><b>solutions</b> <span class="v" id="stSol">0</span></div>
+        <div class="box"><b>queens placed</b> <span class="v" id="stPlaced">0</span></div>
+      </div>
+      <div class="pos">pos[] = <b><span id="posArr">[]</span></b></div>
+      <div class="sets">
+        <div class="setrow"><span class="lab">cols</span><div id="setCols"></div></div>
+        <div class="setrow"><span class="lab">r&minus;c</span><div id="setDiag"></div></div>
+        <div class="setrow"><span class="lab">r+c</span><div id="setAnti"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Conflict checks are O(1): a square (r,c) is safe iff its column c, main diagonal r&minus;c, and anti-diagonal r+c are all free.
+    See <code>junior.md</code> for the recursion and <code>middle.md</code> for the bitmask speedup; <code>professional.md</code> proves the search visits exactly the valid partial placements.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------- State ----------------
+const state = {
+  n: 6,
+  mode: "one",
+  steps: [],
+  idx: 0,
+  running: false,
+  timer: null,
+  speed: 600
+};
+
+// ---------------- Build the step plan by simulating backtracking ----------------
+// Each step is a snapshot the renderer can draw. We log: try, place, backtrack,
+// solution, done. Snapshots carry pos[], the three occupancy sets, and counters.
+function buildSteps(n, mode) {
+  const steps = [];
+  const pos = new Array(n).fill(-1);
+  const cols = new Array(n).fill(false);
+  const diag = new Array(2 * n - 1).fill(false); // index r - c + (n-1)
+  const anti = new Array(2 * n - 1).fill(false); // index r + c
+  let nodes = 0, backtracks = 0, solutions = 0;
+
+  function snapshot(extra) {
+    return Object.assign({
+      pos: pos.slice(),
+      cols: cols.slice(),
+      diag: diag.slice(),
+      anti: anti.slice(),
+      nodes, backtracks, solutions
+    }, extra);
+  }
+
+  function solve(r) {
+    if (r === n) {
+      solutions++;
+      steps.push(snapshot({
+        type: "solution",
+        row: r, col: -1,
+        desc: "All " + n + " rows filled with non-attacking queens — a complete solution! (#" + solutions + ")"
+      }));
+      return mode === "one"; // stop early in find-one mode
+    }
+    for (let c = 0; c < n; c++) {
+      nodes++;
+      const d = r - c + n - 1, a = r + c;
+      const conflictCol = cols[c], conflictD = diag[d], conflictA = anti[a];
+      if (conflictCol || conflictD || conflictA) {
+        let why = [];
+        if (conflictCol) why.push("column " + c);
+        if (conflictD) why.push("diagonal r−c=" + (r - c));
+        if (conflictA) why.push("anti-diagonal r+c=" + (r + c));
+        steps.push(snapshot({
+          type: "try", row: r, col: c, ok: false,
+          hcol: c, hd: d, ha: a,
+          desc: "Row " + r + ", try column " + c + ": BLOCKED by " + why.join(" & ") + ". Skip."
+        }));
+        continue;
+      }
+      // safe -> place
+      steps.push(snapshot({
+        type: "try", row: r, col: c, ok: true,
+        hcol: c, hd: d, ha: a,
+        desc: "Row " + r + ", try column " + c + ": SAFE (column, r−c=" + (r - c) + ", r+c=" + (r + c) + " all free). Place the queen."
+      }));
+      pos[r] = c; cols[c] = true; diag[d] = true; anti[a] = true;
+      steps.push(snapshot({
+        type: "place", row: r, col: c,
+        desc: "Placed queen at (" + r + ", " + c + "). Recurse to row " + (r + 1) + "."
+      }));
+      const stop = solve(r + 1);
+      if (stop) return true;
+      // backtrack
+      pos[r] = -1; cols[c] = false; diag[d] = false; anti[a] = false;
+      backtracks++;
+      steps.push(snapshot({
+        type: "backtrack", row: r, col: c,
+        desc: "Dead end below (" + r + ", " + c + "). BACKTRACK: lift the queen and try the next column in row " + r + "."
+      }));
+    }
+    return false;
+  }
+
+  steps.push(snapshot({
+    type: "init", row: 0, col: -1,
+    desc: "Start at row 0 with an empty board. One queen per row; choose a column for each."
+  }));
+  solve(0);
+  steps.push(snapshot({
+    type: "done", row: -1, col: -1,
+    desc: mode === "one"
+      ? (solutions > 0 ? "Done — found one solution after " + nodes + " node visits and " + backtracks + " backtracks."
+                       : "Done — NO solution exists for N=" + n + ".")
+      : "Done — explored the whole tree: " + solutions + " solution(s), " + nodes + " node visits, " + backtracks + " backtracks."
+  }));
+  return steps;
+}
+
+// ---------------- Rendering ----------------
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function boardGeometry(n) {
+  const margin = 18;
+  const size = 360 - margin * 2;
+  const cell = size / n;
+  return { margin, size, cell };
+}
+
+function renderBoard(step) {
+  const n = state.n;
+  const svg = document.getElementById("boardSvg");
+  svg.innerHTML = "";
+  const { margin, cell } = boardGeometry(n);
+
+  // squares
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("x", margin + c * cell);
+      rect.setAttribute("y", margin + r * cell);
+      rect.setAttribute("width", cell);
+      rect.setAttribute("height", cell);
+      let baseClass = "cell";
+      rect.setAttribute("fill", (r + c) % 2 === 0 ? "var(--light-sq)" : "var(--dark-sq)");
+      // highlight attacked column / diagonals relative to the square being tried
+      if (step.col >= 0 && (step.type === "try" || step.type === "place" || step.type === "backtrack")) {
+        if (c === step.hcol && step.hcol !== undefined) baseClass += " hcol";
+        const d = r - c + n - 1, a = r + c;
+        if (step.hd !== undefined && (d === step.hd || a === step.ha)) baseClass += " hdiag";
+      }
+      rect.setAttribute("class", baseClass);
+      svg.appendChild(rect);
+    }
+  }
+
+  // the square being tried (overlay)
+  if ((step.type === "try") && step.col >= 0) {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", margin + step.col * cell);
+    rect.setAttribute("y", margin + step.row * cell);
+    rect.setAttribute("width", cell);
+    rect.setAttribute("height", cell);
+    rect.setAttribute("class", step.ok ? "cell htry" : "cell hdiag");
+    svg.appendChild(rect);
+  }
+
+  // placed queens
+  for (let r = 0; r < n; r++) {
+    if (step.pos[r] >= 0) {
+      const c = step.pos[r];
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", margin + c * cell + cell / 2);
+      t.setAttribute("y", margin + r * cell + cell / 2 + 8);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("class", "queen");
+      t.setAttribute("fill", "#fff");
+      t.textContent = "♛"; // black queen glyph (renders solid)
+      svg.appendChild(t);
+    }
+  }
+
+  // coordinate hints (top + left) for small n
+  if (n <= 8) {
+    for (let c = 0; c < n; c++) {
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", margin + c * cell + cell / 2);
+      t.setAttribute("y", margin - 5);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("class", "coord");
+      t.textContent = c;
+      svg.appendChild(t);
+    }
+    for (let r = 0; r < n; r++) {
+      const t = document.createElementNS(SVG_NS, "text");
+      t.setAttribute("x", margin - 10);
+      t.setAttribute("y", margin + r * cell + cell / 2 + 3);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("class", "coord");
+      t.textContent = r;
+      svg.appendChild(t);
+    }
+  }
+}
+
+function renderSets(step) {
+  const n = state.n;
+  function row(elId, arr, prefixOffset) {
+    const el = document.getElementById(elId);
+    el.innerHTML = "";
+    for (let i = 0; i < arr.length; i++) {
+      const d = document.createElement("div");
+      d.className = "bitcell" + (arr[i] ? " on" : "");
+      // label: for cols it's the column index; for diag/anti the actual r∓c value
+      d.textContent = (prefixOffset === null) ? i : (i - prefixOffset);
+      el.appendChild(d);
+    }
+  }
+  row("setCols", step.cols, null);
+  row("setDiag", step.diag, n - 1);   // index i corresponds to r-c = i-(n-1)
+  row("setAnti", step.anti, 0);       // index i corresponds to r+c = i
+}
+
+function renderStats(step) {
+  document.getElementById("stRow").textContent = step.row >= 0 ? step.row : "—";
+  document.getElementById("stCol").textContent = step.col >= 0 ? step.col : "—";
+  document.getElementById("stNodes").textContent = step.nodes;
+  document.getElementById("stBack").textContent = step.backtracks;
+  document.getElementById("stSol").textContent = step.solutions;
+  let placed = 0;
+  for (let r = 0; r < state.n; r++) if (step.pos[r] >= 0) placed++;
+  document.getElementById("stPlaced").textContent = placed;
+  const posTxt = "[" + step.pos.map(x => x < 0 ? "_" : x).join(", ") + "]";
+  document.getElementById("posArr").textContent = posTxt;
+}
+
+function applyStep(step) {
+  renderBoard(step);
+  renderSets(step);
+  renderStats(step);
+  const nar = document.getElementById("narrate");
+  nar.classList.remove("fail", "win");
+  if (step.type === "backtrack") nar.classList.add("fail");
+  if (step.type === "solution") nar.classList.add("win");
+  if (step.type === "try" && !step.ok) nar.classList.add("fail");
+  nar.innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.steps.length - 1);
+}
+
+// ---------------- Controls / flow ----------------
+function gotoStep(i) {
+  if (i < 0 || i >= state.steps.length) return;
+  state.idx = i;
+  applyStep(state.steps[i]);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) gotoStep(state.idx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, state.speed);
+}
+
+function rebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  if (n > 10) n = 10;
+  document.getElementById("nInput").value = n;
+  state.n = n;
+  state.mode = document.getElementById("modeSel").value;
+  state.speed = parseInt(document.getElementById("speed").value, 10);
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.steps = buildSteps(n, state.mode);
+  state.idx = 0;
+  applyStep(state.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("speed").addEventListener("input", () => {
+  state.speed = parseInt(document.getElementById("speed").value, 10);
+  if (state.running) { clearInterval(state.timer); run(); run(); }
+});
+
+// ---------------- Initial load ----------------
+rebuild();
+</script>
+</body>
+</html>
