@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The 8-Puzzle — IDA* Heuristic Search</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .board {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    margin: 0 auto;
+  }
+  .board td {
+    border: 1px solid var(--border);
+    width: 56px;
+    height: 56px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    background: var(--panel-2);
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .board td.blank { background: var(--bg); color: var(--bg); }
+  .board td.moved { background: var(--hi-cell); color: #fff; }
+  .board td.placed { color: var(--good); }
+  .stats {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    min-width: 70px;
+    text-align: center;
+  }
+  .stat .lbl { display: block; color: var(--muted); font-size: 11px; }
+  .stat .num { font-size: 18px; font-weight: 700; }
+  .stat.g .num { color: var(--accent); }
+  .stat.h .num { color: var(--accent-2); }
+  .stat.f .num { color: var(--good); }
+  .stat.over .num { color: var(--bad); }
+  .thresholds {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .trow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .trow.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .trow.solved { border-color: var(--good); }
+  .trow .tval { color: var(--accent-2); font-weight: 700; min-width: 64px; }
+  .trow .tnote { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.prune { border-left-color: var(--bad); }
+  .narrate.found { border-left-color: var(--good); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); justify-content: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .pathbox {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    min-height: 38px;
+    word-break: break-word;
+  }
+  .pathbox b { color: var(--accent); }
+  .pathbox .move { color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>The 8-Puzzle — IDA* with the Manhattan Heuristic</h1>
+  <p>IDA* is a depth-first search bounded by f = g + h. Watch it prune branches where f &gt; threshold, raise the threshold, and find the optimal solution path.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Scramble:
+      <select id="puzzleSel">
+        <option value="easy1">1 move (slide 8)</option>
+        <option value="easy3">3 moves</option>
+        <option value="mid5">5 moves</option>
+        <option value="mid8">8 moves</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Current board (blank slides)</h2>
+      <table class="board" id="boardTbl"></table>
+      <div class="stats">
+        <div class="stat g"><span class="lbl">g (moves so far)</span><span class="num" id="statG">0</span></div>
+        <div class="stat h"><span class="lbl">h (Manhattan)</span><span class="num" id="statH">0</span></div>
+        <div class="stat f"><span class="lbl">f = g + h</span><span class="num" id="statF">0</span></div>
+        <div class="stat over"><span class="lbl">threshold</span><span class="num" id="statT">0</span></div>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> tile just moved</span>
+        <span><span class="swatch" style="background:var(--panel-2)"></span> tile</span>
+        <span><span class="swatch" style="background:var(--bg)"></span> blank</span>
+      </div>
+      <div class="pathbox" id="pathBox">Path from start: <b>(none yet)</b></div>
+    </div>
+
+    <div class="card">
+      <h2>IDA* iterations (threshold rises)</h2>
+      <div class="thresholds" id="threshList"></div>
+      <div class="step-counter" id="iterInfo" style="margin-top:12px;"></div>
+      <div class="pathbox" id="goalBox" style="margin-top:12px;">Goal: <b>1 2 3 / 4 5 6 / 7 8 _</b></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. IDA* starts with threshold = h(start), runs a bounded DFS, and raises the threshold when no solution fits.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The heuristic is the admissible <b>Manhattan distance</b> (sum of each tile's grid distance to its goal cell, blank excluded).
+    Because h never overestimates, the first solution IDA* reaches is optimal. See <code>junior.md</code> and <code>professional.md</code> for the admissibility and optimality proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Constants ----------
+const SIDE = 3;
+const GOAL = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+const DR = [-1, 1, 0, 0];
+const DC = [0, 0, -1, 1];
+const DIRNAME = ["Up", "Down", "Left", "Right"];
+
+// ---------- Scrambles ----------
+const PUZZLES = {
+  easy1: [1, 2, 3, 4, 5, 6, 7, 0, 8],
+  easy3: [1, 2, 3, 4, 5, 6, 0, 7, 8],
+  mid5:  [1, 2, 3, 4, 0, 6, 7, 5, 8],
+  mid8:  [1, 2, 3, 0, 4, 6, 7, 5, 8]
+};
+
+// ---------- Heuristic ----------
+function manhattan(b) {
+  let d = 0;
+  for (let i = 0; i < b.length; i++) {
+    const v = b[i];
+    if (v === 0) continue;
+    const gr = Math.floor((v - 1) / SIDE), gc = (v - 1) % SIDE;
+    const r = Math.floor(i / SIDE), c = i % SIDE;
+    d += Math.abs(r - gr) + Math.abs(c - gc);
+  }
+  return d;
+}
+
+function indexOf(b, v) {
+  for (let i = 0; i < b.length; i++) if (b[i] === v) return i;
+  return -1;
+}
+
+function isGoal(b) {
+  for (let i = 0; i < b.length; i++) if (b[i] !== GOAL[i]) return false;
+  return true;
+}
+
+// ---------- Build the full IDA* step plan ----------
+// We record EVERY visited node across all iterations as a discrete step so the
+// user can watch pruning, backtracking, threshold increases, and the solution.
+function buildPlan(start) {
+  const steps = [];
+  const thresholds = [];
+  let bound = manhattan(start);
+  let solved = false;
+
+  // safety cap so the animation always terminates
+  let guard = 0;
+  while (!solved && guard < 40) {
+    guard++;
+    const iterIndex = thresholds.length;
+    thresholds.push(bound);
+    let nextBound = Infinity;
+    const board = start.slice();
+    const path = []; // moved tiles
+    const moveDir = []; // direction names
+
+    steps.push({
+      kind: "iter-start",
+      board: board.slice(),
+      g: 0, h: manhattan(board), bound: bound,
+      iter: iterIndex, path: path.slice(), dirs: moveDir.slice(),
+      desc: "Begin iteration " + (iterIndex + 1) + " with threshold = " + bound +
+            ". Run a depth-first search, pruning any node with f = g + h > " + bound + "."
+    });
+
+    function dfs(blank, g, prev) {
+      const h = manhattan(board);
+      const f = g + h;
+      if (f > bound) {
+        steps.push({
+          kind: "prune",
+          board: board.slice(),
+          g: g, h: h, bound: bound, iter: iterIndex,
+          path: path.slice(), dirs: moveDir.slice(),
+          desc: "Prune: f = " + g + " + " + h + " = " + f + " > threshold " + bound +
+                ". Backtrack. (This f is a candidate for the next threshold.)"
+        });
+        if (f < nextBound) nextBound = f;
+        return false;
+      }
+      if (h === 0) {
+        steps.push({
+          kind: "found",
+          board: board.slice(),
+          g: g, h: 0, bound: bound, iter: iterIndex,
+          path: path.slice(), dirs: moveDir.slice(),
+          desc: "Goal reached at depth " + g + " with f = " + g + " ≤ threshold " + bound +
+                ". This is the optimal solution (" + g + " moves)."
+        });
+        return true;
+      }
+      steps.push({
+        kind: "expand",
+        board: board.slice(),
+        g: g, h: h, bound: bound, iter: iterIndex,
+        path: path.slice(), dirs: moveDir.slice(),
+        desc: "Expand node: f = " + g + " + " + h + " = " + f + " ≤ threshold " + bound +
+              ". Generate moves (skipping the reverse of the last move)."
+      });
+      const r = Math.floor(blank / SIDE), c = blank % SIDE;
+      for (let d = 0; d < 4; d++) {
+        const nr = r + DR[d], nc = c + DC[d];
+        if (nr < 0 || nr >= SIDE || nc < 0 || nc >= SIDE) continue;
+        const ni = nr * SIDE + nc;
+        if (ni === prev) continue; // forbid reverse
+        const tile = board[ni];
+        board[blank] = tile; board[ni] = 0; // slide tile into blank
+        path.push(tile);
+        moveDir.push(DIRNAME[d]);
+        const ok = dfs(ni, g + 1, blank);
+        if (ok) return true;
+        path.pop();
+        moveDir.pop();
+        board[blank] = 0; board[ni] = tile; // undo
+      }
+      return false;
+    }
+
+    const blank0 = indexOf(board, 0);
+    solved = dfs(blank0, 0, -1);
+
+    if (!solved) {
+      steps.push({
+        kind: "raise",
+        board: start.slice(),
+        g: 0, h: manhattan(start), bound: nextBound, iter: iterIndex,
+        path: [], dirs: [],
+        desc: "No solution within threshold " + bound +
+              ". Raise threshold to the smallest pruned f = " + nextBound + " and search again."
+      });
+      bound = nextBound;
+      if (!isFinite(bound)) break;
+    }
+  }
+  return { steps, thresholds };
+}
+
+// ---------- Rendering ----------
+function renderBoard(b, movedIndex) {
+  const tbl = document.getElementById("boardTbl");
+  let html = "";
+  for (let r = 0; r < SIDE; r++) {
+    html += "<tr>";
+    for (let c = 0; c < SIDE; c++) {
+      const i = r * SIDE + c;
+      const v = b[i];
+      let cls = "";
+      if (v === 0) cls = "blank";
+      else {
+        if (i === movedIndex) cls = "moved";
+        else if (i === v - 1) cls = "placed";
+      }
+      html += "<td class='" + cls + "'>" + (v === 0 ? "0" : v) + "</td>";
+    }
+    html += "</tr>";
+  }
+  tbl.innerHTML = html;
+}
+
+function renderThresholds(thresholds, activeIter, solvedIter) {
+  const list = document.getElementById("threshList");
+  let html = "";
+  for (let i = 0; i < thresholds.length; i++) {
+    let cls = "trow";
+    if (i === solvedIter) cls += " solved";
+    else if (i === activeIter) cls += " active";
+    const note = (i === solvedIter)
+      ? "solution found at this threshold"
+      : "no solution ≤ this; raise threshold";
+    html += "<div class='" + cls + "'><span class='tval'>f ≤ " + thresholds[i] +
+            "</span><span class='tnote'>iteration " + (i + 1) + " — " + note + "</span></div>";
+  }
+  list.innerHTML = html;
+}
+
+function renderPath(path, dirs) {
+  const box = document.getElementById("pathBox");
+  if (path.length === 0) {
+    box.innerHTML = "Path from start: <b>(none yet)</b>";
+    return;
+  }
+  const parts = path.map((t, i) => "<span class='move'>" + t + "(" + dirs[i] + ")</span>");
+  box.innerHTML = "Path from start (" + path.length + " moves): " + parts.join(" &rarr; ");
+}
+
+// ---------- State machine ----------
+const state = {
+  start: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  solvedIter: -1
+};
+
+function findSolvedIter(plan) {
+  for (const s of plan.steps) if (s.kind === "found") return s.iter;
+  return -1;
+}
+
+function loadPuzzle(key) {
+  state.start = PUZZLES[key].slice();
+  state.plan = buildPlan(state.start);
+  state.solvedIter = findSolvedIter(state.plan);
+  state.stepIdx = 0;
+  applyStep(0);
+}
+
+function applyStep(idx) {
+  const step = state.plan.steps[idx];
+  let moved = -1;
+  if (step.path.length > 0) {
+    moved = indexOf(step.board, 0); // blank is where the tile came from; show last moved
+    // the moved tile is in the cell the blank just left; approximate by blank-adjacency
+  }
+  // Better: highlight the cell that holds the most-recently moved tile.
+  // The blank sits where that tile used to be, so its neighbor differing from goal is the move.
+  renderBoard(step.board, lastMovedCell(step));
+  document.getElementById("statG").textContent = step.g;
+  document.getElementById("statH").textContent = step.h;
+  document.getElementById("statF").textContent = step.g + step.h;
+  document.getElementById("statT").textContent = isFinite(step.bound) ? step.bound : "∞";
+  renderThresholds(state.plan.thresholds, step.iter, state.solvedIter);
+  renderPath(step.path, step.dirs);
+
+  const narrate = document.getElementById("narrate");
+  narrate.className = "narrate";
+  if (step.kind === "prune" || step.kind === "raise") narrate.classList.add("prune");
+  if (step.kind === "found") narrate.classList.add("found");
+  narrate.innerHTML = step.desc;
+
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("iterInfo").textContent =
+    "iteration " + (step.iter + 1) + " of " + state.plan.thresholds.length +
+    "  •  total nodes visited so far: " + countNodesUpTo(idx);
+  updateButtons();
+}
+
+function lastMovedCell(step) {
+  // The tile that moved last sits adjacent to the blank, in the blank's previous cell.
+  // We approximate: the blank's position is known; the last moved tile occupies the
+  // cell that the blank vacated. Without storing it explicitly, highlight nothing for
+  // structural steps and the blank-adjacent changed cell for move steps.
+  if (step.path.length === 0) return -1;
+  const blank = indexOf(step.board, 0);
+  // the moved tile is the one now in blank's old spot; we can't recover the old spot
+  // cheaply, so highlight the tile value equal to the last path entry.
+  const lastTile = step.path[step.path.length - 1];
+  return indexOf(step.board, lastTile);
+}
+
+function countNodesUpTo(idx) {
+  let n = 0;
+  for (let i = 0; i <= idx; i++) {
+    const k = state.plan.steps[i].kind;
+    if (k === "expand" || k === "prune" || k === "found") n++;
+  }
+  return n;
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep(state.stepIdx);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const key = document.getElementById("puzzleSel").value;
+  loadPuzzle(key);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("puzzleSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
