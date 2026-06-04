@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Backtracking — Subsets &amp; Permutations Decision Tree</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --choose: rgba(63, 185, 80, 0.40);
+    --unchoose: rgba(248, 81, 73, 0.30);
+    --emit: rgba(210, 153, 34, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select, .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  .controls input[type="text"] { width: 120px; }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .partial {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: #fff;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    min-height: 30px;
+    letter-spacing: 2px;
+  }
+  .partial .slot {
+    display: inline-block;
+    min-width: 26px;
+    text-align: center;
+    border-bottom: 2px solid var(--accent);
+    margin: 0 3px;
+    color: var(--good);
+  }
+  .results {
+    font-family: var(--mono);
+    font-size: 14px;
+    margin-top: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .results .row {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--accent-2);
+    animation: pop 0.4s ease;
+  }
+  @keyframes pop { from { background: var(--emit); } to { background: transparent; } }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate .act-choose { color: var(--good); font-weight: 700; }
+  .narrate .act-unchoose { color: var(--bad); font-weight: 700; }
+  .narrate .act-emit { color: var(--accent-2); font-weight: 700; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  circle.tnode { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.5; transition: all 0.25s ease; }
+  circle.tnode.visited { stroke: var(--accent); }
+  circle.tnode.active { fill: var(--accent); stroke: #fff; stroke-width: 2.5; }
+  circle.tnode.emitted { fill: var(--accent-2); stroke: #fff; }
+  line.tedge { stroke: var(--border); stroke-width: 1.5; transition: stroke 0.25s ease; }
+  line.tedge.walked { stroke: var(--good); stroke-width: 2.5; }
+  text.tlabel { fill: var(--text); font-size: 11px; font-family: var(--mono); }
+  text.elabel { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Backtracking — The Decision Tree for Subsets &amp; Permutations</h1>
+  <p>Watch <b>choose &rarr; recurse &rarr; un-choose</b>. Green = a choice made, red = a choice undone, gold = a complete result emitted.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Mode:
+      <select id="modeSel">
+        <option value="subsets">Subsets (2&#8319;)</option>
+        <option value="permutations">Permutations (n!)</option>
+      </select>
+    </label>
+    <label>Elements: <input type="text" id="elemInput" value="1,2,3" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Decision tree (DFS order)</h2>
+      <svg id="tree" viewBox="0 0 760 420" preserveAspectRatio="xMidYMid meet">
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--accent)"></span> active node</span>
+        <span><span class="swatch" style="background:var(--accent-2)"></span> emitted result</span>
+        <span><span class="swatch" style="background:var(--good)"></span> path taken</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Partial solution</h2>
+      <div class="partial" id="partial">[ ]</div>
+      <h2 style="margin-top:16px;">Emitted results (<span id="emitCount">0</span>)</h2>
+      <div class="results" id="results"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We explore the decision tree depth-first, making a choice, recursing, then undoing it.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Subsets mode uses the start-index include/exclude tree (every node is a subset); permutations mode tries every unused element at each depth and emits at full length.
+    See <code>junior.md</code> for the templates and <code>professional.md</code> for the proof that each object is generated exactly once.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  mode: "subsets",
+  elems: [1, 2, 3],
+  steps: [],
+  nodes: [],       // tree nodes with layout {id, depth, x, y, parent, label, partial}
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// ---------- Build the tree + the linear step plan ----------
+// A "step" is one observable action: choose, recurse-enter (visit), emit, unchoose.
+// We pre-walk the recursion, recording nodes (for layout) and steps (for animation).
+
+function buildSubsets(elems) {
+  const nodes = [];
+  const steps = [];
+  let nextId = 0;
+  function addNode(parent, depth, partial, edgeLabel) {
+    const id = nextId++;
+    nodes.push({ id, parent, depth, partial: partial.slice(), edgeLabel, x: 0, y: 0 });
+    return id;
+  }
+  const rootId = addNode(-1, 0, [], "");
+  steps.push({ type: "visit", node: rootId, partial: [],
+    desc: "Enter the root with an empty partial solution. Every node here IS a subset." });
+  steps.push({ type: "emit", node: rootId, partial: [],
+    desc: "Emit the current subset (a copy of the buffer)." });
+
+  function rec(start, partial, nodeId) {
+    for (let i = start; i < elems.length; i++) {
+      const child = partial.concat(elems[i]);
+      const cid = addNode(nodeId, partial.length + 1, child, String(elems[i]));
+      steps.push({ type: "choose", node: cid, from: nodeId, partial: child, val: elems[i],
+        desc: "CHOOSE " + elems[i] + " &rarr; add it to the partial solution and recurse (only later indices allowed)." });
+      steps.push({ type: "visit", node: cid, partial: child,
+        desc: "Enter the child node; the partial solution is now [" + child.join(", ") + "]." });
+      steps.push({ type: "emit", node: cid, partial: child,
+        desc: "Emit [" + child.join(", ") + "] (a copy)." });
+      rec(i + 1, child, cid);
+      steps.push({ type: "unchoose", node: cid, to: nodeId, partial: partial.slice(), val: elems[i],
+        desc: "UN-CHOOSE " + elems[i] + " &rarr; remove it; the buffer is restored to [" + partial.join(", ") + "]." });
+    }
+  }
+  rec(0, [], rootId);
+  steps.push({ type: "done", node: rootId, partial: [],
+    desc: "Done. All 2^" + elems.length + " = " + (1 << elems.length) + " subsets were emitted, each exactly once." });
+  return { nodes, steps };
+}
+
+function buildPermutations(elems) {
+  const nodes = [];
+  const steps = [];
+  let nextId = 0;
+  const n = elems.length;
+  function addNode(parent, depth, partial, edgeLabel) {
+    const id = nextId++;
+    nodes.push({ id, parent, depth, partial: partial.slice(), edgeLabel, x: 0, y: 0 });
+    return id;
+  }
+  const rootId = addNode(-1, 0, [], "");
+  steps.push({ type: "visit", node: rootId, partial: [],
+    desc: "Enter the root. We will place one element per level until length " + n + "." });
+
+  const used = new Array(n).fill(false);
+  function rec(partial, nodeId) {
+    if (partial.length === n) {
+      steps.push({ type: "emit", node: nodeId, partial: partial.slice(),
+        desc: "Length " + n + " reached &rarr; emit the permutation [" + partial.join(", ") + "]." });
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      const child = partial.concat(elems[i]);
+      const cid = addNode(nodeId, partial.length + 1, child, String(elems[i]));
+      steps.push({ type: "choose", node: cid, from: nodeId, partial: child, val: elems[i],
+        desc: "CHOOSE " + elems[i] + " (not yet used) &rarr; place it and recurse." });
+      steps.push({ type: "visit", node: cid, partial: child,
+        desc: "Enter child; partial = [" + child.join(", ") + "]." });
+      rec(child, cid);
+      steps.push({ type: "unchoose", node: cid, to: nodeId, partial: partial.slice(), val: elems[i],
+        desc: "UN-CHOOSE " + elems[i] + " &rarr; mark it unused again; buffer back to [" + partial.join(", ") + "]." });
+      used[i] = false;
+    }
+  }
+  rec([], rootId);
+  steps.push({ type: "done", node: rootId, partial: [],
+    desc: "Done. All " + factorial(n) + " permutations were emitted, each exactly once." });
+  return { nodes, steps };
+}
+
+function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
+
+// ---------- Layout: assign x,y to every node ----------
+function layoutTree(nodes) {
+  const maxDepth = nodes.reduce((m, nd) => Math.max(m, nd.depth), 0);
+  const W = 760, H = 420;
+  const topPad = 30, botPad = 24;
+  const levelGap = maxDepth > 0 ? (H - topPad - botPad) / maxDepth : 0;
+  // group leaves left-to-right by DFS order to spread x positions
+  const byDepth = {};
+  nodes.forEach(nd => { (byDepth[nd.depth] = byDepth[nd.depth] || []).push(nd); });
+  Object.keys(byDepth).forEach(d => {
+    const row = byDepth[d];
+    const count = row.length;
+    row.forEach((nd, idx) => {
+      nd.x = (W * (idx + 1)) / (count + 1);
+      nd.y = topPad + nd.depth * levelGap;
+    });
+  });
+}
+
+// ---------- Rendering ----------
+function renderTreeStatic() {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  const byId = {};
+  state.nodes.forEach(nd => byId[nd.id] = nd);
+  // edges
+  state.nodes.forEach(nd => {
+    if (nd.parent < 0) return;
+    const p = byId[nd.parent];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", p.x); line.setAttribute("y1", p.y);
+    line.setAttribute("x2", nd.x); line.setAttribute("y2", nd.y);
+    line.setAttribute("class", "tedge");
+    line.setAttribute("id", "edge-" + nd.id);
+    edgeLayer.appendChild(line);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", (p.x + nd.x) / 2 + 4);
+    t.setAttribute("y", (p.y + nd.y) / 2);
+    t.setAttribute("class", "elabel");
+    t.textContent = "+" + nd.edgeLabel;
+    edgeLayer.appendChild(t);
+  });
+  // nodes
+  state.nodes.forEach(nd => {
+    const r = state.nodes.length > 30 ? 7 : 10;
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", nd.x); c.setAttribute("cy", nd.y);
+    c.setAttribute("r", r);
+    c.setAttribute("class", "tnode");
+    c.setAttribute("id", "node-" + nd.id);
+    nodeLayer.appendChild(c);
+  });
+}
+
+function setNodeClass(id, cls, on) {
+  const el = document.getElementById("node-" + id);
+  if (el) el.classList.toggle(cls, on);
+}
+function setEdgeWalked(id, on) {
+  const el = document.getElementById("edge-" + id);
+  if (el) el.classList.toggle("walked", on);
+}
+
+function renderPartial(partial) {
+  const box = document.getElementById("partial");
+  if (!partial || partial.length === 0) { box.innerHTML = "[ ]"; return; }
+  box.innerHTML = "[ " + partial.map(v => "<span class='slot'>" + v + "</span>").join("") + " ]";
+}
+
+function addResult(partial) {
+  const list = document.getElementById("results");
+  const row = document.createElement("div");
+  row.className = "row";
+  row.textContent = "[" + partial.join(", ") + "]";
+  list.insertBefore(row, list.firstChild);
+  document.getElementById("emitCount").textContent = list.children.length;
+}
+
+// ---------- Apply a single step ----------
+let activeNode = -1;
+function applyStep(step) {
+  // clear previous active
+  if (activeNode >= 0) setNodeClass(activeNode, "active", false);
+
+  if (step.type === "choose") {
+    setNodeClass(step.node, "visited", true);
+    setEdgeWalked(step.node, true);
+  } else if (step.type === "visit") {
+    setNodeClass(step.node, "active", true);
+    setNodeClass(step.node, "visited", true);
+    activeNode = step.node;
+    renderPartial(step.partial);
+  } else if (step.type === "emit") {
+    setNodeClass(step.node, "emitted", true);
+    activeNode = step.node;
+    renderPartial(step.partial);
+    addResult(step.partial);
+  } else if (step.type === "unchoose") {
+    setEdgeWalked(step.node, false);
+    setNodeClass(step.node, "active", false);
+    activeNode = step.to;
+    if (step.to >= 0) setNodeClass(step.to, "active", true);
+    renderPartial(step.partial);
+  } else if (step.type === "done") {
+    renderPartial([]);
+  }
+
+  let actClass = "";
+  if (step.type === "choose") actClass = "act-choose";
+  else if (step.type === "unchoose") actClass = "act-unchoose";
+  else if (step.type === "emit") actClass = "act-emit";
+  document.getElementById("narrate").innerHTML =
+    (actClass ? "<span class='" + actClass + "'>" + step.type.toUpperCase() + ":</span> " : "") + step.desc;
+}
+
+function replayTo(idx) {
+  // reset visuals then apply 0..idx
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("emitCount").textContent = "0";
+  activeNode = -1;
+  state.nodes.forEach(nd => {
+    setNodeClass(nd.id, "active", false);
+    setNodeClass(nd.id, "visited", false);
+    setNodeClass(nd.id, "emitted", false);
+    setEdgeWalked(nd.id, false);
+  });
+  for (let i = 0; i <= idx; i++) applyStep(state.steps[i]);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  // emit-type steps append; to keep results list correct we replay from scratch
+  // (cheap for these small inputs)
+  replayTo(idx);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) {
+    state.stepIdx++;
+    applyStep(state.steps[state.stepIdx]);
+    document.getElementById("stepInfo").textContent =
+      "step " + state.stepIdx + " / " + (state.steps.length - 1);
+    updateButtons();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer); state.running = false; updateButtons(); return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer); state.running = false; updateButtons(); return;
+    }
+    stepForward();
+  }, 850);
+}
+
+// ---------- Build / rebuild ----------
+function parseElems(raw) {
+  const parts = raw.split(/[\s,]+/).filter(s => s.length > 0);
+  let vals = parts.map(s => {
+    const n = parseInt(s, 10);
+    return isNaN(n) ? s : n;
+  });
+  if (vals.length === 0) vals = [1, 2, 3];
+  if (vals.length > 4) vals = vals.slice(0, 4); // keep the tree readable
+  return vals;
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.mode = document.getElementById("modeSel").value;
+  state.elems = parseElems(document.getElementById("elemInput").value);
+  document.getElementById("elemInput").value = state.elems.join(",");
+  const built = state.mode === "subsets"
+    ? buildSubsets(state.elems)
+    : buildPermutations(state.elems);
+  state.nodes = built.nodes;
+  state.steps = built.steps;
+  layoutTree(state.nodes);
+  renderTreeStatic();
+  state.stepIdx = 0;
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("emitCount").textContent = "0";
+  activeNode = -1;
+  applyStep(state.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("elemInput").addEventListener("change", rebuild);
+
+// ---------- Initial ----------
+rebuild();
+</script>
+</body>
+</html>
