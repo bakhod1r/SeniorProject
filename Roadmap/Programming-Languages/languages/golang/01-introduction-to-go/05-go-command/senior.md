@@ -8,27 +8,21 @@
 4. [Use Cases](#use-cases)
 5. [Code Examples](#code-examples)
 6. [Coding Patterns](#coding-patterns)
-7. [Clean Code](#clean-code)
-8. [Best Practices](#best-practices)
-9. [Product Use / Feature](#product-use-feature)
-10. [Error Handling](#error-handling)
-11. [Security Considerations](#security-considerations)
-12. [Performance Optimization](#performance-optimization)
-13. Metrics & Analytics
-14. [Debugging Guide](#debugging-guide)
-15. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-16. [Postmortems & System Failures](#postmortems-system-failures)
-17. [Common Mistakes](#common-mistakes)
-18. [Tricky Points](#tricky-points)
-19. [Comparison with Other Languages](#comparison-with-other-languages)
-20. [Test](#test)
-21. [Tricky Questions](#tricky-questions)
-22. [Cheat Sheet](#cheat-sheet)
-23. [Summary](#summary)
-24. [What You Can Build](#what-you-can-build)
-25. [Further Reading](#further-reading)
-26. [Related Topics](#related-topics)
-27. [Diagrams & Visual Aids](#diagrams-visual-aids)
+7. [Best Practices](#best-practices)
+8. [Product Use / Feature](#product-use-feature)
+9. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+10. [Postmortems & System Failures](#postmortems-system-failures)
+11. [Common Mistakes](#common-mistakes)
+12. [Tricky Points](#tricky-points)
+13. [Comparison with Other Languages](#comparison-with-other-languages)
+14. [Test](#test)
+15. [Tricky Questions](#tricky-questions)
+16. [Cheat Sheet](#cheat-sheet)
+17. [Summary](#summary)
+18. [What You Can Build](#what-you-can-build)
+19. [Further Reading](#further-reading)
+20. [Related Topics](#related-topics)
+21. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -538,59 +532,6 @@ generate-mocks:
 
 ---
 
-## Clean Code
-
-### Clean Architecture Boundaries
-
-```go
-// Layering violation — build logic mixed with business logic
-func main() {
-    version := "hardcoded-1.0" // should be injected
-    log.Printf("Starting v%s", version)
-}
-
-// Dependency inversion — version injected at build time
-var version = "dev" // overridden by -ldflags
-
-func main() {
-    log.Printf("Starting v%s", version)
-}
-```
-
-**Dependency flow must be:**
-```mermaid
-graph LR
-    A[Build System] -->|injects via -ldflags| B[main package]
-    B -->|depends on| C[Internal packages]
-    D[go generate] -->|produces| E[Generated code]
-    E -->|compiled into| C
-    style A fill:#f9f,stroke:#333
-```
-
----
-
-### Code Smells at Senior Level
-
-| Smell | Symptom | Refactoring |
-|-------|---------|-------------|
-| **Build script in Go** | `go run ./cmd/build` that calls `exec.Command("go", "build")` | Use Makefile or shell script |
-| **Embedded everything** | 100 MB binary because all assets embedded | Embed only essential files; serve others from CDN |
-| **CGO for simple tasks** | Using CGO for JSON parsing or HTTP | Use pure Go alternatives |
-| **Generate in build** | `go generate` as part of `go build` | Separate steps; commit generated code |
-
----
-
-### Code Review Checklist (Senior)
-
-- [ ] Build flags documented in Makefile or README
-- [ ] `go:embed` only used for files that truly need to be in the binary
-- [ ] CGO disabled unless absolutely necessary
-- [ ] Build constraints use the new `//go:build` syntax (not `// +build`)
-- [ ] No hardcoded version strings — all injected via `-ldflags`
-- [ ] CI runs `go mod verify` and `go vet`
-
----
-
 ## Best Practices
 
 ### Must Do
@@ -656,158 +597,6 @@ graph LR
 - **Architecture:** Uses GoReleaser for cross-compilation to 10+ platforms with `-ldflags` version injection.
 - **Scale:** Each release produces 20+ binaries (OS x arch combinations).
 - **Lessons learned:** Standardized on `CGO_ENABLED=0` to avoid C toolchain requirements on CI.
-
----
-
-## Error Handling
-
-### Strategy 1: Build failure categorization
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-# Categorize build failures
-if ! go vet ./... 2>vet_errors.txt; then
-    echo "CATEGORY: Static analysis failure"
-    cat vet_errors.txt
-    exit 1
-fi
-
-if ! go build -o /dev/null ./... 2>build_errors.txt; then
-    echo "CATEGORY: Compilation failure"
-    cat build_errors.txt
-    exit 1
-fi
-
-if ! go test -race -count=1 ./... 2>test_errors.txt; then
-    echo "CATEGORY: Test failure"
-    cat test_errors.txt
-    exit 1
-fi
-```
-
-### Error Handling Architecture
-
-```mermaid
-flowchart TD
-    A[CI Pipeline] --> B{go vet}
-    B -->|Fail| C[Static Analysis Error]
-    B -->|Pass| D{go build}
-    D -->|Fail| E[Compilation Error]
-    D -->|Pass| F{go test -race}
-    F -->|Fail| G[Test / Race Error]
-    F -->|Pass| H{go mod verify}
-    H -->|Fail| I[Supply Chain Error]
-    H -->|Pass| J[Build Artifact]
-    C --> K[Alert: Code Quality]
-    E --> K
-    G --> K
-    I --> L[Alert: Security]
-```
-
----
-
-## Security Considerations
-
-### Security Architecture Checklist
-
-- [ ] Input validation — `go vet` and `staticcheck` in CI
-- [ ] `-trimpath` — no local paths in production binaries
-- [ ] `go mod verify` — checksums match expected values
-- [ ] `govulncheck ./...` — no known vulnerable dependencies
-- [ ] `GONOSUMCHECK` narrowly scoped — only private modules
-- [ ] No secrets in `-ldflags` — use runtime env vars instead
-- [ ] Binary signed with cosign or similar for artifact integrity
-
-### Threat Model
-
-| Threat | Likelihood | Impact | Mitigation |
-|--------|:---------:|:------:|------------|
-| Dependency tampering | Medium | Critical | `go mod verify` + `GONOSUMCHECK` scoped |
-| Path disclosure in stack traces | High | Medium | `-trimpath` in all builds |
-| Vulnerable dependency | High | High | `govulncheck` in CI |
-| Build server compromise | Low | Critical | Reproducible builds + artifact signing |
-
----
-
-## Performance Optimization
-
-### Optimization 1: Binary size reduction
-
-```bash
-# Baseline
-go build -o server ./cmd/server
-ls -lh server
-# 25 MB
-
-# Strip debug info
-go build -ldflags="-s -w" -o server ./cmd/server
-ls -lh server
-# 17 MB (-32%)
-
-# Disable CGO + strip
-CGO_ENABLED=0 go build -ldflags="-s -w" -trimpath -o server ./cmd/server
-ls -lh server
-# 14 MB (-44%)
-
-# UPX compression (optional, affects startup time)
-upx --best server
-ls -lh server
-# 5 MB (-80%)
-```
-
-### Optimization 2: Build time reduction
-
-```bash
-# Measure baseline
-time go build ./...
-# real 45s
-
-# Warm cache
-time go build ./...
-# real 2s (cached)
-
-# Parallel tests
-time go test -parallel $(nproc) ./...
-# 30% faster than default
-
-# Reduce test scope in development
-go test -short ./...  # skip long-running tests
-```
-
-### Performance Architecture
-
-| Layer | Optimization | Impact | Cost |
-|:-----:|:------------|:------:|:----:|
-| **Binary size** | `-ldflags="-s -w"` + CGO_ENABLED=0 | 30-50% smaller | No cost |
-| **Build time** | CI cache + parallel tests | 50-80% faster CI | Cache storage cost |
-| **Startup time** | Avoid UPX on server binaries | Faster cold starts | Larger binary |
-| **Cross-compile** | CGO_ENABLED=0 | Trivial multi-platform | Lose C library access |
-
----
-
-## Debugging Guide
-
-### Advanced Tools & Techniques
-
-| Tool | Use case | When to use |
-|------|----------|-------------|
-| `go build -gcflags="-m"` | Escape analysis | Find unexpected heap allocations |
-| `go build -gcflags="-S"` | Assembly output | Understand generated code |
-| `GOSSAFUNC=fn go build` | SSA visualization | Compiler optimization analysis |
-| `go tool nm ./binary` | Symbol listing | Check what is linked |
-| `go tool objdump -s main.main ./binary` | Disassembly | Verify optimizations |
-| `go version -m ./binary` | Build info | Check how binary was built |
-
-```bash
-# Check build info of any Go binary
-go version -m ./server
-# Shows: Go version, module path, dependencies, build settings
-
-# Check if binary has race detector
-go version -m ./server | grep -race
-```
 
 ---
 

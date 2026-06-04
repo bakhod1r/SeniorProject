@@ -8,16 +8,14 @@
 4. [Compiler Perspective](#compiler-perspective)
 5. [Memory Layout](#memory-layout)
 6. [OS / Syscall Level](#os-syscall-level)
-7. [Source Code Walkthrough](#source-code-walkthrough)
-8. [Assembly Output Analysis](#assembly-output-analysis)
-9. [Performance Internals](#performance-internals)
-10. [Metrics & Analytics (Runtime Level)](#metrics-analytics-runtime-level)
-11. [Edge Cases at the Lowest Level](#edge-cases-at-the-lowest-level)
-12. [Test](#test)
-13. [Tricky Questions](#tricky-questions)
-14. [Summary](#summary)
-15. [Further Reading](#further-reading)
-16. [Diagrams & Visual Aids](#diagrams-visual-aids)
+7. [Assembly Output Analysis](#assembly-output-analysis)
+8. [Performance Internals](#performance-internals)
+9. [Metrics & Analytics (Runtime Level)](#metrics-analytics-runtime-level)
+10. [Test](#test)
+11. [Tricky Questions](#tricky-questions)
+12. [Summary](#summary)
+13. [Further Reading](#further-reading)
+14. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -336,48 +334,12 @@ Benefit: No hot split, more cache-friendly
 Cost: Must update all pointers when stack moves (copy + adjust)
 ```
 
-### Go Runtime Memory Allocator
-
-```
-+----------------------------------------------------------+
-|                     Go Memory Allocator                   |
-|----------------------------------------------------------|
-|  mcache (per-P, lock-free)                               |
-|  ├── tiny allocator (< 16 bytes, no pointers)            |
-|  ├── mspan allocations by size class                     |
-|  └── stack allocations                                    |
-|                                                           |
-|  mcentral (per-size-class, shared with lock)              |
-|  └── distributes mspans to mcaches                        |
-|                                                           |
-|  mheap (global, locked)                                   |
-|  ├── manages page-level allocation                        |
-|  ├── requests memory from OS via mmap                     |
-|  └── returns memory to OS via madvise(MADV_DONTNEED)      |
-+----------------------------------------------------------+
-```
+The initial goroutine stack size has also shrunk over Go's history: it was
+8KB before Go 1.2, 4KB before Go 1.4, and 2KB from Go 1.4 onward.
 
 ---
 
 ## OS / Syscall Level
-
-### Key System Calls Used by Go Runtime
-
-```bash
-# Trace syscalls on Linux
-strace -f -e trace=clone,futex,mmap,madvise,write ./myprogram
-```
-
-**Key syscalls:**
-
-| Syscall | Purpose | When |
-|---------|---------|------|
-| `clone` | Create new OS thread (M) | When runtime needs more threads |
-| `futex` | Low-level synchronization | Mutex, semaphore operations |
-| `mmap` | Allocate memory pages | Heap growth |
-| `madvise(MADV_DONTNEED)` | Return memory to OS | After GC frees large regions |
-| `sigaltstack` | Set up signal stack | Goroutine preemption (Go 1.14+) |
-| `tgkill` | Send signal to thread | Non-cooperative preemption |
 
 ### Non-Cooperative Preemption (Go 1.14+)
 
@@ -401,69 +363,6 @@ Go 1.14 introduced asynchronous preemption using OS signals:
 3. Signal handler saves G's state at current PC
 4. Scheduler switches to another goroutine
 ```
-
----
-
-## Source Code Walkthrough
-
-### GC Initialization (src/runtime/mgc.go — Go 1.22)
-
-```go
-// Annotated excerpt from runtime/mgc.go
-// This shows how GC is triggered
-
-// gcStart transitions from _GCoff to _GCmark (if not already
-// transitioning) and starts GC workers.
-//
-// The GC starts in mark phase with mark workers running.
-// func gcStart(trigger gcTrigger) {
-//     ...
-//     // In concurrent mode, start mark workers
-//     // This is where the tri-color marking begins
-//     gcController.startCycle(now, int64(gogc), memoryLimit)
-//     ...
-// }
-
-// gcController maintains the GC's internal state
-// type gcControllerState struct {
-//     gcPercent    atomic.Int32    // GOGC value (default 100)
-//     memoryLimit  atomic.Int64    // GOMEMLIMIT value
-//     heapGoal     atomic.Uint64   // target heap size for next cycle
-//     ...
-// }
-```
-
-### Scheduler Source (src/runtime/proc.go — Go 1.22)
-
-```go
-// Annotated excerpt from runtime/proc.go
-// This is the core scheduling loop
-
-// schedule() finds a runnable goroutine and executes it.
-// func schedule() {
-//     mp := getg().m  // current M (OS thread)
-//
-//     // Check local run queue first (lock-free, fast path)
-//     if gp, inheritTime := runqget(mp.p.ptr()); gp != nil {
-//         execute(gp, inheritTime)
-//     }
-//
-//     // Check global run queue (locked, slower)
-//     if gp := globrunqget(mp.p.ptr(), 0); gp != nil {
-//         execute(gp, false)
-//     }
-//
-//     // Try to steal from other P's (work stealing)
-//     if gp, inheritTime, _ := stealWork(now); gp != nil {
-//         execute(gp, inheritTime)
-//     }
-//
-//     // Nothing to run — park the M
-//     stopm()
-// }
-```
-
-> Reference: Go 1.22. Internals change between versions.
 
 ---
 
@@ -621,92 +520,6 @@ func main() {
 | `/gc/cycles/total:gc-cycles` | Total GC cycles | More frequent but shorter with concurrent GC |
 | `/sched/goroutines:goroutines` | Goroutine count | Scheduling improved with G-M-P model |
 | `/sched/latencies:seconds` | Scheduling latency | Improved with non-cooperative preemption (1.14) |
-
----
-
-## Edge Cases at the Lowest Level
-
-### Edge Case 1: Stack Growth During Tight Loops
-
-What happens when a goroutine's stack needs to grow:
-
-```go
-package main
-
-import "fmt"
-
-func recursive(n int) int {
-    if n <= 0 {
-        return 0
-    }
-    // Each call frame needs stack space
-    // Go starts with 2KB stack and grows by 2x
-    // The runtime copies the entire stack to a new location
-    // All pointers into the stack are updated
-    var buf [256]byte
-    buf[0] = byte(n)
-    return recursive(n-1) + int(buf[0])
-}
-
-func main() {
-    // This causes many stack growths: 2KB → 4KB → 8KB → ... → ~1MB
-    result := recursive(10000)
-    fmt.Println(result)
-}
-```
-
-**Internal behavior:**
-1. Goroutine starts with 2KB stack (was 4KB before Go 1.4, 8KB before Go 1.2)
-2. Each function call checks if there is enough stack space (stack check prologue)
-3. If not, `runtime.morestack()` is called
-4. New stack (2x size) is allocated
-5. Old stack is copied to new stack
-6. All pointers into the old stack are updated (stack scanning)
-7. Old stack is freed
-
-**Why it matters:** Stack copying is O(n) where n is the current stack size. Very deep recursion can cause performance issues not from the algorithm but from repeated stack copies.
-
-### Edge Case 2: Goroutine Preemption at Unsafe Points
-
-```go
-package main
-
-import (
-    "fmt"
-    "runtime"
-    "sync"
-    "unsafe"
-)
-
-func main() {
-    // Since Go 1.14, goroutines can be preempted at almost any point
-    // EXCEPT during unsafe.Pointer operations
-    //
-    // The runtime marks certain instruction sequences as "unsafe points"
-    // where preemption is disallowed to prevent partially-visible writes
-
-    var mu sync.Mutex
-    var data [100]int
-
-    var wg sync.WaitGroup
-    wg.Add(1)
-    go func() {
-        defer wg.Done()
-        mu.Lock()
-        defer mu.Unlock()
-        // This is safe — the runtime will not preempt in the middle
-        // of a synchronized block in a way that violates atomicity
-        for i := range data {
-            data[i] = i
-        }
-    }()
-
-    wg.Wait()
-    fmt.Printf("Data size: %d, unsafe.Sizeof(int): %d\n",
-        len(data), unsafe.Sizeof(data[0]))
-    _ = runtime.Version()
-}
-```
 
 ---
 

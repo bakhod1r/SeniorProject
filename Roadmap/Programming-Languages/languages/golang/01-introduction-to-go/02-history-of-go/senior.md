@@ -8,27 +8,22 @@
 4. [Use Cases](#use-cases)
 5. [Code Examples](#code-examples)
 6. [Coding Patterns](#coding-patterns)
-7. [Clean Code](#clean-code)
-8. [Best Practices](#best-practices)
-9. [Product Use / Feature](#product-use-feature)
-10. [Error Handling](#error-handling)
-11. [Security Considerations](#security-considerations)
-12. [Performance Optimization](#performance-optimization)
-13. [Metrics & Analytics](#metrics-analytics)
-14. [Debugging Guide](#debugging-guide)
-15. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-16. [Postmortems & System Failures](#postmortems-system-failures)
-17. [Common Mistakes](#common-mistakes)
-18. [Tricky Points](#tricky-points)
-19. [Comparison with Other Languages](#comparison-with-other-languages)
-20. [Test](#test)
-21. [Tricky Questions](#tricky-questions)
-22. [Cheat Sheet](#cheat-sheet)
-23. [Summary](#summary)
-24. [What You Can Build](#what-you-can-build)
-25. [Further Reading](#further-reading)
-26. [Related Topics](#related-topics)
-27. [Diagrams & Visual Aids](#diagrams-visual-aids)
+7. [Best Practices](#best-practices)
+8. [Product Use / Feature](#product-use-feature)
+9. [Performance Optimization](#performance-optimization)
+10. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+11. [Postmortems & System Failures](#postmortems-system-failures)
+12. [Common Mistakes](#common-mistakes)
+13. [Tricky Points](#tricky-points)
+14. [Comparison with Other Languages](#comparison-with-other-languages)
+15. [Test](#test)
+16. [Tricky Questions](#tricky-questions)
+17. [Cheat Sheet](#cheat-sheet)
+18. [Summary](#summary)
+19. [What You Can Build](#what-you-can-build)
+20. [Further Reading](#further-reading)
+21. [Related Topics](#related-topics)
+22. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -456,53 +451,6 @@ func main() {
 
 ---
 
-## Clean Code
-
-### Clean Architecture Boundaries
-
-```go
-// Layering violation — business logic knows about HTTP
-type OrderHandler struct{ db *sql.DB }
-
-// Dependency inversion — depend on abstractions
-type OrderRepository interface{ Save(Order) error }
-type OrderService struct{ repo OrderRepository }
-```
-
-**Dependency flow must be:**
-```mermaid
-graph LR
-    A[HTTP Handler] -->|depends on| B[Use Case / Service]
-    B -->|depends on| C[Repository Interface]
-    D[DB Adapter] -->|implements| C
-    style C fill:#f9f,stroke:#333
-```
-
----
-
-### Code Smells at Senior Level
-
-| Smell | Symptom | Refactoring |
-|-------|---------|-------------|
-| **God Object** | One struct with 20+ methods | Split by responsibility |
-| **Primitive Obsession** | `string` for version, `int` for year | Wrap in value types |
-| **Shotgun Surgery** | Change 1 feature, edit 10 files | Move cohesive logic together |
-| **Feature Envy** | Method uses another type's data more than its own | Move method to that type |
-| **Data Clumps** | Same 3+ fields always appear together | Extract into a struct |
-
----
-
-### Code Review Checklist (Senior)
-
-- [ ] No business logic in HTTP handlers or DB adapters
-- [ ] All public interfaces are documented
-- [ ] No global mutable state
-- [ ] Error messages include enough context to debug
-- [ ] No magic numbers/strings — all constants named
-- [ ] Functions have single responsibility
-
----
-
 ## Best Practices
 
 ### Must Do
@@ -579,92 +527,6 @@ graph LR
 
 ---
 
-## Error Handling
-
-### Strategy 1: Domain error hierarchy (Go 1.13+ pattern)
-
-```go
-package main
-
-import (
-    "errors"
-    "fmt"
-)
-
-type VersionError struct {
-    Required string
-    Current  string
-    Feature  string
-}
-
-func (e *VersionError) Error() string {
-    return fmt.Sprintf("feature %q requires Go %s, current: %s", e.Feature, e.Required, e.Current)
-}
-
-var ErrUnsupportedVersion = errors.New("unsupported Go version")
-
-func checkFeature(feature, current string) error {
-    requirements := map[string]string{
-        "generics": "1.18",
-        "slog":     "1.21",
-        "range-int": "1.22",
-    }
-    required, ok := requirements[feature]
-    if !ok {
-        return fmt.Errorf("unknown feature %q: %w", feature, ErrUnsupportedVersion)
-    }
-    if current < required {
-        return &VersionError{Required: required, Current: current, Feature: feature}
-    }
-    return nil
-}
-
-func main() {
-    err := checkFeature("generics", "1.16")
-    if err != nil {
-        var verErr *VersionError
-        if errors.As(err, &verErr) {
-            fmt.Printf("Upgrade needed: %s → %s for %s\n", verErr.Current, verErr.Required, verErr.Feature)
-        }
-    }
-}
-```
-
-### Error Handling Architecture
-
-```mermaid
-flowchart TD
-    A[Handler] -->|wraps| B[Service]
-    B -->|wraps| C[Repository]
-    C -->|original| D[Database Error]
-    A -->|maps to| E[HTTP Status Code]
-    A -->|logs| F[Structured Logging]
-    A -->|reports| G[Error Monitoring]
-```
-
----
-
-## Security Considerations
-
-### Security Architecture Checklist
-
-- [ ] Go version is within 2 releases of latest — security patches
-- [ ] `govulncheck` runs in CI — known vulnerability scanning
-- [ ] `GONOSUMCHECK` is NOT set — checksum verification enabled
-- [ ] Dependencies pinned with exact versions in `go.sum`
-- [ ] `GOFLAGS=-mod=readonly` in CI — prevents unauthorized changes
-- [ ] Private module proxy configured (`GOPROXY`)
-
-### Threat Model
-
-| Threat | Likelihood | Impact | Mitigation |
-|--------|:---------:|:------:|------------|
-| Dependency supply chain attack | Medium | Critical | `sum.golang.org` verification, `govulncheck` |
-| Using Go version with known CVEs | High | High | Upgrade policy: max 2 releases behind |
-| `//go:linkname` to internal APIs | Low | Medium | Go 1.23+ restricts this; avoid entirely |
-
----
-
 ## Performance Optimization
 
 ### Optimization 1: Leveraging Go Version Improvements
@@ -728,69 +590,6 @@ benchstat before.txt after.txt
 | **PGO** | Profile-guided optimization | 2-7% | Build pipeline change |
 | **GOMEMLIMIT** | Set to 80% of container | Fewer OOM, better GC | Env var change |
 | **Algorithm** | Better data structures | Highest | Requires redesign |
-
----
-
-## Metrics & Analytics
-
-### Key Metrics
-
-| Metric | Type | Description | Alert threshold |
-|--------|------|-------------|-----------------|
-| **go_info** | Gauge | Go version in production | < latest-2 |
-| **go_gc_duration_seconds** | Summary | GC pause duration | p99 > 1ms |
-| **go_memstats_heap_alloc_bytes** | Gauge | Current heap allocation | > GOMEMLIMIT * 0.9 |
-| **go_goroutines** | Gauge | Number of goroutines | > 100K |
-
-### Prometheus Instrumentation
-
-```go
-package main
-
-import (
-    "fmt"
-    "runtime"
-    "runtime/metrics"
-)
-
-func main() {
-    // Go 1.16+: runtime/metrics API (no STW, unlike ReadMemStats)
-    samples := []metrics.Sample{
-        {Name: "/memory/classes/heap/objects:bytes"},
-        {Name: "/gc/cycles/total:gc-cycles"},
-        {Name: "/sched/goroutines:goroutines"},
-        {Name: "/gc/pauses:seconds"},
-    }
-    metrics.Read(samples)
-
-    fmt.Printf("Go %s runtime metrics:\n", runtime.Version())
-    for _, s := range samples {
-        switch s.Value.Kind() {
-        case metrics.KindUint64:
-            fmt.Printf("  %s: %d\n", s.Name, s.Value.Uint64())
-        case metrics.KindFloat64:
-            fmt.Printf("  %s: %.4f\n", s.Name, s.Value.Float64())
-        case metrics.KindFloat64Histogram:
-            fmt.Printf("  %s: [histogram]\n", s.Name)
-        }
-    }
-}
-```
-
----
-
-## Debugging Guide
-
-### Advanced Tools & Techniques
-
-| Tool | Use case | When to use |
-|------|----------|-------------|
-| `go tool pprof` | CPU/memory profiling | Performance issues |
-| `go tool trace` | Execution tracing | Concurrency issues, GC analysis |
-| `go build -race` | Race detection | Always in CI |
-| `benchstat` | Compare benchmarks | Before/after Go version upgrades |
-| `GODEBUG=gctrace=1` | GC behavior | Tuning GOMEMLIMIT |
-| `govulncheck` | Security scanning | Every CI run |
 
 ---
 

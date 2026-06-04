@@ -12,26 +12,21 @@
 8. [Use Cases](#use-cases)
 9. [Code Examples](#code-examples)
 10. [Coding Patterns](#coding-patterns)
-11. [Clean Code](#clean-code)
-12. [Product Use / Feature](#product-use-feature)
-13. [Error Handling](#error-handling)
-14. [Security Considerations](#security-considerations)
-15. [Performance Tips](#performance-tips)
-16. [Metrics & Analytics](#metrics-analytics)
-17. [Best Practices](#best-practices)
-18. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-19. [Common Mistakes](#common-mistakes)
-20. [Common Misconceptions](#common-misconceptions)
-21. [Tricky Points](#tricky-points)
-22. [Test](#test)
-23. [Tricky Questions](#tricky-questions)
-24. [Cheat Sheet](#cheat-sheet)
-25. [Self-Assessment Checklist](#self-assessment-checklist)
-26. [Summary](#summary)
-27. [What You Can Build](#what-you-can-build)
-28. [Further Reading](#further-reading)
-29. [Related Topics](#related-topics)
-30. [Diagrams & Visual Aids](#diagrams-visual-aids)
+11. [Product Use / Feature](#product-use-feature)
+12. [Best Practices](#best-practices)
+13. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+14. [Common Mistakes](#common-mistakes)
+15. [Common Misconceptions](#common-misconceptions)
+16. [Tricky Points](#tricky-points)
+17. [Test](#test)
+18. [Tricky Questions](#tricky-questions)
+19. [Cheat Sheet](#cheat-sheet)
+20. [Self-Assessment Checklist](#self-assessment-checklist)
+21. [Summary](#summary)
+22. [What You Can Build](#what-you-can-build)
+23. [Further Reading](#further-reading)
+24. [Related Topics](#related-topics)
+25. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -300,80 +295,6 @@ sequenceDiagram
 
 ---
 
-## Clean Code
-
-### Naming
-
-```go
-// Bad naming
-package main
-import "fmt"
-func main() {
-    s := "World"
-    fmt.Println("Hello, " + s)
-}
-
-// Clean naming
-package main
-import "fmt"
-func main() {
-    greeting := "World"
-    fmt.Println("Hello, " + greeting)
-}
-```
-
-**Rules:**
-- Variables: describe WHAT they hold (`greeting`, not `s`, `x`, `tmp`)
-- Functions: describe WHAT they do (`printGreeting`, not `pg`)
-- Booleans: use `is`, `has`, `can` prefix (`isReady`, `hasOutput`)
-
----
-
-### Functions
-
-```go
-// Too much in one function
-package main
-import "fmt"
-func main() {
-    name := "Gopher"
-    greeting := "Hello, " + name + "!"
-    fmt.Println(greeting)
-    fmt.Println("Welcome to Go.")
-    fmt.Println("Enjoy coding!")
-}
-
-// Single responsibility — extract a greeting function
-package main
-import "fmt"
-func buildGreeting(name string) string {
-    return "Hello, " + name + "!"
-}
-func main() {
-    fmt.Println(buildGreeting("Gopher"))
-}
-```
-
-**Rule:** If you need to scroll to see a function — it does too much. Aim for **20 lines or fewer**.
-
----
-
-### Comments
-
-```go
-// Noise comment (states the obvious)
-// print hello world
-fmt.Println("Hello, World!")
-
-// Explains WHY, not WHAT
-// Use Println instead of Printf — no dynamic formatting needed here
-fmt.Println("Hello, World!")
-```
-
-**Rule:** Good code explains itself. Comments explain **why**, not **what**.
-
----
-
 ## Product Use / Feature
 
 ### 1. Docker
@@ -390,178 +311,6 @@ fmt.Println("Hello, World!")
 
 - **How it uses Hello World:** Teams often include a Hello World test to validate that Go is correctly installed in the CI environment.
 - **Why it matters:** A failing Hello World in CI immediately signals a toolchain issue.
-
----
-
-## Error Handling
-
-### Error 1: `undefined: fmt` or package not imported
-
-```go
-package main
-
-func main() {
-    fmt.Println("Hello") // Error: undefined: fmt
-}
-```
-
-**Why it happens:** You forgot the `import "fmt"` statement.
-**How to fix:**
-
-```go
-package main
-
-import "fmt"
-
-func main() {
-    fmt.Println("Hello")
-}
-```
-
-### Error 2: `imported and not used: "fmt"`
-
-```go
-package main
-
-import "fmt"
-
-func main() {
-    // We imported fmt but never used it
-}
-```
-
-**Why it happens:** Go does not allow unused imports to keep code clean.
-**How to fix:** Remove the import or use the package. During development, you can use a blank identifier: `_ = fmt.Println` (not recommended for production).
-
-### Error 3: `expected declaration, found '...'`
-
-```go
-package main
-
-import "fmt"
-
-fmt.Println("Hello") // Error: expected declaration
-```
-
-**Why it happens:** Executable statements must be inside a function. You placed `fmt.Println` outside of `func main()`.
-**How to fix:**
-
-```go
-package main
-
-import "fmt"
-
-func main() {
-    fmt.Println("Hello")
-}
-```
-
----
-
-## Security Considerations
-
-### 1. Do Not Print Sensitive Data
-
-```go
-// Insecure — printing secrets to stdout
-package main
-import "fmt"
-func main() {
-    password := "s3cret123"
-    fmt.Println("Password:", password) // Visible in logs!
-}
-
-// Secure — never print credentials
-package main
-import "fmt"
-func main() {
-    fmt.Println("Application started successfully")
-}
-```
-
-**Risk:** Printed secrets end up in log files, terminal history, or CI output — accessible to anyone who reads them.
-**Mitigation:** Never print passwords, API keys, or tokens. Use environment variables and avoid logging them.
-
-### 2. User Input in Print Statements
-
-```go
-// Risky — using Printf with user-controlled format string
-package main
-import "fmt"
-func main() {
-    userInput := "%x %x %x %x"
-    fmt.Printf(userInput) // Format string attack — reads stack memory
-}
-
-// Safe — always use format verbs explicitly
-package main
-import "fmt"
-func main() {
-    userInput := "%x %x %x %x"
-    fmt.Printf("%s\n", userInput) // Treated as a plain string
-}
-```
-
-**Risk:** If user input is used as a format string in `Printf`, an attacker can read memory contents.
-**Mitigation:** Always pass user input as an argument, never as the format string itself.
-
----
-
-## Performance Tips
-
-### Tip 1: Use `fmt.Println` for Simple Output
-
-```go
-// Slower — unnecessary formatting overhead
-fmt.Printf("%s\n", "Hello, World!")
-
-// Faster — direct print, no format parsing
-fmt.Println("Hello, World!")
-```
-
-**Why it's faster:** `Println` directly writes the string without parsing a format string. For simple text output, avoid `Printf` unless you need formatting.
-
-### Tip 2: Use `go build` for Production
-
-```go
-// Development: compile and run in one step (slower — temporary binary)
-// go run main.go
-
-// Production: compile once, run many times (faster execution)
-// go build -o myapp main.go
-// ./myapp
-```
-
-**Why it's faster:** `go run` compiles every time. `go build` creates a reusable binary — no compilation overhead on subsequent runs.
-
----
-
-## Metrics & Analytics
-
-### What to Measure
-
-| Metric | Why it matters | Tool |
-|--------|---------------|------|
-| **Compilation time** | Ensures fast development feedback loop | `time go build main.go` |
-| **Binary size** | Affects deployment and container image size | `ls -lh myapp` |
-
-### Basic Instrumentation
-
-```go
-package main
-
-import (
-    "fmt"
-    "time"
-)
-
-func main() {
-    start := time.Now()
-    fmt.Println("Hello, World!")
-    elapsed := time.Since(start)
-    fmt.Printf("Execution took: %s\n", elapsed)
-}
-```
 
 ---
 

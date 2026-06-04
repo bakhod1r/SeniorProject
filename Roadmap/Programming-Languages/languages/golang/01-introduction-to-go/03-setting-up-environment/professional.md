@@ -5,20 +5,19 @@
 1. [Introduction](#introduction)
 2. [How It Works Internally](#how-it-works-internally)
 3. [Runtime Deep Dive](#runtime-deep-dive)
-4. [Compiler Perspective](#compiler-perspective)
+4. [Toolchain & Linker Flags](#toolchain-linker-flags)
 5. [Memory Layout](#memory-layout)
 6. [OS / Syscall Level](#os-syscall-level)
 7. [Source Code Walkthrough](#source-code-walkthrough)
-8. [Assembly Output Analysis](#assembly-output-analysis)
-9. [Performance Internals](#performance-internals)
-10. [Metrics & Analytics (Runtime Level)](#metrics-analytics-runtime-level)
-11. [Edge Cases at the Lowest Level](#edge-cases-at-the-lowest-level)
-12. [Test](#test)
-13. [Tricky Questions](#tricky-questions)
-14. [Self-Assessment Checklist](#self-assessment-checklist)
-15. [Summary](#summary)
-16. [Further Reading](#further-reading)
-17. [Diagrams & Visual Aids](#diagrams-visual-aids)
+8. [Performance Internals](#performance-internals)
+9. [Metrics & Analytics (Runtime Level)](#metrics-analytics-runtime-level)
+10. [Edge Cases at the Lowest Level](#edge-cases-at-the-lowest-level)
+11. [Test](#test)
+12. [Tricky Questions](#tricky-questions)
+13. [Self-Assessment Checklist](#self-assessment-checklist)
+14. [Summary](#summary)
+15. [Further Reading](#further-reading)
+16. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -82,45 +81,6 @@ cmd/go/main.go
 
 ## Runtime Deep Dive
 
-### How Go Bootstraps Itself
-
-Go is famously written in Go (since Go 1.5). The bootstrapping process is:
-
-1. **Stage 0:** Use a C compiler or an existing Go installation to build a minimal Go compiler
-2. **Stage 1:** Use the stage-0 compiler to build the actual Go toolchain
-3. **Stage 2:** Use the stage-1 toolchain to rebuild itself (for verification)
-
-```bash
-# The bootstrap process (from Go source)
-cd $GOROOT/src
-./make.bash
-# Internally:
-# 1. Build cmd/dist (bootstrap tool) using GOROOT_BOOTSTRAP
-# 2. Use cmd/dist to build the compiler, assembler, linker
-# 3. Use the new compiler to rebuild everything
-# 4. Run tests
-```
-
-**Key file:** `src/cmd/dist/build.go` — orchestrates the entire bootstrap.
-
-```go
-// Simplified view of bootstrap stages in cmd/dist
-// From: src/cmd/dist/build.go (Go 1.23)
-func cmdbootstrap() {
-    // Phase 1: Build using GOROOT_BOOTSTRAP compiler
-    // Compiles: cmd/compile, cmd/link, cmd/asm, cmd/go
-    bootstrapBuildTools()
-
-    // Phase 2: Rebuild everything with the new compiler
-    // This produces the final toolchain
-    installRuntime()
-    installCommands()
-
-    // Phase 3: Verify by rebuilding cmd/go
-    checkNotStale("cmd/go")
-}
-```
-
 ### GOROOT Structure
 
 ```
@@ -153,48 +113,7 @@ $GOROOT/
 
 ---
 
-## Compiler Perspective
-
-### What `go tool compile` Does
-
-The Go compiler (`cmd/compile`) transforms Go source into object files through these stages:
-
-```mermaid
-flowchart TD
-    A[".go source files"] --> B["Lexer\n(cmd/compile/internal/syntax)"]
-    B --> C["Parser\n(produces AST)"]
-    C --> D["Type Checker\n(cmd/compile/internal/types2)"]
-    D --> E["IR Generation\n(cmd/compile/internal/ir)"]
-    E --> F["Escape Analysis\n(decides stack vs heap)"]
-    F --> G["SSA Generation\n(cmd/compile/internal/ssa)"]
-    G --> H["SSA Optimization Passes\n(~50 passes)"]
-    H --> I["Architecture-Specific Lowering\n(amd64, arm64, etc.)"]
-    I --> J["Register Allocation"]
-    J --> K["Object File (.o)"]
-```
-
-```bash
-# View compiler decisions
-go build -gcflags="-m -m" main.go 2>&1 | head -20
-
-# View SSA for a specific function
-GOSSAFUNC=main go build main.go
-# Creates ssa.html — open in browser to see all SSA passes
-
-# View all compiler flags
-go tool compile -help
-```
-
-### Key Compiler Flags
-
-| Flag | What it does | Internal effect |
-|------|-------------|----------------|
-| `-m` | Print escape analysis decisions | Shows stack vs heap allocation decisions |
-| `-m -m` | Verbose escape analysis | Shows why each decision was made |
-| `-S` | Print assembly output | Shows generated machine code |
-| `-N` | Disable optimizations | Produces unoptimized code for debugging |
-| `-l` | Disable inlining | Prevents function inlining |
-| `-B` | Disable bounds checking | Removes array bounds checks (unsafe!) |
+## Toolchain & Linker Flags
 
 ### Linker Flags Deep Dive
 
@@ -226,49 +145,15 @@ go tool nm app | grep version
 
 ## Memory Layout
 
-### Binary Structure
-
-A Go binary contains these sections:
-
-```
-+--------------------+
-| ELF Header         |  <- Binary format metadata
-+--------------------+
-| .text              |  <- Machine code (compiled functions)
-+--------------------+
-| .rodata            |  <- Read-only data (string literals, constants)
-+--------------------+
-| .data              |  <- Initialized global variables
-+--------------------+
-| .bss               |  <- Uninitialized global variables
-+--------------------+
-| .gopclntab         |  <- Go PC-line table (for stack traces)
-+--------------------+
-| .gosymtab          |  <- Go symbol table
-+--------------------+
-| .noptrdata         |  <- Go data without pointers (skipped by GC)
-+--------------------+
-| .moduledata        |  <- Module metadata (type info, itabs)
-+--------------------+
-| .note.go.buildid   |  <- Build ID for cache invalidation
-+--------------------+
-```
+### Effect of `-s -w` on Binary Size
 
 ```bash
-# Examine binary sections
-objdump -h ./server | head -30
-
-# Check what takes space
-go tool nm -size ./server | sort -rn -k2 | head -20
-
-# View the build ID
-go tool buildid ./server
-
-# View embedded module info
-go version -m ./server
+# Inspect what a built binary embeds (useful for packaging decisions)
+go tool buildid ./server   # build ID used for cache invalidation
+go version -m ./server     # embedded module + build flag info
 ```
 
-### Effect of `-s -w` on Binary Size
+The `-s -w` linker flags control how much of that metadata ships in the final binary:
 
 ```bash
 # Full binary with debug info:
@@ -415,78 +300,6 @@ ls $(go env GOCACHE)/ | head -5
 // 4. Verify checksum against go.sum and sum.golang.org
 // 5. Extract zip to GOMODCACHE/<module>@<version>/
 // 6. Mark directory as read-only (prevent accidental modification)
-```
-
----
-
-## Assembly Output Analysis
-
-### Hello World Assembly
-
-```go
-package main
-
-import "fmt"
-
-func main() {
-    fmt.Println("Hello, World!")
-}
-```
-
-```bash
-go build -gcflags="-S" main.go 2>&1 | grep -A 20 '"".main STEXT'
-```
-
-```asm
-; Key assembly instructions for main.main
-TEXT main.main(SB), ABIInternal, $40-0
-    ; Function prologue — stack growth check
-    CMPQ    SP, 16(R14)           ; compare SP with goroutine stack limit
-    PCDATA  $0, $-2
-    JLS     grow_stack             ; if SP too low, grow the stack
-
-    ; Set up stack frame
-    SUBQ    $40, SP                ; allocate 40 bytes on stack
-    MOVQ    BP, 32(SP)             ; save frame pointer
-    LEAQ    32(SP), BP
-
-    ; Prepare arguments for fmt.Println
-    LEAQ    type:string(SB), AX    ; load string type descriptor
-    MOVQ    AX, (SP)               ; first arg: type
-    LEAQ    main..stmp_0(SB), AX   ; load pointer to "Hello, World!"
-    MOVQ    AX, 8(SP)              ; second arg: string pointer
-    MOVQ    $13, 16(SP)            ; third arg: string length (13 bytes)
-
-    CALL    fmt.Println(SB)        ; call fmt.Println
-
-    ; Function epilogue
-    MOVQ    32(SP), BP             ; restore frame pointer
-    ADDQ    $40, SP                ; deallocate stack frame
-    RET
-
-grow_stack:
-    CALL    runtime.morestack_noctxt(SB)  ; grow goroutine stack
-    JMP     main.main(SB)                  ; retry from start
-```
-
-**What to notice:**
-- Stack growth check at every function entry (goroutine stacks are dynamically sized)
-- `runtime.morestack_noctxt` — called when the goroutine needs a bigger stack
-- String is stored as a pointer + length (not null-terminated like C)
-- Frame pointer (`BP`) is saved/restored for profiling tools
-
-### How `-s -w` Affects the Binary
-
-```bash
-# Compare symbol counts
-go build -o app-full ./cmd/server
-go build -ldflags="-s -w" -o app-stripped ./cmd/server
-
-go tool nm app-full | wc -l       # ~50,000 symbols
-go tool nm app-stripped | wc -l    # ~0 symbols (stripped)
-
-# But the binary still works because Go's runtime has its own
-# internal symbol table (.gopclntab) for panic/stack traces
 ```
 
 ---
@@ -753,10 +566,9 @@ Source: `src/cmd/link/internal/ld/config.go`
 - [ ] What GOROOT contains and how tools are organized
 
 ### I can analyze:
-- [ ] Read and understand assembly output from `go build -gcflags="-S"`
 - [ ] Use `go tool nm` to analyze binary symbols
 - [ ] Trace syscalls during module download with `strace`
-- [ ] Examine binary sections with `objdump`
+- [ ] Inspect embedded build info with `go version -m`
 
 ### I can prove:
 - [ ] Why `-trimpath` improves security (with binary analysis)

@@ -8,26 +8,20 @@
 4. [Use Cases](#use-cases)
 5. [Code Examples](#code-examples)
 6. [Coding Patterns](#coding-patterns)
-7. [Clean Code](#clean-code)
-8. [Product Use / Feature](#product-use-feature)
-9. [Error Handling](#error-handling)
-10. [Security Considerations](#security-considerations)
-11. [Performance Optimization](#performance-optimization)
-12. [Metrics & Analytics](#metrics-analytics)
-13. [Debugging Guide](#debugging-guide)
-14. [Best Practices](#best-practices)
-15. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-16. [Common Mistakes](#common-mistakes)
-17. [Tricky Points](#tricky-points)
-18. [Comparison with Other Languages](#comparison-with-other-languages)
-19. [Test](#test)
-20. [Tricky Questions](#tricky-questions)
-21. [Cheat Sheet](#cheat-sheet)
-22. [Summary](#summary)
-23. [What You Can Build](#what-you-can-build)
-24. [Further Reading](#further-reading)
-25. [Related Topics](#related-topics)
-26. [Diagrams & Visual Aids](#diagrams-visual-aids)
+7. [Product Use / Feature](#product-use-feature)
+8. [Best Practices](#best-practices)
+9. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+10. [Common Mistakes](#common-mistakes)
+11. [Tricky Points](#tricky-points)
+12. [Comparison with Other Languages](#comparison-with-other-languages)
+13. [Test](#test)
+14. [Tricky Questions](#tricky-questions)
+15. [Cheat Sheet](#cheat-sheet)
+16. [Summary](#summary)
+17. [What You Can Build](#what-you-can-build)
+18. [Further Reading](#further-reading)
+19. [Related Topics](#related-topics)
+20. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -408,51 +402,6 @@ jobs:
 
 ---
 
-## Clean Code
-
-### Naming & Readability
-
-```go
-// Cryptic
-func proc(d []byte, f bool) ([]byte, error) { return nil, nil }
-
-// Self-documenting
-func compressPayload(data []byte, includeHeader bool) ([]byte, error) { return nil, nil }
-```
-
-| Element | Rule | Example |
-|---------|------|---------|
-| Build targets | Descriptive make targets | `make build`, `make lint`, not `make b` |
-| Binary names | Match the command they provide | `server`, `cli`, not `app`, `main` |
-| Build flags | Document in Makefile or README | `LDFLAGS := -X main.version=...` |
-
----
-
-### SOLID in Go
-
-**Single Responsibility:**
-```go
-// One struct doing everything — builds, tests, deploys
-type Pipeline struct { /* ... */ }
-
-// Each step has its own function or type
-func build(ctx context.Context, cfg BuildConfig) error  { return nil }
-func test(ctx context.Context, cfg TestConfig) error     { return nil }
-func deploy(ctx context.Context, cfg DeployConfig) error { return nil }
-```
-
----
-
-### Function Design
-
-| Signal | Smell | Fix |
-|--------|-------|-----|
-| Makefile target > 5 lines | Does too much | Split into helper targets |
-| `go build` with 8+ flags | Complex invocation | Move to Makefile or script |
-| Build script modifies source | Side effect in build | Use `go generate` separately |
-
----
-
 ## Product Use / Feature
 
 ### 1. Kubernetes
@@ -470,206 +419,6 @@ func deploy(ctx context.Context, cfg DeployConfig) error { return nil }
 
 - **How it uses Go commands:** Multi-stage Docker builds with `go build -trimpath -ldflags` to produce minimal, secure binaries.
 - **Key insight:** `-trimpath` removes local paths from stack traces, improving security.
-
----
-
-## Error Handling
-
-### Pattern 1: Error wrapping with context
-
-```bash
-# When go build fails, the error tells you exactly where
-$ go build ./...
-cmd/server/main.go:15:2: undefined: nonExistentFunction
-```
-
-Wrap build commands in scripts with clear error messages:
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-if ! go vet ./...; then
-    echo "ERROR: go vet found issues. Fix them before building."
-    exit 1
-fi
-
-if ! go build -o bin/server ./cmd/server; then
-    echo "ERROR: Build failed."
-    exit 1
-fi
-
-echo "Build successful: bin/server"
-```
-
-### Pattern 2: Handling `go mod` errors
-
-```bash
-# Module not found
-go: github.com/user/private-lib@v1.0.0: reading https://...: 404 Not Found
-
-# Fix: configure GOPRIVATE for private modules
-go env -w GOPRIVATE=github.com/user/*
-```
-
-### Common Error Patterns
-
-| Situation | Pattern | Example |
-|-----------|---------|---------|
-| Private module | Set `GOPRIVATE` | `go env -w GOPRIVATE=github.com/company/*` |
-| Checksum mismatch | Verify + retidy | `go mod verify && go mod tidy` |
-| Ambiguous import | Use explicit version | `go get pkg@v1.2.3` |
-| Stale generated code | Regenerate | `go generate ./... && go build ./...` |
-
----
-
-## Security Considerations
-
-### 1. Supply-chain security with `GONOSUMCHECK`
-
-**Risk level:** High
-
-```bash
-# Vulnerable — disables checksum verification for all modules
-GONOSUMCHECK=* go get ./...
-
-# Secure — only skip for your private modules
-GONOSUMCHECK=github.com/your-company/* go get ./...
-```
-
-**Risk:** Disabling sum checks globally allows tampered modules.
-**Mitigation:** Set `GONOSUMCHECK` narrowly; use `GONOSUMDB` for private modules; run `go mod verify` in CI.
-
-### 2. Binary stripping and trimpath
-
-**Risk level:** Medium
-
-```bash
-# Insecure — binary contains local paths
-go build -o server
-
-# Secure — strip paths and debug info
-go build -trimpath -ldflags="-s -w" -o server
-```
-
-### Security Checklist
-
-- [ ] `GOPRIVATE` is set for internal modules
-- [ ] `go mod verify` runs in CI
-- [ ] `-trimpath` used in production builds
-- [ ] No secrets passed via `-ldflags`
-- [ ] `govulncheck ./...` runs in CI
-
----
-
-## Performance Optimization
-
-### Optimization 1: Parallel test execution
-
-```bash
-# Slow — tests run sequentially
-go test -p 1 ./...
-
-# Fast — tests run in parallel (default: GOMAXPROCS packages at once)
-go test ./...
-
-# Even faster — increase parallelism within tests
-go test -parallel 8 ./...
-```
-
-**Benchmark results:**
-```
-Sequential:  45s total
-Parallel:    12s total (3.75x faster)
-```
-
-### Optimization 2: Build cache warming
-
-```bash
-# First build on CI is slow (cold cache)
-# Warm the cache by caching ~/.cache/go-build between CI runs
-
-# GitHub Actions example:
-# - uses: actions/cache@v3
-#   with:
-#     path: |
-#       ~/.cache/go-build
-#       ~/go/pkg/mod
-#     key: go-${{ hashFiles('**/go.sum') }}
-```
-
-### Performance Decision Matrix
-
-| Scenario | Approach | Why |
-|----------|----------|-----|
-| CI builds slow | Cache `~/.cache/go-build` | Build cache avoids recompilation |
-| Tests slow | `go test -parallel N` | Run test functions concurrently |
-| Binary too large | `-ldflags="-s -w"` | Strip debug info (30-40% reduction) |
-| Race detection needed | `-race` in CI only | 5-10x slower, do not ship to production |
-
----
-
-## Metrics & Analytics
-
-### Key Metrics
-
-| Metric | Type | Description | Alert threshold |
-|--------|------|-------------|-----------------|
-| **Build time** | Gauge | Time to compile all packages | > 120s |
-| **Test time** | Gauge | Time to run all tests | > 300s |
-| **Binary size** | Gauge | Size of produced binary | > 100 MB |
-| **Test coverage** | Gauge | Percentage of code covered | < 70% |
-
-### Prometheus Instrumentation (for build pipelines)
-
-```bash
-# Measure build time in CI and export as metric
-BUILD_START=$(date +%s)
-go build -o bin/server ./cmd/server
-BUILD_END=$(date +%s)
-BUILD_DURATION=$((BUILD_END - BUILD_START))
-echo "go_build_duration_seconds $BUILD_DURATION" >> metrics.txt
-```
-
----
-
-## Debugging Guide
-
-### Problem 1: Build fails after updating Go version
-
-**Symptoms:** Compilation errors that did not exist before.
-
-**Diagnostic steps:**
-```bash
-go version                    # confirm Go version
-go env GOVERSION             # expected version
-go build -v ./...            # verbose build shows which package fails
-```
-
-**Root cause:** New Go versions may deprecate APIs or change behavior.
-**Fix:** Check the Go release notes and update code accordingly.
-
-### Problem 2: `go mod tidy` adds unexpected dependencies
-
-**Symptoms:** `go.sum` grows with modules you never imported.
-
-**Diagnostic steps:**
-```bash
-go mod why github.com/unexpected/module
-go mod graph | grep unexpected
-```
-
-**Root cause:** Transitive dependencies — your dependency depends on it.
-**Fix:** If unwanted, consider replacing the dependency or using `go mod vendor` to audit.
-
-### Useful Tools
-
-| Tool | Command | What it shows |
-|------|---------|---------------|
-| mod why | `go mod why -m <module>` | Why a dependency exists |
-| mod graph | `go mod graph` | Full dependency tree |
-| build verbose | `go build -v ./...` | Which packages are compiled |
-| list | `go list -m all` | All modules in dependency graph |
 
 ---
 

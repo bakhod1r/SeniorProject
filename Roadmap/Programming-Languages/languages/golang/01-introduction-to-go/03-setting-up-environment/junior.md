@@ -12,26 +12,21 @@
 8. [Use Cases](#use-cases)
 9. [Code Examples](#code-examples)
 10. [Coding Patterns](#coding-patterns)
-11. [Clean Code](#clean-code)
-12. [Product Use / Feature](#product-use-feature)
-13. [Error Handling](#error-handling)
-14. [Security Considerations](#security-considerations)
-15. [Performance Tips](#performance-tips)
-16. [Metrics & Analytics](#metrics-analytics)
-17. [Best Practices](#best-practices)
-18. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-19. [Common Mistakes](#common-mistakes)
-20. [Common Misconceptions](#common-misconceptions)
-21. [Tricky Points](#tricky-points)
-22. [Test](#test)
-23. [Tricky Questions](#tricky-questions)
-24. [Cheat Sheet](#cheat-sheet)
-25. [Self-Assessment Checklist](#self-assessment-checklist)
-26. [Summary](#summary)
-27. [What You Can Build](#what-you-can-build)
-28. [Further Reading](#further-reading)
-29. [Related Topics](#related-topics)
-30. [Diagrams & Visual Aids](#diagrams-visual-aids)
+11. [Product Use / Feature](#product-use-feature)
+12. [Best Practices](#best-practices)
+13. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+14. [Common Mistakes](#common-mistakes)
+15. [Common Misconceptions](#common-misconceptions)
+16. [Tricky Points](#tricky-points)
+17. [Test](#test)
+18. [Tricky Questions](#tricky-questions)
+19. [Cheat Sheet](#cheat-sheet)
+20. [Self-Assessment Checklist](#self-assessment-checklist)
+21. [Summary](#summary)
+22. [What You Can Build](#what-you-can-build)
+23. [Further Reading](#further-reading)
+24. [Related Topics](#related-topics)
+25. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -292,63 +287,6 @@ sequenceDiagram
 
 ---
 
-## Clean Code
-
-### Naming
-
-```go
-// Bad naming for project structure
-// myapp/a/b.go
-
-// Clean naming for project structure
-// myapp/internal/handler/user.go
-```
-
-**Rules:**
-- Module paths: use your domain or GitHub path (`github.com/username/project`)
-- Package names: short, lowercase, no underscores (`handler`, not `user_handler`)
-- Files: lowercase with underscores if needed (`user_handler.go`)
-
----
-
-### Functions
-
-```go
-// Too much in one function
-func setup() {
-    // install Go
-    // configure PATH
-    // initialize module
-    // create main.go
-    // run tests
-}
-
-// Single responsibility
-func installGo() error          { return nil }
-func configurePATH() error      { return nil }
-func initModule(name string) error { return nil }
-```
-
-**Rule:** Each setup step should be its own function or script.
-
----
-
-### Comments
-
-```go
-// Bad: states the obvious
-// Initialize the module
-go mod init myapp
-
-// Good: explains WHY
-// Use the full GitHub path so 'go get' works for other users
-go mod init github.com/username/myapp
-```
-
-**Rule:** Comments should explain decisions, not repeat what the code does.
-
----
-
 ## Product Use / Feature
 
 ### 1. Docker
@@ -365,166 +303,6 @@ go mod init github.com/username/myapp
 
 - **How it uses Go environment:** The extension auto-detects your Go installation, formats code on save with `gofmt`, and runs linting with `staticcheck`.
 - **Why it matters:** Proper IDE setup dramatically increases productivity and code quality.
-
----
-
-## Error Handling
-
-### Error 1: `go: command not found`
-
-```bash
-# This error happens when Go is not in your PATH
-$ go version
-bash: go: command not found
-```
-
-**Why it happens:** The Go binary directory is not added to your shell's PATH variable.
-**How to fix:**
-
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-export PATH=$PATH:/usr/local/go/bin
-# Then reload your shell
-source ~/.bashrc
-```
-
-### Error 2: `go.mod file not found`
-
-```bash
-# This error happens when you run go commands outside a module
-$ go build
-go: go.mod file not found in current directory or any parent directory
-```
-
-**Why it happens:** You are running a `go` command in a directory without a `go.mod` file.
-**How to fix:**
-
-```bash
-# Initialize a module in your project directory
-go mod init example.com/myproject
-```
-
-### Error 3: `cannot find module providing package`
-
-```bash
-$ go run main.go
-main.go:5:2: no required module provides package github.com/some/pkg
-```
-
-**Why it happens:** You imported a package but did not download it.
-**How to fix:**
-
-```bash
-# Download all missing dependencies
-go mod tidy
-```
-
-### Error Handling Pattern
-
-```go
-// When checking if Go tools are available, verify errors
-package main
-
-import (
-    "fmt"
-    "os/exec"
-)
-
-func main() {
-    path, err := exec.LookPath("go")
-    if err != nil {
-        fmt.Printf("Go not found: %v\n", err)
-        fmt.Println("Please install Go from https://go.dev/dl/")
-        return
-    }
-    fmt.Printf("Go found at: %s\n", path)
-}
-```
-
----
-
-## Security Considerations
-
-### 1. Verify Downloads
-
-```bash
-# Insecure — downloading from an unofficial source
-wget https://some-random-site.com/go.tar.gz
-
-# Secure — always download from the official site and verify checksum
-wget https://go.dev/dl/go1.23.0.linux-amd64.tar.gz
-sha256sum go1.23.0.linux-amd64.tar.gz
-# Compare with the checksum listed on go.dev/dl/
-```
-
-**Risk:** A tampered Go binary could inject malicious code into everything you compile.
-**Mitigation:** Always download from go.dev and verify SHA256 checksums.
-
-### 2. Module Checksums
-
-```bash
-# Go automatically verifies module checksums via sum.golang.org
-# If you see this error, DO NOT ignore it:
-# verifier error: checksum mismatch
-```
-
-**Risk:** A compromised dependency could contain malicious code.
-**Mitigation:** Never disable `GONOSUMCHECK`. Let Go verify all module checksums automatically.
-
----
-
-## Performance Tips
-
-### Tip 1: Use `go build` Instead of `go run` for Repeated Execution
-
-```bash
-# Slow — compiles every time
-go run main.go
-
-# Faster for repeated runs — compile once, run the binary
-go build -o myapp main.go
-./myapp
-```
-
-**Why it's faster:** `go run` compiles to a temp directory every time, while `go build` creates a reusable binary.
-
-### Tip 2: Enable the Go Build Cache
-
-```bash
-# Check if the build cache is active (it is by default)
-go env GOCACHE
-# Typical output: /home/user/.cache/go-build
-
-# Clearing the cache (only if necessary)
-go clean -cache
-```
-
-**Why it's faster:** Go caches compiled packages so subsequent builds only recompile changed files.
-
----
-
-## Metrics & Analytics
-
-### What to Measure
-
-| Metric | Why it matters | Tool |
-|--------|---------------|------|
-| **Build time** | Slow builds reduce productivity | `time go build ./...` |
-| **Binary size** | Large binaries slow deployment | `ls -lh myapp` |
-| **Dependency count** | Too many deps increase attack surface | `go list -m all \| wc -l` |
-
-### Basic Instrumentation
-
-```bash
-# Measure build time
-time go build -o myapp ./...
-
-# Check binary size
-ls -lh myapp
-
-# Count dependencies
-go list -m all | wc -l
-```
 
 ---
 

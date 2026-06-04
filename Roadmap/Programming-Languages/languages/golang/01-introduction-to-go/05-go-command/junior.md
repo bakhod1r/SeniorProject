@@ -10,24 +10,19 @@
 6. [Use Cases](#use-cases)
 7. [Code Examples](#code-examples)
 8. [Coding Patterns](#coding-patterns)
-9. [Clean Code](#clean-code)
-10. [Product Use / Feature](#product-use-feature)
-11. [Error Handling](#error-handling)
-12. [Security Considerations](#security-considerations)
-13. [Performance Tips](#performance-tips)
-14. [Metrics & Analytics](#metrics-analytics)
-15. [Best Practices](#best-practices)
-16. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-17. [Common Mistakes](#common-mistakes)
-18. [Tricky Points](#tricky-points)
-19. [Test](#test)
-20. [Tricky Questions](#tricky-questions)
-21. [Cheat Sheet](#cheat-sheet)
-22. [Summary](#summary)
-23. [What You Can Build](#what-you-can-build)
-24. [Further Reading](#further-reading)
-25. [Related Topics](#related-topics)
-26. [Diagrams & Visual Aids](#diagrams-visual-aids)
+9. [Product Use / Feature](#product-use-feature)
+10. [Best Practices](#best-practices)
+11. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+12. [Common Mistakes](#common-mistakes)
+13. [Tricky Points](#tricky-points)
+14. [Test](#test)
+15. [Tricky Questions](#tricky-questions)
+16. [Cheat Sheet](#cheat-sheet)
+17. [Summary](#summary)
+18. [What You Can Build](#what-you-can-build)
+19. [Further Reading](#further-reading)
+20. [Related Topics](#related-topics)
+21. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -387,62 +382,6 @@ sequenceDiagram
 
 ---
 
-## Clean Code
-
-### Naming
-
-```go
-// Bad naming
-func r(p string) {}
-var m = make(map[string]string)
-
-// Clean naming
-func readConfig(path string) {}
-var userCache = make(map[string]string)
-```
-
-**Rules:**
-- Variables: describe WHAT they hold (`userCount`, not `n`, `x`, `tmp`)
-- Functions: describe WHAT they do (`buildBinary`, not `do`, `run`)
-- Booleans: use `is`, `has`, `can` prefix (`isValid`, `hasTests`)
-
----
-
-### Functions
-
-```go
-// Too long, does too many things
-func deploy(code string) error {
-    // 60+ lines: build, test, push, notify...
-    return nil
-}
-
-// Single responsibility
-func buildBinary(src string) (string, error)  { return "", nil }
-func runTests(dir string) error               { return nil }
-func pushToRegistry(bin string) error         { return nil }
-```
-
-**Rule:** If you need to scroll to see a function — it does too much. Aim for 20 lines or fewer.
-
----
-
-### Comments
-
-```go
-// Noise comment (states the obvious)
-// build the binary
-go build -o server
-
-// Explains WHY, not WHAT
-// Use -trimpath to remove local file paths from the binary (for security)
-go build -trimpath -o server
-```
-
-**Rule:** Good code explains itself. Comments explain **why**, not **what**.
-
----
-
 ## Product Use / Feature
 
 ### 1. Docker Multi-Stage Builds
@@ -459,149 +398,6 @@ go build -trimpath -o server
 
 - **How it uses Go commands:** IDEs run `go fmt`, `go vet`, `go test`, and `go doc` automatically in the background.
 - **Why it matters:** Developers get instant feedback as they type.
-
----
-
-## Error Handling
-
-### Error 1: `go: cannot find main module`
-
-```bash
-$ go build
-go: cannot find main module; see 'go help modules'
-```
-
-**Why it happens:** You are in a directory without a `go.mod` file.
-**How to fix:**
-
-```bash
-go mod init github.com/user/myproject
-```
-
-### Error 2: `package xxx is not in std`
-
-```bash
-$ go run main.go
-main.go:5:2: package github.com/foo/bar is not in std
-```
-
-**Why it happens:** The dependency has not been downloaded.
-**How to fix:**
-
-```bash
-go mod tidy
-# or explicitly:
-go get github.com/foo/bar
-```
-
-### Error 3: `cannot find package` after renaming
-
-```bash
-$ go build
-cannot find package "myproject/utils" in any of: ...
-```
-
-**Why it happens:** The import path does not match the module path in `go.mod`.
-**How to fix:**
-
-```go
-// Make sure go.mod says:
-module github.com/user/myproject
-
-// Then import as:
-import "github.com/user/myproject/utils"
-```
-
-### Error Handling Pattern
-
-```bash
-# Always check if the command succeeded
-go build -o server ./cmd/server
-if [ $? -ne 0 ]; then
-    echo "Build failed!"
-    exit 1
-fi
-```
-
----
-
-## Security Considerations
-
-### 1. Dependency supply-chain attacks
-
-```bash
-# Insecure — blindly adding dependencies
-go get github.com/random-user/unverified-lib
-
-# Secure — verify checksums and use the Go checksum database
-go get github.com/well-known/trusted-lib
-go mod verify    # verify downloaded modules match go.sum
-```
-
-**Risk:** Malicious code hidden in dependencies can steal data or install backdoors.
-**Mitigation:** Use `go mod verify`, review `go.sum` changes, and enable `GONOSUMCHECK` only for private modules.
-
-### 2. Embedding sensitive data in binaries
-
-```bash
-# Insecure — hardcoded secrets compiled into binary
-go build -ldflags="-X main.apiKey=secret123" -o server
-
-# Secure — read secrets from environment at runtime
-```
-
-**Risk:** Anyone who decompiles the binary can extract secrets.
-**Mitigation:** Never embed secrets via `-ldflags`. Use environment variables or a secrets manager.
-
----
-
-## Performance Tips
-
-### Tip 1: Use `go build ./...` to check compilation without producing binaries
-
-```bash
-# Slow approach — build each package separately
-go build ./pkg/auth
-go build ./pkg/db
-
-# Faster approach — build all at once
-go build ./...
-```
-
-**Why it's faster:** Go only compiles each package once and caches the results.
-
-### Tip 2: The build cache
-
-Go automatically caches compiled packages. To see cache statistics:
-
-```bash
-go env GOCACHE      # shows cache directory
-go clean -cache     # clear the cache (rarely needed)
-```
-
-**Why it matters:** Second builds are near-instant because unchanged packages use the cache.
-
----
-
-## Metrics & Analytics
-
-### What to Measure
-
-| Metric | Why it matters | Tool |
-|--------|---------------|------|
-| **Build time** | Slow builds reduce productivity | `time go build ./...` |
-| **Test execution time** | Slow tests discourage running them | `go test -v ./... 2>&1 \| tail` |
-| **Binary size** | Affects deployment speed and container image size | `ls -lh ./server` |
-
-### Basic Instrumentation
-
-```bash
-# Measure build time
-time go build -o server ./cmd/server
-
-# Measure test time
-go test -v -count=1 ./... 2>&1 | grep -E "ok|FAIL"
-```
 
 ---
 

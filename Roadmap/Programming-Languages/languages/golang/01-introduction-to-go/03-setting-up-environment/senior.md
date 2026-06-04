@@ -8,27 +8,21 @@
 4. [Use Cases](#use-cases)
 5. [Code Examples](#code-examples)
 6. [Coding Patterns](#coding-patterns)
-7. [Clean Code](#clean-code)
-8. [Best Practices](#best-practices)
-9. [Product Use / Feature](#product-use-feature)
-10. [Error Handling](#error-handling)
-11. [Security Considerations](#security-considerations)
-12. [Performance Optimization](#performance-optimization)
-13. [Metrics & Analytics](#metrics-analytics)
-14. [Debugging Guide](#debugging-guide)
-15. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-16. [Postmortems & System Failures](#postmortems-system-failures)
-17. [Common Mistakes](#common-mistakes)
-18. [Tricky Points](#tricky-points)
-19. [Comparison with Other Languages](#comparison-with-other-languages)
-20. [Test](#test)
-21. [Tricky Questions](#tricky-questions)
-22. [Cheat Sheet](#cheat-sheet)
-23. [Summary](#summary)
-24. [What You Can Build](#what-you-can-build)
-25. [Further Reading](#further-reading)
-26. [Related Topics](#related-topics)
-27. [Diagrams & Visual Aids](#diagrams-visual-aids)
+7. [Best Practices](#best-practices)
+8. [Product Use / Feature](#product-use-feature)
+9. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+10. [Postmortems & System Failures](#postmortems-system-failures)
+11. [Common Mistakes](#common-mistakes)
+12. [Tricky Points](#tricky-points)
+13. [Comparison with Other Languages](#comparison-with-other-languages)
+14. [Test](#test)
+15. [Tricky Questions](#tricky-questions)
+16. [Cheat Sheet](#cheat-sheet)
+17. [Summary](#summary)
+18. [What You Can Build](#what-you-can-build)
+19. [Further Reading](#further-reading)
+20. [Related Topics](#related-topics)
+21. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -624,62 +618,6 @@ stateDiagram-v2
 
 ---
 
-## Clean Code
-
-### Clean Architecture Boundaries
-
-```go
-// Layering violation — build script knows about Docker AND Kubernetes
-type DeployPipeline struct {
-    dockerClient *docker.Client
-    k8sClient    *kubernetes.Clientset
-}
-
-// Dependency inversion — depend on abstractions
-type Packager interface { Package(binary string) (string, error) }
-type Deployer interface { Deploy(artifact string) error }
-type Pipeline struct {
-    packager Packager
-    deployer Deployer
-}
-```
-
-**Dependency flow must be:**
-```mermaid
-graph LR
-    A[CLI / Trigger] -->|depends on| B[Pipeline Orchestrator]
-    B -->|depends on| C[Builder Interface]
-    B -->|depends on| D[Packager Interface]
-    D2[Docker Adapter] -->|implements| D
-    C2[Go Build Adapter] -->|implements| C
-    style C fill:#f9f,stroke:#333
-    style D fill:#f9f,stroke:#333
-```
-
----
-
-### Code Smells at Senior Level
-
-| Smell | Symptom | Refactoring |
-|-------|---------|-------------|
-| **God Makefile** | 500+ line Makefile with everything | Split into focused build tools |
-| **Primitive Obsession** | `string` for version, `string` for OS | `type GoVersion string`, `type TargetOS string` |
-| **Shotgun Surgery** | Changing Go version requires editing 8 files | Single `.go-version` file, read everywhere |
-| **Config Sprawl** | Build config in Makefile, Dockerfile, CI YAML, and shell scripts | Centralize in a Go build tool |
-
----
-
-### Code Review Checklist (Senior)
-
-- [ ] Build is reproducible (`-trimpath`, pinned deps, no timestamp embedding)
-- [ ] `CGO_ENABLED=0` set explicitly for container deployments
-- [ ] Private module proxy configured, not bypassing checksums
-- [ ] `go mod verify` runs in CI
-- [ ] Binary version info embedded via `-ldflags`
-- [ ] Docker image uses `nonroot` user
-
----
-
 ## Best Practices
 
 ### Must Do
@@ -748,182 +686,6 @@ graph LR
 - **Architecture:** Reproducible Go builds for all edge services, multi-arch compilation for x86 and ARM
 - **Scale:** Runs on thousands of servers across 300+ data centers
 - **Lessons learned:** `-trimpath` is essential — without it, developer home directory paths leak into binaries
-
----
-
-## Error Handling
-
-### Strategy 1: Domain error hierarchy for build failures
-
-```go
-package build
-
-import "fmt"
-
-type BuildError struct {
-    Phase   string            // "lint", "test", "compile", "package"
-    Target  string            // "linux/amd64", "darwin/arm64"
-    Message string
-    Err     error
-    Context map[string]string // additional debug info
-}
-
-func (e *BuildError) Error() string {
-    return fmt.Sprintf("[%s] %s: %s", e.Phase, e.Target, e.Message)
-}
-
-func (e *BuildError) Unwrap() error { return e.Err }
-
-// Usage:
-// return &BuildError{
-//     Phase:   "compile",
-//     Target:  "linux/arm64",
-//     Message: "CGo requires cross-compiler",
-//     Err:     err,
-//     Context: map[string]string{"CGO_ENABLED": "1"},
-// }
-```
-
-### Error Handling Architecture
-
-```mermaid
-flowchart TD
-    A[Build Orchestrator] -->|wraps| B[Compiler]
-    A -->|wraps| C[Linter]
-    A -->|wraps| D[Tester]
-    B -->|original| E[go build error]
-    C -->|original| F[lint findings]
-    D -->|original| G[test failures]
-    A -->|categorizes| H[BuildError with Phase]
-    A -->|reports| I[CI Status / Slack]
-```
-
----
-
-## Security Considerations
-
-### Security Architecture Checklist
-
-- [ ] Input validation — verify module paths and versions before download
-- [ ] Checksum verification — `go mod verify` in every CI run
-- [ ] Vulnerability scanning — `govulncheck ./...` blocks builds with critical CVEs
-- [ ] Secrets management — no credentials in Dockerfiles, Makefiles, or source code
-- [ ] SBOM generation — produce Software Bill of Materials for compliance
-- [ ] Signed binaries — use `cosign` to sign container images
-- [ ] Dependency scanning — `nancy` or Snyk for license compliance
-
-### Threat Model
-
-| Threat | Likelihood | Impact | Mitigation |
-|--------|:---------:|:------:|------------|
-| Supply chain attack via compromised module | Medium | Critical | `go mod verify`, `GONOSUMDB` only for private repos, pin exact versions |
-| Secret leak via Docker build layers | High | Critical | Multi-stage builds, `.dockerignore`, never COPY `.env` |
-| Typosquatting (fake module names) | Medium | High | Review all new dependencies in PRs, use `depcheck` tool |
-| Build environment compromise | Low | Critical | Hermetic builds, reproducibility verification |
-
----
-
-## Performance Optimization
-
-### Optimization 1: Parallel Cross-Compilation
-
-```bash
-# Sequential — builds one at a time
-for os in linux darwin windows; do
-    GOOS=$os go build -o dist/app-$os ./cmd/app
-done
-# Total: ~45 seconds
-
-# Parallel — all builds at once
-GOOS=linux go build -o dist/app-linux ./cmd/app &
-GOOS=darwin go build -o dist/app-darwin ./cmd/app &
-GOOS=windows go build -o dist/app-windows.exe ./cmd/app &
-wait
-# Total: ~18 seconds
-```
-
-### Optimization 2: Smaller Binaries
-
-```bash
-# Default build: 15.2 MB
-go build -o app ./cmd/server
-
-# Strip debug info: 10.8 MB (-29%)
-go build -ldflags="-s -w" -o app ./cmd/server
-
-# + UPX compression: 3.9 MB (-74%)
-upx --best app
-```
-
-**Benchmark proof:**
-```
-Default:       15.2 MB   (0.8s build)
-Stripped:      10.8 MB   (0.8s build)
-Stripped+UPX:   3.9 MB   (0.8s build + 2s compress)
-```
-
-### Optimization 3: Docker Image Size
-
-```
-golang:1.23        ~850 MB
-golang:1.23-alpine ~250 MB
-distroless/static   ~2 MB + your binary
-scratch              0 MB + your binary
-```
-
-### Performance Architecture
-
-| Layer | Optimization | Impact | Cost |
-|:-----:|:------------|:------:|:----:|
-| **Build parallelism** | Concurrent cross-compilation | 2-3x faster | None |
-| **Binary size** | `-s -w` flags | 25-30% smaller | None |
-| **Docker layers** | Separate dep download from code copy | 5-10x faster rebuilds | Slightly more complex Dockerfile |
-| **Module cache** | CI cache of `GOMODCACHE` | 10-30x faster dep resolution | CI config complexity |
-
----
-
-## Metrics & Analytics
-
-### SLO / SLA Definition
-
-| SLI | SLO Target | Measurement window | Consequence if breached |
-|-----|-----------|-------------------|------------------------|
-| **CI build duration** | < 5 minutes | Per PR | Engineering productivity alert |
-| **Build reproducibility** | 100% | Per release | Release blocked |
-| **Vulnerability scan** | 0 critical CVEs | Per build | Build fails |
-
-### Capacity Planning Metrics
-
-| Signal | Indicates | Action |
-|--------|-----------|--------|
-| CI build time trending up | Growing codebase or dep tree | Optimize caching, split builds |
-| Module download failures | Proxy issues or dep removal | Check proxy health, add fallbacks |
-| Binary size growth > 10%/month | Feature bloat or dep explosion | Audit dependencies |
-
----
-
-## Debugging Guide
-
-### Advanced Tools & Techniques
-
-| Tool | Use case | When to use |
-|------|----------|-------------|
-| `go build -x` | Show all commands executed during build | Build fails with unclear error |
-| `go mod why -m pkg` | Explain why a dependency is needed | Unexpected deps in go.mod |
-| `go mod graph` | Full dependency tree | Understanding transitive deps |
-| `go version -m binary` | Show embedded module info | Verifying what was compiled |
-| `go tool nm binary` | List symbols in binary | Checking for debug info |
-
-```bash
-# Debug: why is this module in my go.mod?
-go mod why -m golang.org/x/net
-
-# Debug: what modules does my binary contain?
-go version -m ./server
-
-# Debug: what build flags were used?
-go version -m ./server | grep -E "build|mod"
-```
 
 ---
 

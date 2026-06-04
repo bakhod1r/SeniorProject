@@ -10,26 +10,22 @@
 6. [Use Cases](#use-cases)
 7. [Code Examples](#code-examples)
 8. [Coding Patterns](#coding-patterns)
-9. [Clean Code](#clean-code)
-10. [Product Use / Feature](#product-use-feature)
-11. [Error Handling](#error-handling)
-12. [Security Considerations](#security-considerations)
-13. [Performance Optimization](#performance-optimization)
-14. [Metrics & Analytics](#metrics-analytics)
-15. [Debugging Guide](#debugging-guide)
-16. [Best Practices](#best-practices)
-17. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
-18. [Common Mistakes](#common-mistakes)
-19. [Tricky Points](#tricky-points)
-20. [Comparison with Other Languages](#comparison-with-other-languages)
-21. [Test](#test)
-22. [Tricky Questions](#tricky-questions)
-23. [Cheat Sheet](#cheat-sheet)
-24. [Summary](#summary)
-25. [What You Can Build](#what-you-can-build)
-26. [Further Reading](#further-reading)
-27. [Related Topics](#related-topics)
-28. [Diagrams & Visual Aids](#diagrams-visual-aids)
+9. [Product Use / Feature](#product-use-feature)
+10. [Performance Optimization](#performance-optimization)
+11. [Debugging Guide](#debugging-guide)
+12. [Best Practices](#best-practices)
+13. [Edge Cases & Pitfalls](#edge-cases-pitfalls)
+14. [Common Mistakes](#common-mistakes)
+15. [Tricky Points](#tricky-points)
+16. [Comparison with Other Languages](#comparison-with-other-languages)
+17. [Test](#test)
+18. [Tricky Questions](#tricky-questions)
+19. [Cheat Sheet](#cheat-sheet)
+20. [Summary](#summary)
+21. [What You Can Build](#what-you-can-build)
+22. [Further Reading](#further-reading)
+23. [Related Topics](#related-topics)
+24. [Diagrams & Visual Aids](#diagrams-visual-aids)
 
 ---
 
@@ -420,62 +416,6 @@ func main() {
 
 ---
 
-## Clean Code
-
-### Naming & Readability
-
-```go
-// Cryptic
-func chk(v string) bool { return len(v) > 0 }
-
-// Self-documenting
-func isGoVersionSupported(version string) bool { return len(version) > 0 }
-```
-
-| Element | Rule | Example |
-|---------|------|---------|
-| Functions | Verb + noun, describes action | `parseGoVersion`, `checkCompatibility` |
-| Variables | Noun, describes content | `currentVersion`, `releaseDate` |
-| Booleans | `is/has/can` prefix | `isModuleEnabled`, `hasGenerics` |
-| Constants | Descriptive | `MinGoVersion`, `DefaultModulePath` |
-
----
-
-### SOLID in Go
-
-**Single Responsibility:**
-```go
-// One struct doing everything
-type VersionManager struct { /* checks, parses, downloads, installs */ }
-
-// Each type has one reason to change
-type VersionParser interface { Parse(s string) (Version, error) }
-type VersionChecker interface { IsSupported(v Version) bool }
-type VersionInstaller struct { parser VersionParser }
-```
-
-**Open/Closed (via interfaces):**
-```go
-// Switch on version — breaks on every new version
-func handleVersion(v string) { switch v { case "1.21": /* ... */ case "1.22": /* ... */ } }
-
-// Open for extension via interface
-type VersionHandler interface { Handle(v Version) error }
-```
-
----
-
-### Function Design
-
-| Signal | Smell | Fix |
-|--------|-------|-----|
-| > 20 lines | Does too much | Split into smaller functions |
-| > 3 parameters | Complex signature | Use options struct |
-| Deep nesting (> 3 levels) | Spaghetti logic | Early returns, extract helpers |
-| Boolean parameter | Flags a violation | Split into two functions |
-
----
-
 ## Product Use / Feature
 
 ### 1. Google (Internal)
@@ -494,79 +434,6 @@ type VersionHandler interface { Handle(v Version) error }
 
 - **How it uses Go's history:** Cloudflare builds much of their edge computing infrastructure in Go, including their DNS server and access control systems.
 - **Key insight:** They have contributed back to Go, particularly around performance and networking improvements.
-
----
-
-## Error Handling
-
-### Pattern 1: Error wrapping with context (Go 1.13+)
-
-```go
-package main
-
-import (
-    "errors"
-    "fmt"
-)
-
-var ErrVersionNotFound = errors.New("version not found")
-
-func lookupVersion(name string) (string, error) {
-    versions := map[string]string{
-        "modules": "1.11",
-        "generics": "1.18",
-    }
-    v, ok := versions[name]
-    if !ok {
-        return "", fmt.Errorf("lookupVersion %q: %w", name, ErrVersionNotFound)
-    }
-    return v, nil
-}
-
-func main() {
-    _, err := lookupVersion("pattern-matching")
-    if errors.Is(err, ErrVersionNotFound) {
-        fmt.Println("Feature not yet in Go:", err)
-    }
-}
-```
-
-### Common Error Patterns
-
-| Situation | Pattern | Example |
-|-----------|---------|---------|
-| Wrapping errors | `fmt.Errorf("context: %w", err)` | Add context to errors |
-| Checking error type | `errors.Is(err, target)` | Check specific error (Go 1.13+) |
-| Extracting error | `errors.As(err, &target)` | Get typed error info (Go 1.13+) |
-| Sentinel errors | `var ErrNotFound = errors.New("not found")` | Predefined errors |
-
----
-
-## Security Considerations
-
-### 1. Dependency Supply Chain Attacks
-
-**Risk level:** High
-
-```go
-// Before Go 1.14: no checksum verification
-// go get github.com/malicious/package  -- could be tampered with
-
-// Go 1.14+: checksum database (sum.golang.org)
-// go.sum file records expected checksums
-// Tampering is automatically detected
-```
-
-**Attack vector:** An attacker modifies a popular Go module's source code after it has been published.
-**Impact:** Malicious code runs in your production environment.
-**Mitigation:** Go 1.14+ uses `sum.golang.org` to verify module integrity. Never set `GONOSUMCHECK` in production.
-
-### Security Checklist
-
-- [ ] Use latest Go version — each release includes security patches
-- [ ] Run `govulncheck ./...` in CI pipeline
-- [ ] Set `GOFLAGS=-mod=readonly` in CI to prevent unauthorized dependency changes
-- [ ] Review go.sum changes in every pull request
 
 ---
 
@@ -629,48 +496,6 @@ Go 1.19+: Total GC pause: ~0.3ms (with GOMEMLIMIT)
 | High GC pressure | Upgrade Go version first | Free improvements |
 | Legacy GOPATH project | Migrate to Modules | Better dependency caching |
 | Slow compilation | Use Go 1.20+ build cache | Incremental builds |
-
----
-
-## Metrics & Analytics
-
-### Key Metrics
-
-| Metric | Type | Description | Alert threshold |
-|--------|------|-------------|-----------------|
-| **go_version** | Gauge | Current Go version in production | < latest-2 versions |
-| **go_build_time_seconds** | Histogram | Build time for CI pipeline | p99 > 300s |
-| **go_dependency_age_days** | Gauge | Age of oldest dependency | > 365 days |
-
-### Prometheus Instrumentation
-
-```go
-package main
-
-import (
-    "fmt"
-    "runtime"
-
-    "github.com/prometheus/client_golang/prometheus"
-)
-
-var goVersionInfo = prometheus.NewGaugeVec(
-    prometheus.GaugeOpts{
-        Name: "go_build_info",
-        Help: "Go version used to build this binary",
-    },
-    []string{"version"},
-)
-
-func init() {
-    goVersionInfo.WithLabelValues(runtime.Version()).Set(1)
-    prometheus.MustRegister(goVersionInfo)
-}
-
-func main() {
-    fmt.Printf("Registered Go version metric: %s\n", runtime.Version())
-}
-```
 
 ---
 
