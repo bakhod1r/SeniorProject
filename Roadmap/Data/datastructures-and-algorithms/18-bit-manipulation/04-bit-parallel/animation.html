@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bit-Parallel Subset-Sum — B |= B &lt;&lt; w</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-new: rgba(63, 185, 80, 0.85);
+    --hi-old: rgba(88, 166, 255, 0.55);
+    --hi-shift: rgba(210, 153, 34, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 200px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bitrow {
+    display: flex;
+    flex-direction: row-reverse;
+    flex-wrap: wrap-reverse;
+    gap: 4px;
+    justify-content: flex-end;
+  }
+  .cell {
+    width: 30px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--panel-2);
+    color: var(--muted);
+    transition: background 0.25s ease, color 0.25s ease, transform 0.2s ease;
+    position: relative;
+  }
+  .cell .idx { font-size: 9px; color: var(--muted); position: absolute; top: 1px; }
+  .cell .bit { margin-top: 8px; font-weight: 700; }
+  .cell.on { background: var(--hi-old); color: #fff; }
+  .cell.newly { background: var(--hi-new); color: #06210f; transform: translateY(-4px); box-shadow: 0 0 0 2px var(--good); }
+  .cell.shifted { background: var(--hi-shift); color: #2a1d00; }
+  .caption { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .items { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel-2);
+    color: var(--text);
+  }
+  .chip.active { border-color: var(--accent-2); color: #fff; box-shadow: 0 0 0 1px var(--accent-2) inset; }
+  .chip.done { border-color: var(--good); color: var(--good); }
+  .stat {
+    display: inline-block;
+    margin-right: 18px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .stat b { color: var(--accent); }
+  .stat .val { color: var(--good); font-weight: 700; }
+  .formula {
+    font-family: var(--mono);
+    font-size: 16px;
+    color: var(--accent-2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 12px;
+    margin: 6px 0 12px;
+    display: inline-block;
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bit-Parallel Subset-Sum — <code>B |= B &lt;&lt; w</code></h1>
+  <p>Bit <b>s</b> set means "sum <b>s</b> is reachable". Adding item <b>w</b> shifts every reachable sum up by <b>w</b> (one instruction, 64 lanes) and OR-merges &mdash; the <b>/64</b> win.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Items (comma-separated weights):
+      <input type="text" id="itemsInput" value="3,1,2" />
+    </label>
+    <button id="btnApply">Apply</button>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="card">
+    <h2>Items to fold in</h2>
+    <div class="items" id="itemChips"></div>
+  </div>
+
+  <div class="card">
+    <h2>Reachable-sums bitset B</h2>
+    <div class="formula" id="formulaBox">B = 1 &nbsp;(only sum 0 reachable: the empty subset)</div>
+    <div class="caption" id="capCurrent">current B (bit s lit &rArr; sum s reachable):</div>
+    <div class="bitrow" id="rowCurrent"></div>
+
+    <div class="caption" id="capShift" style="display:none;">B &lt;&lt; w (every reachable sum slid up by w):</div>
+    <div class="bitrow" id="rowShift" style="display:none;"></div>
+
+    <div class="caption" id="capResult" style="display:none;">B |= B &lt;&lt; w (merged; newly-reachable sums flash green):</div>
+    <div class="bitrow" id="rowResult" style="display:none;"></div>
+
+    <div style="margin-top:14px;">
+      <span class="stat">reachable sums: <span class="val" id="statCount">1</span></span>
+      <span class="stat">popcount(B) = <span class="val" id="statPop">1</span></span>
+      <span class="stat">smallest positive sum: <span class="val" id="statMin">&ndash;</span></span>
+    </div>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--hi-old)"></span> already reachable</span>
+      <span><span class="swatch" style="background:var(--hi-shift)"></span> shifted copy (B &lt;&lt; w)</span>
+      <span><span class="swatch" style="background:var(--hi-new)"></span> newly reachable this step</span>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We start with only sum 0 reachable, then fold in each item with one shift-and-OR.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Each item costs exactly one left shift plus one OR over the whole bitset &mdash;
+    processing 64 candidate sums per machine instruction (the <code>/64</code> constant-factor win, not a Big-O change).
+    See <code>junior.md</code> and <code>professional.md</code> for the proof that <code>shift = "add w to every reachable sum at once"</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  items: [3, 1, 2],
+  maxSum: 6,
+  steps: [],     // discrete sub-steps of the animation
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// ---------- Build the step plan ----------
+// We model the algorithm as a sequence of phases. For each item we emit:
+//   "show-shift"  : reveal the shifted copy B << w
+//   "merge"       : OR it in, flashing newly-set bits
+// plus an initial "init" and a final "done".
+function buildPlan(items) {
+  const maxSum = items.reduce((a, b) => a + b, 0);
+  const steps = [];
+  let B = 1n; // bit 0 set
+
+  function bitsArray(x, width) {
+    const arr = [];
+    for (let s = 0; s <= width; s++) arr.push(Number((x >> BigInt(s)) & 1n));
+    return arr;
+  }
+  function popcount(x) {
+    let c = 0;
+    while (x > 0n) { c += Number(x & 1n); x >>= 1n; }
+    return c;
+  }
+  function smallestPositive(x) {
+    let s = 1;
+    let y = x >> 1n;
+    while (y > 0n) {
+      if ((y & 1n) === 1n) return s;
+      y >>= 1n;
+      s++;
+    }
+    return null;
+  }
+
+  steps.push({
+    type: "init",
+    B: bitsArray(B, maxSum),
+    shift: null,
+    newly: [],
+    pop: popcount(B),
+    minPos: smallestPositive(B),
+    item: -1,
+    desc: "Start: B = 1. Only bit 0 is set, meaning the only reachable sum is 0 (the empty subset)."
+  });
+
+  for (let k = 0; k < items.length; k++) {
+    const w = items[k];
+    const before = B;
+    const shifted = before << BigInt(w);
+    // show shift phase
+    steps.push({
+      type: "show-shift",
+      B: bitsArray(before, maxSum),
+      shift: bitsArray(shifted, maxSum),
+      newly: [],
+      pop: popcount(before),
+      minPos: smallestPositive(before),
+      item: k,
+      w: w,
+      desc: "Item w = " + w + ": compute B << " + w + ". Every set bit s moves to s + " + w +
+            " — i.e. 'take this item' adds " + w + " to every reachable sum, all 64 lanes at once."
+    });
+    const merged = before | shifted;
+    // which bits are newly set
+    const newly = [];
+    for (let s = 0; s <= maxSum; s++) {
+      const wasSet = (before >> BigInt(s)) & 1n;
+      const nowSet = (merged >> BigInt(s)) & 1n;
+      if (wasSet === 0n && nowSet === 1n) newly.push(s);
+    }
+    steps.push({
+      type: "merge",
+      B: bitsArray(merged, maxSum),
+      shift: bitsArray(shifted, maxSum),
+      newly: newly,
+      pop: popcount(merged),
+      minPos: smallestPositive(merged),
+      item: k,
+      w: w,
+      desc: "B |= B << " + w + ": OR the shifted copy back in. " +
+            (newly.length ? ("New reachable sums: {" + newly.join(", ") + "}.") : "No new sums this step.")
+    });
+    B = merged;
+  }
+
+  steps.push({
+    type: "done",
+    B: bitsArray(B, maxSum),
+    shift: null,
+    newly: [],
+    pop: popcount(B),
+    minPos: smallestPositive(B),
+    item: -1,
+    desc: "Done. Every lit bit s is a reachable subset sum. popcount(B) = " + popcount(B) +
+          " distinct totals are achievable from " + JSON.stringify(items) + "."
+  });
+
+  return { steps, maxSum };
+}
+
+// ---------- Rendering ----------
+function renderBitRow(container, bits, opts) {
+  opts = opts || {};
+  container.innerHTML = "";
+  for (let s = 0; s < bits.length; s++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if (opts.shifted) {
+      if (bits[s]) cell.classList.add("shifted");
+    } else {
+      if (opts.newly && opts.newly.indexOf(s) !== -1) cell.classList.add("newly");
+      else if (bits[s]) cell.classList.add("on");
+    }
+    const idx = document.createElement("div");
+    idx.className = "idx";
+    idx.textContent = s;
+    const bit = document.createElement("div");
+    bit.className = "bit";
+    bit.textContent = bits[s];
+    cell.appendChild(idx);
+    cell.appendChild(bit);
+    container.appendChild(cell);
+  }
+}
+
+function renderChips(activeItem, doneCount) {
+  const c = document.getElementById("itemChips");
+  c.innerHTML = "";
+  if (state.items.length === 0) {
+    c.innerHTML = "<span class='step-counter'>(no items)</span>";
+    return;
+  }
+  for (let k = 0; k < state.items.length; k++) {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = "w = " + state.items[k];
+    if (k === activeItem) chip.classList.add("active");
+    else if (k < doneCount) chip.classList.add("done");
+    c.appendChild(chip);
+  }
+}
+
+function applyStep(idx) {
+  const step = state.steps[idx];
+  const rowCur = document.getElementById("rowCurrent");
+  const rowShift = document.getElementById("rowShift");
+  const rowResult = document.getElementById("rowResult");
+  const capShift = document.getElementById("capShift");
+  const capResult = document.getElementById("capResult");
+
+  // current B
+  renderBitRow(rowCur, step.B, {});
+
+  if (step.type === "show-shift") {
+    capShift.style.display = "";
+    rowShift.style.display = "";
+    capResult.style.display = "none";
+    rowResult.style.display = "none";
+    renderBitRow(rowShift, step.shift, { shifted: true });
+    document.getElementById("formulaBox").innerHTML =
+      "B &lt;&lt; " + step.w + " &nbsp;(slide every reachable sum up by " + step.w + ")";
+  } else if (step.type === "merge") {
+    capShift.style.display = "";
+    rowShift.style.display = "";
+    capResult.style.display = "";
+    rowResult.style.display = "";
+    renderBitRow(rowShift, step.shift, { shifted: true });
+    renderBitRow(rowResult, step.B, { newly: step.newly });
+    document.getElementById("formulaBox").innerHTML =
+      "B |= B &lt;&lt; " + step.w + " &nbsp;(merge: keep old sums + new sums)";
+  } else {
+    capShift.style.display = "none";
+    rowShift.style.display = "none";
+    capResult.style.display = "none";
+    rowResult.style.display = "none";
+    document.getElementById("formulaBox").innerHTML = step.type === "init"
+      ? "B = 1 &nbsp;(only sum 0 reachable: the empty subset)"
+      : "B = final reachable-sums set";
+  }
+
+  // stats
+  document.getElementById("statCount").textContent = step.pop;
+  document.getElementById("statPop").textContent = step.pop;
+  document.getElementById("statMin").textContent = step.minPos === null ? "–" : step.minPos;
+
+  // chips
+  let doneCount = 0;
+  for (let i = 0; i <= idx; i++) {
+    if (state.steps[i].type === "merge") doneCount = state.steps[i].item + 1;
+  }
+  const active = (step.type === "show-shift" || step.type === "merge") ? step.item : -1;
+  renderChips(active, doneCount);
+
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(idx);
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) {
+    rebuild(); // restart
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1200);
+}
+
+function parseItems(str) {
+  const parts = str.split(",");
+  const out = [];
+  for (const p of parts) {
+    const v = parseInt(p.trim(), 10);
+    if (!isNaN(v) && v > 0 && v <= 32) out.push(v);
+  }
+  return out.length ? out : [3, 1, 2];
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.items = parseItems(document.getElementById("itemsInput").value);
+  // cap total so the bit row stays readable
+  let total = state.items.reduce((a, b) => a + b, 0);
+  while (total > 48 && state.items.length > 1) {
+    state.items.pop();
+    total = state.items.reduce((a, b) => a + b, 0);
+  }
+  const plan = buildPlan(state.items);
+  state.steps = plan.steps;
+  state.maxSum = plan.maxSum;
+  state.stepIdx = 0;
+  applyStep(0);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("btnApply").addEventListener("click", rebuild);
+document.getElementById("itemsInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") rebuild();
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
