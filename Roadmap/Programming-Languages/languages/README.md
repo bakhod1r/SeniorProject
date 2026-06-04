@@ -11,6 +11,7 @@ The **language-specific** side of programming-language work — syntax, idioms, 
 - **[Python](python/)** — syntax, data structures, decorators, iterators, OOP, packaging, common packages, context managers, environments, static typing, concurrency, and testing.
 - **[Rust](rust/)** — language basics, the ownership system, error handling, modules and crates, traits and generics, lifetimes and the borrow checker, macros, debugging, and performance.
 - **[SQL](sql/)** — DDL, DML, aggregate queries, constraints, subqueries, joins, advanced functions, views, indexes, transactions, stored procedures, and performance optimization.
+- **[TypeScript](typescript/)** — the type system on top of JavaScript: setup and tooling, types and inference, combining types, narrowing, interfaces, functions, classes, generics, utility types, decorators, advanced types, modules, and the ecosystem.
 
 ---
 
