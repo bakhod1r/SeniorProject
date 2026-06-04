@@ -4,30 +4,79 @@
 
 | | Description |
 |---|---|
-| **Purpose** | Universal template for all System Design roadmap topics |
-| **Files per topic** | 9 files: `junior.md`, `middle.md`, `senior.md`, `professional.md`, `interview.md`, `tasks.md`, `find-bug.md`, `optimize.md`, `specification.md` |
+| **Purpose** | Template for all System Design roadmap topics — **the file set depends on the topic TYPE** (see matrix below) |
 | **Language** | All content must be generated in **English** |
-| **Table of Contents** | **REQUIRED** on the four level files (`junior.md`, `middle.md`, `senior.md`, `professional.md`) as a numbered TOC linking each section; **OPTIONAL** on practice files (`tasks.md`, `find-bug.md`, `optimize.md`) |
-| **Depth / Length** | Each level file (`junior.md`, `middle.md`, `senior.md`, `professional.md`) must be substantial — target at least ~520 lines of genuine content (no filler), with multiple worked code examples, at least one Mermaid diagram, and at least one comparison table where the topic allows |
-| **Level Handoff** | Every level file ends with a **`Next step:`** line linking to the next level in the progression (junior → middle → senior → professional → …) |
+| **Depth / Length** | Each level/doc file must be substantial — target at least ~520 lines of genuine content (no filler), with multiple worked examples, at least one Mermaid diagram, and at least one comparison table where the topic allows |
+| **Table of Contents** | **REQUIRED** on every level file and design-doc file (numbered TOC linking each section); **OPTIONAL** on practice/guidance files |
+| **Handoff** | Every level/doc file ends with a **`Next step:`** line linking to the next file in its progression |
+| **Diagrams** | Every level/doc file MUST include at least one **step-by-step (staged) diagram** + a **"See it animated"** external link where one exists (see standard below) |
 
-### Topic Structure
+### Diagram & Visualization Standard (GitHub-markdown)
 
-```
-XX-topic-name/
-├── junior.md          ← Distributed system basics, key terms, availability nines
-├── middle.md          ← Caching strategies, sharding, back-of-envelope estimation
-├── senior.md          ← Messaging patterns, consensus, SLO design
-├── professional.md    ← CAP/PACELC proofs, Raft safety, queueing theory
-├── interview.md       ← Interview prep across all levels
-├── tasks.md           ← Hands-on system design tasks
-├── find-bug.md        ← Find and fix bugs in code (10+ exercises)
-├── optimize.md        ← Optimize slow/inefficient code (10+ exercises)
-└── specification.md   ← Official spec / documentation deep-dive
-```
+GitHub renders Mermaid **statically** — no real animation. To convey *dynamic* behavior, every
+level/doc file must do BOTH:
+
+1. **Step-by-step (staged) diagram** — show the process as an ordered progression, not one static box:
+   - a Mermaid `sequenceDiagram` with numbered steps and `Note over` annotations, **or**
+   - a `stateDiagram-v2` of the state transitions, **or**
+   - 2–3 **before → during → after** diagrams showing how state changes.
+
+   ```mermaid
+   sequenceDiagram
+       autonumber
+       participant C as Client
+       participant Cache
+       participant DB
+       C->>Cache: 1. GET key
+       Cache-->>C: 2. MISS
+       C->>DB: 3. query
+       DB-->>C: 4. row
+       C->>Cache: 5. SET key (TTL)
+       Note over C,Cache: subsequent reads now HIT
+   ```
+
+2. **"See it animated" link** — when a reputable interactive/animated visualization exists, link it in this exact format (omit only if none exists):
+
+   > 🎞️ **See it animated:** [Raft consensus](https://raft.github.io/) · [Consistent hashing](https://www.toptal.com/big-data/consistent-hashing)
+
+   Good sources: thesecretlivesofdata.com (Raft), raft.github.io, visualgo.net, sortvisualizer,
+   pollard.github.io, and official docs with animated GIFs. Never invent a URL — link only real, verified pages.
+
+### Topic Types & File Sets
+
+Not every topic is the same kind of thing. Pick the file set by topic type:
+
+| Type | Applies to (sections) | Files |
+|------|----------------------|-------|
+| **A — Concept / Building-Block** | §1–31, §35–42 leaf topics (most topics) | **Required (6):** `junior.md`, `middle.md`, `senior.md`, `professional.md`, `staff.md`, `interview.md`. **Optional — include only when the topic warrants** (skip for pure reference/theory like number-tables, OSI model, Amdahl's law): `tasks.md`, `find-bug.md`, `optimize.md`. **No `specification.md`** (tool/spec docs live in dedicated roadmaps like `Backend/redis`, not here). |
+| **B — Classic Problem** | §32 (URL shortener, Uber, etc.) | `requirements.md`, `estimation.md`, `high-level-design.md`, `deep-dive.md`, `scaling-and-tradeoffs.md`, `interview.md` — one progressive design doc, **NOT** junior→staff tiers |
+| **C — Real-World Architecture** | §33 (Spanner, Kafka, Cassandra…) | `context.md`, `architecture.md`, `key-innovations.md`, `tradeoffs.md`, `lessons.md` — case-study format |
+| **D — Interview Playbook** | §34 (RESHADED, estimation step…) | `guide.md`, `examples.md`, `checklist.md`, `pitfalls.md` — guidance, not level tiers |
+
+### The Five Levels (Type A) — and the professional vs staff axis
+
+| Level | Axis | What it answers |
+|-------|------|-----------------|
+| `junior` | basics | What is it? Where does it sit in a system? |
+| `middle` | applied | How do I use it correctly under real load? |
+| `senior` | ownership | How do I own it end-to-end (SLOs, trade-offs, tech choice)? |
+| `professional` | **technical/theoretical depth** | Can I reason about it formally — proofs, queueing math, precise capacity? |
+| `staff` | **organizational scope & judgment** | How does this play across many teams over years — build-vs-buy, cost, migration path, sociotechnical impact, when NOT to use it? |
+
+> `professional` and `staff` are **different axes**, not "more of the same." Professional = principal-level technical mastery of the topic; Staff = breadth of org-scale judgment using the topic. Both are required for Staff/Principal readiness.
+
+### The Three Practice Files (Type A) — OPTIONAL, distinct intents
+
+> Include each only when the topic genuinely supports it; skip on pure reference/theory topics.
+
+| File | Intent | Format |
+|------|--------|--------|
+| `tasks.md` | **Build from scratch** — design a system from zero applying `{{TOPIC_NAME}}` | graduated design briefs + acceptance criteria |
+| `find-bug.md` | **A system is described → find its (design) flaw** and fix it | 10+ flawed-design scenarios, each with the fix |
+| `optimize.md` | **A built/working system is given → make it optimal** (latency / throughput / cost) | 10+ optimization scenarios with measured gains |
 
 > Replace `{{TOPIC_NAME}}` with the specific System Design concept being documented.
-> Each section below corresponds to one output file in the topic folder.
+> Each TEMPLATE section below corresponds to one output file. Templates are grouped by topic type.
 
 ---
 
@@ -437,6 +486,58 @@ Example — Design a photo storage system (Instagram-scale):
 
 ---
 
+# TEMPLATE 4B — `staff.md`  *(Type A — 5th level tier)*
+
+## {{TOPIC_NAME}} — Staff / Principal Level
+
+> **Axis:** organizational scope & judgment — NOT deeper theory (that is `professional.md`).
+> This file answers: how does a Staff/Principal engineer wield `{{TOPIC_NAME}}` across many
+> teams, over years, under real cost and political constraints?
+
+### Scope of Influence
+- How a decision about `{{TOPIC_NAME}}` ripples across multiple teams and services.
+- Who owns it, who is affected, and how you align them without direct authority.
+
+### Build vs Buy vs Adopt
+| Option | When it wins | Hidden cost |
+|--------|-------------|-------------|
+| Build in-house | Core differentiator; no fit on market | Ongoing maintenance, on-call, staffing |
+| Buy (managed/SaaS) | Commodity capability; speed matters | Lock-in, egress cost, less control |
+| Adopt open-source | Strong community; need control | Operational burden, upgrade treadmill |
+
+### Cost & ROI Lens
+- Total cost of ownership: infra + people + opportunity cost, not just cloud bill.
+- What is the unit economics impact of this choice (cost per request / per user / per GB)?
+- Where is the break-even point that flips the build-vs-buy decision?
+
+### Evolution & Migration Path
+- Where will this choice be a bottleneck in 2–3 years at the next 10× of scale?
+- The incremental migration path OUT of it (link to §36 Large-Scale Migrations).
+- Reversibility: is this a one-way door or a two-way door decision?
+
+### Sociotechnical Impact (Conway's Law)
+- How team boundaries shape (and are shaped by) this design — see §37.
+- Cognitive load imposed on the teams that must operate it.
+
+### When NOT to Use It
+- The failure modes where `{{TOPIC_NAME}}` is the *wrong* answer.
+- Cheaper/simpler alternatives that a less experienced engineer over-engineers past.
+
+### Second-Order Consequences
+- Downstream effects 6–12 months later (operational, organizational, security, cost).
+- The metric you would watch to know the decision is going wrong.
+
+### Staff Checklist
+- [ ] Decision captured as an ADR (§35.1) with explicit trade-offs and reversal criteria.
+- [ ] Cost/ROI modeled, not hand-waved; break-even identified.
+- [ ] Migration / exit path documented before adoption.
+- [ ] Cross-team ownership and on-call responsibility assigned.
+- [ ] "When NOT to use" section written so others don't cargo-cult the choice.
+
+*Next step:* this is the top tier — revisit the [interview.md](interview.md) and apply at portfolio scale.
+
+---
+
 # TEMPLATE 5 — `interview.md`
 
 ## {{TOPIC_NAME}} — Interview Questions
@@ -799,202 +900,100 @@ Reduction techniques:
 | High egress cost | CDN + compression | 60–90% egress reduction | GB/month |
 | Slow deploys under load | Blue-green + canary | Zero-downtime deploys | Deployment MTTR |
 ---
----
 
-# TEMPLATE 9 — `specification.md`
+# TYPE B — CLASSIC PROBLEM (§32)
 
-> **Focus:** Official documentation deep-dive — API reference, configuration schema, behavioral guarantees, and version compatibility.
->
-> **Source:** Always cite the official documentation with direct section links.
-> - Blockchain: https://bitcoin.org/bitcoin.pdf | https://ethereum.org/en/whitepaper/
-> - Software Design/Architecture: https://refactoring.guru/design-patterns
-> - Computer Science: https://en.wikipedia.org/wiki/List_of_data_structures
-> - Software Architect: https://www.oreilly.com/library/view/fundamentals-of-software/9781492043447/
-> - System Design: https://github.com/donnemartin/system-design-primer
-> - MongoDB: https://www.mongodb.com/docs/manual/reference/
-> - PostgreSQL: https://www.postgresql.org/docs/current/
-> - API Design: https://swagger.io/specification/ (OpenAPI 3.x)
-> - Backend: https://developer.mozilla.org/en-US/docs/Learn/Server-side
-> - Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/current/
-> - Redis: https://redis.io/docs/latest/commands/
-> - Full-Stack: https://developer.mozilla.org/en-US/
+> A single progressive design document, not level tiers. Read in order. Each file ends
+> with a `Next step:` link to the next. Use a concrete brief (e.g., "Design TinyURL").
 
-<details open>
-<summary><strong>Template Content</strong></summary>
+## B1 — `requirements.md`
+- **Functional requirements** — the core features in scope (bullet list, prioritized).
+- **Non-functional requirements** — scale, latency, availability, consistency, durability targets.
+- **Out of scope** — explicitly what you are NOT building (shows judgment).
+- **Assumptions & clarifying questions** — what you'd ask the interviewer first.
 
-# {{TOPIC_NAME}} — Specification
+## B2 — `estimation.md`
+- Traffic: DAU, read/write QPS, peak multiplier.
+- Storage: bytes/record × records × retention.
+- Bandwidth: QPS × payload size (read + write paths).
+- Memory: working set for cache (e.g., 20% hot data).
+- One Mermaid or table summarizing the numbers and what they imply for tech choice.
 
-> **Official Documentation Reference**
->
-> Source: [{{TOOL_NAME}} Official Docs]({{DOCS_URL}}) — {{SECTION}}
+## B3 — `high-level-design.md`
+- API design (key endpoints, request/response shapes).
+- Architecture diagram (Mermaid) — client → edge → services → storage.
+- Component responsibilities (one line each).
+- The single happy-path request walkthrough (write path + read path).
 
----
+## B4 — `deep-dive.md`
+- Data model / schema and the chosen storage per component (justified).
+- 2–3 hard sub-problems solved in detail (e.g., short-code generation, dedup, hotspot).
+- Bottleneck analysis: where does it break first, and the fix (cache, shard, queue).
+- At least one sequence diagram for a non-trivial flow.
 
-## Table of Contents
+## B5 — `scaling-and-tradeoffs.md`
+- How each component scales to 10× / 100×.
+- Failure modes and mitigations (what happens when X is down?).
+- Consistency/availability trade-offs (CAP/PACELC classification of the design).
+- Alternatives considered and why rejected.
 
-1. [Docs Reference](#docs-reference)
-2. [API / Configuration Reference](#api--configuration-reference)
-3. [Core Concepts & Rules](#core-concepts--rules)
-4. [Schema / Options Reference](#schema--options-reference)
-5. [Behavioral Specification](#behavioral-specification)
-6. [Edge Cases from Official Docs](#edge-cases-from-official-docs)
-7. [Version & Compatibility Matrix](#version--compatibility-matrix)
-8. [Official Examples](#official-examples)
-9. [Compliance Checklist](#compliance-checklist)
-10. [Related Documentation](#related-documentation)
+## B6 — `interview.md`
+- How this problem is typically asked; common variations.
+- Expected follow-up questions and strong answers.
+- Red flags interviewers watch for; what a great vs mediocre answer looks like.
 
 ---
-
-## 1. Docs Reference
-
-| Property | Value |
-|----------|-------|
-| **Official Docs** | [{{TOOL_NAME}} Documentation]({{DOCS_URL}}) |
-| **Relevant Section** | {{SECTION_NAME}} — {{SECTION_TITLE}} |
-| **Version** | {{TOOL_VERSION}} |
-| **Direct URL** | {{DOCS_URL}}/{{PATH}} |
-
 ---
 
-## 2. API / Configuration Reference
+# TYPE C — REAL-WORLD ARCHITECTURE (§33)
 
-> From: {{DOCS_URL}}/{{API_SECTION}}
+> Case-study format. Study a real production system; extract reusable lessons. Always
+> cite primary sources (papers, engineering blogs). End each file with a `Next step:` link.
 
-### {{RESOURCE_OR_ENDPOINT_NAME}}
+## C1 — `context.md`
+- What problem does the system solve, and at what scale (numbers).
+- History: what existed before, why it was built, key constraints.
+- Primary sources (paper / talk / engineering blog) — linked.
 
-| Field / Parameter | Type | Required | Default | Description |
-|------------------|------|----------|---------|-------------|
-| `{{FIELD_1}}` | `{{TYPE_1}}` | ✅ | — | {{DESC_1}} |
-| `{{FIELD_2}}` | `{{TYPE_2}}` | ❌ | `{{DEFAULT_2}}` | {{DESC_2}} |
-| `{{FIELD_3}}` | `{{TYPE_3}}` | ❌ | `{{DEFAULT_3}}` | {{DESC_3}} |
+## C2 — `architecture.md`
+- The overall architecture (Mermaid diagram) and major components.
+- Data flow for the core operation(s).
+- Storage, replication, and partitioning approach.
 
----
+## C3 — `key-innovations.md`
+- The 2–4 genuinely novel ideas (e.g., Spanner TrueTime, Dynamo consistent hashing + vector clocks).
+- Why each was necessary and what it enabled.
 
-## 3. Core Concepts & Rules
+## C4 — `tradeoffs.md`
+- What the designers deliberately gave up.
+- CAP/PACELC classification with justification.
+- Known limitations and operational pain points.
 
-The official documentation defines these key rules for {{TOPIC_NAME}}:
-
-### Rule 1: {{RULE_NAME}}
-
-> *Docs: [{{DOCS_URL}}/{{SECTION}}]({{DOCS_URL}}/{{SECTION}}) — "{{DOC_QUOTE}}"*
-
-{{RULE_EXPLANATION}}
-
-```{{CODE_LANG}}
-# ✅ Correct — follows official guidance
-{{VALID_EXAMPLE}}
-
-# ❌ Incorrect — violates official guidance
-{{INVALID_EXAMPLE}}
-```
-
-### Rule 2: {{RULE_NAME}}
-
-> *Docs: [{{DOCS_URL}}/{{SECTION}}]({{DOCS_URL}}/{{SECTION}})*
-
-{{RULE_EXPLANATION}}
-
-```{{CODE_LANG}}
-{{CODE_EXAMPLE}}
-```
+## C5 — `lessons.md`
+- What patterns to steal for your own designs.
+- What is specific to their scale and should NOT be cargo-culted.
+- Map each lesson back to the relevant concept section (§1–31).
 
 ---
-
-## 4. Schema / Options Reference
-
-| Option | Type | Allowed Values | Default | Docs |
-|--------|------|---------------|---------|------|
-| `{{OPT_1}}` | `{{TYPE_1}}` | `{{VALUES_1}}` | `{{DEFAULT_1}}` | [Link]({{URL_1}}) |
-| `{{OPT_2}}` | `{{TYPE_2}}` | `{{VALUES_2}}` | `{{DEFAULT_2}}` | [Link]({{URL_2}}) |
-| `{{OPT_3}}` | `{{TYPE_3}}` | `{{VALUES_3}}` | `{{DEFAULT_3}}` | [Link]({{URL_3}}) |
-
 ---
 
-## 5. Behavioral Specification
+# TYPE D — INTERVIEW PLAYBOOK (§34)
 
-### Normal Operation
+> Guidance format — coaching, not level tiers. Concrete, actionable, example-driven.
 
-{{NORMAL_OPERATION}}
+## D1 — `guide.md`
+- What this step/framework is and why it matters in the 45-minute interview.
+- How to execute it, with time-boxing guidance.
+- One worked walkthrough end-to-end.
 
-### Performance Characteristics
+## D2 — `examples.md`
+- 2–3 fully worked examples applying the step to real problems.
+- Show the actual words/diagrams a strong candidate would produce.
 
-| Operation | Time Complexity | Space | Notes |
-|-----------|----------------|-------|-------|
-| {{OP_1}} | {{TIME_1}} | {{SPACE_1}} | {{NOTES_1}} |
-| {{OP_2}} | {{TIME_2}} | {{SPACE_2}} | {{NOTES_2}} |
+## D3 — `checklist.md`
+- A do/say checklist for this step.
+- The signals an interviewer is looking for here.
 
-### Error / Failure Conditions
-
-| Error | Condition | Official Resolution |
-|-------|-----------|---------------------|
-| `{{ERROR_1}}` | {{COND_1}} | {{FIX_1}} |
-| `{{ERROR_2}}` | {{COND_2}} | {{FIX_2}} |
-
----
-
-## 6. Edge Cases from Official Docs
-
-| Edge Case | Official Behavior | Reference |
-|-----------|-------------------|-----------|
-| {{EDGE_1}} | {{BEHAVIOR_1}} | [Docs]({{URL_1}}) |
-| {{EDGE_2}} | {{BEHAVIOR_2}} | [Docs]({{URL_2}}) |
-| {{EDGE_3}} | {{BEHAVIOR_3}} | [Docs]({{URL_3}}) |
-
----
-
-## 7. Version & Compatibility Matrix
-
-| Version | Change | Backward Compatible? | Notes |
-|---------|--------|---------------------|-------|
-| `{{VER_1}}` | {{CHANGE_1}} | {{COMPAT_1}} | {{NOTES_1}} |
-| `{{VER_2}}` | {{CHANGE_2}} | {{COMPAT_2}} | {{NOTES_2}} |
-
----
-
-## 8. Official Examples
-
-### Example from Docs: {{EXAMPLE_TITLE}}
-
-> Source: [{{DOCS_URL}}/{{ANCHOR}}]({{DOCS_URL}}/{{ANCHOR}})
-
-```{{CODE_LANG}}
-{{OFFICIAL_EXAMPLE_CODE}}
-```
-
-**Expected result:**
-
-```
-{{EXPECTED_RESULT}}
-```
-
----
-
-## 9. Compliance Checklist
-
-- [ ] Follows official recommended patterns for {{TOPIC_NAME}}
-- [ ] Uses supported version ({{TOOL_VERSION}}+)
-- [ ] Handles all documented error conditions
-- [ ] Follows official security recommendations
-- [ ] Compatible with listed dependencies
-- [ ] Configuration validated against official schema
-
----
-
-## 10. Related Documentation
-
-| Topic | Doc Section | URL |
-|-------|-------------|-----|
-| {{RELATED_1}} | {{SECTION_1}} | [Link]({{URL_1}}) |
-| {{RELATED_2}} | {{SECTION_2}} | [Link]({{URL_2}}) |
-| {{RELATED_3}} | {{SECTION_3}} | [Link]({{URL_3}}) |
-
----
-
-> **Content Rules for `specification.md`:**
-> - Always link directly to the relevant doc section (not just the homepage)
-> - Use official examples from the documentation when available
-> - Note breaking changes and deprecated features between versions
-> - Include official security recommendations
-> - Minimum 2 Core Rules, 3 Schema fields, 3 Edge Cases, 2 Official Examples
-
-</details>
+## D4 — `pitfalls.md`
+- Common mistakes and how to recover.
+- Time traps and how to avoid them.
