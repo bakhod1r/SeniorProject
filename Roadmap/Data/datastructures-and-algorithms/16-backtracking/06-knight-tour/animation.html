@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Knight's Tour — Backtracking + Warnsdorff's Heuristic</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --visited: rgba(88, 166, 255, 0.20);
+    --current: rgba(63, 185, 80, 0.45);
+    --candidate: rgba(210, 153, 34, 0.22);
+    --chosen: rgba(63, 185, 80, 0.30);
+    --backtrack: rgba(248, 81, 73, 0.35);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .board {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    margin: 0 auto;
+  }
+  .board td {
+    border: 1px solid var(--border);
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+    background: var(--bg);
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+  .board td.dark { background: #11161d; }
+  .board td.visited { background: var(--visited); color: var(--accent); font-weight: 700; }
+  .board td.current { background: var(--current); color: #fff; font-weight: 800; }
+  .board td.candidate { background: var(--candidate); }
+  .board td.chosen { background: var(--chosen); outline: 2px solid var(--good); outline-offset: -2px; }
+  .board td.backtrack { background: var(--backtrack); color: #fff; }
+  .order { font-size: 13px; }
+  .deg {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    font-size: 10px;
+    color: var(--accent-2);
+    font-weight: 700;
+  }
+  .knight { font-size: 18px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stat-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .stat-row b { color: var(--accent); }
+  .stat-row .v { color: var(--good); }
+  .candlist { margin-top: 10px; font-family: var(--mono); font-size: 12px; }
+  .candlist .ch { color: var(--good); font-weight: 700; }
+  .candlist .row { padding: 2px 0; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Knight's Tour — Backtracking with Warnsdorff's Rule</h1>
+  <p>The knight visits every square once. Each candidate shows its <b>Warnsdorff degree</b> (onward unvisited moves); the rule picks the <b>lowest</b>. Watch the path fill with order numbers and backtracking fire on dead ends.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>N = <input type="number" id="nInput" value="6" min="5" max="12" /></label>
+    <label>Start:
+      <select id="startSel">
+        <option value="0">corner (0,0)</option>
+        <option value="center">center</option>
+      </select>
+    </label>
+    <label>Speed
+      <input type="range" id="speed" min="60" max="900" value="380" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Board &mdash; visit order &amp; candidate degrees</h2>
+      <table class="board" id="boardTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--visited)"></span> visited (order #)</span>
+        <span><span class="swatch" style="background:var(--current)"></span> knight here</span>
+        <span><span class="swatch" style="background:var(--candidate)"></span> candidate (degree)</span>
+        <span><span class="swatch" style="background:var(--chosen)"></span> chosen (min degree)</span>
+        <span><span class="swatch" style="background:var(--backtrack)"></span> backtrack</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Search state</h2>
+      <div class="stat-row"><b>squares filled</b><span class="v" id="stFilled">1</span></div>
+      <div class="stat-row"><b>total squares</b><span class="v" id="stTotal">36</span></div>
+      <div class="stat-row"><b>moves made</b><span class="v" id="stMoves">0</span></div>
+      <div class="stat-row"><b>backtracks</b><span class="v" id="stBack">0</span></div>
+      <div class="stat-row"><b>nodes expanded</b><span class="v" id="stNodes">0</span></div>
+      <div class="candlist" id="candList"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> or <b>Run</b>. At each square we list legal unvisited moves, label each with its onward degree, and jump to the lowest. Dead ends trigger backtracking.</div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>How to read this animation</h2>
+    <div style="font-size:13px;color:var(--text);">
+      <p style="margin:4px 0;">
+        The board is the knight graph drawn as a grid. The knight symbol &#9822; marks the
+        current square. Each <b>candidate</b> square shows a small orange number in its corner:
+        that is its <b>Warnsdorff degree</b> &mdash; how many unvisited squares it could reach next.
+      </p>
+      <p style="margin:4px 0;">
+        On a <b>score</b> step, all candidates light up with their degrees. On a <b>choose</b> step,
+        the minimum-degree candidate is outlined in green (ties go to the square farther from
+        the center). On a <b>move</b> step, the knight jumps there and the square is stamped with
+        its visit-order number. On a <b>backtrack</b> step, a failed branch flashes red and the
+        search undoes the last move to try the next candidate.
+      </p>
+      <p style="margin:4px 0;">
+        The <b>Search state</b> panel tracks squares filled, moves made, backtracks, and nodes
+        expanded. On a well-behaved board (try N = 6 or N = 8 from a corner), backtracks stay at
+        <b>0</b> &mdash; Warnsdorff's first path completes the whole tour. Increase N or change the
+        start to watch where the heuristic occasionally needs the backtracking safety net.
+      </p>
+      <p style="margin:4px 0;">
+        Tip: lower the <b>Speed</b> slider for a slow, readable walk; raise it to watch a large
+        board fill quickly. Use <b>Step</b> to inspect a single decision at a time.
+      </p>
+      <p style="margin:4px 0;">
+        Why the lowest degree? A square with few onward moves is about to become a trap: every
+        move you make elsewhere can only reduce its remaining exits, never add one. Visiting the
+        most-constrained square first keeps the rest of the board flexible &mdash; that single idea
+        is what turns an exponential search into a near-linear one.
+      </p>
+      <p style="margin:4px 0;">
+        Remember: this is a <b>heuristic</b>, not a guarantee. The backtracking fallback (the red
+        flashes) is what makes the search always correct when the greedy choice stumbles.
+      </p>
+    </div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Move order uses <b>Warnsdorff's rule</b> (minimum onward degree first, ties broken toward the board edge) with a backtracking fallback.
+    See <code>junior.md</code>, <code>middle.md</code>, and <code>professional.md</code> for the heuristic's intuition, tie-breaking, existence theorems, and why it carries no completeness guarantee.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Knight moves ----------
+const DR = [-2, -2, -1, -1, 1, 1, 2, 2];
+const DC = [-1, 1, -2, 2, -2, 2, -1, 1];
+
+// ---------- Build a full step-by-step plan of the Warnsdorff backtracking search ----------
+// We record discrete events so the UI can animate forward deterministically:
+//   "score"   : at square (r,c), show candidate degrees
+//   "choose"  : highlight the chosen (min-degree) candidate
+//   "move"    : commit the move, write order number
+//   "deadend" : no candidates, board not full
+//   "backtrack": undo the last move
+//   "done"    : board fully filled
+function buildPlan(n, startR, startC) {
+  const board = [];
+  for (let i = 0; i < n; i++) board.push(new Array(n).fill(-1));
+  const total = n * n;
+  const cr = n - 1; // for integer center distance: (2r-cr)
+  const steps = [];
+  let nodes = 0;
+  let backtracks = 0;
+  let movesMade = 0;
+
+  function ok(r, c) { return r >= 0 && r < n && c >= 0 && c < n; }
+  function degree(r, c) {
+    let d = 0;
+    for (let i = 0; i < 8; i++) {
+      const nr = r + DR[i], nc = c + DC[i];
+      if (ok(nr, nc) && board[nr][nc] === -1) d++;
+    }
+    return d;
+  }
+  function candidates(r, c) {
+    const cs = [];
+    for (let i = 0; i < 8; i++) {
+      const nr = r + DR[i], nc = c + DC[i];
+      if (ok(nr, nc) && board[nr][nc] === -1) {
+        const dist = (2 * nr - cr) * (2 * nr - cr) + (2 * nc - cr) * (2 * nc - cr);
+        cs.push({ r: nr, c: nc, deg: degree(nr, nc), dist: dist });
+      }
+    }
+    // Warnsdorff: min degree, ties -> farther from center, then lexicographic
+    cs.sort((a, b) => {
+      if (a.deg !== b.deg) return a.deg - b.deg;
+      if (a.dist !== b.dist) return b.dist - a.dist;
+      if (a.r !== b.r) return a.r - b.r;
+      return a.c - b.c;
+    });
+    return cs;
+  }
+
+  // bound the recorded plan so the animation stays responsive
+  const MAX_STEPS = 60000;
+
+  function solve(r, c, step) {
+    if (steps.length > MAX_STEPS) return false;
+    nodes++;
+    board[r][c] = step;
+    movesMade = step;
+    if (step === 0) {
+      steps.push(snapshot("move", r, c, [], -1,
+        "Place the knight at the start (" + r + "," + c + ") and label it 0."));
+    }
+    if (step === total - 1) {
+      steps.push(snapshot("done", r, c, [], -1,
+        "Board full! Every square visited exactly once — a complete open tour."));
+      return true;
+    }
+    const cs = candidates(r, c);
+    if (cs.length === 0) {
+      steps.push(snapshot("deadend", r, c, [], -1,
+        "Dead end at (" + r + "," + c + "): no legal unvisited move but board not full."));
+      board[r][c] = -1;
+      return false;
+    }
+    // SCORE event: show all candidate degrees
+    steps.push(snapshot("score", r, c, cs, -1,
+      "Score each legal move by onward degree: [" +
+      cs.map(x => "(" + x.r + "," + x.c + ")=" + x.deg).join(", ") +
+      "]. Warnsdorff picks the minimum."));
+    for (let k = 0; k < cs.length; k++) {
+      const m = cs[k];
+      steps.push(snapshot("choose", r, c, cs, k,
+        "Choose (" + m.r + "," + m.c + ") with degree " + m.deg +
+        (k > 0 ? " (previous choices backtracked)." : " — the lowest degree.")));
+      steps.push(snapshot("move", m.r, m.c, [], -1,
+        "Jump to (" + m.r + "," + m.c + ") and label it " + (step + 1) + "."));
+      if (solve(m.r, m.c, step + 1)) return true;
+      // backtrack
+      backtracks++;
+      steps.push(snapshot("backtrack", r, c, cs, k,
+        "That branch failed. Backtrack: undo (" + m.r + "," + m.c + ") and try the next candidate."));
+    }
+    board[r][c] = -1;
+    return false;
+  }
+
+  function snapshot(type, r, c, cs, chosenIdx, desc) {
+    return {
+      type: type,
+      r: r, c: c,
+      board: board.map(row => row.slice()),
+      cands: cs.map(x => ({ r: x.r, c: x.c, deg: x.deg })),
+      chosenIdx: chosenIdx,
+      nodes: nodes,
+      backtracks: backtracks,
+      moves: movesMade,
+      desc: desc
+    };
+  }
+
+  solve(startR, startC, 0);
+  return { steps: steps, total: total, n: n };
+}
+
+// ---------- Rendering ----------
+const state = {
+  plan: null,
+  idx: 0,
+  running: false,
+  timer: null,
+  n: 6
+};
+
+function cellSize(n) {
+  if (n <= 6) return 56;
+  if (n <= 8) return 46;
+  if (n <= 10) return 38;
+  return 32;
+}
+
+function renderBoard(step) {
+  const table = document.getElementById("boardTable");
+  const n = state.n;
+  const sz = cellSize(n);
+  const b = step.board;
+  // build a quick lookup for candidate degree at each cell
+  const candMap = {};
+  step.cands.forEach((x, i) => { candMap[x.r + "," + x.c] = { deg: x.deg, idx: i }; });
+  let html = "";
+  for (let r = 0; r < n; r++) {
+    html += "<tr>";
+    for (let c = 0; c < n; c++) {
+      const key = r + "," + c;
+      const dark = (r + c) % 2 === 1;
+      let cls = dark ? "dark" : "";
+      let inner = "";
+      const isCurrent = (step.r === r && step.c === c) &&
+        (step.type === "move" || step.type === "done" || step.type === "deadend");
+      const visited = b[r][c] !== -1;
+      if (visited) {
+        cls += " visited";
+        inner = "<span class='order'>" + b[r][c] + "</span>";
+      }
+      if (candMap[key] !== undefined) {
+        cls += " candidate";
+        inner += "<span class='deg'>" + candMap[key].deg + "</span>";
+        if (step.type === "choose" && candMap[key].idx === step.chosenIdx) cls += " chosen";
+        if (step.type === "backtrack" && candMap[key].idx === step.chosenIdx) cls += " backtrack";
+      }
+      if (isCurrent) {
+        cls += " current";
+        inner = "<span class='knight'>&#9822;</span>";
+        if (step.type !== "done") inner += "<span class='order' style='font-size:10px'> " + b[r][c] + "</span>";
+      }
+      html += "<td class='" + cls + "' style='width:" + sz + "px;height:" + sz + "px'>" + inner + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+
+  // stats
+  const filled = b.reduce((acc, row) => acc + row.filter(v => v !== -1).length, 0);
+  document.getElementById("stFilled").textContent = filled;
+  document.getElementById("stTotal").textContent = state.plan.total;
+  document.getElementById("stMoves").textContent = step.moves;
+  document.getElementById("stBack").textContent = step.backtracks;
+  document.getElementById("stNodes").textContent = step.nodes;
+
+  // candidate list panel
+  const cl = document.getElementById("candList");
+  if (step.cands.length > 0) {
+    let h = "<div class='row'>candidates (sorted by degree):</div>";
+    step.cands.forEach((x, i) => {
+      const chosen = (i === step.chosenIdx && (step.type === "choose" || step.type === "backtrack"));
+      h += "<div class='row" + (chosen ? " ch" : "") + "'>" +
+        (chosen ? "&#9654; " : "&nbsp;&nbsp;") +
+        "(" + x.r + "," + x.c + ") degree " + x.deg + "</div>";
+    });
+    cl.innerHTML = h;
+  } else {
+    cl.innerHTML = "<div class='row'>no candidates listed</div>";
+  }
+
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.plan.steps.length - 1);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.idx = idx;
+  renderBoard(state.plan.steps[idx]);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.plan.steps.length - 1) gotoStep(state.idx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  const delay = 960 - parseInt(document.getElementById("speed").value, 10);
+  state.timer = setInterval(() => {
+    if (state.idx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, Math.max(40, delay));
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 5) n = 5;
+  if (n > 12) n = 12;
+  document.getElementById("nInput").value = n;
+  state.n = n;
+  let sr = 0, sc = 0;
+  if (document.getElementById("startSel").value === "center") {
+    sr = Math.floor(n / 2);
+    sc = Math.floor(n / 2);
+  }
+  state.plan = buildPlan(n, sr, sc);
+  state.idx = 0;
+  renderBoard(state.plan.steps[0]);
+  updateButtons();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("startSel").addEventListener("change", rebuild);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; run(); }
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
