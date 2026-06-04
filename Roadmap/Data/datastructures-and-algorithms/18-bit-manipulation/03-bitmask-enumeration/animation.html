@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bitmask Enumeration — Subsets &amp; Submasks</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-on: rgba(63, 185, 80, 0.40);
+    --hi-cur: rgba(88, 166, 255, 0.28);
+    --hi-mask: rgba(210, 153, 34, 0.22);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 76px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bits {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 6px 0 12px;
+  }
+  .bit {
+    width: 46px;
+    height: 56px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    transition: all 0.2s ease;
+  }
+  .bit .val { font-size: 20px; font-weight: 700; color: var(--muted); }
+  .bit .idx { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .bit.on { background: var(--hi-on); border-color: var(--good); }
+  .bit.on .val { color: #fff; }
+  .bit.mask { border-color: var(--accent-2); }
+  .bit.mask.off { background: var(--hi-mask); }
+  .bigmask {
+    font-family: var(--mono);
+    font-size: 26px;
+    letter-spacing: 5px;
+    margin: 4px 0 8px;
+  }
+  .bigmask .on { color: var(--good); font-weight: 700; }
+  .bigmask .off { color: var(--muted); }
+  .subset {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .meta { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .meta b { color: var(--text); }
+  .progress {
+    height: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress > div { height: 100%; background: var(--accent); width: 0%; transition: width 0.25s ease; }
+  .list {
+    margin-top: 12px;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .list .row {
+    display: flex;
+    gap: 14px;
+    padding: 4px 10px;
+    border-bottom: 1px solid #21262d;
+  }
+  .list .row:last-child { border-bottom: none; }
+  .list .row.cur { background: var(--hi-cur); }
+  .list .row .mono { color: var(--good); }
+  .list .row .dim { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .guide {
+    margin-top: 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .guide h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--accent-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .guide ul { margin: 0; padding-left: 20px; }
+  .guide li { font-size: 13px; margin-bottom: 6px; color: var(--text); }
+  .guide li b { color: var(--accent); }
+  .guide code { color: var(--good); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bitmask Enumeration — Subsets &amp; Submasks</h1>
+  <p>Mode 1: count <b>0 &hellip; 2<sup>n</sup>&minus;1</b> as subsets. Mode 2: walk the submasks of a mask with <code>s = (s &minus; 1) &amp; mask</code>.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Mode:
+      <select id="modeSel">
+        <option value="all">1 &mdash; all subsets 0..2&#8319;-1</option>
+        <option value="sub">2 &mdash; submasks of a mask</option>
+      </select>
+    </label>
+    <label>n = <input type="number" id="nInput" value="4" min="1" max="8" /></label>
+    <label id="maskWrap">mask = <input type="number" id="maskInput" value="13" min="0" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2 id="leftTitle">Current value</h2>
+      <div class="bigmask" id="bigMask"></div>
+      <div class="bits" id="bitRow"></div>
+      <div class="subset" id="subsetTxt"></div>
+      <div class="meta" id="metaTxt"></div>
+      <div class="progress"><div id="progBar"></div></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-on)"></span> bit = 1 (element present)</span>
+        <span><span class="swatch" style="background:var(--hi-mask)"></span> in mask, not in submask</span>
+        <span><span class="swatch" style="background:var(--panel-2)"></span> bit = 0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="rightTitle">Enumeration log</h2>
+      <div class="meta" id="formula"></div>
+      <div class="list" id="log"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Mode 1 walks every subset; Mode 2 walks the submasks of the chosen mask.</div>
+
+  <div class="guide">
+    <h3>How to read this</h3>
+    <ul>
+      <li><b>Mode 1 (all subsets):</b> the loop <code>for mask in 0 .. 2&#8319;&minus;1</code> treats each integer as a subset. Watch the bit row turn each integer into the set of present elements; the log records every one of the 2&#8319; subsets in increasing integer order.</li>
+      <li><b>Mode 2 (submasks):</b> pick a <b>mask</b>; the loop <code>s = (s &minus; 1) &amp; mask</code> walks every subset contained in it, in strictly decreasing order, ending at the empty set 0. Amber-bordered bits are in the mask; green-filled bits are in the current submask.</li>
+      <li><b>Counts to verify:</b> Mode 1 produces exactly 2&#8319; rows; Mode 2 produces exactly 2<sup>popcount(mask)</sup> rows. Try a few masks and confirm.</li>
+      <li><b>The 3&#8319; idea:</b> summing the Mode-2 row count over every possible mask gives &Sigma; 2<sup>popcount(mask)</sup> = 3&#8319; &mdash; the cost of "submasks of every mask".</li>
+      <li><b>Controls:</b> <code>Step</code> advances one subset/submask; <code>Run</code> auto-plays; <code>Reset</code> rebuilds with the current n and mask.</li>
+      <li><b>Bit positions:</b> each cell shows the bit value (0/1) and its element index i; the big binary string at top mirrors the same value, high bit on the left.</li>
+      <li><b>Try this:</b> in Mode 2 set <code>mask = 0</code> &mdash; the only submask is the empty set, so the walk is a single step. Set <code>mask = (1&lt;&lt;n)&minus;1</code> &mdash; every subset is a submask, so Mode 2 matches Mode 1 exactly.</li>
+      <li><b>Decreasing order:</b> note Mode 2 starts at the mask itself and ends at 0, each step strictly smaller &mdash; that is why the loop terminates without an explicit counter.</li>
+      <li><b>Progress bar:</b> the bar fills as a fraction of the total subsets/submasks, giving an at-a-glance sense of how many remain.</li>
+    </ul>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. A subset of <code>{0..n-1}</code> is the integer whose bit i is 1 iff element i is present.
+    The submask loop visits exactly 2<sup>popcount(mask)</sup> submasks; summed over all masks this is 3<sup>n</sup>.
+    See <code>junior.md</code>, <code>middle.md</code>, and <code>professional.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  mode: "all",
+  n: 4,
+  mask: 13,
+  seq: [],        // sequence of values to visit
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function popcount(x) {
+  let c = 0;
+  while (x) { x &= x - 1; c++; }
+  return c;
+}
+
+function subsetString(value, n) {
+  const elems = [];
+  for (let i = 0; i < n; i++) if (value & (1 << i)) elems.push(i);
+  return "{" + elems.join(", ") + "}";
+}
+
+function binString(value, n) {
+  let s = "";
+  for (let i = n - 1; i >= 0; i--) s += ((value >> i) & 1);
+  return s;
+}
+
+// ---------- Build the step sequence ----------
+function buildSeq() {
+  const seq = [];
+  if (state.mode === "all") {
+    const total = 1 << state.n;
+    for (let m = 0; m < total; m++) seq.push(m);
+  } else {
+    // submasks of mask, in decreasing order, including 0
+    let s = state.mask;
+    while (true) {
+      seq.push(s);
+      if (s === 0) break;
+      s = (s - 1) & state.mask;
+    }
+  }
+  state.seq = seq;
+  state.stepIdx = 0;
+}
+
+// ---------- Render the bit row ----------
+function renderBits(value) {
+  const row = document.getElementById("bitRow");
+  row.innerHTML = "";
+  for (let i = state.n - 1; i >= 0; i--) {
+    const bit = document.createElement("div");
+    bit.className = "bit";
+    const isOn = (value >> i) & 1;
+    const inMask = state.mode === "sub" && ((state.mask >> i) & 1);
+    if (isOn) bit.classList.add("on");
+    if (inMask) {
+      bit.classList.add("mask");
+      if (!isOn) bit.classList.add("off");
+    }
+    bit.innerHTML = "<span class='val'>" + (isOn ? 1 : 0) + "</span>" +
+                    "<span class='idx'>i=" + i + "</span>";
+    row.appendChild(bit);
+  }
+}
+
+function renderBigMask(value) {
+  const el = document.getElementById("bigMask");
+  let html = "";
+  for (let i = state.n - 1; i >= 0; i--) {
+    const on = (value >> i) & 1;
+    html += "<span class='" + (on ? "on" : "off") + "'>" + on + "</span>";
+  }
+  el.innerHTML = html;
+}
+
+function renderLog(curValue) {
+  const log = document.getElementById("log");
+  log.innerHTML = "";
+  const shown = state.seq.slice(0, state.stepIdx + 1);
+  for (let k = 0; k < shown.length; k++) {
+    const v = shown[k];
+    const row = document.createElement("div");
+    row.className = "row" + (k === state.stepIdx ? " cur" : "");
+    row.innerHTML =
+      "<span class='dim'>#" + k + "</span>" +
+      "<span class='mono'>" + binString(v, state.n) + "</span>" +
+      "<span class='dim'>=" + v + "</span>" +
+      "<span>" + subsetString(v, state.n) + "</span>";
+    log.appendChild(row);
+  }
+  // keep current row in view
+  const cur = log.querySelector(".row.cur");
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+
+// ---------- Apply current step ----------
+function applyStep() {
+  const value = state.seq[state.stepIdx];
+  renderBigMask(value);
+  renderBits(value);
+
+  document.getElementById("subsetTxt").textContent =
+    "subset = " + subsetString(value, state.n) + "   (popcount = " + popcount(value) + ")";
+
+  const total = state.seq.length;
+  document.getElementById("progBar").style.width =
+    Math.round(((state.stepIdx + 1) / total) * 100) + "%";
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (total - 1);
+
+  if (state.mode === "all") {
+    document.getElementById("leftTitle").textContent = "Current mask (subset)";
+    document.getElementById("rightTitle").textContent =
+      "All subsets visited (" + (state.stepIdx + 1) + " of " + total + ")";
+    document.getElementById("metaTxt").innerHTML =
+      "mask = <b>" + value + "</b> = " + binString(value, state.n) + "&#8322; &nbsp; " +
+      "(of 2<sup>" + state.n + "</sup> = " + (1 << state.n) + " subsets)";
+    document.getElementById("formula").innerHTML =
+      "<b>for mask in 0 .. 2<sup>n</sup>&minus;1:</b> &nbsp; visit subset(mask)";
+    document.getElementById("narrate").innerHTML =
+      "Subset <b>#" + state.stepIdx + "</b>: integer " + value +
+      " is the binary odometer pattern " + binString(value, state.n) +
+      ", which is the subset " + subsetString(value, state.n) + ".";
+  } else {
+    const sub = popcount(state.mask);
+    document.getElementById("leftTitle").textContent = "Current submask of mask";
+    document.getElementById("rightTitle").textContent =
+      "Submasks visited (" + (state.stepIdx + 1) + " of 2^popcount = " + (1 << sub) + ")";
+    document.getElementById("metaTxt").innerHTML =
+      "mask = <b>" + state.mask + "</b> = " + binString(state.mask, state.n) +
+      " &nbsp; submask s = <b>" + value + "</b> = " + binString(value, state.n);
+    document.getElementById("formula").innerHTML =
+      "<b>s = mask; while s: visit(s); s = (s&minus;1) &amp; mask</b> &nbsp; (then s = 0)";
+    let extra;
+    if (state.stepIdx === 0) {
+      extra = "Start at s = mask itself.";
+    } else if (value === 0) {
+      extra = "Reached the empty submask 0 &mdash; loop stops here.";
+    } else {
+      const prev = state.seq[state.stepIdx - 1];
+      extra = "(" + prev + " &minus; 1) &amp; " + state.mask + " = " + value +
+              " &mdash; the next-smaller submask.";
+    }
+    document.getElementById("narrate").innerHTML =
+      "Submask <b>#" + state.stepIdx + "</b>: s = " + value + " = " +
+      binString(value, state.n) + " = " + subsetString(value, state.n) + ". " + extra;
+  }
+  renderLog(value);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.seq.length) return;
+  state.stepIdx = idx;
+  applyStep();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.seq.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.seq.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.seq.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.seq.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  state.mode = document.getElementById("modeSel").value;
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  if (n > 8) n = 8;
+  state.n = n;
+  document.getElementById("nInput").value = n;
+
+  const full = (1 << n) - 1;
+  document.getElementById("maskInput").max = full;
+  let mask = parseInt(document.getElementById("maskInput").value, 10);
+  if (isNaN(mask) || mask < 0) mask = 0;
+  if (mask > full) mask = full;
+  state.mask = mask;
+  document.getElementById("maskInput").value = mask;
+
+  // show/hide mask input depending on mode
+  document.getElementById("maskWrap").style.display =
+    state.mode === "sub" ? "" : "none";
+
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  buildSeq();
+  applyStep();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("maskInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
