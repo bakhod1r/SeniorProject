@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gosper's Hack &amp; Gray Code — Bit-Iteration Techniques</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-bit: rgba(63, 185, 80, 0.40);
+    --hi-block: rgba(88, 166, 255, 0.28);
+    --hi-move: rgba(210, 153, 34, 0.32);
+    --hi-flip: rgba(248, 81, 73, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  button.mode { border-color: var(--border); }
+  button.mode.active { background: var(--accent-2); border-color: var(--accent-2); color: #0d1117; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bitrow {
+    display: flex;
+    gap: 6px;
+    font-family: var(--mono);
+    margin: 8px 0;
+    flex-wrap: wrap;
+  }
+  .bitcell {
+    width: 34px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    font-size: 16px;
+    font-weight: 700;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .bitcell.one { color: var(--good); }
+  .bitcell.zero { color: var(--muted); }
+  .bitcell.hibit { background: var(--hi-bit); color: #fff; }
+  .bitcell.hiblock { background: var(--hi-block); }
+  .bitcell.himove { background: var(--hi-move); color: #fff; }
+  .bitcell.hiflip { background: var(--hi-flip); color: #fff; }
+  .idxrow {
+    display: flex;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .idxrow .icell { width: 34px; text-align: center; }
+  .label { font-family: var(--mono); font-size: 13px; color: var(--accent-2); min-width: 64px; display: inline-block; }
+  .calc {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    line-height: 1.7;
+  }
+  .calc .hl { color: var(--good); font-weight: 700; }
+  .calc .dim { color: var(--muted); }
+  .seqlist {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .seqitem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  .seqitem.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .seqitem.done { opacity: 0.55; }
+  .seqitem .num { color: var(--accent-2); min-width: 40px; }
+  .seqitem .flip { color: var(--bad); font-size: 12px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gosper's Hack &amp; Gray Code — Bit-Iteration Techniques</h1>
+  <p><b>Mode 1:</b> Gosper steps through k-subset bitmasks via c=x&amp;-x, r=x+c, repack. <b>Mode 2:</b> Gray code flips exactly one bit between consecutive values.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <button id="modeGosper" class="mode active">Gosper</button>
+    <button id="modeGray" class="mode">Gray code</button>
+    <label>n = <input type="number" id="nInput" value="5" min="1" max="8" /></label>
+    <label id="kWrap">k = <input type="number" id="kInput" value="3" min="0" max="8" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2 id="leftTitle">Current bitmask</h2>
+      <div class="idxrow" id="idxRow"></div>
+      <div class="bitrow" id="bitRow"></div>
+      <div class="calc" id="calcBox"></div>
+      <div class="legend" id="legendBox"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="rightTitle">Sequence</h2>
+      <div class="step-counter" id="seqInfo"></div>
+      <div class="seqlist" id="seqList"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Switch modes with the Gosper / Gray code buttons; adjust n and k.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Gosper enumerates fixed-size subsets in increasing numeric order;
+    Gray code lists all subsets so each step toggles one element. See <code>junior.md</code> and <code>professional.md</code>
+    for the proofs that Gosper yields the smallest larger same-popcount integer and that each Gray step flips exactly one bit.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Bit helpers ----------
+function popcount(x) {
+  let c = 0;
+  while (x > 0) { c += x & 1; x = Math.floor(x / 2); }
+  return c;
+}
+function lowestSetBitIndex(x) {
+  // index of lowest set bit; -1 if x == 0
+  if (x === 0) return -1;
+  let i = 0;
+  while ((x & 1) === 0) { x >>= 1; i++; }
+  return i;
+}
+function toBits(x, n) {
+  // returns array of n bits, index 0 = least significant (we render high->low)
+  const b = [];
+  for (let i = 0; i < n; i++) b.push((x >> i) & 1);
+  return b;
+}
+
+// ---------- Gosper next combination (safe for small n) ----------
+function nextCombination(x) {
+  const c = x & (-x);
+  const r = x + c;
+  return (((r ^ x) >> 2) / c | 0) | r;   // | 0 forces integer for the exact division
+}
+
+// ---------- Build Gosper plan ----------
+function buildGosperPlan(n, k) {
+  const steps = [];
+  if (k === 0) {
+    steps.push({ x: 0, c: 0, r: 0, isFirst: true,
+      desc: "k = 0: the only 0-subset is the empty mask 0. No Gosper step is taken (it would divide by c = 0)." });
+    return steps;
+  }
+  if (k > n) {
+    steps.push({ x: 0, c: 0, r: 0, isFirst: true, empty: true,
+      desc: "k > n: there are no k-subsets. Nothing to enumerate." });
+    return steps;
+  }
+  let x = (1 << k) - 1;
+  const limit = 1 << n;
+  let first = true;
+  while (x < limit) {
+    const c = x & (-x);
+    const r = x + c;
+    const next = (((r ^ x) >> 2) / c | 0) | r;
+    steps.push({
+      x: x, c: c, r: r, next: next, isFirst: first,
+      desc: first
+        ? "Start at (1<<k)-1 = " + ((1 << k) - 1) + ": the k lowest bits set, the smallest k-subset."
+        : "Applied Gosper: c = x & -x (lowest set bit), r = x + c (ripple the lowest block up), then repack the freed bits to the bottom."
+    });
+    first = false;
+    x = next;
+  }
+  // mark the last step
+  if (steps.length) steps[steps.length - 1].last = true;
+  return steps;
+}
+
+// ---------- Build Gray plan ----------
+function buildGrayPlan(n) {
+  const steps = [];
+  const total = 1 << n;
+  for (let i = 0; i < total; i++) {
+    const g = i ^ (i >> 1);
+    steps.push({ index: i, g: g, prevG: null, flipped: -1 });
+  }
+  // compute flips and descriptions
+  for (let i = 0; i < steps.length; i++) {
+    if (i === 0) {
+      steps[i].flipped = -1;
+      steps[i].desc = "Gray(0) = 0. We list all 2^n values; each next value flips exactly one bit.";
+    } else {
+      const diff = steps[i].g ^ steps[i - 1].g;
+      steps[i].flipped = lowestSetBitIndex(diff);
+      steps[i].desc = "Gray(" + i + ") = " + i + " ^ (" + i + ">>1) = " + steps[i].g +
+        ". Exactly bit " + steps[i].flipped + " flipped vs the previous value (it equals the lowest set bit of " + i + ").";
+    }
+    steps[i].prevG = i === 0 ? null : steps[i - 1].g;
+  }
+  return steps;
+}
+
+// ---------- State ----------
+const state = {
+  mode: "gosper",
+  n: 5,
+  k: 3,
+  plan: [],
+  idx: 0,
+  running: false,
+  timer: null
+};
+
+// ---------- Render: bit row ----------
+function renderBitRow(x, n, highlights) {
+  highlights = highlights || {};
+  const idxRow = document.getElementById("idxRow");
+  const bitRow = document.getElementById("bitRow");
+  const bits = toBits(x, n);
+  let idxHtml = "", bitHtml = "";
+  for (let i = n - 1; i >= 0; i--) {
+    idxHtml += "<div class='icell'>" + i + "</div>";
+    let cls = bits[i] ? "one" : "zero";
+    if (highlights.flip === i) cls += " hiflip";
+    else if (highlights.move === i) cls += " himove";
+    else if (highlights.block && highlights.block.indexOf(i) >= 0) cls += " hiblock";
+    else if (highlights.bit === i) cls += " hibit";
+    bitHtml += "<div class='bitcell " + cls + "'>" + bits[i] + "</div>";
+  }
+  idxRow.innerHTML = idxHtml;
+  bitRow.innerHTML = bitHtml;
+}
+
+// ---------- Render: Gosper step ----------
+function renderGosper() {
+  document.getElementById("leftTitle").textContent = "Current k-subset mask";
+  document.getElementById("rightTitle").textContent = "k-subsets (increasing order)";
+  const step = state.plan[state.idx];
+  const n = state.n;
+
+  // highlight the lowest block of x
+  const block = [];
+  if (step.c > 0) {
+    let p = lowestSetBitIndex(step.x);
+    let q = p;
+    while (q < n && ((step.x >> q) & 1) === 1) { block.push(q); q++; }
+  }
+  renderBitRow(step.x, n, { block: block });
+
+  // calc box
+  let calc = "";
+  if (step.empty) {
+    calc = "<span class='dim'>No k-subsets exist (k > n).</span>";
+  } else if (step.x === 0 && state.k === 0) {
+    calc = "x = <span class='hl'>0</span>  (empty subset)\n<span class='dim'>k = 0: no Gosper step (c would be 0).</span>";
+  } else {
+    const c = step.c, r = step.r;
+    const rx = r ^ step.x;
+    const shifted = rx >> 2;
+    const divided = c > 0 ? ((shifted / c) | 0) : 0;
+    const result = step.next;
+    calc =
+      "<span class='label'>x</span>= " + fmtbin(step.x, n) + "  (= " + step.x + ", popcount " + popcount(step.x) + ")\n" +
+      "<span class='label'>c=x&-x</span>= " + fmtbin(c, n) + "  <span class='dim'>lowest set bit</span>\n" +
+      "<span class='label'>r=x+c</span>= " + fmtbin(r, n) + "  <span class='dim'>ripple the block up</span>\n" +
+      "<span class='label'>r^x</span>= " + fmtbin(rx, n) + "  <span class='dim'>changed bits</span>\n" +
+      "<span class='label'>(r^x)>>2</span>= " + fmtbin(shifted, n) + "\n" +
+      "<span class='label'>/c</span>= " + fmtbin(divided, n) + "  <span class='dim'>repack low bits (integer divide)</span>\n" +
+      "<span class='label'>| r</span>= <span class='hl'>" + fmtbin(result, n) + "</span>  <span class='dim'>= next mask " + result + "</span>";
+    if (step.last) calc += "\n<span class='dim'>This is the largest k-subset; the next step would spill past bit " + (n - 1) + " and stop.</span>";
+  }
+  document.getElementById("calcBox").innerHTML = calc;
+
+  renderGosperSeq();
+  document.getElementById("legendBox").innerHTML =
+    "<span><span class='swatch' style='background:var(--hi-block)'></span> lowest block of 1s</span>";
+}
+
+function renderGosperSeq() {
+  const list = document.getElementById("seqList");
+  let html = "";
+  for (let i = 0; i < state.plan.length; i++) {
+    const s = state.plan[i];
+    let cls = "seqitem";
+    if (i === state.idx) cls += " active";
+    else if (i < state.idx) cls += " done";
+    html += "<div class='" + cls + "'><span class='num'>" + (s.empty ? "—" : s.x) +
+      "</span><span>" + fmtbinPlain(s.x, state.n) + "</span></div>";
+  }
+  list.innerHTML = html;
+  document.getElementById("seqInfo").textContent =
+    state.plan.length ? ("C(n,k) = " + state.plan.filter(function (z) { return !z.empty; }).length + " masks") : "";
+}
+
+// ---------- Render: Gray step ----------
+function renderGray() {
+  document.getElementById("leftTitle").textContent = "Current Gray value";
+  document.getElementById("rightTitle").textContent = "Gray sequence (one bit flips per step)";
+  const step = state.plan[state.idx];
+  const n = state.n;
+  renderBitRow(step.g, n, { flip: step.flipped >= 0 ? step.flipped : -1 });
+
+  let calc =
+    "<span class='label'>index x</span>= " + fmtbin(step.index, n) + "  (= " + step.index + ")\n" +
+    "<span class='label'>x>>1</span>= " + fmtbin(step.index >> 1, n) + "\n" +
+    "<span class='label'>gray=x^(x>>1)</span>= <span class='hl'>" + fmtbin(step.g, n) + "</span>  (= " + step.g + ")\n";
+  if (step.flipped >= 0) {
+    calc += "<span class='label'>flipped bit</span>= <span class='hl'>" + step.flipped +
+      "</span>  <span class='dim'>= lowest set bit of " + step.index + "</span>\n" +
+      "<span class='label'>prev gray</span>= " + fmtbin(step.prevG, n) +
+      "  <span class='dim'>Hamming distance = 1</span>";
+  } else {
+    calc += "<span class='dim'>First value; no previous to compare.</span>";
+  }
+  document.getElementById("calcBox").innerHTML = calc;
+
+  renderGraySeq();
+  document.getElementById("legendBox").innerHTML =
+    "<span><span class='swatch' style='background:var(--hi-flip)'></span> the single flipped bit</span>";
+}
+
+function renderGraySeq() {
+  const list = document.getElementById("seqList");
+  let html = "";
+  for (let i = 0; i < state.plan.length; i++) {
+    const s = state.plan[i];
+    let cls = "seqitem";
+    if (i === state.idx) cls += " active";
+    else if (i < state.idx) cls += " done";
+    const flip = s.flipped >= 0 ? "<span class='flip'>flip bit " + s.flipped + "</span>" : "<span class='flip'>start</span>";
+    html += "<div class='" + cls + "'><span class='num'>" + s.g + "</span><span>" +
+      fmtbinPlain(s.g, state.n) + "</span>" + flip + "</div>";
+  }
+  list.innerHTML = html;
+  document.getElementById("seqInfo").textContent = (1 << state.n) + " values, each differs from the last in 1 bit";
+}
+
+// ---------- Formatting ----------
+function fmtbin(x, n) {
+  let s = "";
+  for (let i = n - 1; i >= 0; i--) s += ((x >> i) & 1);
+  return s;
+}
+function fmtbinPlain(x, n) { return fmtbin(x, n); }
+
+// ---------- Apply current step ----------
+function applyStep() {
+  if (state.mode === "gosper") renderGosper();
+  else renderGray();
+  const step = state.plan[state.idx];
+  document.getElementById("narrate").innerHTML = step.desc || "";
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.plan.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.plan.length - 1) {
+    state.idx++;
+    applyStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+  document.getElementById("modeGosper").classList.toggle("active", state.mode === "gosper");
+  document.getElementById("modeGray").classList.toggle("active", state.mode === "gray");
+  document.getElementById("kWrap").style.display = state.mode === "gosper" ? "" : "none";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.plan.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(function () {
+    if (state.idx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+function rebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  if (n > 8) n = 8;
+  document.getElementById("nInput").value = n;
+  let k = parseInt(document.getElementById("kInput").value, 10);
+  if (isNaN(k) || k < 0) k = 0;
+  if (k > n) k = n;
+  document.getElementById("kInput").value = k;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.n = n;
+  state.k = k;
+  state.idx = 0;
+  if (state.mode === "gosper") state.plan = buildGosperPlan(n, k);
+  else state.plan = buildGrayPlan(n);
+  applyStep();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", function () {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("kInput").addEventListener("change", rebuild);
+document.getElementById("modeGosper").addEventListener("click", function () {
+  state.mode = "gosper";
+  rebuild();
+});
+document.getElementById("modeGray").addEventListener("click", function () {
+  state.mode = "gray";
+  rebuild();
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
