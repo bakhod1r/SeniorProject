@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boyer-Moore String Matching — Right-to-Left Scan with Two Shift Rules</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-match: rgba(63, 185, 80, 0.40);
+    --hi-bad: rgba(248, 81, 73, 0.40);
+    --hi-window: rgba(88, 166, 255, 0.16);
+    --hi-bc: rgba(210, 153, 34, 0.30);
+    --hi-gs: rgba(88, 166, 255, 0.32);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  #textInput { width: 320px; }
+  #patInput { width: 150px; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tape { display: flex; flex-direction: column; gap: 4px; overflow-x: auto; padding-bottom: 6px; }
+  .row { display: flex; gap: 2px; align-items: center; }
+  .rowlabel { width: 64px; color: var(--muted); font-size: 12px; font-family: var(--mono); flex: 0 0 auto; }
+  .cell {
+    width: 26px;
+    height: 30px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--panel-2);
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+  .cell.idx { border: none; background: transparent; color: var(--muted); font-size: 11px; height: 16px; }
+  .cell.window { background: var(--hi-window); }
+  .cell.match { background: var(--hi-match); color: #fff; font-weight: 700; }
+  .cell.bad { background: var(--hi-bad); color: #fff; font-weight: 700; }
+  .cell.empty { border: 1px dashed var(--border); background: transparent; color: var(--muted); }
+  .cell.scan { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .shifts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .shiftbox {
+    flex: 1 1 200px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    font-size: 13px;
+  }
+  .shiftbox.bc { border-left: 3px solid var(--accent-2); }
+  .shiftbox.gs { border-left: 3px solid var(--accent); }
+  .shiftbox.chosen { box-shadow: 0 0 0 1px var(--good) inset; border-color: var(--good); }
+  .shiftbox .title { font-weight: 700; margin-bottom: 4px; }
+  .shiftbox.bc .title { color: var(--accent-2); }
+  .shiftbox.gs .title { color: var(--accent); }
+  .shiftbox .val { font-family: var(--mono); font-size: 18px; color: var(--text); }
+  .shiftbox .val.win { color: var(--good); }
+  .shiftbox small { color: var(--muted); display: block; margin-top: 3px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .table-wrap { margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .table-wrap b { color: var(--accent-2); }
+  .matches { margin-top: 10px; font-family: var(--mono); font-size: 13px; color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Boyer-Moore — Right-to-Left Scan with Bad-Character &amp; Good-Suffix Shifts</h1>
+  <p>Align the pattern under the text, scan <b>right&nbsp;&rarr;&nbsp;left</b>. On a mismatch, see the <b>bad-character</b> and <b>good-suffix</b> shift candidates and watch the pattern jump by the chosen (maximum) shift.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Text: <input type="text" id="textInput" value="HERE IS A SIMPLE EXAMPLE" /></label>
+    <label>Pattern: <input type="text" id="patInput" value="EXAMPLE" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Alignment &amp; right-to-left scan</h2>
+      <div class="tape" id="tape"></div>
+      <div class="shifts">
+        <div class="shiftbox bc" id="bcBox">
+          <div class="title">Bad-character shift</div>
+          <div class="val" id="bcVal">&mdash;</div>
+          <small id="bcDesc">align the mismatched text char with its last occurrence in P</small>
+        </div>
+        <div class="shiftbox gs" id="gsBox">
+          <div class="title">Good-suffix shift</div>
+          <div class="val" id="gsVal">&mdash;</div>
+          <small id="gsDesc">re-align the matched suffix with another copy / prefix</small>
+        </div>
+        <div class="shiftbox" id="chosenBox">
+          <div class="title" style="color:var(--good)">Chosen = max</div>
+          <div class="val win" id="chosenVal">&mdash;</div>
+          <small>the larger safe jump finishes the search faster</small>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-window)"></span> current window</span>
+        <span><span class="swatch" style="background:var(--hi-match)"></span> matched (right&rarr;left)</span>
+        <span><span class="swatch" style="background:var(--hi-bad)"></span> bad character</span>
+      </div>
+      <div class="matches" id="matchesBox">matches: (none yet)</div>
+    </div>
+
+    <div class="card">
+      <h2>Precomputed last-occurrence table</h2>
+      <div class="table-wrap" id="lastTable"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Boyer-Moore aligns the pattern under the text and compares from the <b>right end</b> first, jumping forward by the larger of two precomputed shifts on each mismatch.</div>
+
+  <div class="footnote">
+    Self-contained visualization of the full Boyer-Moore algorithm (bad-character + good-suffix, max shift).
+    A shift is always clamped to at least 1. After a full match the pattern advances by the good-suffix continue-shift so overlapping occurrences are not missed.
+    See <code>junior.md</code> and <code>professional.md</code> for the proof that neither shift rule ever skips a real occurrence.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Boyer-Moore table builders ----------
+const SIGMA = 256;
+
+function buildLast(p) {
+  const last = new Array(SIGMA).fill(-1);
+  for (let i = 0; i < p.length; i++) last[p.charCodeAt(i)] = i;
+  return last;
+}
+
+function buildGoodSuffix(p) {
+  const m = p.length;
+  const border = new Array(m + 1).fill(0);
+  const shift = new Array(m + 1).fill(0);
+  let i = m, j = m + 1;
+  border[i] = j;
+  while (i > 0) {
+    while (j <= m && p.charAt(i - 1) !== p.charAt(j - 1)) {
+      if (shift[j] === 0) shift[j] = j - i;
+      j = border[j];
+    }
+    i--; j--;
+    border[i] = j;
+  }
+  j = border[0];
+  for (i = 0; i <= m; i++) {
+    if (shift[i] === 0) shift[i] = j;
+    if (i === j) j = border[j];
+  }
+  return shift;
+}
+
+// ---------- Build the step plan ----------
+// Each step records the alignment s, scan index j, mismatch info, and the
+// two candidate shifts. We emit one step per comparison phase + one per shift.
+function buildPlan(t, p) {
+  const steps = [];
+  const n = t.length, m = p.length;
+  const last = buildLast(p);
+  const gs = buildGoodSuffix(p);
+  const matches = [];
+
+  if (m === 0 || m > n) {
+    steps.push({
+      type: "done", s: 0, j: -1, matchedFrom: m, matches: [],
+      desc: m === 0 ? "Empty pattern — by convention it matches at position 0." :
+                      "Pattern is longer than the text — no occurrence possible."
+    });
+    return { steps, last, gs };
+  }
+
+  let s = 0;
+  steps.push({
+    type: "init", s: 0, j: m - 1, matchedFrom: m, matches: matches.slice(),
+    desc: "Align the pattern at shift s = 0. We compare from the right end: P[" + (m - 1) + "] against the text."
+  });
+
+  while (s <= n - m) {
+    let j = m - 1;
+    // scan right to left
+    while (j >= 0 && p.charAt(j) === t.charAt(s + j)) {
+      steps.push({
+        type: "match", s: s, j: j, matchedFrom: j, matches: matches.slice(),
+        desc: "P[" + j + "] = '" + p.charAt(j) + "' matches text[" + (s + j) + "]. Move left."
+      });
+      j--;
+    }
+    if (j < 0) {
+      matches.push(s);
+      const cont = gs[0];
+      steps.push({
+        type: "fullmatch", s: s, j: -1, matchedFrom: 0, matches: matches.slice(),
+        bc: null, gs: cont, chosen: cont,
+        desc: "Full match at shift " + s + "! Advance by the good-suffix continue-shift gs[0] = " + cont + " to catch overlaps."
+      });
+      s += cont;
+      if (s <= n - m) {
+        steps.push({
+          type: "realign", s: s, j: m - 1, matchedFrom: m, matches: matches.slice(),
+          desc: "Re-align at shift s = " + s + ". Scan from the right end again."
+        });
+      }
+    } else {
+      const c = t.charCodeAt(s + j);
+      const bc = j - last[c];
+      const gsShift = gs[j + 1];
+      const chosen = Math.max(1, bc, gsShift);
+      steps.push({
+        type: "mismatch", s: s, j: j, matchedFrom: j + 1, matches: matches.slice(),
+        bc: bc, gs: gsShift, chosen: chosen, badChar: t.charAt(s + j),
+        desc: "Mismatch at P[" + j + "]: text char '" + t.charAt(s + j) + "' ≠ '" + p.charAt(j) +
+              "'. Bad-character shift = " + bc + ", good-suffix shift = " + gsShift +
+              " → jump by max = " + chosen + "."
+      });
+      s += chosen;
+      if (s <= n - m) {
+        steps.push({
+          type: "realign", s: s, j: m - 1, matchedFrom: m, matches: matches.slice(),
+          desc: "Re-align at shift s = " + s + ". Scan from the right end again."
+        });
+      }
+    }
+  }
+  steps.push({
+    type: "done", s: Math.min(s, n - m), j: -1, matchedFrom: m, matches: matches.slice(),
+    desc: "Done. The pattern has slid past the end of the text. Matches found: " +
+          (matches.length ? matches.join(", ") : "none") + "."
+  });
+  return { steps, last, gs };
+}
+
+// ---------- Rendering ----------
+function renderTape(step, t, p) {
+  const tape = document.getElementById("tape");
+  const n = t.length, m = p.length;
+  let html = "";
+
+  // text index row
+  html += "<div class='row'><div class='rowlabel'></div>";
+  for (let i = 0; i < n; i++) html += "<div class='cell idx'>" + i + "</div>";
+  html += "</div>";
+
+  // text row
+  html += "<div class='row'><div class='rowlabel'>text</div>";
+  for (let i = 0; i < n; i++) {
+    let cls = "cell";
+    const inWindow = (step.s !== undefined && i >= step.s && i < step.s + m);
+    if (inWindow) cls += " window";
+    if (step.type === "mismatch" && i === step.s + step.j) cls += " bad";
+    else if ((step.type === "match" || step.type === "mismatch" || step.type === "fullmatch") &&
+             inWindow && (i - step.s) >= step.matchedFrom) cls += " match";
+    if ((step.type === "match" || step.type === "mismatch") && i === step.s + step.j) cls += " scan";
+    const ch = t.charAt(i) === " " ? "·" : t.charAt(i);
+    html += "<div class='" + cls + "'>" + ch + "</div>";
+  }
+  html += "</div>";
+
+  // pattern row (offset by s)
+  html += "<div class='row'><div class='rowlabel'>pattern</div>";
+  for (let i = 0; i < n; i++) {
+    const k = i - (step.s || 0); // pattern index under text position i
+    if (k < 0 || k >= m) {
+      html += "<div class='cell empty'></div>";
+    } else {
+      let cls = "cell";
+      if (step.type === "mismatch" && k === step.j) cls += " bad";
+      else if ((step.type === "match" || step.type === "mismatch" || step.type === "fullmatch") &&
+               k >= step.matchedFrom) cls += " match";
+      if ((step.type === "match" || step.type === "mismatch") && k === step.j) cls += " scan";
+      const ch = p.charAt(k) === " " ? "·" : p.charAt(k);
+      html += "<div class='" + cls + "'>" + ch + "</div>";
+    }
+  }
+  html += "</div>";
+
+  tape.innerHTML = html;
+}
+
+function renderShiftBoxes(step) {
+  const bcVal = document.getElementById("bcVal");
+  const gsVal = document.getElementById("gsVal");
+  const chosenVal = document.getElementById("chosenVal");
+  const bcBox = document.getElementById("bcBox");
+  const gsBox = document.getElementById("gsBox");
+  const bcDesc = document.getElementById("bcDesc");
+
+  if (step.type === "mismatch") {
+    bcVal.textContent = step.bc;
+    gsVal.textContent = step.gs;
+    chosenVal.textContent = step.chosen;
+    bcDesc.textContent = "bad char '" + step.badChar + "': shift = j - last[c] = " + step.bc +
+                         (step.bc < 1 ? " (clamped to ≥ 1)" : "");
+    bcBox.classList.toggle("chosen", step.chosen === Math.max(1, step.bc) && step.bc >= step.gs);
+    gsBox.classList.toggle("chosen", step.chosen === step.gs && step.gs > step.bc);
+  } else if (step.type === "fullmatch") {
+    bcVal.innerHTML = "&mdash;";
+    gsVal.textContent = step.gs;
+    chosenVal.textContent = step.chosen;
+    bcDesc.textContent = "no bad character on a full match";
+    bcBox.classList.remove("chosen");
+    gsBox.classList.add("chosen");
+  } else {
+    bcVal.innerHTML = "&mdash;";
+    gsVal.innerHTML = "&mdash;";
+    chosenVal.innerHTML = "&mdash;";
+    bcDesc.textContent = "align the mismatched text char with its last occurrence in P";
+    bcBox.classList.remove("chosen");
+    gsBox.classList.remove("chosen");
+  }
+}
+
+function renderLastTable(p, last) {
+  const el = document.getElementById("lastTable");
+  if (p.length === 0) { el.innerHTML = "(empty pattern)"; return; }
+  const seen = [];
+  const done = new Set();
+  for (let i = 0; i < p.length; i++) {
+    const c = p.charCodeAt(i);
+    if (!done.has(c)) { done.add(c); seen.push(p.charAt(i)); }
+  }
+  let html = "last[c] = rightmost index of c in P (else -1):<br>";
+  html += seen.map(ch => {
+    const disp = ch === " " ? "·" : ch;
+    return "<b>" + disp + "</b> &rarr; " + last[ch.charCodeAt(0)];
+  }).join(" &nbsp; ");
+  html += "<br>every other character &rarr; -1 (jump the whole pattern past it).";
+  el.innerHTML = html;
+}
+
+function renderMatches(step) {
+  const el = document.getElementById("matchesBox");
+  const ms = step.matches || [];
+  el.textContent = "matches: " + (ms.length ? ms.join(", ") : "(none yet)");
+}
+
+// ---------- Animation state ----------
+const state = {
+  t: "",
+  p: "",
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load() {
+  state.t = document.getElementById("textInput").value;
+  state.p = document.getElementById("patInput").value;
+  const built = buildPlan(state.t, state.p);
+  state.plan = built.steps;
+  state.stepIdx = 0;
+  renderLastTable(state.p, built.last);
+  gotoStep(0);
+}
+
+function gotoStep(idx) {
+  if (!state.plan || idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  const step = state.plan[idx];
+  renderTape(step, state.t, state.p);
+  renderShiftBoxes(step);
+  renderMatches(step);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) load();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  load();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("textInput").addEventListener("change", rebuild);
+document.getElementById("patInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
