@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Suffix Automaton — Online Construction</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --clone: #bc8cff;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 160px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+  .stateList { font-family: var(--mono); font-size: 12.5px; }
+  .stateRow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 5px;
+    background: var(--panel-2);
+  }
+  .stateRow.cur { border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
+  .stateRow.cloneRow { border-color: var(--clone); }
+  .stateRow .sid { color: var(--accent-2); font-weight: 700; min-width: 28px; }
+  .stateRow .meta { color: var(--muted); }
+  .stateRow .tag { color: var(--clone); font-weight: 700; }
+  .progress {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin: 6px 0 12px;
+  }
+  .progress .done { color: var(--good); font-weight: 700; }
+  .progress .cur { color: var(--accent-2); font-weight: 700; text-decoration: underline; }
+  .progress .todo { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate.clone { border-left-color: var(--clone); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stat {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .stat b { color: var(--accent); }
+  .stat .val { color: var(--good); font-weight: 700; }
+  circle.node { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; }
+  circle.node.clone { stroke: var(--clone); }
+  circle.node.cur { stroke: var(--good); stroke-width: 3; }
+  circle.node.terminal { fill: #14361f; }
+  text.nlabel { fill: #fff; font-size: 12px; font-weight: 700; font-family: var(--mono); }
+  text.nlen { fill: var(--muted); font-size: 9px; font-family: var(--mono); }
+  path.tr { stroke: var(--muted); stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
+  path.tr.newedge { stroke: var(--good); stroke-width: 2.6; marker-end: url(#arrowg); }
+  path.link { stroke: var(--accent-2); stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; marker-end: url(#arrowo); opacity: 0.85; }
+  text.elabel { fill: var(--accent); font-size: 10px; font-family: var(--mono); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Suffix Automaton — Building It One Character at a Time</h1>
+  <p>States are <b>endpos classes</b>; each shows its <b>len</b>. Solid arrows are transitions, dashed gold arrows are suffix <b>links</b>. Watch the online <code>extend</code> and the <b>clone/split</b> when it fires.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>string: <input type="text" id="strInput" value="abcbc" maxlength="20" /></label>
+    <button id="btnBuild">Build</button>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="progress" id="progress"></div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Automaton &amp; suffix-link tree</h2>
+      <svg id="svg" viewBox="0 0 600 380" height="380">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#8b949e"/>
+          </marker>
+          <marker id="arrowg" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#3fb950"/>
+          </marker>
+          <marker id="arrowo" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#d29922"/>
+          </marker>
+        </defs>
+        <g id="linkLayer"></g>
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> state (len shown)</span>
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--clone)"></span> clone</span>
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--good)"></span> current (last)</span>
+        <span><span class="swatch" style="background:#8b949e"></span> transition</span>
+        <span><span class="swatch" style="background:var(--accent-2)"></span> suffix link</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>States</h2>
+      <div class="stateList" id="stateList"></div>
+      <div class="stat" id="statBox">
+        distinct substrings so far = <span class="val" id="distinctVal">0</span><br/>
+        states = <b id="stateCount">1</b> &nbsp; transitions = <b id="edgeCount">0</b>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We add characters left to right; each <code>extend</code> creates a new state and walks suffix links, sometimes cloning a state to split an endpos class.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Distinct-substring count uses <code>&Sigma; (len[v] &minus; len[link[v]])</code>. The clone/split fires when the found transition leads to a non-solid state
+    (<code>len[q] &ne; len[p]+1</code>). See <code>junior.md</code> and <code>professional.md</code> for proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- SAM model that records discrete steps ----------
+function buildPlan(s) {
+  const nxt = [{}];
+  const link = [-1];
+  const length = [0];
+  const isClone = [false];
+  let last = 0;
+  const steps = [];
+
+  function snapshot(desc, info) {
+    steps.push({
+      nxt: nxt.map(o => Object.assign({}, o)),
+      link: link.slice(),
+      length: length.slice(),
+      isClone: isClone.slice(),
+      last: last,
+      cur: info && info.cur != null ? info.cur : -1,
+      clone: info && info.clone != null ? info.clone : -1,
+      newEdges: info && info.newEdges ? info.newEdges.slice() : [],
+      processed: info && info.processed != null ? info.processed : 0,
+      isCloneStep: info && info.isCloneStep ? true : false,
+      desc: desc
+    });
+  }
+
+  snapshot("Start: only the initial state t0 (len 0, link -1). It represents the empty substring and is the root of the suffix-link tree.",
+           { processed: 0 });
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const cur = nxt.length;
+    nxt.push({});
+    link.push(-1);
+    length.push(length[last] + 1);
+    isClone.push(false);
+    const newEdges = [];
+    let p = last;
+    while (p !== -1 && !(c in nxt[p])) {
+      nxt[p][c] = cur;
+      newEdges.push([p, c, cur]);
+      p = link[p];
+    }
+    if (p === -1) {
+      link[cur] = 0;
+      snapshot("extend('" + c + "'): new state " + cur + " (len " + length[cur] +
+               "). Walked links from last and added '" + c + "'-edges; reached the root, so link[" + cur + "] = t0.",
+               { cur: cur, newEdges: newEdges, processed: i + 1 });
+    } else {
+      const q = nxt[p][c];
+      if (length[p] + 1 === length[q]) {
+        link[cur] = q;
+        snapshot("extend('" + c + "'): new state " + cur + ". Found a '" + c + "'-edge p=" + p + " → q=" + q +
+                 " that is SOLID (len[q]=" + length[q] + " = len[p]+1). No clone: link[" + cur + "] = " + q + ".",
+                 { cur: cur, newEdges: newEdges, processed: i + 1 });
+      } else {
+        const clone = nxt.length;
+        nxt.push(Object.assign({}, nxt[q]));
+        link.push(link[q]);
+        length.push(length[p] + 1);
+        isClone.push(true);
+        const redirected = [];
+        let pp = p;
+        while (pp !== -1 && nxt[pp][c] === q) {
+          nxt[pp][c] = clone;
+          redirected.push(pp);
+          pp = link[pp];
+        }
+        link[q] = clone;
+        link[cur] = clone;
+        snapshot("extend('" + c + "'): CLONE! Found '" + c + "'-edge p=" + p + " → q=" + q +
+                 " with len[q]=" + length[q] + " ≠ len[p]+1=" + (length[p] + 1) +
+                 ". Split q: clone=" + clone + " (len " + length[clone] + ") takes the shorter strings; redirected " +
+                 redirected.length + " edge(s). link[q]=link[" + cur + "]=" + clone + ".",
+                 { cur: cur, clone: clone, newEdges: newEdges, processed: i + 1, isCloneStep: true });
+      }
+    }
+    last = cur;
+  }
+  snapshot("Done. The automaton recognizes every substring of \"" + s + "\". Distinct substrings = Σ (len[v] − len[link[v]]).",
+           { processed: s.length });
+  return steps;
+}
+
+// ---------- layout: position nodes by len (x) and an index within the level (y) ----------
+function layout(step) {
+  const n = step.length.length;
+  const byLen = {};
+  let maxLen = 0;
+  for (let v = 0; v < n; v++) {
+    const L = step.length[v];
+    maxLen = Math.max(maxLen, L);
+    (byLen[L] = byLen[L] || []).push(v);
+  }
+  const pos = new Array(n);
+  const W = 600, H = 380;
+  const padL = 40, padR = 40, padT = 36, padB = 36;
+  const cols = Math.max(1, maxLen);
+  for (let L = 0; L <= maxLen; L++) {
+    const group = byLen[L] || [];
+    const x = padL + (cols === 0 ? 0 : (L / cols) * (W - padL - padR));
+    for (let k = 0; k < group.length; k++) {
+      const v = group[k];
+      const y = group.length === 1
+        ? H / 2
+        : padT + (k / (group.length - 1)) * (H - padT - padB);
+      pos[v] = [x, y];
+    }
+  }
+  return pos;
+}
+
+function curve(x1, y1, x2, y2, bend) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const cx = mx + nx * bend, cy = my + ny * bend;
+  return "M" + x1 + "," + y1 + " Q" + cx + "," + cy + " " + x2 + "," + y2;
+}
+
+function shorten(x1, y1, x2, y2, r) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  return [x1 + (dx / len) * r, y1 + (dy / len) * r, x2 - (dx / len) * r, y2 - (dy / len) * r];
+}
+
+// ---------- render ----------
+function renderGraph(step) {
+  const pos = layout(step);
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  const linkLayer = document.getElementById("linkLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  linkLayer.innerHTML = "";
+
+  const newSet = new Set(step.newEdges.map(e => e[0] + "|" + e[1] + "|" + e[2]));
+  // suffix links (dashed)
+  for (let v = 1; v < step.length.length; v++) {
+    const lk = step.link[v];
+    if (lk < 0) continue;
+    const [x1, y1] = pos[v], [x2, y2] = pos[lk];
+    const [sx, sy, ex, ey] = shorten(x1, y1, x2, y2, 13);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", curve(sx, sy, ex, ey, -16));
+    path.setAttribute("class", "link");
+    linkLayer.appendChild(path);
+  }
+  // transitions
+  for (let v = 0; v < step.length.length; v++) {
+    for (const c in step.nxt[v]) {
+      const w = step.nxt[v][c];
+      const [x1, y1] = pos[v], [x2, y2] = pos[w];
+      const [sx, sy, ex, ey] = shorten(x1, y1, x2, y2, 13);
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const isNew = newSet.has(v + "|" + c + "|" + w);
+      path.setAttribute("d", curve(sx, sy, ex, ey, 14));
+      path.setAttribute("class", "tr" + (isNew ? " newedge" : ""));
+      edgeLayer.appendChild(path);
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("x", (sx + ex) / 2 + 4);
+      t.setAttribute("y", (sy + ey) / 2 - 2);
+      t.setAttribute("class", "elabel");
+      t.textContent = c;
+      edgeLayer.appendChild(t);
+    }
+  }
+  // nodes
+  for (let v = 0; v < step.length.length; v++) {
+    const [x, y] = pos[v];
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 13);
+    let cls = "node";
+    if (step.isClone[v]) cls += " clone";
+    if (v === step.cur || v === step.last) cls += " cur";
+    c.setAttribute("class", cls);
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 3);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "nlabel");
+    t.textContent = v;
+    nodeLayer.appendChild(t);
+    const lt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    lt.setAttribute("x", x); lt.setAttribute("y", y + 24);
+    lt.setAttribute("text-anchor", "middle");
+    lt.setAttribute("class", "nlen");
+    lt.textContent = "len " + step.length[v];
+    nodeLayer.appendChild(lt);
+  }
+}
+
+function renderStateList(step) {
+  const el = document.getElementById("stateList");
+  let html = "";
+  for (let v = 0; v < step.length.length; v++) {
+    let cls = "stateRow";
+    if (v === step.cur || v === step.last) cls += " cur";
+    if (step.isClone[v]) cls += " cloneRow";
+    const edges = Object.keys(step.nxt[v]).sort().map(c => c + "→" + step.nxt[v][c]).join("  ");
+    html += "<div class='" + cls + "'>" +
+            "<span class='sid'>" + v + "</span>" +
+            "<span class='meta'>len " + step.length[v] + ", link " + step.link[v] + "</span>" +
+            (step.isClone[v] ? "<span class='tag'>clone</span>" : "") +
+            "<span class='meta'>" + (edges ? "{" + edges + "}" : "{}") + "</span>" +
+            "</div>";
+  }
+  el.innerHTML = html;
+}
+
+function distinctCount(step) {
+  let total = 0;
+  for (let v = 1; v < step.length.length; v++) {
+    if (step.link[v] >= 0) total += step.length[v] - step.length[step.link[v]];
+  }
+  return total;
+}
+
+function edgeCount(step) {
+  let e = 0;
+  for (let v = 0; v < step.nxt.length; v++) e += Object.keys(step.nxt[v]).length;
+  return e;
+}
+
+function renderProgress(step) {
+  const s = state.s;
+  let html = "";
+  for (let i = 0; i < s.length; i++) {
+    let cls = "todo";
+    if (i < step.processed - 0 && i < step.processed) cls = "done";
+    if (i === step.processed - 1) cls = "cur";
+    html += "<span class='" + cls + "'>" + s[i] + "</span>";
+  }
+  document.getElementById("progress").innerHTML = html || "<span class='todo'>(empty)</span>";
+}
+
+// ---------- state ----------
+const state = {
+  s: "abcbc",
+  steps: [],
+  idx: 0,
+  running: false,
+  timer: null
+};
+
+function applyStep(i) {
+  const step = state.steps[i];
+  renderGraph(step);
+  renderStateList(step);
+  renderProgress(step);
+  document.getElementById("distinctVal").textContent = distinctCount(step);
+  document.getElementById("stateCount").textContent = step.length.length;
+  document.getElementById("edgeCount").textContent = edgeCount(step);
+  const nar = document.getElementById("narrate");
+  nar.innerHTML = step.desc;
+  nar.className = "narrate" + (step.isCloneStep ? " clone" : "");
+  document.getElementById("stepInfo").textContent = "step " + i + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(i) {
+  if (i < 0 || i >= state.steps.length) return;
+  state.idx = i;
+  applyStep(i);
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) gotoStep(state.idx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) { rebuild(); }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1300);
+}
+
+function sanitize(raw) {
+  let s = (raw || "").toLowerCase().replace(/[^a-z]/g, "");
+  if (s.length === 0) s = "a";
+  if (s.length > 20) s = s.slice(0, 20);
+  return s;
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.s = sanitize(document.getElementById("strInput").value);
+  document.getElementById("strInput").value = state.s;
+  state.steps = buildPlan(state.s);
+  state.idx = 0;
+  applyStep(0);
+}
+
+// ---------- wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", () => { gotoStep(0); });
+document.getElementById("btnBuild").addEventListener("click", rebuild);
+document.getElementById("strInput").addEventListener("change", rebuild);
+
+// ---------- initial ----------
+rebuild();
+</script>
+</body>
+</html>
