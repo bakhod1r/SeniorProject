@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Burrows-Wheeler Transform — Forward &amp; LF-Mapping Inverse</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --hi-lf: rgba(248, 81, 73, 0.30);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 150px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table.matrix { border-collapse: collapse; font-family: var(--mono); font-size: 15px; }
+  table.matrix td, table.matrix th {
+    border: 1px solid var(--border);
+    width: 26px;
+    height: 26px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  table.matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  table.matrix td.fcol { background: var(--hi-col); color: #fff; }
+  table.matrix td.lcol { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  table.matrix tr.activerow td { outline: 2px solid var(--accent); }
+  table.matrix tr.lfrow td { background: var(--hi-lf); }
+  .bwtbox {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .bwtbox .ch { color: var(--good); font-weight: 700; }
+  .bwtbox .pending { color: var(--muted); }
+  .recon {
+    font-family: var(--mono);
+    font-size: 20px;
+    letter-spacing: 4px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    min-height: 24px;
+  }
+  .recon .done { color: var(--good); font-weight: 700; }
+  .recon .cursor { color: var(--accent-2); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .lfinfo {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .lfinfo b { color: var(--accent); }
+  .lfinfo .val { color: var(--good); font-weight: 700; }
+  .phase {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Burrows-Wheeler Transform — Build, Sort, Extract, then Invert</h1>
+  <p>Forward: append <b>$</b>, list rotations, sort, take the <b>last column</b> (the BWT). Inverse: walk the <b>LF-mapping</b> from the $ row to rebuild the original.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>string:
+      <input type="text" id="strInput" value="banana" maxlength="12" />
+    </label>
+    <span class="phase" id="phaseTag">phase: build</span>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2 id="matTitle">Rotation matrix of <span id="strEcho">banana$</span></h2>
+      <table class="matrix" id="matTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-col)"></span> first column F (sorted chars)</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> last column L = BWT</span>
+        <span><span class="swatch" style="background:var(--hi-lf)"></span> LF target row</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>BWT output (last column)</h2>
+      <div class="bwtbox" id="bwtBox"></div>
+      <h2 style="margin-top:18px;">Inverse via LF-mapping</h2>
+      <div class="lfinfo" id="lfInfo">
+        The inverse follows <b>LF(i) = C[L[i]] + Occ(L[i], i)</b> from the $ row, emitting the original string backward.
+      </div>
+      <div class="recon" id="reconBox"></div>
+      <div class="step-counter" id="reconInfo" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>First / Last column rank table &mdash; the LF-mapping made explicit</h2>
+    <p style="margin:0 0 10px; color:var(--muted); font-size:13px;">
+      Each row pairs the first column character <b>F</b> with the last column character <b>L</b> and shows the
+      <b>rank</b> (which occurrence of that character it is). The LF-mapping says the <i>k</i>-th occurrence of a
+      character in <b>L</b> jumps to the <i>k</i>-th occurrence of the same character in <b>F</b>. During the inverse
+      walk the current and target rows are highlighted so you can see the jump.
+    </p>
+    <table class="matrix" id="rankTable"></table>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--hi-col)"></span> first column F</span>
+      <span><span class="swatch" style="background:var(--hi-cell)"></span> last column L</span>
+      <span><span class="swatch" style="background:var(--hi-lf)"></span> current / LF-target row</span>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We build every rotation of the string plus <code>$</code>, sort them, read the last column (the BWT), then invert it with the LF-mapping.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The first column F is always the sorted characters; the last column L is the BWT.
+    Reversibility comes from the LF-mapping forming a single cycle (the unique <code>$</code> guarantees it).
+    See <code>junior.md</code> (forward), <code>middle.md</code> (LF-mapping inverse, FM-index), and <code>professional.md</code> (proofs).
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Core BWT computations ----------
+function rotations(s) {
+  const n = s.length;
+  const arr = [];
+  for (let i = 0; i < n; i++) arr.push(s.slice(i) + s.slice(0, i));
+  return arr;
+}
+
+function sortedRotations(s) {
+  return rotations(s).slice().sort();
+}
+
+function bwtOf(sorted, n) {
+  return sorted.map(r => r[n - 1]).join("");
+}
+
+// Build C array and LF mapping for the BWT string L.
+function buildLF(L) {
+  const n = L.length;
+  const counts = {};
+  for (const ch of L) counts[ch] = (counts[ch] || 0) + 1;
+  const chars = Object.keys(counts).sort();
+  const C = {};
+  let run = 0;
+  for (const c of chars) { C[c] = run; run += counts[c]; }
+  const seen = {};
+  const LF = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const c = L[i];
+    seen[c] = seen[c] || 0;
+    LF[i] = C[c] + seen[c];
+    seen[c]++;
+  }
+  return { C, LF };
+}
+
+// ---------- Build the step plan ----------
+// Phases:
+//   build  : reveal each unsorted rotation row by row
+//   sort   : show the sorted matrix
+//   extract: highlight the last column, build the BWT char by char
+//   invert : LF-mapping walk from the $ row, rebuilding the original
+function buildPlan(rawStr) {
+  const s = rawStr + "$";
+  const n = s.length;
+  const unsorted = rotations(s);
+  const sorted = sortedRotations(s);
+  const L = bwtOf(sorted, n);
+  const { C, LF } = buildLF(L);
+
+  const steps = [];
+
+  steps.push({
+    phase: "build", matrix: [], sorted: false,
+    bwtCount: 0, reveal: 0,
+    desc: "Start with the string <code>" + s + "</code> (we appended the unique sentinel $)."
+  });
+
+  // build phase: reveal rotations one at a time
+  for (let i = 0; i < n; i++) {
+    steps.push({
+      phase: "build", matrix: unsorted.slice(0, i + 1), sorted: false,
+      activeRow: i, bwtCount: 0, reveal: i + 1,
+      desc: "Rotation " + i + ": move the first " + i + " char(s) to the back &rarr; <code>" + unsorted[i] + "</code>."
+    });
+  }
+
+  // sort phase
+  steps.push({
+    phase: "sort", matrix: sorted, sorted: true, bwtCount: 0,
+    desc: "Sort all " + n + " rotations lexicographically ($ is smallest). The first column F is now the sorted characters."
+  });
+
+  // extract phase: build BWT char by char from the last column
+  for (let i = 0; i < n; i++) {
+    steps.push({
+      phase: "extract", matrix: sorted, sorted: true,
+      activeRow: i, bwtCount: i + 1, showLast: true,
+      desc: "Row " + i + " ends in <code>" + sorted[i][n - 1] + "</code> &rarr; append it to the BWT. (F here = <code>" + sorted[i][0] + "</code>.)"
+    });
+  }
+
+  steps.push({
+    phase: "extract", matrix: sorted, sorted: true, bwtCount: n, showLast: true,
+    desc: "Forward done. BWT(<code>" + s + "</code>) = <code>" + L + "</code> &mdash; a permutation that clusters runs."
+  });
+
+  // invert phase: LF walk from the $ row
+  let row = L.indexOf("$");
+  const recon = new Array(n);
+  steps.push({
+    phase: "invert", matrix: sorted, sorted: true, showLast: true,
+    lfRow: row, recon: recon.slice(), reconPos: -1, bwtCount: n,
+    desc: "Inverse: start at the row whose L is $ (row " + row + "). We will emit characters backward following LF."
+  });
+  for (let step = 0; step < n; step++) {
+    recon[n - 1 - step] = L[row];
+    const next = LF[row];
+    steps.push({
+      phase: "invert", matrix: sorted, sorted: true, showLast: true,
+      lfRow: next, fromRow: row, emitted: L[row], recon: recon.slice(),
+      reconPos: n - 1 - step, bwtCount: n,
+      cInfo: "LF(" + row + ") = C['" + L[row] + "'] + Occ('" + L[row] + "'," + row + ") = " + C[L[row]] + " + " + (LF[row] - C[L[row]]) + " = " + next,
+      desc: "Emit L[" + row + "] = <code>" + L[row] + "</code>, then jump to row LF(" + row + ") = " + next + "."
+    });
+    row = next;
+  }
+  steps.push({
+    phase: "invert", matrix: sorted, sorted: true, showLast: true,
+    recon: recon.slice(), reconPos: n, bwtCount: n, done: true,
+    desc: "Inverse complete. Reconstructed <code>" + recon.join("") + "</code> &mdash; the original (with trailing $). Reversible!"
+  });
+
+  // Precompute the F column and per-row ranks for the rank table panel.
+  const F = sorted.map(r => r[0]).join("");
+  const seenL = {}, seenF = {};
+  const lRank = new Array(n), fRank = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const cl = L[i];
+    seenL[cl] = seenL[cl] || 0;
+    lRank[i] = seenL[cl]; seenL[cl]++;
+    const cf = F[i];
+    seenF[cf] = seenF[cf] || 0;
+    fRank[i] = seenF[cf]; seenF[cf]++;
+  }
+
+  return { steps, s, n, L, sorted, F, LF, lRank, fRank };
+}
+
+// ---------- Rendering ----------
+function renderMatrix(plan, step) {
+  const table = document.getElementById("matTable");
+  const n = plan.n;
+  const matrix = step.matrix || [];
+  let html = "<tr><th>#</th>";
+  for (let j = 0; j < n; j++) html += "<th>" + j + "</th>";
+  html += "</tr>";
+  for (let i = 0; i < matrix.length; i++) {
+    const rowStr = matrix[i];
+    let rowCls = "";
+    if (step.activeRow === i && (step.phase === "build" || step.phase === "extract")) rowCls = "activerow";
+    if (step.phase === "invert" && step.lfRow === i) rowCls = "lfrow";
+    if (step.phase === "invert" && step.fromRow === i) rowCls = "activerow";
+    html += "<tr class='" + rowCls + "'><th>" + i + "</th>";
+    for (let j = 0; j < n; j++) {
+      let cls = "";
+      if (step.sorted && j === 0) cls = "fcol";
+      if (step.showLast && j === n - 1) cls = "lcol";
+      html += "<td class='" + cls + "'>" + rowStr[j] + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function renderBWT(plan, step) {
+  const box = document.getElementById("bwtBox");
+  const L = plan.L;
+  const n = plan.n;
+  let html = "";
+  const count = step.bwtCount || 0;
+  for (let i = 0; i < n; i++) {
+    if (i < count) html += "<span class='ch'>" + L[i] + "</span>";
+    else html += "<span class='pending'>&middot;</span>";
+  }
+  box.innerHTML = html || "<span class='pending'>(building&hellip;)</span>";
+}
+
+function renderRecon(plan, step) {
+  const box = document.getElementById("reconBox");
+  const info = document.getElementById("reconInfo");
+  const lfInfo = document.getElementById("lfInfo");
+  if (step.phase !== "invert") {
+    box.innerHTML = "<span class='pending'>(inverse runs after extraction)</span>";
+    info.textContent = "";
+    return;
+  }
+  const recon = step.recon || [];
+  let html = "";
+  for (let i = 0; i < plan.n; i++) {
+    const ch = recon[i];
+    if (ch === undefined) html += "<span class='pending'>&middot;</span>";
+    else if (i === step.reconPos) html += "<span class='cursor'>" + ch + "</span>";
+    else html += "<span class='done'>" + ch + "</span>";
+  }
+  box.innerHTML = html;
+  if (step.cInfo) {
+    lfInfo.innerHTML = "<b>" + step.cInfo + "</b>";
+  }
+  if (step.emitted !== undefined) {
+    info.innerHTML = "emitted <span style='color:var(--good)'>" + step.emitted + "</span> &mdash; building the original backward.";
+  } else {
+    info.textContent = step.done ? "done." : "";
+  }
+}
+
+function renderRankTable(plan, step) {
+  const table = document.getElementById("rankTable");
+  const n = plan.n;
+  // Before sorting we have nothing meaningful to show.
+  if (!step.sorted) {
+    table.innerHTML =
+      "<tr><td style='border:none;color:var(--muted);width:auto;height:auto;padding:6px 2px'>" +
+      "(appears once the rotations are sorted)</td></tr>";
+    return;
+  }
+  // Which rows to highlight: during the inverse, the row we are leaving and the LF target.
+  const cur = (step.phase === "invert" && step.fromRow !== undefined) ? step.fromRow : -1;
+  const tgt = (step.phase === "invert" && step.lfRow !== undefined) ? step.lfRow : -1;
+  let html =
+    "<tr><th>row</th><th>F</th><th>F&nbsp;rank</th><th>L</th><th>L&nbsp;rank</th><th>LF&rarr;</th></tr>";
+  for (let i = 0; i < n; i++) {
+    let cls = "";
+    if (i === cur) cls = "activerow";
+    else if (i === tgt) cls = "lfrow";
+    html += "<tr class='" + cls + "'>";
+    html += "<th>" + i + "</th>";
+    html += "<td class='fcol' style='width:auto;padding:0 8px'>" + plan.F[i] + "</td>";
+    html += "<td style='width:auto;padding:0 8px'>" + plan.fRank[i] + "</td>";
+    html += "<td class='lcol' style='width:auto;padding:0 8px'>" + plan.L[i] + "</td>";
+    html += "<td style='width:auto;padding:0 8px'>" + plan.lRank[i] + "</td>";
+    html += "<td style='width:auto;padding:0 8px'>" + plan.LF[i] + "</td>";
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function applyStep(idx) {
+  const step = state.plan.steps[idx];
+  document.getElementById("strEcho").textContent = state.plan.s;
+  document.getElementById("phaseTag").textContent = "phase: " + step.phase;
+  renderMatrix(state.plan, step);
+  renderBWT(state.plan, step);
+  renderRecon(state.plan, step);
+  renderRankTable(state.plan, step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  const titles = {
+    build: "Rotation matrix (building)",
+    sort: "Sorted rotation matrix",
+    extract: "Sorted matrix &mdash; reading the last column",
+    invert: "Sorted matrix &mdash; LF-mapping inverse"
+  };
+  document.getElementById("matTitle").innerHTML =
+    titles[step.phase] + " of <span id='strEcho'>" + state.plan.s + "</span>";
+  updateButtons();
+}
+
+// ---------- State + controls ----------
+const state = { plan: null, stepIdx: 0, running: false, timer: null };
+
+function rebuild() {
+  let raw = document.getElementById("strInput").value || "banana";
+  raw = raw.replace(/\$/g, "");           // strip any user-entered sentinel
+  if (raw.length === 0) raw = "a";
+  if (raw.length > 12) raw = raw.slice(0, 12);
+  document.getElementById("strInput").value = raw;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.plan = buildPlan(raw);
+  state.stepIdx = 0;
+  applyStep(0);
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    applyStep(state.stepIdx);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("strInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
