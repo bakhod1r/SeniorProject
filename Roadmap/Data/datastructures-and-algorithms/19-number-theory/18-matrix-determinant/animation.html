@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Matrix Determinant — Gaussian Elimination</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-pivot: rgba(210, 153, 34, 0.45);
+    --hi-prow: rgba(88, 166, 255, 0.20);
+    --hi-trow: rgba(63, 185, 80, 0.22);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table.matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 15px;
+    margin-top: 4px;
+  }
+  table.matrix td {
+    border: 1px solid var(--border);
+    width: 52px;
+    height: 44px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+    padding: 0;
+  }
+  table.matrix td input {
+    width: 50px;
+    height: 42px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 15px;
+  }
+  table.matrix td input:focus { outline: 1px solid var(--accent); background: var(--bg); }
+  td.pivot { background: var(--hi-pivot); color: #fff; font-weight: 700; }
+  td.prow { background: var(--hi-prow); }
+  td.trow { background: var(--hi-trow); }
+  td.zeroed { color: var(--muted); }
+  .track {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .stat .label { color: var(--muted); }
+  .stat .val { color: var(--good); font-weight: 700; }
+  .stat .val.sign { color: var(--accent-2); }
+  .pivots {
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    min-height: 24px;
+  }
+  .pivots .p { color: var(--accent-2); font-weight: 700; }
+  .pivots .x { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .result {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 18px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 12px 14px;
+  }
+  .result b { color: var(--accent); }
+  .result .final { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Matrix Determinant — Gaussian Elimination</h1>
+  <p>Reduce A to upper-triangular; det(A) = sign &times; product of pivots. Row-adds don't change det; each row swap flips the sign. Edit the matrix below and step through.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="basic">3×3 basic (det 4)</option>
+        <option value="swap">3×3 needs a swap</option>
+        <option value="singular">3×3 singular (det 0)</option>
+        <option value="four">4×4 mixed</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Matrix (editable) &mdash; working copy A<sup id="curStage"></sup></h2>
+      <table class="matrix" id="matTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-pivot)"></span> pivot</span>
+        <span><span class="swatch" style="background:var(--hi-prow)"></span> pivot row</span>
+        <span><span class="swatch" style="background:var(--hi-trow)"></span> row being eliminated</span>
+      </div>
+      <div class="result" id="resultBox">
+        det = <b>sign</b> &times; <b>&prod; pivots</b> = <span class="final" id="finalDet">?</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Running determinant</h2>
+      <div class="track">
+        <div class="stat"><span class="label">sign (flips on each row swap)</span><span class="val sign" id="signVal">+1</span></div>
+        <div class="stat"><span class="label">pivot product so far</span><span class="val" id="prodVal">1</span></div>
+        <div class="stat"><span class="label">row swaps so far</span><span class="val" id="swapVal">0</span></div>
+      </div>
+      <div class="step-counter" style="margin-top:12px;">pivots collected:</div>
+      <div class="pivots" id="pivotList"><span class="x">(none yet)</span></div>
+      <div class="step-counter" style="margin-top:12px;">why this step is valid:</div>
+      <div class="pivots" id="ruleBox"><span class="x">press Step to begin</span></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We eliminate column by column to reach upper-triangular form, then read det = sign &times; product of the diagonal pivots.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Exact integer arithmetic (no rounding). Row operation "add a multiple of one row to another" leaves det unchanged; a row swap multiplies det by &minus;1.
+    See <code>junior.md</code> for the worked example and <code>professional.md</code> for the proof that det(A) = (&minus;1)<sup>swaps</sup> &times; &prod; pivots.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Presets ----------
+const PRESETS = {
+  basic:    [[2,1,1],[4,3,3],[8,7,9]],
+  swap:     [[0,2,1],[1,1,1],[3,1,2]],
+  singular: [[1,2,3],[2,4,6],[1,0,1]],
+  four:     [[2,0,1,1],[1,3,0,2],[0,1,2,1],[1,1,1,3]]
+};
+
+// ---------- State ----------
+const state = {
+  base: null,     // original integer matrix (from inputs)
+  plan: null,     // list of steps
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  editable: true
+};
+
+// ---------- Build the elimination plan (Bareiss-free, exact rational via fractions kept integer-friendly) ----------
+// We use plain fraction-free style: we record matrices as 2D number arrays.
+// To keep entries exact and readable we use the standard "row r -= (m[r][c]/m[c][c]) * row c"
+// but display fractions as reduced strings. For robustness we operate with rationals.
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; }
+
+// rational as [num, den] with den > 0, reduced
+function rat(n, d) {
+  if (d === undefined) d = 1;
+  if (d < 0) { n = -n; d = -d; }
+  const g = gcd(n, d);
+  return [n / g, d / g];
+}
+function rAdd(a, b) { return rat(a[0] * b[1] + b[0] * a[1], a[1] * b[1]); }
+function rSub(a, b) { return rat(a[0] * b[1] - b[0] * a[1], a[1] * b[1]); }
+function rMul(a, b) { return rat(a[0] * b[0], a[1] * b[1]); }
+function rDiv(a, b) { return rat(a[0] * b[1], a[1] * b[0]); }
+function rIsZero(a) { return a[0] === 0; }
+function rStr(a) { return a[1] === 1 ? String(a[0]) : a[0] + "/" + a[1]; }
+
+function toRatMatrix(m) { return m.map(row => row.map(v => rat(v, 1))); }
+
+function buildPlan(intMatrix) {
+  const n = intMatrix.length;
+  let m = toRatMatrix(intMatrix);
+  const steps = [];
+  let sign = 1;
+  let prod = rat(1, 1);
+  let swaps = 0;
+  const pivots = [];
+
+  const snap = (extra) => {
+    return Object.assign({
+      m: m.map(r => r.map(x => x.slice())),
+      sign, prod: prod.slice(), swaps, pivots: pivots.slice()
+    }, extra);
+  };
+
+  steps.push(snap({
+    type: "init", pivotCell: null, prow: -1, trow: -1, stage: 0,
+    desc: "Start: sign = +1, pivot product = 1. We reduce A to upper-triangular column by column.",
+    rule: "We will only use row-adds (no det change) and row-swaps (flip the sign)."
+  }));
+
+  let singular = false;
+  for (let c = 0; c < n; c++) {
+    // find a nonzero pivot at/below (c,c)
+    let piv = -1;
+    for (let r = c; r < n; r++) { if (!rIsZero(m[r][c])) { piv = r; break; } }
+    if (piv === -1) {
+      singular = true;
+      steps.push(snap({
+        type: "singular", pivotCell: [c, c], prow: -1, trow: -1, stage: c,
+        desc: "Column " + c + " has no nonzero pivot at or below the diagonal → the matrix is SINGULAR, det = 0.",
+        rule: "No nonzero pivot in a column ⇒ rows are linearly dependent ⇒ det = 0."
+      }));
+      prod = rat(0, 1);
+      break;
+    }
+    if (piv !== c) {
+      // swap rows c and piv
+      const tmp = m[c]; m[c] = m[piv]; m[piv] = tmp;
+      sign = -sign;
+      swaps++;
+      steps.push(snap({
+        type: "swap", pivotCell: [c, c], prow: c, trow: piv, stage: c,
+        desc: "Pivot at (" + c + "," + c + ") was zero; swap row " + c + " ↔ row " + piv + ". This flips the sign to " + (sign > 0 ? "+1" : "−1") + ".",
+        rule: "Swapping two rows multiplies det by −1."
+      }));
+    }
+    // record pivot, multiply into product
+    const pivVal = m[c][c];
+    prod = rMul(prod, pivVal);
+    pivots.push(rStr(pivVal));
+    steps.push(snap({
+      type: "pivot", pivotCell: [c, c], prow: c, trow: -1, stage: c,
+      desc: "Pivot A[" + c + "][" + c + "] = " + rStr(pivVal) + ". Multiply it into the running product → " + rStr(prod) + ".",
+      rule: "det of an upper-triangular matrix = product of its diagonal pivots."
+    }));
+    // eliminate below
+    for (let r = c + 1; r < n; r++) {
+      if (rIsZero(m[r][c])) continue;
+      const factor = rDiv(m[r][c], m[c][c]);
+      for (let k = c; k < n; k++) {
+        m[r][k] = rSub(m[r][k], rMul(factor, m[c][k]));
+      }
+      steps.push(snap({
+        type: "eliminate", pivotCell: [c, c], prow: c, trow: r, stage: c,
+        desc: "Eliminate below: row " + r + " ← row " + r + " − (" + rStr(factor) + ")·row " + c + ". Entry (" + r + "," + c + ") becomes 0.",
+        rule: "Adding a multiple of one row to another does NOT change det."
+      }));
+    }
+  }
+
+  // final det
+  let finalDet = singular ? rat(0, 1) : rMul(rat(sign, 1), prod);
+  steps.push(snap({
+    type: "done", pivotCell: null, prow: -1, trow: -1, stage: n - 1,
+    finalDet: finalDet.slice(),
+    desc: singular
+      ? "Done. The matrix is singular, so det(A) = 0."
+      : "Done. Upper-triangular reached. det(A) = sign × product of pivots = " + (sign > 0 ? "+" : "−") + " × " + rStr(prod) + " = " + rStr(finalDet) + ".",
+    rule: "det(A) = (−1)^(#swaps) × (product of pivots)."
+  }));
+
+  return { steps, n, finalDet };
+}
+
+// ---------- Rendering ----------
+function buildEditableTable(intMatrix) {
+  const n = intMatrix.length;
+  const table = document.getElementById("matTable");
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    html += "<tr>";
+    for (let j = 0; j < n; j++) {
+      html += "<td><input data-i='" + i + "' data-j='" + j + "' value='" + intMatrix[i][j] + "' /></td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+  table.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("change", onEditMatrix);
+  });
+  document.getElementById("curStage").textContent = "";
+}
+
+function renderStep(step) {
+  const n = step.m.length;
+  const table = document.getElementById("matTable");
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    html += "<tr>";
+    for (let j = 0; j < n; j++) {
+      let cls = "";
+      if (step.pivotCell && step.pivotCell[0] === i && step.pivotCell[1] === j) cls = "pivot";
+      else if (step.prow === i) cls = "prow";
+      else if (step.trow === i) cls = "trow";
+      if (j < step.stage && step.type !== "init") {
+        // entries already eliminated below the diagonal
+        if (i > j && step.m[i][j][0] === 0) cls += " zeroed";
+      }
+      html += "<td class='" + cls.trim() + "'>" + rStr(step.m[i][j]) + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+
+  document.getElementById("signVal").textContent = step.sign > 0 ? "+1" : "−1";
+  document.getElementById("signVal").style.color = step.sign > 0 ? "var(--good)" : "var(--bad)";
+  document.getElementById("prodVal").textContent = rStr(step.prod);
+  document.getElementById("swapVal").textContent = step.swaps;
+
+  const pl = document.getElementById("pivotList");
+  if (step.pivots.length === 0) {
+    pl.innerHTML = "<span class='x'>(none yet)</span>";
+  } else {
+    pl.innerHTML = step.pivots.map(p => "<span class='p'>" + p + "</span>").join("<span class='x'> × </span>");
+  }
+
+  document.getElementById("ruleBox").textContent = step.rule || "";
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("curStage").textContent = "";
+
+  const finalEl = document.getElementById("finalDet");
+  if (step.type === "done") {
+    finalEl.textContent = rStr(step.finalDet);
+  } else {
+    finalEl.textContent = "?";
+  }
+}
+
+// ---------- Step navigation ----------
+function gotoStep(idx) {
+  if (!state.plan || idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  renderStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (!state.plan) startRun();
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.plan && state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (!state.plan || state.stepIdx >= state.plan.steps.length - 1) {
+    startRun();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+// ---------- Read matrix from inputs and build a plan ----------
+function readMatrix() {
+  const inputs = document.querySelectorAll("#matTable input");
+  if (inputs.length === 0) return state.base;
+  const n = Math.round(Math.sqrt(inputs.length));
+  const m = Array.from({ length: n }, () => new Array(n).fill(0));
+  inputs.forEach(inp => {
+    const i = parseInt(inp.getAttribute("data-i"), 10);
+    const j = parseInt(inp.getAttribute("data-j"), 10);
+    let v = parseInt(inp.value, 10);
+    if (isNaN(v)) v = 0;
+    m[i][j] = v;
+  });
+  return m;
+}
+
+function startRun() {
+  const m = readMatrix();
+  state.base = m;
+  state.plan = buildPlan(m);
+  state.stepIdx = 0;
+  gotoStep(0);
+}
+
+function onEditMatrix() {
+  // editing resets the animation; rebuild plan lazily on next Step/Run
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.plan = null;
+  state.stepIdx = 0;
+  document.getElementById("stepInfo").textContent = "step 0";
+  document.getElementById("finalDet").textContent = "?";
+  document.getElementById("signVal").textContent = "+1";
+  document.getElementById("prodVal").textContent = "1";
+  document.getElementById("swapVal").textContent = "0";
+  document.getElementById("pivotList").innerHTML = "<span class='x'>(none yet)</span>";
+  document.getElementById("narrate").innerHTML =
+    "Matrix edited. Press <b>Step</b> or <b>Run</b> to compute the determinant of the new matrix.";
+  updateButtons();
+}
+
+function loadPreset(key) {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const preset = PRESETS[key].map(r => r.slice());
+  state.base = preset;
+  state.plan = null;
+  state.stepIdx = 0;
+  buildEditableTable(preset);
+  document.getElementById("stepInfo").textContent = "step 0";
+  document.getElementById("finalDet").textContent = "?";
+  document.getElementById("signVal").textContent = "+1";
+  document.getElementById("prodVal").textContent = "1";
+  document.getElementById("swapVal").textContent = "0";
+  document.getElementById("pivotList").innerHTML = "<span class='x'>(none yet)</span>";
+  document.getElementById("ruleBox").innerHTML = "<span class='x'>press Step to begin</span>";
+  document.getElementById("narrate").innerHTML =
+    "Loaded preset. Press <b>Step</b> to reduce to upper-triangular and read det = sign × product of pivots.";
+  updateButtons();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", () => {
+  loadPreset(document.getElementById("presetSel").value);
+});
+document.getElementById("presetSel").addEventListener("change", (e) => {
+  loadPreset(e.target.value);
+});
+
+// ---------- Initial load ----------
+loadPreset("basic");
+</script>
+</body>
+</html>
