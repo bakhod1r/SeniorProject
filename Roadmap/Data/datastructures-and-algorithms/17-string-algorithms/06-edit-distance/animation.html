@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Edit Distance — DP Grid Fill and Alignment Traceback</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --match: rgba(63, 185, 80, 0.40);
+    --sub: rgba(210, 153, 34, 0.42);
+    --ins: rgba(88, 166, 255, 0.40);
+    --del: rgba(248, 81, 73, 0.40);
+    --hi-fill: rgba(88, 166, 255, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 130px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .grid td, .grid th {
+    border: 1px solid var(--border);
+    width: 34px;
+    height: 34px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+  .grid th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .grid td.empty { color: var(--muted); }
+  .grid td.filled { color: #fff; }
+  .grid td.active { background: var(--hi-fill); }
+  .grid td.cursor { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .grid td.path { outline: 2px solid var(--good); outline-offset: -2px; }
+  .grid td.op-match { background: var(--match); color: #fff; font-weight: 700; }
+  .grid td.op-sub { background: var(--sub); color: #fff; font-weight: 700; }
+  .grid td.op-ins { background: var(--ins); color: #fff; font-weight: 700; }
+  .grid td.op-del { background: var(--del); color: #fff; font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .align {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin-top: 6px;
+    white-space: pre;
+  }
+  .align .m { color: var(--good); }
+  .align .s { color: var(--accent-2); }
+  .align .i { color: var(--accent); }
+  .align .d { color: var(--bad); }
+  .ops {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .ops div { padding: 1px 0; }
+  .ops .m { color: var(--good); }
+  .ops .s { color: var(--accent-2); }
+  .ops .i { color: var(--accent); }
+  .ops .d { color: var(--bad); }
+  .distbox {
+    margin-top: 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .distbox b { color: var(--accent); }
+  .distbox .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Edit Distance — Fill the Grid, Trace the Alignment</h1>
+  <p>The DP cell (i, j) is the edit distance between the first i chars of A and first j chars of B. Watch the grid fill, then the traceback color each step as match / substitute / insert / delete.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>A (rows): <input type="text" id="aInput" value="kitten" maxlength="12" /></label>
+    <label>B (cols): <input type="text" id="bInput" value="sitting" maxlength="12" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Edit-distance DP grid</h2>
+      <table class="grid" id="gridTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-fill)"></span> being filled</span>
+        <span><span class="swatch" style="background:var(--match)"></span> match</span>
+        <span><span class="swatch" style="background:var(--sub)"></span> substitute</span>
+        <span><span class="swatch" style="background:var(--ins)"></span> insert</span>
+        <span><span class="swatch" style="background:var(--del)"></span> delete</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Alignment &amp; edit script</h2>
+      <div class="step-counter">Recovered by traceback from the bottom-right corner:</div>
+      <div class="align" id="alignTop">&nbsp;</div>
+      <div class="align" id="alignBot">&nbsp;</div>
+      <div class="distbox" id="distBox">Edit distance = <span class="val" id="distVal">?</span></div>
+      <div class="ops" id="opsBox"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Phase 1 fills the grid with the three-way minimum; phase 2 traces back the cheapest path to recover the alignment.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Unit-cost Levenshtein: insert = delete = substitute = 1, match = 0.
+    The diagonal move is a match (free) or substitution; the up move is a delete; the left move is an insert.
+    See <code>junior.md</code> for the fill rule and <code>middle.md</code> for the "edit distance = shortest path in this grid" view.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Core edit-distance DP ----------
+function buildDP(a, b) {
+  const n = a.length, m = b.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) {
+    dp.push(new Array(m + 1).fill(0));
+    dp[i][0] = i;
+  }
+  for (let j = 0; j <= m; j++) dp[0][j] = j;
+  return dp;
+}
+
+// Build the full sequence of animation steps:
+//   phase "fill": compute one inner cell at a time (i,j), i,j >= 1
+//   phase "trace": walk back from (n,m) to (0,0), tagging operations
+function buildPlan(a, b) {
+  const n = a.length, m = b.length;
+  const dp = buildDP(a, b);
+  const steps = [];
+
+  // initial step: base row/column already shown
+  steps.push({
+    phase: "init",
+    desc: "Base cases: row 0 = inserts (0..m), column 0 = deletes (0..n). Now fill the interior with the three-way minimum.",
+    cursor: null
+  });
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const same = a[i - 1] === b[j - 1];
+      let val, why;
+      if (same) {
+        val = dp[i - 1][j - 1];
+        why = "A[" + (i - 1) + "]='" + a[i - 1] + "' equals B[" + (j - 1) + "]='" + b[j - 1] +
+              "' → free match, take the diagonal " + dp[i - 1][j - 1] + ".";
+      } else {
+        val = 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+        why = "'" + a[i - 1] + "' ≠ '" + b[j - 1] + "' → 1 + min(diag " + dp[i - 1][j - 1] +
+              ", up " + dp[i - 1][j] + ", left " + dp[i][j - 1] + ") = " + val + ".";
+      }
+      dp[i][j] = val;
+      steps.push({
+        phase: "fill",
+        i: i, j: j, val: val,
+        desc: "dp[" + i + "][" + j + "]: " + why,
+        cursor: [i, j]
+      });
+    }
+  }
+
+  // traceback
+  let i = n, j = m;
+  const traceSteps = [];
+  while (i > 0 || j > 0) {
+    let op, ni, nj, glyphTop, glyphBot, cls;
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1] && dp[i][j] === dp[i - 1][j - 1]) {
+      op = "MATCH " + a[i - 1]; ni = i - 1; nj = j - 1;
+      glyphTop = a[i - 1]; glyphBot = b[j - 1]; cls = "m";
+    } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+      op = "SUB " + a[i - 1] + "→" + b[j - 1]; ni = i - 1; nj = j - 1;
+      glyphTop = a[i - 1]; glyphBot = b[j - 1]; cls = "s";
+    } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+      op = "DEL " + a[i - 1]; ni = i - 1; nj = j;
+      glyphTop = a[i - 1]; glyphBot = "-"; cls = "d";
+    } else {
+      op = "INS " + b[j - 1]; ni = i; nj = j - 1;
+      glyphTop = "-"; glyphBot = b[j - 1]; cls = "i";
+    }
+    traceSteps.push({
+      phase: "trace",
+      from: [i, j], to: [ni, nj],
+      op: op, glyphTop: glyphTop, glyphBot: glyphBot, cls: cls,
+      desc: "Traceback at (" + i + "," + j + "): " + op + ". Move to (" + ni + "," + nj + ")."
+    });
+    i = ni; j = nj;
+  }
+  traceSteps.reverse(); // present alignment left-to-right
+  // but traceback visit order is corner->origin; replay in that order for the walk,
+  // yet reveal alignment glyphs in left-to-right order. We keep reversed for glyph order
+  // and recompute the visiting cells accordingly.
+  for (const ts of traceSteps) steps.push(ts);
+
+  steps.push({
+    phase: "done",
+    desc: "Done. The bottom-right cell dp[" + n + "][" + m + "] = " + dp[n][m] +
+          " is the edit distance; the colored path is one optimal alignment.",
+    cursor: [n, m]
+  });
+
+  return { steps: steps, dp: dp, n: n, m: m };
+}
+
+// ---------- Rendering ----------
+function renderGrid(state) {
+  const { a, b, dp, n, m } = state;
+  const table = document.getElementById("gridTable");
+  let html = "<tr><th></th><th>&epsilon;</th>";
+  for (let j = 0; j < m; j++) html += "<th>" + b[j] + "</th>";
+  html += "</tr>";
+  for (let i = 0; i <= n; i++) {
+    html += "<tr><th>" + (i === 0 ? "&epsilon;" : a[i - 1]) + "</th>";
+    for (let j = 0; j <= m; j++) {
+      const id = "c-" + i + "-" + j;
+      const shown = state.shown[i][j];
+      const cls = shown ? "filled" : "empty";
+      const txt = shown ? dp[i][j] : "";
+      html += "<td id='" + id + "' class='" + cls + "'>" + txt + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function cell(i, j) { return document.getElementById("c-" + i + "-" + j); }
+
+function clearTransient() {
+  document.querySelectorAll(".grid td").forEach(td => {
+    td.classList.remove("active", "cursor");
+  });
+}
+
+// ---------- Animation state ----------
+const state = {
+  a: "kitten",
+  b: "sitting",
+  plan: null,
+  dp: null,
+  n: 0, m: 0,
+  shown: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  opsHtml: [],
+  topGlyphs: [],
+  botGlyphs: []
+};
+
+function load(a, b) {
+  state.a = a; state.b = b;
+  state.plan = buildPlan(a, b);
+  state.dp = state.plan.dp;
+  state.n = state.plan.n; state.m = state.plan.m;
+  // shown[i][j] true once a cell value should be visible
+  state.shown = [];
+  for (let i = 0; i <= state.n; i++) {
+    state.shown.push(new Array(state.m + 1).fill(false));
+  }
+  // base row/col visible from the start
+  for (let j = 0; j <= state.m; j++) state.shown[0][j] = true;
+  for (let i = 0; i <= state.n; i++) state.shown[i][0] = true;
+  state.stepIdx = 0;
+  state.opsHtml = [];
+  state.topGlyphs = [];
+  state.botGlyphs = [];
+  renderGrid(state);
+  document.getElementById("opsBox").innerHTML = "";
+  document.getElementById("alignTop").innerHTML = "&nbsp;";
+  document.getElementById("alignBot").innerHTML = "&nbsp;";
+  document.getElementById("distVal").textContent = "?";
+  document.getElementById("narrate").innerHTML = state.plan.steps[0].desc;
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function applyStep(step) {
+  clearTransient();
+  if (step.phase === "fill") {
+    const [i, j] = step.cursor;
+    state.shown[i][j] = true;
+    const td = cell(i, j);
+    td.classList.add("filled", "cursor");
+    td.textContent = state.dp[i][j];
+    // highlight the three contributing neighbors
+    [[i - 1, j - 1], [i - 1, j], [i, j - 1]].forEach(([ni, nj]) => {
+      if (ni >= 0 && nj >= 0) cell(ni, nj).classList.add("active");
+    });
+  } else if (step.phase === "trace") {
+    const [fi, fj] = step.from;
+    const [ti, tj] = step.to;
+    const td = cell(fi, fj);
+    td.classList.add("path", "op-" + opClass(step.cls));
+    // build alignment glyphs (traceSteps already in left-to-right order)
+    state.topGlyphs.push("<span class='" + step.cls + "'>" + esc(step.glyphTop) + "</span>");
+    state.botGlyphs.push("<span class='" + step.cls + "'>" + esc(step.glyphBot) + "</span>");
+    state.opsHtml.push("<div class='" + step.cls + "'>" + esc(step.op) + "</div>");
+    document.getElementById("alignTop").innerHTML = state.topGlyphs.join("");
+    document.getElementById("alignBot").innerHTML = state.botGlyphs.join("");
+    document.getElementById("opsBox").innerHTML = state.opsHtml.join("");
+    cell(ti, tj).classList.add("cursor");
+  } else if (step.phase === "done") {
+    cell(state.n, state.m).classList.add("path", "cursor");
+    document.getElementById("distVal").textContent = state.dp[state.n][state.m];
+  }
+}
+
+function opClass(c) {
+  if (c === "m") return "match";
+  if (c === "s") return "sub";
+  if (c === "i") return "ins";
+  return "del";
+}
+
+function esc(s) {
+  if (s === "-") return "&minus;";
+  if (s === " ") return "&nbsp;";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  // when stepping forward one at a time we only apply the new step;
+  // if jumping (reset), the caller rebuilds. Here we assume monotone forward.
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  applyStep(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild(); // restart from the beginning
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 600);
+}
+
+function sanitize(s) {
+  // keep it short and printable for the grid
+  s = (s || "").replace(/[^\x21-\x7e]/g, "").slice(0, 12);
+  return s.length ? s : "a";
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const a = sanitize(document.getElementById("aInput").value);
+  const b = sanitize(document.getElementById("bInput").value);
+  document.getElementById("aInput").value = a;
+  document.getElementById("bInput").value = b;
+  load(a, b);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("bInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
