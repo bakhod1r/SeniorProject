@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boyer-Moore-Horspool — Single Bad-Character Shift</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input#textInput { width: 280px; }
+  .controls input#patInput { width: 130px; }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tape { display: flex; flex-direction: column; gap: 4px; overflow-x: auto; padding-bottom: 6px; }
+  .row { display: flex; gap: 3px; }
+  .cell {
+    min-width: 30px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 15px;
+    background: var(--panel-2);
+    color: var(--text);
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .cell.idx { border: none; background: transparent; color: var(--muted); font-size: 11px; height: 16px; }
+  .cell.win { border-color: var(--accent); }
+  .cell.cmp-ok { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .cell.cmp-bad { background: rgba(248, 81, 73, 0.40); color: #fff; font-weight: 700; }
+  .cell.last { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+  .cell.empty { background: transparent; border: none; }
+  .pat-row { margin-top: 2px; }
+  .cell.pcell { background: #20262e; }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 40px;
+    height: 32px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .matrix td.hcell { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .interp .key { color: var(--accent-2); font-weight: 700; }
+  .hits { margin-top: 10px; font-family: var(--mono); font-size: 13px; color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Boyer-Moore-Horspool — One Shift Table, Keyed on the Window's Last Character</h1>
+  <p>Align the window, compare <b>right-to-left</b>, and on match or mismatch shift by <code>shift[T[i+m-1]]</code> &mdash; the table value of the text char aligned with the pattern's <b>last</b> position. No good-suffix rule.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Variant:
+      <select id="variantSel">
+        <option value="horspool">Horspool (last-window char)</option>
+        <option value="sunday">Sunday (char past window)</option>
+      </select>
+    </label>
+    <label>Text: <input type="text" id="textInput" value="TRUSTHARDTEETH" /></label>
+    <label>Pattern: <input type="text" id="patInput" value="TEETH" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Text &amp; sliding window</h2>
+      <div class="tape" id="tape"></div>
+      <div class="interp" id="interpBox">
+        Press <b>Step</b> to align the pattern at position 0 and compare from the right.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> window</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> char matched</span>
+        <span><span class="swatch" style="background:rgba(248,81,73,0.40)"></span> char mismatched</span>
+        <span><span class="swatch" style="background:var(--panel-2);box-shadow:0 0 0 1px var(--accent-2) inset"></span> shift key char</span>
+      </div>
+      <div class="hits" id="hits"></div>
+    </div>
+
+    <div class="card">
+      <h2>Shift table (built from the pattern)</h2>
+      <div class="step-counter" id="tableInfo"></div>
+      <table class="matrix" id="shiftMat"></table>
+      <div class="interp" id="shiftBox">
+        Horspool: for j = 0..m-2 (exclude last char), <code>shift[P[j]] = m-1-j</code>; default <code>m</code>.
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We build one bad-character table from the pattern, then slide the window. On every step the shift is the table value of a single text character &mdash; the one aligned with the window's last position (Horspool) or just past the window (Sunday).</div>
+
+  <div class="footnote">
+    Self-contained visualization. Horspool drops Boyer-Moore's good-suffix rule and keeps only this single shift &mdash; tiny code, near-Boyer-Moore average speed, <code>O(nm)</code> worst case. See <code>junior.md</code> and <code>professional.md</code> for the proof that this shift never skips a match.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the shift table for the chosen variant ----------
+function buildHorspool(pattern) {
+  const m = pattern.length;
+  const tbl = {};                 // default handled as m on lookup miss
+  for (let j = 0; j < m - 1; j++) // exclude last char
+    tbl[pattern[j]] = m - 1 - j;  // rightmost wins
+  return { tbl, def: m };
+}
+function buildSunday(pattern) {
+  const m = pattern.length;
+  const tbl = {};
+  for (let j = 0; j < m; j++)     // include all chars
+    tbl[pattern[j]] = m - j;
+  return { tbl, def: m + 1 };
+}
+function shiftOf(state, ch) {
+  return (ch in state.table.tbl) ? state.table.tbl[ch] : state.table.def;
+}
+
+// ---------- Build the step plan ----------
+// Steps model: align window, then a sequence of compare steps (right-to-left for
+// Horspool, left-to-right for Sunday), then a shift step keyed on the variant's char.
+function buildPlan(text, pattern, variant) {
+  const n = text.length, m = pattern.length;
+  const steps = [];
+  const hits = [];
+  if (m === 0 || m > n) {
+    steps.push({ type: "done", i: 0, hits: [], desc: "Pattern empty or longer than text — nothing to search." });
+    return { steps };
+  }
+  let i = 0;
+  steps.push({ type: "align", i, j: -1, hits: hits.slice(),
+    desc: "Align the pattern window at text position " + i + "." });
+
+  while (i <= n - m) {
+    if (variant === "horspool") {
+      // right-to-left compare
+      let j = m - 1;
+      let matched = true;
+      while (j >= 0) {
+        const ok = text[i + j] === pattern[j];
+        steps.push({ type: "cmp", i, j, ok, hits: hits.slice(),
+          desc: "Compare T[" + (i + j) + "]='" + text[i + j] + "' with P[" + j + "]='" + pattern[j] + "' → " + (ok ? "match" : "MISMATCH") + "." });
+        if (!ok) { matched = false; break; }
+        j--;
+      }
+      if (matched) {
+        hits.push(i);
+        steps.push({ type: "match", i, j: -1, hits: hits.slice(),
+          desc: "Full match at position " + i + "! Report it, then shift to look for more." });
+      }
+      const keyPos = i + m - 1;
+      const ch = text[keyPos];
+      const s = shiftOf(stateForBuild(variant, pattern), ch);
+      steps.push({ type: "shift", i, keyPos, ch, s, hits: hits.slice(),
+        desc: "Shift key = T[" + keyPos + "]='" + ch + "' (window's LAST char). shift['" + ch + "'] = " + s + " → move window to " + (i + s) + "." });
+      i += s;
+    } else {
+      // sunday: left-to-right compare
+      let j = 0;
+      let matched = true;
+      while (j < m) {
+        const ok = text[i + j] === pattern[j];
+        steps.push({ type: "cmp", i, j, ok, hits: hits.slice(),
+          desc: "Compare T[" + (i + j) + "]='" + text[i + j] + "' with P[" + j + "]='" + pattern[j] + "' → " + (ok ? "match" : "MISMATCH") + "." });
+        if (!ok) { matched = false; break; }
+        j++;
+      }
+      if (matched) {
+        hits.push(i);
+        steps.push({ type: "match", i, j: -1, hits: hits.slice(),
+          desc: "Full match at position " + i + "! Report it, then shift." });
+      }
+      if (i + m >= n) {
+        steps.push({ type: "done", i, hits: hits.slice(),
+          desc: "No character past the window — search complete." });
+        return { steps };
+      }
+      const keyPos = i + m;
+      const ch = text[keyPos];
+      const s = shiftOf(stateForBuild(variant, pattern), ch);
+      steps.push({ type: "shift", i, keyPos, ch, s, hits: hits.slice(),
+        desc: "Shift key = T[" + keyPos + "]='" + ch + "' (char PAST the window). shift['" + ch + "'] = " + s + " → move window to " + (i + s) + "." });
+      i += s;
+    }
+    if (i <= n - m) {
+      steps.push({ type: "align", i, j: -1, hits: hits.slice(),
+        desc: "Align the pattern window at text position " + i + "." });
+    }
+  }
+  steps.push({ type: "done", i, hits: hits.slice(),
+    desc: "Window passed the end of the text. Search complete. Matches: " + (hits.length ? hits.join(", ") : "none") + "." });
+  return { steps };
+}
+
+function stateForBuild(variant, pattern) {
+  return { table: variant === "horspool" ? buildHorspool(pattern) : buildSunday(pattern) };
+}
+
+// ---------- Rendering ----------
+function renderTape(step) {
+  const tape = document.getElementById("tape");
+  const text = state.text, pattern = state.pattern;
+  const n = text.length, m = pattern.length;
+  tape.innerHTML = "";
+
+  // index row
+  const idxRow = document.createElement("div");
+  idxRow.className = "row";
+  for (let p = 0; p < n; p++) {
+    const c = document.createElement("div");
+    c.className = "cell idx";
+    c.textContent = p;
+    idxRow.appendChild(c);
+  }
+  tape.appendChild(idxRow);
+
+  // text row
+  const txtRow = document.createElement("div");
+  txtRow.className = "row";
+  for (let p = 0; p < n; p++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.textContent = text[p];
+    const i = step.i;
+    const inWindow = (step.type !== "done") && p >= i && p < i + m;
+    if (inWindow) c.classList.add("win");
+    if (step.type === "cmp" && p === i + step.j) c.classList.add(step.ok ? "cmp-ok" : "cmp-bad");
+    if (step.type === "shift" && p === step.keyPos) c.classList.add("last");
+    txtRow.appendChild(c);
+  }
+  tape.appendChild(txtRow);
+
+  // pattern row (offset under the window)
+  const patRow = document.createElement("div");
+  patRow.className = "row pat-row";
+  const i = (step.type === "done") ? Math.min(step.i, n - m >= 0 ? n - m : 0) : step.i;
+  for (let p = 0; p < n; p++) {
+    const c = document.createElement("div");
+    if (step.type !== "done" && p >= i && p < i + m) {
+      c.className = "cell pcell";
+      const pj = p - i;
+      c.textContent = pattern[pj];
+      if (step.type === "cmp" && pj === step.j) c.classList.add(step.ok ? "cmp-ok" : "cmp-bad");
+    } else {
+      c.className = "cell empty";
+      c.textContent = "";
+    }
+    patRow.appendChild(c);
+  }
+  tape.appendChild(patRow);
+}
+
+function renderShiftTable(step) {
+  const m = state.pattern.length;
+  const tableObj = state.table;
+  const chars = [];
+  for (const ch of state.pattern) if (!chars.includes(ch)) chars.push(ch);
+  // include the shift key char if not already present (to show the default)
+  let keyChar = null;
+  if (step && step.type === "shift") keyChar = step.ch;
+  if (keyChar !== null && !chars.includes(keyChar)) chars.push(keyChar);
+
+  let html = "<tr><th>char</th>";
+  for (const ch of chars) html += "<th>" + ch + "</th>";
+  html += "<th>else</th></tr><tr><th>shift</th>";
+  for (const ch of chars) {
+    const v = (ch in tableObj.tbl) ? tableObj.tbl[ch] : tableObj.def;
+    const hi = (keyChar === ch) ? " class='hcell'" : "";
+    html += "<td" + hi + ">" + v + "</td>";
+  }
+  html += "<td>" + tableObj.def + "</td></tr>";
+  document.getElementById("shiftMat").innerHTML = html;
+
+  document.getElementById("tableInfo").textContent =
+    "m = " + m + ", default = " + tableObj.def +
+    (state.variant === "horspool"
+      ? "  (Horspool: last char excluded, shift = m-1-j)"
+      : "  (Sunday: all chars, shift = m-j, default m+1)");
+}
+
+function applyStep(step) {
+  renderTape(step);
+  renderShiftTable(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+
+  let interp = "";
+  if (step.type === "align") {
+    interp = "Window at <b>i = " + step.i + "</b>. Compare " +
+      (state.variant === "horspool" ? "right-to-left from the last char." : "left-to-right.");
+  } else if (step.type === "cmp") {
+    interp = "Comparing P[" + step.j + "] against T[" + (step.i + step.j) + "] → " +
+      (step.ok ? "<span class='val'>match</span>" : "<span style='color:var(--bad);font-weight:700'>mismatch</span>") + ".";
+  } else if (step.type === "match") {
+    interp = "<span class='val'>MATCH at " + step.i + "</span>. Then shift like any other step.";
+  } else if (step.type === "shift") {
+    interp = "Shift key char <span class='key'>'" + step.ch + "'</span> at T[" + step.keyPos +
+      "]. <b>shift['" + step.ch + "'] = <span class='val'>" + step.s + "</span></b>. " +
+      "Same shift on match or mismatch.";
+  } else {
+    interp = "Done. Matches: <span class='val'>" + (step.hits.length ? step.hits.join(", ") : "none") + "</span>.";
+  }
+  document.getElementById("interpBox").innerHTML = interp;
+
+  document.getElementById("hits").textContent =
+    "matches so far: " + (step.hits && step.hits.length ? step.hits.join(", ") : "(none)");
+}
+
+// ---------- Animation state ----------
+const state = {
+  text: "TRUSTHARDTEETH",
+  pattern: "TEETH",
+  variant: "horspool",
+  table: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load() {
+  state.table = state.variant === "horspool"
+    ? buildHorspool(state.pattern)
+    : buildSunday(state.pattern);
+  state.plan = buildPlan(state.text, state.pattern, state.variant);
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 950);
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.variant = document.getElementById("variantSel").value;
+  let t = document.getElementById("textInput").value;
+  let p = document.getElementById("patInput").value;
+  if (t.length === 0) t = " ";
+  state.text = t;
+  state.pattern = p;
+  document.getElementById("shiftBox").innerHTML = state.variant === "horspool"
+    ? "Horspool: for j = 0..m-2 (exclude last char), <code>shift[P[j]] = m-1-j</code>; default <code>m</code>."
+    : "Sunday: for j = 0..m-1 (include last char), <code>shift[P[j]] = m-j</code>; default <code>m+1</code>; key on char past window.";
+  load();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("variantSel").addEventListener("change", rebuild);
+document.getElementById("textInput").addEventListener("change", rebuild);
+document.getElementById("patInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
