@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Slope Trick — Convex Function as Two Heaps of Breakpoints</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 12px;
+    padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--accent);
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 200px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { width: 150px; accent-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 18px;
+  }
+  .card h3 { margin: 0 0 10px; font-size: 14px; color: #fff; }
+  svg { width: 100%; height: auto; display: block; background: #0a0e14; border-radius: 8px; }
+  .heaps { display: flex; gap: 14px; }
+  .heap-col { flex: 1; }
+  .heap-col h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .heap-stack { display: flex; flex-direction: column-reverse; gap: 4px; min-height: 120px;
+    border: 1px dashed var(--border); border-radius: 6px; padding: 6px; }
+  .chip {
+    font-family: var(--mono); font-size: 13px; text-align: center;
+    padding: 5px 0; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--panel-2); transition: all 0.2s;
+  }
+  .chip.top { border-color: var(--accent); color: #fff; background: rgba(88,166,255,0.18); }
+  .chip.left.top { border-color: var(--blue); }
+  .chip.right.top { border-color: var(--orange); }
+  .chip.pushing { border-color: var(--green); background: rgba(63,185,80,0.20); }
+  .chip.popping { border-color: var(--red); background: rgba(248,81,73,0.20); }
+  .stat-row { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 8px; }
+  .stat { font-family: var(--mono); font-size: 13px; }
+  .stat .k { color: var(--muted); }
+  .stat .v { color: var(--accent); font-weight: 700; }
+  .info {
+    font-family: var(--mono); font-size: 13px; line-height: 1.7;
+    background: #0a0e14; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; min-height: 64px;
+  }
+  .info .hl { color: var(--yellow); }
+  .info .ok { color: var(--green); }
+  .log {
+    font-family: var(--mono); font-size: 12px; max-height: 200px; overflow-y: auto;
+    background: #0a0e14; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.5); color: var(--muted); }
+  .log div:last-child { border-bottom: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.c { font-family: var(--mono); }
+  .o1 { color: var(--green); } .olog { color: var(--yellow); } .ovr { color: var(--orange); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin: 8px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Slope Trick — A Convex Function Carried as Two Heaps of Breakpoints</h1>
+  <p>Watch <code>f(x)</code> (a convex piecewise-linear valley) mutate as we relax (prefix-min) and add <code>|x − a|</code> penalties. The left max-heap and right min-heap hold the breakpoints; their tops bound the flat minimum.</p>
+  <div class="badges">
+    <span class="badge">add |x−a| : O(log n)</span>
+    <span class="badge">prefix-min : O(1)</span>
+    <span class="badge">whole DP : O(n log n)</span>
+    <span class="badge">space : O(n)</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <label>Array a:</label>
+    <input type="text" id="arrInput" value="3, 1, 2, 2, 5, 1" />
+    <button onclick="loadArr()">Load</button>
+    <button onclick="randomArr()">Random</button>
+    <button class="primary" id="playBtn" onclick="togglePlay()">▶ Play</button>
+    <button id="stepBtn" onclick="stepFwd()">Step ▶</button>
+    <button onclick="resetAll()">⟲ Reset</button>
+    <label>Speed</label>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+    <span id="stepCounter" class="stat"><span class="k">step</span> <span class="v">0</span>/<span id="totalSteps">0</span></span>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:#58a6ff"></i> left heap top (left floor)</span>
+    <span><i class="sw" style="background:#ffa657"></i> right heap top (right floor)</span>
+    <span><i class="sw" style="background:#3fb950"></i> pushing</span>
+    <span><i class="sw" style="background:#f85149"></i> popping / rebalance</span>
+    <span><i class="sw" style="background:#bc8cff"></i> valley floor (argmin)</span>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h3>f(x) — convex piecewise-linear cost function</h3>
+        <svg id="plot" viewBox="0 0 560 300" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="card">
+        <h3>Operation log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>State</h3>
+        <div class="stat-row">
+          <div class="stat"><span class="k">minVal =</span> <span class="v" id="minVal">0</span></div>
+          <div class="stat"><span class="k">floor =</span> <span class="v" id="floor">[—, —]</span></div>
+          <div class="stat"><span class="k">a_i =</span> <span class="v" id="curA">—</span></div>
+        </div>
+        <div class="heaps">
+          <div class="heap-col">
+            <h4>L (max-heap)</h4>
+            <div class="heap-stack" id="heapL"></div>
+          </div>
+          <div class="heap-col">
+            <h4>R (min-heap)</h4>
+            <div class="heap-stack" id="heapR"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>What is happening</h3>
+        <div class="info" id="info">Press <span class="hl">Play</span> or <span class="hl">Step</span>. Each element <code>a_i</code> triggers a <span class="hl">relax</span> (clear R) then <span class="hl">add |x − a_i|</span>.</div>
+      </div>
+      <div class="card">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Cost</th></tr>
+          <tr><td>add |x − a|</td><td class="c olog">O(log n)</td></tr>
+          <tr><td>one-sided ramp</td><td class="c olog">O(log n)</td></tr>
+          <tr><td>prefix-min (clear)</td><td class="c o1">O(1) amortized</td></tr>
+          <tr><td>shift (lazy)</td><td class="c o1">O(1)</td></tr>
+          <tr><td>read minVal / floor</td><td class="c o1">O(1)</td></tr>
+          <tr><td>whole DP (n steps)</td><td class="c ovr">O(n log n)</td></tr>
+          <tr><td>memory</td><td class="c o1">O(n) (range-independent)</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== Slope-Trick model with step recording =====================
+// We maintain the FULL two-heap engine (L max-heap, R min-heap, minVal) and, to make
+// the make-non-decreasing DP visible, each element does: relax (clear R) then add |x-a|.
+// Every micro-action is recorded as a "frame" for the animation.
+
+let array = [3, 1, 2, 2, 5, 1];
+let frames = [];
+let idx = 0;
+let playing = false;
+let timer = null;
+
+// simple binary heaps over arrays of numbers
+function heapifyMax(arr){ return [...arr].sort((a,b)=>b-a); } // small n: keep sorted desc, [0]=top
+function heapifyMin(arr){ return [...arr].sort((a,b)=>a-b); } // sorted asc, [0]=top
+
+function recordFrames(a){
+  frames = [];
+  let L = [];      // kept sorted desc; L[0] = max (left floor)
+  let R = [];      // kept sorted asc;  R[0] = min (right floor)
+  let minVal = 0;
+
+  const snap = (desc, hi) => {
+    frames.push({
+      L: [...L], R: [...R], minVal, curA: hi.curA ?? null,
+      desc, push: hi.push ?? null, pop: hi.pop ?? null
+    });
+  };
+
+  const pushL = v => { L.push(v); L.sort((x,y)=>y-x); };
+  const pushR = v => { R.push(v); R.sort((x,y)=>x-y); };
+
+  snap("Initial: f ≡ 0, empty heaps, minVal = 0.", {});
+
+  for (let i = 0; i < a.length; i++){
+    const ai = a[i];
+    // ---- relax: clear R (later b may be >= current) ----
+    if (R.length > 0){
+      R = [];
+      snap(`Element a[${i}] = ${ai}: RELAX — clear R (later values may be ≥ current). Ascending side flattens.`, {curA: ai});
+    } else {
+      snap(`Element a[${i}] = ${ai}: RELAX — R already empty (nothing to flatten).`, {curA: ai});
+    }
+    // ---- add |x - ai|: push ai to both, rebalance ----
+    pushL(ai); pushR(ai);
+    snap(`add |x − ${ai}|: push ${ai} into L and into R.`, {curA: ai, push: ai});
+
+    if (L[0] > R[0]){
+      const l = L.shift();   // pop max of L
+      const r = R.shift();   // pop min of R
+      const lifted = l - r;
+      minVal += lifted;
+      snap(`Heaps cross (L.top ${l} > R.top ${r}). Pop both; minVal += ${l} − ${r} = ${lifted}.`,
+           {curA: ai, pop: [l, r]});
+      pushL(r); pushR(l);    // swap back
+      snap(`Swap the crossed tops back: push ${r}→L, ${l}→R. Invariant L.top ≤ R.top restored.`, {curA: ai});
+    } else {
+      snap(`No crossing (L.top ${L[0]} ≤ R.top ${R[0]}). minVal unchanged = ${minVal}.`, {curA: ai});
+    }
+  }
+  snap(`Done. Optimal cost (make non-decreasing) = minVal = ${minVal}.`, {});
+  document.getElementById('totalSteps').textContent = frames.length - 1;
+}
+
+// ===================== Rendering =====================
+function chip(val, cls){ return `<div class="chip ${cls}">${val}</div>`; }
+
+function renderHeaps(f){
+  const Lel = document.getElementById('heapL');
+  const Rel = document.getElementById('heapR');
+  // L sorted desc; top is L[0]; show stack with top visually highlighted
+  Lel.innerHTML = f.L.map((v,i)=>{
+    let cls = 'left' + (i===0?' top':'');
+    if (f.push!==null && v===f.push && i===0) cls += '';
+    if (f.pop && f.pop.includes(v)) cls += ' popping';
+    return chip(v, cls);
+  }).join('') || '<div class="chip" style="opacity:.4">∅</div>';
+  Rel.innerHTML = f.R.map((v,i)=>{
+    let cls = 'right' + (i===0?' top':'');
+    if (f.pop && f.pop.includes(v)) cls += ' popping';
+    return chip(v, cls);
+  }).join('') || '<div class="chip" style="opacity:.4">∅</div>';
+  // mark a freshly-pushed chip green
+  if (f.push!==null){
+    [...Lel.children].forEach(c=>{ if (c.textContent==String(f.push)) c.classList.add('pushing'); });
+    [...Rel.children].forEach(c=>{ if (c.textContent==String(f.push)) c.classList.add('pushing'); });
+  }
+}
+
+function renderStats(f){
+  document.getElementById('minVal').textContent = f.minVal;
+  const lo = f.L.length ? f.L[0] : '—';
+  const hi = f.R.length ? f.R[0] : '+∞';
+  document.getElementById('floor').textContent = `[${lo}, ${hi}]`;
+  document.getElementById('curA').textContent = f.curA===null?'—':f.curA;
+}
+
+// Reconstruct f(x) = minVal + sum_L max(0, l-x) + sum_R max(0, x-r), draw polyline.
+function renderPlot(f){
+  const svg = document.getElementById('plot');
+  const W=560, H=300, padL=40, padB=30, padT=14, padR=14;
+  const all = [...f.L, ...f.R, f.curA].filter(v=>v!==null && v!==undefined);
+  let xmin = all.length ? Math.min(...all) : 0;
+  let xmax = all.length ? Math.max(...all) : 10;
+  xmin -= 2; xmax += 2;
+  if (xmin===xmax){ xmin-=2; xmax+=2; }
+  const fval = (x) => {
+    let v = f.minVal;
+    for (const l of f.L) v += Math.max(0, l - x);
+    for (const r of f.R) v += Math.max(0, x - r);
+    return v;
+  };
+  // sample at integer-ish grid
+  const N = 120;
+  const xs = [], ys = [];
+  for (let i=0;i<=N;i++){ const x = xmin + (xmax-xmin)*i/N; xs.push(x); ys.push(fval(x)); }
+  let ymin = Math.min(...ys), ymax = Math.max(...ys);
+  if (ymin===ymax) ymax = ymin + 1;
+  ymax += (ymax-ymin)*0.1 + 0.5;
+  const sx = x => padL + (x - xmin)/(xmax-xmin)*(W-padL-padR);
+  const sy = y => H-padB - (y - ymin)/(ymax-ymin)*(H-padB-padT);
+
+  let parts = [];
+  // axes
+  parts.push(`<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#30363d"/>`);
+  parts.push(`<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#30363d"/>`);
+  // floor band (argmin interval)
+  if (f.L.length && f.R.length){
+    const x1 = sx(f.L[0]), x2 = sx(f.R[0]);
+    parts.push(`<rect x="${Math.min(x1,x2)}" y="${padT}" width="${Math.abs(x2-x1)}" height="${H-padB-padT}" fill="rgba(188,140,255,0.12)"/>`);
+  }
+  // polyline of f
+  const pts = xs.map((x,i)=>`${sx(x).toFixed(1)},${sy(ys[i]).toFixed(1)}`).join(' ');
+  parts.push(`<polyline points="${pts}" fill="none" stroke="#58a6ff" stroke-width="2.5"/>`);
+  // minVal horizontal guide
+  parts.push(`<line x1="${padL}" y1="${sy(f.minVal)}" x2="${W-padR}" y2="${sy(f.minVal)}" stroke="#bc8cff" stroke-dasharray="4 4" stroke-width="1"/>`);
+  parts.push(`<text x="${W-padR}" y="${sy(f.minVal)-4}" fill="#bc8cff" font-size="11" text-anchor="end">minVal=${f.minVal}</text>`);
+  // breakpoint markers
+  for (const l of f.L){ parts.push(`<circle cx="${sx(l)}" cy="${sy(fval(l))}" r="3.5" fill="#58a6ff"/>`); }
+  for (const r of f.R){ parts.push(`<circle cx="${sx(r)}" cy="${sy(fval(r))}" r="3.5" fill="#ffa657"/>`); }
+  // current a_i marker
+  if (f.curA!==null && f.curA!==undefined){
+    parts.push(`<line x1="${sx(f.curA)}" y1="${padT}" x2="${sx(f.curA)}" y2="${H-padB}" stroke="#3fb950" stroke-dasharray="3 3" stroke-width="1"/>`);
+    parts.push(`<text x="${sx(f.curA)}" y="${padT+10}" fill="#3fb950" font-size="11" text-anchor="middle">a=${f.curA}</text>`);
+  }
+  // axis labels
+  parts.push(`<text x="${W-padR}" y="${H-8}" fill="#8b949e" font-size="10" text-anchor="end">x</text>`);
+  parts.push(`<text x="${padL-6}" y="${padT+8}" fill="#8b949e" font-size="10" text-anchor="end">f(x)</text>`);
+  svg.innerHTML = parts.join('');
+}
+
+function renderInfo(f){
+  let html = f.desc;
+  html = html.replace(/minVal/g,'<span class="hl">minVal</span>');
+  if (f.desc.startsWith('Done')) html = '<span class="ok">'+f.desc+'</span>';
+  document.getElementById('info').innerHTML = html;
+}
+
+function pushLog(f){
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.textContent = `[${idx}] ${f.desc}`;
+  log.prepend(d);
+}
+
+function renderFrame(){
+  const f = frames[idx];
+  renderHeaps(f); renderStats(f); renderPlot(f); renderInfo(f);
+  document.querySelector('#stepCounter .v').textContent = idx;
+}
+
+// ===================== Controls =====================
+function stepFwd(){
+  if (idx < frames.length - 1){ idx++; renderFrame(); pushLog(frames[idx]); }
+  else stopPlay();
+}
+function getDelay(){ return 1100 - document.getElementById('speed').value*95; }
+function play(){
+  if (idx >= frames.length-1){ stopPlay(); return; }
+  stepFwd();
+  timer = setTimeout(play, getDelay());
+}
+function togglePlay(){
+  if (playing){ stopPlay(); }
+  else { playing = true; document.getElementById('playBtn').textContent='⏸ Pause'; play(); }
+}
+function stopPlay(){ playing=false; clearTimeout(timer); document.getElementById('playBtn').textContent='▶ Play'; }
+
+function resetAll(){
+  stopPlay(); idx = 0;
+  recordFrames(array);
+  document.getElementById('log').innerHTML='';
+  renderFrame();
+}
+function loadArr(){
+  const raw = document.getElementById('arrInput').value;
+  const nums = raw.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+  if (nums.length){ array = nums; resetAll(); }
+}
+function randomArr(){
+  const n = 4 + Math.floor(Math.random()*5);
+  array = Array.from({length:n}, ()=>Math.floor(Math.random()*9));
+  document.getElementById('arrInput').value = array.join(', ');
+  resetAll();
+}
+
+// init
+resetAll();
+</script>
+</body>
+</html>
