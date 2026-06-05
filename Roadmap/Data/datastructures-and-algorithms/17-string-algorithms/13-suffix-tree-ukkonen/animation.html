@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Suffix Tree — Ukkonen's Algorithm, Step by Step</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --link: #bc8cff;
+    --active: #f0883e;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 160px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .strrow { font-family: var(--mono); font-size: 18px; letter-spacing: 6px; margin-bottom: 10px; }
+  .strrow .done { color: var(--good); }
+  .strrow .cur { color: var(--active); font-weight: 700; text-decoration: underline; }
+  .strrow .future { color: var(--muted); }
+  .state-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+  .state-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  .state-table td.k { color: var(--muted); }
+  .state-table td.v { color: var(--text); text-align: right; font-weight: 700; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+  .badge.r1 { background: rgba(63,185,80,0.18); color: var(--good); }
+  .badge.r2 { background: rgba(240,136,62,0.18); color: var(--active); }
+  .badge.r3 { background: rgba(88,166,255,0.18); color: var(--accent); }
+  .badge.r0 { background: rgba(139,148,158,0.18); color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  circle.node { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; }
+  circle.node.leaf { stroke: var(--good); }
+  circle.node.activeN { stroke: var(--active); stroke-width: 3.5; }
+  text.nlabel { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  line.edge { stroke: var(--muted); stroke-width: 2; }
+  line.edge.activeE { stroke: var(--active); stroke-width: 3; }
+  line.edge.leafedge { stroke: var(--good); stroke-width: 2; stroke-dasharray: none; }
+  path.slink { stroke: var(--link); stroke-width: 1.6; fill: none; stroke-dasharray: 4 3; marker-end: url(#arrowL); opacity: 0.9; }
+  text.elabel { fill: var(--text); font-size: 12px; font-family: var(--mono); }
+  circle.activePoint { fill: var(--active); stroke: #fff; stroke-width: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Suffix Tree — Ukkonen's Online Construction</h1>
+  <p>Add characters of S$ one at a time. Watch the <b>global end</b> extend leaves, the <b>active point</b> move, <b>Rule 2</b> splits create internal nodes, and <b>suffix links</b> (dashed purple) appear.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>String:
+      <input type="text" id="strInput" value="banana" maxlength="14" />
+    </label>
+    <button id="btnBuild">Build</button>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Suffix tree of S$ (under construction)</h2>
+      <div class="strrow" id="strRow"></div>
+      <svg id="treeSvg" viewBox="0 0 720 460" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrowL" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#bc8cff"/>
+          </marker>
+        </defs>
+        <g id="slinkLayer"></g>
+        <g id="edgeLayer"></g>
+        <g id="labelLayer"></g>
+        <g id="nodeLayer"></g>
+        <g id="apLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> internal node</span>
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--good)"></span> leaf</span>
+        <span><span class="swatch" style="background:var(--active)"></span> active point</span>
+        <span><span class="swatch" style="background:var(--link)"></span> suffix link</span>
+        <span><span class="swatch" style="background:var(--good)"></span> leaf edge (global end)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Algorithm state</h2>
+      <table class="state-table">
+        <tr><td class="k">phase (char index i)</td><td class="v" id="stPhase">-</td></tr>
+        <tr><td class="k">adding character</td><td class="v" id="stChar">-</td></tr>
+        <tr><td class="k">global end (leafEnd)</td><td class="v" id="stEnd">-1</td></tr>
+        <tr><td class="k">remaining</td><td class="v" id="stRem">0</td></tr>
+        <tr><td class="k">active_node</td><td class="v" id="stAN">root</td></tr>
+        <tr><td class="k">active_edge</td><td class="v" id="stAE">-</td></tr>
+        <tr><td class="k">active_length</td><td class="v" id="stAL">0</td></tr>
+        <tr><td class="k">rule applied</td><td class="v" id="stRule"><span class="badge r0">start</span></td></tr>
+        <tr><td class="k">nodes / leaves</td><td class="v" id="stNodes">1 / 0</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Ukkonen processes S$ left to right, keeping the suffix tree of every prefix.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The three tricks: <code>global end</code> (leaf edges share one end index, extended for free each phase),
+    <code>suffix links</code> (dashed purple, O(1) hops between node "x&alpha;" and "&alpha;"), and the
+    <code>active point</code> (active_node, active_edge, active_length) with skip/count. See <code>middle.md</code> and <code>professional.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Ukkonen builder that RECORDS a snapshot after each micro-step.
+//  Each snapshot captures the whole tree + algorithm state so the
+//  UI can replay the construction step by step.
+// ============================================================
+
+let NODE_ID = 0;
+function makeNode(start, end, isLeaf) {
+  return { id: NODE_ID++, start: start, end: end, children: {}, link: -1, isLeaf: !!isLeaf };
+}
+
+function buildSteps(text) {
+  NODE_ID = 0;
+  const steps = [];
+  const nodes = {};               // id -> node
+  const root = makeNode(-1, -1, false);
+  nodes[root.id] = root;
+  root.link = root.id;
+
+  let leafEnd = -1;               // GLOBAL END
+  let activeNode = root.id;
+  let activeEdge = -1;
+  let activeLength = 0;
+  let remaining = 0;
+
+  function edgeEnd(n) { return n.isLeaf ? leafEnd : n.end; }
+  function edgeLen(n) { return edgeEnd(n) - n.start + 1; }
+
+  function countNodesLeaves() {
+    let nC = 0, lC = 0;
+    for (const id in nodes) { nC++; if (nodes[id].isLeaf) lC++; }
+    return [nC, lC];
+  }
+
+  // Deep snapshot of the tree topology + state for the UI.
+  function snapshot(rule, desc, phase, ch) {
+    const snapNodes = {};
+    for (const id in nodes) {
+      const n = nodes[id];
+      snapNodes[id] = {
+        id: n.id, start: n.start,
+        end: n.isLeaf ? leafEnd : n.end,
+        isLeaf: n.isLeaf, link: n.link,
+        children: Object.assign({}, n.children)
+      };
+    }
+    const [nC, lC] = countNodesLeaves();
+    steps.push({
+      nodes: snapNodes, rootId: root.id,
+      leafEnd: leafEnd, activeNode: activeNode, activeEdge: activeEdge,
+      activeLength: activeLength, remaining: remaining,
+      rule: rule, desc: desc, phase: phase, ch: ch, nC: nC, lC: lC
+    });
+  }
+
+  snapshot("start", "Empty tree: only the root. We will add S$ = \"" + text + "\" one character at a time.", -1, "");
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    leafEnd = i;                  // Trick 1: extend ALL leaves (Rule 1) for free
+    remaining++;
+    snapshot("r1", "Phase " + i + ": set global end = " + i + " (Rule 1 extends every leaf to include '" + c + "'). remaining = " + remaining + ".", i, c);
+    let lastNew = -1;
+
+    while (remaining > 0) {
+      if (activeLength === 0) activeEdge = i;
+      const ac = text[activeEdge];
+      if (nodes[activeNode].children[ac] === undefined) {
+        // Rule 2: new leaf directly at active_node
+        const leaf = makeNode(i, -1, true);
+        nodes[leaf.id] = leaf;
+        nodes[activeNode].children[ac] = leaf.id;
+        if (lastNew !== -1) { nodes[lastNew].link = activeNode; lastNew = -1; }
+        snapshot("r2", "Rule 2: no edge starts with '" + ac + "' at the active node — add a new leaf for '" + c + "'.", i, c);
+      } else {
+        const nxtId = nodes[activeNode].children[ac];
+        const nxt = nodes[nxtId];
+        const el = edgeLen(nxt);
+        if (activeLength >= el) {
+          // skip/count walk down
+          activeEdge += el;
+          activeLength -= el;
+          activeNode = nxtId;
+          snapshot("r0", "Skip/count: active_length spanned the whole edge — walk down into node " + nxtId + " in O(1).", i, c);
+          continue;
+        }
+        if (text[nxt.start + activeLength] === c) {
+          // Rule 3: char already present — show-stopper
+          if (lastNew !== -1 && activeNode !== root.id) nodes[lastNew].link = activeNode;
+          activeLength++;
+          snapshot("r3", "Rule 3: '" + c + "' is already present at the active point — increment active_length and STOP the phase (suffixes stay implicit).", i, c);
+          break;
+        }
+        // Rule 2 with split: create an internal node
+        const split = makeNode(nxt.start, nxt.start + activeLength - 1, false);
+        nodes[split.id] = split;
+        nodes[activeNode].children[ac] = split.id;
+        const newLeaf = makeNode(i, -1, true);
+        nodes[newLeaf.id] = newLeaf;
+        split.children[c] = newLeaf.id;
+        nxt.start += activeLength;
+        split.children[text[nxt.start]] = nxtId;
+        if (lastNew !== -1) nodes[lastNew].link = split.id;
+        lastNew = split.id;
+        snapshot("r2", "Rule 2 (split): split the edge and create internal node " + split.id + ", then add a leaf for '" + c + "'. A suffix link will point here next.", i, c);
+      }
+      remaining--;
+      if (activeNode === root.id && activeLength > 0) {
+        activeLength--;
+        activeEdge = i - remaining + 1;
+        snapshot("r0", "At root after Rule 2: active_length-- and active_edge slides to the next suffix start (" + activeEdge + ").", i, c);
+      } else if (activeNode !== root.id) {
+        const tgt = nodes[activeNode].link;
+        activeNode = (tgt === -1) ? root.id : tgt;
+        snapshot("r0", "Follow the suffix link to node " + activeNode + " — O(1) hop to the next shorter suffix's context.", i, c);
+      }
+    }
+  }
+  snapshot("start", "Done. The explicit suffix tree of \"" + text + "\" is complete: " + (text.length) + " leaves (one per suffix).", text.length - 1, text[text.length - 1]);
+  return steps;
+}
+
+// ============================================================
+//  Layout: assign (x,y) to nodes via a simple tidy tree layout.
+// ============================================================
+function layout(snap, text) {
+  const W = 720, H = 460, topY = 40, botY = 430;
+  const pos = {};
+  // compute string-depth (for vertical placement) and order leaves left->right
+  let leafOrder = [];
+  let maxDepth = 1;
+
+  function walk(id, depth) {
+    const n = snap.nodes[id];
+    const kids = Object.keys(n.children).sort();
+    if (kids.length === 0) { leafOrder.push(id); }
+    let childDepthMax = depth;
+    for (const k of kids) {
+      const ch = snap.nodes[n.children[k]];
+      const len = (ch.end - ch.start + 1);
+      const d = walk(n.children[k], depth + len);
+      if (d > childDepthMax) childDepthMax = d;
+    }
+    if (depth > maxDepth) maxDepth = depth;
+    return Math.max(depth, childDepthMax);
+  }
+  walk(snap.rootId, 0);
+
+  const nLeaves = Math.max(1, leafOrder.length);
+  const xGap = (W - 80) / (nLeaves + 1);
+  const leafX = {};
+  leafOrder.forEach((id, idx) => { leafX[id] = 40 + (idx + 1) * xGap; });
+
+  // depth -> y
+  function depthY(d) {
+    if (maxDepth <= 0) return topY;
+    return topY + (botY - topY) * (d / (maxDepth + 1));
+  }
+
+  // assign x as average of leaf children; y by string depth
+  function place(id, depth) {
+    const n = snap.nodes[id];
+    const kids = Object.keys(n.children).sort();
+    let x;
+    if (kids.length === 0) {
+      x = leafX[id];
+    } else {
+      let sum = 0, cnt = 0;
+      for (const k of kids) {
+        const cid = n.children[k];
+        const ch = snap.nodes[cid];
+        const len = (ch.end - ch.start + 1);
+        const cx = place(cid, depth + len);
+        sum += cx; cnt++;
+      }
+      x = sum / cnt;
+    }
+    pos[id] = { x: x, y: depthY(depth), depth: depth };
+    return x;
+  }
+  place(snap.rootId, 0);
+  return { pos: pos };
+}
+
+// ============================================================
+//  Rendering
+// ============================================================
+function labelText(snap, text, n) {
+  let s = "";
+  for (let k = n.start; k <= n.end && k < text.length; k++) s += text[k];
+  return s;
+}
+
+function render(snap, text) {
+  const lay = layout(snap, text);
+  const pos = lay.pos;
+  const edgeLayer = document.getElementById("edgeLayer");
+  const labelLayer = document.getElementById("labelLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  const slinkLayer = document.getElementById("slinkLayer");
+  const apLayer = document.getElementById("apLayer");
+  edgeLayer.innerHTML = ""; labelLayer.innerHTML = "";
+  nodeLayer.innerHTML = ""; slinkLayer.innerHTML = ""; apLayer.innerHTML = "";
+
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const activeChildId = (snap.activeLength > 0 && snap.nodes[snap.activeNode] &&
+    snap.nodes[snap.activeNode].children[text[snap.activeEdge]] !== undefined)
+    ? snap.nodes[snap.activeNode].children[text[snap.activeEdge]] : -1;
+
+  // edges + labels
+  for (const id in snap.nodes) {
+    const n = snap.nodes[id];
+    if (n.id === snap.rootId) continue;
+    // find parent: search who has this as child
+    let parentId = -1, viaChar = "";
+    for (const pid in snap.nodes) {
+      const p = snap.nodes[pid];
+      for (const k in p.children) {
+        if (p.children[k] === n.id) { parentId = p.id; viaChar = k; }
+      }
+    }
+    if (parentId === -1 || !pos[parentId] || !pos[n.id]) continue;
+    const a = pos[parentId], b = pos[n.id];
+    const line = document.createElementNS(SVGNS, "line");
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    let cls = "edge";
+    if (n.isLeaf) cls += " leafedge";
+    if (n.id === activeChildId) cls += " activeE";
+    line.setAttribute("class", cls);
+    edgeLayer.appendChild(line);
+
+    const lbl = document.createElementNS(SVGNS, "text");
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    lbl.setAttribute("x", mx + 6); lbl.setAttribute("y", my);
+    lbl.setAttribute("class", "elabel");
+    lbl.textContent = labelText(snap, text, n);
+    labelLayer.appendChild(lbl);
+  }
+
+  // suffix links
+  for (const id in snap.nodes) {
+    const n = snap.nodes[id];
+    if (n.isLeaf || n.id === snap.rootId) continue;
+    if (n.link !== -1 && n.link !== n.id && pos[n.id] && pos[n.link]) {
+      const a = pos[n.id], b = pos[n.link];
+      const path = document.createElementNS(SVGNS, "path");
+      const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - 18;
+      path.setAttribute("d", "M" + a.x + "," + a.y + " Q" + mx + "," + my + " " + b.x + "," + b.y);
+      path.setAttribute("class", "slink");
+      slinkLayer.appendChild(path);
+    }
+  }
+
+  // nodes
+  for (const id in snap.nodes) {
+    const n = snap.nodes[id];
+    if (!pos[n.id]) continue;
+    const p = pos[n.id];
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("cx", p.x); c.setAttribute("cy", p.y);
+    c.setAttribute("r", n.id === snap.rootId ? 9 : 7);
+    let cls = "node";
+    if (n.isLeaf) cls += " leaf";
+    if (n.id === snap.activeNode) cls += " activeN";
+    c.setAttribute("class", cls);
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("x", p.x); t.setAttribute("y", p.y - 11);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "nlabel");
+    t.textContent = (n.id === snap.rootId) ? "root" : ("" + n.id);
+    nodeLayer.appendChild(t);
+  }
+
+  // active point marker (on edge if activeLength>0, else at activeNode)
+  let ap = null;
+  if (snap.activeLength > 0 && activeChildId !== -1 && pos[snap.activeNode] && pos[activeChildId]) {
+    const child = snap.nodes[activeChildId];
+    const elen = child.end - child.start + 1;
+    const frac = Math.min(1, snap.activeLength / Math.max(1, elen));
+    const a = pos[snap.activeNode], b = pos[activeChildId];
+    ap = { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+  } else if (pos[snap.activeNode]) {
+    ap = { x: pos[snap.activeNode].x, y: pos[snap.activeNode].y };
+  }
+  if (ap) {
+    const dot = document.createElementNS(SVGNS, "circle");
+    dot.setAttribute("cx", ap.x); dot.setAttribute("cy", ap.y);
+    dot.setAttribute("r", 5);
+    dot.setAttribute("class", "activePoint");
+    apLayer.appendChild(dot);
+  }
+}
+
+// ============================================================
+//  String row + state panel
+// ============================================================
+function renderStrRow(text, phase) {
+  const el = document.getElementById("strRow");
+  let html = "";
+  for (let k = 0; k < text.length; k++) {
+    let cls = "future";
+    if (k < phase) cls = "done";
+    else if (k === phase) cls = "cur";
+    html += "<span class='" + cls + "'>" + (text[k] === "$" ? "$" : text[k]) + "</span>";
+  }
+  el.innerHTML = html;
+}
+
+function ruleBadge(rule) {
+  const map = {
+    r1: ["r1", "Rule 1 (leaf)"],
+    r2: ["r2", "Rule 2 (split/leaf)"],
+    r3: ["r3", "Rule 3 (stop)"],
+    r0: ["r0", "move active point"],
+    start: ["r0", "—"]
+  };
+  const m = map[rule] || ["r0", rule];
+  return "<span class='badge " + m[0] + "'>" + m[1] + "</span>";
+}
+
+function renderState(snap, text) {
+  document.getElementById("stPhase").textContent = snap.phase < 0 ? "-" : snap.phase;
+  document.getElementById("stChar").textContent = snap.ch ? "'" + snap.ch + "'" : "-";
+  document.getElementById("stEnd").textContent = snap.leafEnd;
+  document.getElementById("stRem").textContent = snap.remaining;
+  document.getElementById("stAN").textContent =
+    (snap.activeNode === snap.rootId) ? "root" : ("node " + snap.activeNode);
+  document.getElementById("stAE").textContent =
+    (snap.activeLength === 0) ? "-" : ("'" + text[snap.activeEdge] + "' (i=" + snap.activeEdge + ")");
+  document.getElementById("stAL").textContent = snap.activeLength;
+  document.getElementById("stRule").innerHTML = ruleBadge(snap.rule);
+  document.getElementById("stNodes").textContent = snap.nC + " / " + snap.lC;
+}
+
+// ============================================================
+//  Driver / controls
+// ============================================================
+const state = { text: "banana$", steps: [], idx: 0, running: false, timer: null };
+
+function buildAll() {
+  let raw = document.getElementById("strInput").value || "banana";
+  raw = raw.replace(/\$/g, "").slice(0, 14);
+  if (raw.length === 0) raw = "a";
+  state.text = raw + "$";
+  state.steps = buildSteps(state.text);
+  state.idx = 0;
+  showStep();
+}
+
+function showStep() {
+  const snap = state.steps[state.idx];
+  render(snap, state.text);
+  renderStrRow(state.text, snap.phase);
+  renderState(snap, state.text);
+  document.getElementById("narrate").innerHTML = snap.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) { state.idx++; showStep(); }
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer); state.running = false; updateButtons(); return;
+  }
+  if (state.idx >= state.steps.length - 1) { buildAll(); }
+  state.running = true; updateButtons();
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer); state.running = false; updateButtons(); return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.idx = 0; showStep();
+});
+document.getElementById("btnBuild").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  buildAll();
+});
+document.getElementById("strInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    if (state.running) { clearInterval(state.timer); state.running = false; }
+    buildAll();
+  }
+});
+
+// initial build
+buildAll();
+</script>
+</body>
+</html>
