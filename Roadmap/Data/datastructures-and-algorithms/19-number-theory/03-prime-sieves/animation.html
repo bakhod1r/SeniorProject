@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sieve of Eratosthenes — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --prime: rgba(63, 185, 80, 0.85);
+    --prime-bg: rgba(63, 185, 80, 0.18);
+    --current: rgba(88, 166, 255, 0.85);
+    --current-bg: rgba(88, 166, 255, 0.20);
+    --struck: rgba(248, 81, 73, 0.16);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 86px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid {
+    display: grid;
+    gap: 5px;
+    justify-content: start;
+  }
+  .cell {
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel-2);
+    transition: background 0.25s ease, color 0.25s ease, transform 0.15s ease,
+      border-color 0.25s ease;
+    position: relative;
+  }
+  .cell.nonprime { color: var(--muted); opacity: 0.5; }       /* 0 and 1 */
+  .cell.prime {
+    background: var(--prime-bg);
+    border-color: var(--good);
+    color: var(--good);
+    font-weight: 700;
+  }
+  .cell.current {
+    background: var(--current-bg);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    transform: scale(1.08);
+    box-shadow: 0 0 0 2px var(--accent) inset;
+  }
+  .cell.struck {
+    background: var(--struck);
+    color: var(--bad);
+    text-decoration: line-through;
+    opacity: 0.75;
+  }
+  .cell.striking {
+    background: rgba(248, 81, 73, 0.4);
+    color: #fff;
+    transform: scale(1.12);
+  }
+  .ledger {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .row .k { color: var(--accent-2); font-weight: 700; min-width: 90px; }
+  .row .v { color: var(--text); }
+  .row .v b { color: var(--good); }
+  .primelist {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--good);
+    word-spacing: 4px;
+    line-height: 1.9;
+    min-height: 60px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-top: 8px;
+  }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .explain {
+    margin-top: 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .explain h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .explain ul { margin: 0; padding-left: 18px; }
+  .explain li { margin: 4px 0; font-size: 13px; color: var(--text); }
+  .explain li b { color: var(--good); }
+  .pseudo {
+    margin-top: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .pseudo .kw { color: var(--accent); }
+  .pseudo .cm { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sieve of Eratosthenes — Strike Out the Multiples</h1>
+  <p>Assume every number is prime, then for each surviving prime <b>p</b> strike out its multiples starting at <b>p&sup2;</b>. Whatever survives is prime. Runs in O(n log log n).</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>n = <input type="number" id="nInput" value="50" min="2" max="120" /></label>
+    <label>speed
+      <input type="range" id="speed" min="120" max="1200" value="650" step="60" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Number grid (2 &hellip; <span id="nLabel">50</span>)</h2>
+      <div class="grid" id="grid"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2)"></span> unknown</span>
+        <span><span class="swatch" style="background:var(--current-bg);border-color:var(--accent)"></span> current prime p</span>
+        <span><span class="swatch" style="background:rgba(248,81,73,0.4)"></span> being struck</span>
+        <span><span class="swatch" style="background:var(--struck)"></span> composite (struck)</span>
+        <span><span class="swatch" style="background:var(--prime-bg);border-color:var(--good)"></span> confirmed prime</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>State</h2>
+      <div class="ledger">
+        <div class="row"><span class="k">current p</span><span class="v" id="curP">&mdash;</span></div>
+        <div class="row"><span class="k">striking</span><span class="v" id="curMul">&mdash;</span></div>
+        <div class="row"><span class="k">start at p&sup2;</span><span class="v" id="pSq">&mdash;</span></div>
+        <div class="row"><span class="k">stop when</span><span class="v">p&sup2; &gt; n</span></div>
+        <div class="row"><span class="k">&pi;(n) so far</span><span class="v" id="piCount"><b>0</b></span></div>
+      </div>
+      <h2 style="margin-top:16px;">Primes found</h2>
+      <div class="primelist" id="primeList"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We assume every number from 2 to n is prime, then strike out the multiples of each prime in turn.</div>
+
+  <div class="explain">
+    <h2>How to read this animation</h2>
+    <ul>
+      <li><b>Step</b> advances one action at a time: confirming a prime, or striking one multiple.</li>
+      <li><b>Run</b> auto-plays at the chosen <b>speed</b>; press again to pause.</li>
+      <li>Edit <b>n</b> (2&ndash;120) and the grid rebuilds; the prime list and &pi;(n) update live.</li>
+      <li>The <b>current prime p</b> is outlined in blue; the cell <b>being struck</b> flashes red; confirmed <b>primes</b> glow green; struck <b>composites</b> fade with a line through them.</li>
+      <li>Watch how striking always begins at <b>p&sup2;</b> &mdash; smaller multiples of p were already struck by smaller primes.</li>
+    </ul>
+    <div class="pseudo"><span class="cm"># Sieve of Eratosthenes</span>
+isPrime[0..n] = true
+isPrime[0] = isPrime[1] = false
+<span class="kw">for</span> p = 2; p*p &lt;= n; p++:
+    <span class="kw">if</span> isPrime[p]:               <span class="cm"># p survived -&gt; prime</span>
+        <span class="kw">for</span> m = p*p; m &lt;= n; m += p:
+            isPrime[m] = false   <span class="cm"># strike multiple</span>
+<span class="cm"># survivors are the primes; cost O(n log log n)</span></div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Each composite is struck by at least one prime factor; primes are never struck because their own striking starts at <code>p&sup2; &gt; p</code>.
+    The outer loop stops once <code>p&sup2; &gt; n</code> because every composite &le; n has a prime factor &le; &radic;n. See <code>junior.md</code> and <code>professional.md</code> for the proof and the O(n log log n) analysis.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  n: 50,
+  status: [],     // 'unknown' | 'prime' | 'struck' | 'nonprime'
+  plan: [],       // sequence of discrete steps
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  primes: []
+};
+
+// ---------- Build the step plan ----------
+// Each step mutates a working copy of status so we can replay deterministically.
+// Step types: 'mark-prime' (confirm p), 'strike' (mark m composite), 'done'.
+function buildPlan(n) {
+  const steps = [];
+  const status = new Array(n + 1).fill("unknown");
+  status[0] = "nonprime";
+  if (n >= 1) status[1] = "nonprime";
+
+  steps.push({
+    type: "init",
+    status: status.slice(),
+    p: null, mul: null, pSq: null,
+    primes: [],
+    desc: "Start: indices 0 and 1 are not prime; every number from 2 to " + n +
+          " is assumed prime until struck."
+  });
+
+  const primes = [];
+  for (let p = 2; p <= n; p++) {
+    if (status[p] === "unknown") {
+      // p survived -> it is prime
+      status[p] = "prime";
+      primes.push(p);
+      steps.push({
+        type: "mark-prime",
+        status: status.slice(),
+        p: p, mul: null, pSq: p * p,
+        primes: primes.slice(),
+        desc: "<b>" + p + "</b> is still unmarked, so it is prime. " +
+              (p * p > n
+                ? "But p&sup2; = " + (p * p) + " &gt; " + n + ", so there are no multiples left to strike."
+                : "Now strike its multiples starting at p&sup2; = " + (p * p) + ".")
+      });
+      if (p * p <= n) {
+        for (let m = p * p; m <= n; m += p) {
+          const already = status[m] === "struck";
+          status[m] = "struck";
+          steps.push({
+            type: "strike",
+            status: status.slice(),
+            p: p, mul: m, pSq: p * p,
+            primes: primes.slice(),
+            desc: "Strike <b>" + m + "</b> = " + p + " &times; " + (m / p) +
+                  (already ? " (already struck by a smaller prime — harmless)." : " as a multiple of " + p + ".")
+          });
+        }
+      }
+    }
+    // Once p*p > n, all remaining unknowns are prime; confirm them quickly.
+    if (p * p > n) {
+      for (let q = p; q <= n; q++) {
+        if (status[q] === "unknown") {
+          status[q] = "prime";
+          primes.push(q);
+        }
+      }
+      steps.push({
+        type: "sweep",
+        status: status.slice(),
+        p: p, mul: null, pSq: p * p,
+        primes: primes.slice(),
+        desc: "p&sup2; = " + (p * p) + " &gt; " + n +
+              ": every remaining unmarked number is prime (it has no factor &le; &radic;n). Light them all up."
+      });
+      break;
+    }
+  }
+
+  steps.push({
+    type: "done",
+    status: status.slice(),
+    p: null, mul: null, pSq: null,
+    primes: primes.slice(),
+    desc: "Done. " + primes.length + " primes &le; " + n + " survive. &pi;(" + n + ") = " + primes.length + "."
+  });
+  return steps;
+}
+
+// ---------- Rendering ----------
+function columnsFor(n) {
+  if (n <= 30) return 6;
+  if (n <= 60) return 8;
+  if (n <= 90) return 9;
+  return 10;
+}
+
+function buildGrid(n) {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const cols = columnsFor(n);
+  grid.style.gridTemplateColumns = "repeat(" + cols + ", 38px)";
+  for (let v = 0; v <= n; v++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.id = "cell-" + v;
+    cell.textContent = v;
+    grid.appendChild(cell);
+  }
+}
+
+function renderStep(step) {
+  const st = step.status;
+  for (let v = 0; v < st.length; v++) {
+    const cell = document.getElementById("cell-" + v);
+    if (!cell) continue;
+    let cls = "cell";
+    if (st[v] === "nonprime") cls += " nonprime";
+    else if (st[v] === "prime") cls += " prime";
+    else if (st[v] === "struck") cls += " struck";
+    // highlight the active prime and the cell being struck
+    if (step.p !== null && v === step.p && step.type !== "done") cls += " current";
+    if (step.mul !== null && v === step.mul) cls += " striking";
+    cell.className = cls;
+  }
+
+  document.getElementById("curP").innerHTML = step.p !== null ? step.p : "&mdash;";
+  document.getElementById("curMul").innerHTML = step.mul !== null ? step.mul : "&mdash;";
+  document.getElementById("pSq").innerHTML = step.pSq !== null ? step.pSq : "&mdash;";
+  document.getElementById("piCount").innerHTML = "<b>" + step.primes.length + "</b>";
+  document.getElementById("primeList").textContent = step.primes.join("  ");
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.length - 1);
+}
+
+// ---------- Navigation ----------
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  renderStep(state.plan[idx]);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  const delay = parseInt(document.getElementById("speed").value, 10) || 650;
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, delay);
+}
+
+function rebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 2) n = 2;
+  if (n > 120) n = 120;
+  document.getElementById("nInput").value = n;
+  document.getElementById("nLabel").textContent = n;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.n = n;
+  state.plan = buildPlan(n);
+  state.stepIdx = 0;
+  buildGrid(n);
+  gotoStep(0);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.running) { // restart interval with new speed
+    clearInterval(state.timer);
+    state.running = false;
+    run();
+  }
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
