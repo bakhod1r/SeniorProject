@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Expression Parsing — Shunting-yard & RPN Evaluation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --num: rgba(63, 185, 80, 0.22);
+    --op: rgba(210, 153, 34, 0.22);
+    --paren: rgba(88, 166, 255, 0.22);
+    --active: rgba(88, 166, 255, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 230px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  .tokens {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 16px;
+  }
+  .tok {
+    font-family: var(--mono);
+    font-size: 15px;
+    padding: 6px 11px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    transition: all 0.2s ease;
+  }
+  .tok.num { background: var(--num); }
+  .tok.op { background: var(--op); }
+  .tok.paren { background: var(--paren); }
+  .tok.consumed { opacity: 0.28; }
+  .tok.active { outline: 2px solid var(--accent); outline-offset: 1px; color: #fff; }
+
+  .layout { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-height: 220px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .stack {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 6px;
+    min-height: 150px;
+    justify-content: flex-start;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    background: var(--bg);
+  }
+  .queue {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 150px;
+    align-content: flex-start;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    background: var(--bg);
+  }
+  .cell {
+    font-family: var(--mono);
+    font-size: 15px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    text-align: center;
+  }
+  .cell.op { background: var(--op); }
+  .cell.num { background: var(--num); }
+  .cell.paren { background: var(--paren); }
+  .cell.pushed { animation: pop 0.3s ease; }
+  .stack .label, .queue .label { font-size: 11px; color: var(--muted); }
+  @keyframes pop {
+    0% { transform: scale(0.6); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 18px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate .val { color: var(--good); font-weight: 700; }
+  .phase {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 9px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+  }
+  .phase.shunt { background: rgba(210, 153, 34, 0.2); color: var(--accent-2); }
+  .phase.eval { background: rgba(63, 185, 80, 0.2); color: var(--good); }
+  .phase.done { background: rgba(88, 166, 255, 0.2); color: var(--accent); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .result {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+  }
+  .result b { color: var(--accent); }
+  .result .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Expression Parsing — Shunting-yard &amp; RPN Evaluation</h1>
+  <p>Tokens stream in; the <b>operator stack</b> defers operators by precedence while the <b>output queue</b> builds postfix (RPN). Then the RPN is evaluated on a <b>value stack</b>.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Expr: <input type="text" id="exprInput" value="( 1 + 2 ) * 3 - 4" /></label>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="( 1 + 2 ) * 3 - 4">(1+2)*3-4</option>
+        <option value="3 + 4 * 2">3+4*2</option>
+        <option value="2 ^ 3 ^ 2">2^3^2 (right-assoc)</option>
+        <option value="10 + 2 * 6 - 4 / 2">10+2*6-4/2</option>
+        <option value="( ( 1 + 2 ) * ( 3 + 4 ) )">((1+2)*(3+4))</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="tokens" id="tokens"></div>
+
+  <div class="layout">
+    <div class="card">
+      <span class="phase shunt" id="phaseTag">Shunting-yard</span>
+      <h2>Operator stack</h2>
+      <div class="stack" id="opStack"><span class="label">empty</span></div>
+    </div>
+    <div class="card">
+      <h2>Output queue (postfix / RPN)</h2>
+      <div class="queue" id="outQueue"><span class="label">empty</span></div>
+    </div>
+    <div class="card">
+      <h2>Value stack (RPN eval)</h2>
+      <div class="stack" id="valStack"><span class="label">empty</span></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We first convert infix to postfix with Shunting-yard, then evaluate the postfix on a value stack.</div>
+
+  <div class="result" id="resultBox">Result: <b>pending</b></div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--num)"></span> number</span>
+    <span><span class="swatch" style="background:var(--op)"></span> operator</span>
+    <span><span class="swatch" style="background:var(--paren)"></span> parenthesis</span>
+    <span><span class="swatch" style="background:var(--active)"></span> active token</span>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Precedence: <code>^</code> (right-assoc) &gt; <code>* /</code> &gt; <code>+ -</code> (left-assoc).
+    The output queue is exactly the postfix traversal of the parse tree; evaluating it left-to-right on a value stack yields the answer.
+    See <code>junior.md</code> for the algorithm and <code>professional.md</code> for the correctness proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- precedence / associativity ----------
+function prec(op) {
+  if (op === "+" || op === "-") return 1;
+  if (op === "*" || op === "/") return 2;
+  if (op === "^") return 4;
+  return 0;
+}
+function isRightAssoc(op) { return op === "^"; }
+function isOp(t) { return "+-*/^".indexOf(t) !== -1 && t.length === 1; }
+function isNum(t) { return /^[0-9]+(\.[0-9]+)?$/.test(t); }
+
+// ---------- tokenize ----------
+function tokenize(s) {
+  const toks = [];
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === " ") { i++; continue; }
+    if (/[0-9.]/.test(c)) {
+      let j = i;
+      while (j < s.length && /[0-9.]/.test(s[j])) j++;
+      toks.push(s.slice(i, j));
+      i = j;
+      continue;
+    }
+    toks.push(c);
+    i++;
+  }
+  return toks;
+}
+
+function classOf(t) {
+  if (isNum(t)) return "num";
+  if (t === "(" || t === ")") return "paren";
+  return "op";
+}
+
+// ---------- build the full step plan ----------
+// Phase 1: Shunting-yard (per token, possibly multiple pop steps).
+// Phase 2: RPN evaluation on a value stack.
+function buildPlan(toks) {
+  const steps = [];
+  const out = [];     // output queue (postfix)
+  const ops = [];     // operator stack
+
+  function snap(extra) {
+    return Object.assign({
+      phase: "shunt",
+      tokenIdx: -1,
+      out: out.slice(),
+      ops: ops.slice(),
+      vals: [],
+      desc: ""
+    }, extra);
+  }
+
+  steps.push(snap({
+    desc: "Start. We scan tokens left to right, building postfix in the output queue using an operator stack."
+  }));
+
+  let consumed = 0;
+  for (let idx = 0; idx < toks.length; idx++) {
+    const t = toks[idx];
+    consumed = idx;
+    if (isNum(t)) {
+      out.push(t);
+      steps.push(snap({
+        tokenIdx: idx, consumed,
+        desc: "Token <b>" + t + "</b> is a number &rarr; append straight to the output queue."
+      }));
+    } else if (t === "(") {
+      ops.push("(");
+      steps.push(snap({
+        tokenIdx: idx, consumed,
+        desc: "Token <b>(</b> &rarr; push onto the operator stack as a barrier."
+      }));
+    } else if (t === ")") {
+      while (ops.length && ops[ops.length - 1] !== "(") {
+        const popped = ops.pop();
+        out.push(popped);
+        steps.push(snap({
+          tokenIdx: idx, consumed,
+          desc: "Token <b>)</b> &rarr; pop <b>" + popped + "</b> to the output until the matching <b>(</b>."
+        }));
+      }
+      ops.pop(); // discard "("
+      steps.push(snap({
+        tokenIdx: idx, consumed,
+        desc: "Matching <b>(</b> found &rarr; discard it. The parenthesized group is now flushed to output."
+      }));
+    } else { // operator
+      while (ops.length && ops[ops.length - 1] !== "(" &&
+             (prec(ops[ops.length - 1]) > prec(t) ||
+              (prec(ops[ops.length - 1]) === prec(t) && !isRightAssoc(t)))) {
+        const popped = ops.pop();
+        out.push(popped);
+        steps.push(snap({
+          tokenIdx: idx, consumed,
+          desc: "Operator <b>" + t + "</b>: stack top <b>" + popped + "</b> binds at least as tightly &rarr; pop it to output."
+        }));
+      }
+      ops.push(t);
+      steps.push(snap({
+        tokenIdx: idx, consumed,
+        desc: "Push operator <b>" + t + "</b> onto the operator stack (it waits for its operands)."
+      }));
+    }
+  }
+  // flush remaining operators
+  while (ops.length) {
+    const popped = ops.pop();
+    out.push(popped);
+    steps.push(snap({
+      tokenIdx: toks.length, consumed: toks.length - 1,
+      desc: "End of input &rarr; pop remaining operator <b>" + popped + "</b> to the output."
+    }));
+  }
+  const postfix = out.slice();
+  steps.push(snap({
+    tokenIdx: toks.length, consumed: toks.length - 1,
+    desc: "Shunting-yard done. Postfix (RPN) = <b>" + postfix.join(" ") + "</b>. Now we evaluate it on a value stack."
+  }));
+
+  // ---------- Phase 2: evaluate RPN ----------
+  const vals = [];
+  function snapEval(extra, qhi) {
+    return Object.assign({
+      phase: "eval",
+      tokenIdx: -1,
+      out: postfix.slice(),
+      ops: [],
+      vals: vals.slice(),
+      qhi: (qhi === undefined ? -1 : qhi),
+      desc: ""
+    }, extra);
+  }
+  let result = null;
+  for (let qi = 0; qi < postfix.length; qi++) {
+    const t = postfix[qi];
+    if (isNum(t)) {
+      vals.push(parseFloat(t));
+      steps.push(snapEval({
+        desc: "Postfix token <b>" + t + "</b> is a number &rarr; push onto the value stack."
+      }, qi));
+    } else {
+      const b = vals.pop();
+      const a = vals.pop();
+      let r = 0;
+      if (t === "+") r = a + b;
+      else if (t === "-") r = a - b;
+      else if (t === "*") r = a * b;
+      else if (t === "/") r = a / b;
+      else if (t === "^") r = Math.pow(a, b);
+      vals.push(r);
+      steps.push(snapEval({
+        desc: "Operator <b>" + t + "</b> &rarr; pop b=<b>" + fmt(b) + "</b>, pop a=<b>" + fmt(a) +
+              "</b>, push a " + t + " b = <span class='val'>" + fmt(r) + "</span>."
+      }, qi));
+    }
+  }
+  result = vals.length ? vals[vals.length - 1] : null;
+  steps.push(Object.assign(snapEval({
+    phase: "done",
+    desc: "Done. The single remaining value is the answer: <span class='val'>" + fmt(result) + "</span>."
+  }), { result: result }));
+
+  return { steps, postfix, result };
+}
+
+function fmt(x) {
+  if (x === null || x === undefined) return "?";
+  if (Number.isInteger(x)) return String(x);
+  return String(Math.round(x * 1e6) / 1e6);
+}
+
+// ---------- rendering ----------
+const state = {
+  toks: [],
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function renderTokens(step) {
+  const el = document.getElementById("tokens");
+  el.innerHTML = "";
+  state.toks.forEach((t, i) => {
+    const d = document.createElement("span");
+    d.className = "tok " + classOf(t);
+    if (step.phase === "shunt") {
+      if (i < step.consumed) d.classList.add("consumed");
+      else if (i === step.tokenIdx) d.classList.add("active");
+    } else {
+      d.classList.add("consumed");
+    }
+    d.textContent = t;
+    el.appendChild(d);
+  });
+  if (state.toks.length === 0) el.innerHTML = "<span class='step-counter'>(no tokens)</span>";
+}
+
+function renderStack(id, arr) {
+  const el = document.getElementById(id);
+  el.innerHTML = "";
+  if (arr.length === 0) {
+    const lab = document.createElement("span");
+    lab.className = "label";
+    lab.textContent = "empty";
+    el.appendChild(lab);
+    return;
+  }
+  arr.forEach((v, i) => {
+    const c = document.createElement("div");
+    c.className = "cell " + classOf(String(v));
+    if (i === arr.length - 1) c.classList.add("pushed");
+    c.textContent = fmt(v);
+    el.appendChild(c);
+  });
+}
+
+function renderQueue(arr, hi) {
+  const el = document.getElementById("outQueue");
+  el.innerHTML = "";
+  if (arr.length === 0) {
+    el.innerHTML = "<span class='label'>empty</span>";
+    return;
+  }
+  arr.forEach((v, i) => {
+    const c = document.createElement("div");
+    c.className = "cell " + classOf(String(v));
+    if (i === hi) c.classList.add("pushed");
+    c.textContent = v;
+    el.appendChild(c);
+  });
+}
+
+function applyStep(step) {
+  document.getElementById("phaseTag").className = "phase " + step.phase;
+  document.getElementById("phaseTag").textContent =
+    step.phase === "shunt" ? "Shunting-yard" :
+    step.phase === "eval" ? "RPN evaluation" : "Complete";
+  renderTokens(step);
+  renderStack("opStack", step.ops);
+  renderQueue(step.out, step.phase === "eval" ? step.qhi : -1);
+  renderStack("valStack", step.vals);
+  document.getElementById("narrate").innerHTML = step.desc;
+  const rb = document.getElementById("resultBox");
+  if (step.phase === "done") {
+    rb.innerHTML = "Result: <span class='val'>" + fmt(state.plan.result) + "</span>" +
+      "  &nbsp;|&nbsp; postfix = <b>" + state.plan.postfix.join(" ") + "</b>";
+  } else if (step.phase === "eval") {
+    rb.innerHTML = "Evaluating postfix <b>" + state.plan.postfix.join(" ") + "</b> ...";
+  } else {
+    rb.innerHTML = "Result: <b>pending</b> (building postfix)";
+  }
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 950);
+}
+
+function rebuild() {
+  const expr = document.getElementById("exprInput").value;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.toks = tokenize(expr);
+  try {
+    state.plan = buildPlan(state.toks);
+  } catch (e) {
+    state.plan = { steps: [{ phase: "shunt", tokenIdx: -1, consumed: 0, out: [], ops: [], vals: [],
+      desc: "Could not parse: " + e.message }], postfix: [], result: null };
+  }
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+// ---------- wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("presetSel").addEventListener("change", (e) => {
+  document.getElementById("exprInput").value = e.target.value;
+  rebuild();
+});
+document.getElementById("exprInput").addEventListener("change", rebuild);
+
+// ---------- initial load ----------
+rebuild();
+</script>
+</body>
+</html>
