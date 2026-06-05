@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Extended Euclidean Algorithm &amp; Modular Inverse</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 92px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table.tbl {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+  }
+  table.tbl td, table.tbl th {
+    border: 1px solid var(--border);
+    padding: 6px 9px;
+    text-align: right;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  table.tbl th { color: var(--muted); font-weight: 600; background: var(--panel-2); text-align: center; }
+  table.tbl tr.active td { background: var(--hi-row); }
+  table.tbl tr.gcdrow td { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  table.tbl td.col-x { color: var(--accent); }
+  table.tbl td.col-y { color: var(--accent-2); }
+  .bezout {
+    margin-top: 12px;
+    font-size: 14px;
+    font-family: var(--mono);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+  }
+  .bezout b { color: var(--accent); }
+  .bezout .x { color: var(--accent); font-weight: 700; }
+  .bezout .y { color: var(--accent-2); font-weight: 700; }
+  .bezout .g { color: var(--good); font-weight: 700; }
+  .invbox {
+    margin-top: 12px;
+    font-size: 14px;
+    font-family: var(--mono);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--good);
+    border-radius: 7px;
+    padding: 10px 12px;
+  }
+  .invbox .val { color: var(--good); font-weight: 700; }
+  .invbox.none { border-left-color: var(--bad); }
+  .invbox.none .val { color: var(--bad); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .phase {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .phase.fwd { color: var(--accent); border-color: var(--accent); }
+  .phase.back { color: var(--accent-2); border-color: var(--accent-2); }
+  .phase.done { color: var(--good); border-color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .full { grid-column: 1 / -1; }
+  ol.subst {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    font-family: var(--mono);
+    font-size: 13px;
+    counter-reset: substep;
+  }
+  ol.subst li {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: var(--bg);
+    color: var(--muted);
+    transition: all 0.2s ease;
+  }
+  ol.subst li.shown { color: var(--text); border-left-color: var(--accent-2); }
+  ol.subst li.current { background: var(--hi-col); border-left-color: var(--accent-2); color: #fff; }
+  ol.subst li.final { border-left-color: var(--good); color: #fff; }
+  ol.subst li .lbl { color: var(--muted); margin-right: 6px; }
+  ol.subst li .rem { color: var(--accent); font-weight: 700; }
+  ol.subst li .coef { color: var(--accent-2); font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Extended Euclidean Algorithm &amp; Modular Inverse</h1>
+  <p>extgcd(a, m) finds x, y with a&middot;x + m&middot;y = gcd(a, m). When gcd = 1, the Bezout x is the modular inverse a<sup>&minus;1</sup> mod m.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>a = <input type="number" id="aInput" value="3" min="0" max="100000" /></label>
+    <label>m = <input type="number" id="mInput" value="11" min="1" max="100000" /></label>
+    <span class="phase" id="phaseTag">forward</span>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Euclidean table (a, b, q, r)</h2>
+      <table class="tbl" id="fwdTable"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-row)"></span> current step</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> gcd row</span>
+      </div>
+      <div class="bezout" id="bezoutBox">Press <b>Step</b> to run the forward Euclidean division.</div>
+    </div>
+
+    <div class="card">
+      <h2>Back-substitution: building x, y</h2>
+      <table class="tbl" id="backTable"></table>
+      <div class="invbox" id="invBox">
+        Modular inverse appears here once gcd(a, m) = 1.
+      </div>
+    </div>
+  </div>
+
+  <div class="layout" style="margin-top:18px;">
+    <div class="card full">
+      <h2>Back-substitution chain: assembling a&middot;x + m&middot;y = gcd</h2>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">
+        Each row of the iteration already carries the identity <code>r = s&middot;a + t&middot;m</code>.
+        We replay them from the top so you can watch the remainder shrink while the
+        coefficients <span class="coef" style="color:var(--accent-2)">s</span> and
+        <span class="coef" style="color:var(--accent-2)">t</span> grow toward the final Bezout pair.
+        Once <span class="rem" style="color:var(--accent)">r</span> = gcd, those coefficients are
+        <b>x</b> and <b>y</b>.
+      </p>
+      <ol class="subst" id="substList"></ol>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    We compute gcd(a, m) by repeated division (forward phase), then substitute backward to express the gcd as
+    a&middot;x + m&middot;y. If gcd = 1, x mod m is the inverse.
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Coefficients use the iterative invariant
+    <code>r = s&middot;a + t&middot;b</code>: each row stores (r, s, t) so when r reaches 0 the previous row is (gcd, x, y).
+    The inverse exists <b>iff</b> gcd(a, m) = 1. See <code>junior.md</code> and <code>professional.md</code> for the proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the step plan ----------
+// We model the iterative extended Euclidean algorithm as discrete steps.
+// Forward phase: each Euclidean division row (a_i, b_i, q_i, r_i).
+// We simultaneously carry coefficient triples (r, s, t) with r = s*A + t*M.
+// Back phase: we "reveal" the coefficient rows from bottom (gcd) upward,
+// showing how a*x + m*y = gcd is assembled, then read off the inverse.
+
+function buildPlan(A, M) {
+  const steps = [];
+  // Iterative extended Euclid, recording each row.
+  let oldR = A, r = M;
+  let oldS = 1, s = 0;
+  let oldT = 0, t = 1;
+  const rows = []; // {r, s, t}
+  rows.push({ r: oldR, s: oldS, t: oldT });
+  rows.push({ r: r, s: s, t: t });
+  const divs = []; // {a, b, q, r}
+
+  // Forward steps
+  steps.push({
+    type: "init",
+    phase: "forward",
+    activeRow: -1,
+    divs: divs.slice(),
+    rows: rows.slice(),
+    desc: "Start: row0 = (r=" + A + ", s=1, t=0) means " + A + " = 1·a + 0·m. " +
+          "row1 = (r=" + M + ", s=0, t=1) means " + M + " = 0·a + 1·m. Now divide."
+  });
+
+  while (r !== 0) {
+    const q = Math.floor(oldR / r);
+    const newR = oldR - q * r;
+    const newS = oldS - q * s;
+    const newT = oldT - q * t;
+    divs.push({ a: oldR, b: r, q: q, r: newR });
+    // advance
+    oldR = r; r = newR;
+    oldS = s; s = newS;
+    oldT = t; t = newT;
+    rows.push({ r: oldR, s: oldS, t: oldT }); // note: store advanced "old" as the kept row
+    // Actually push the new remainder row (r-after) once; keep rows aligned with divisions:
+    steps.push({
+      type: "divide",
+      phase: "forward",
+      activeRow: divs.length, // 1-based index into divs
+      divs: divs.slice(),
+      rows: rows.slice(),
+      q: q,
+      desc: "Divide " + divs[divs.length - 1].a + " by " + divs[divs.length - 1].b +
+            ": quotient q=" + q + ", remainder r=" + newR +
+            ". Update coefficients the same way (invariant r = s·a + t·m)."
+    });
+  }
+
+  // After loop, oldR = gcd, with (oldS, oldT) = (x, y)
+  const g = oldR, x = oldS, y = oldT;
+
+  steps.push({
+    type: "gcd",
+    phase: "back",
+    activeRow: -2,
+    divs: divs.slice(),
+    rows: rows.slice(),
+    g: g, x: x, y: y,
+    desc: "Remainder hit 0. The previous row is the gcd: g=" + g +
+          " with coefficients x=" + x + ", y=" + y + ". So a·x + m·y = g."
+  });
+
+  // Back-substitution reveal rows (we reveal the kept coefficient rows top→bottom toward gcd)
+  // For the visual back table we present rows that satisfy r = s*A + t*M, ending at gcd.
+  const coeffRows = rows.filter((rw, i) => true);
+
+  steps.push({
+    type: "bezout",
+    phase: "back",
+    activeRow: -2,
+    divs: divs.slice(),
+    rows: rows.slice(),
+    g: g, x: x, y: y,
+    desc: "Bezout identity assembled: " + A + "·(" + x + ") + " + M + "·(" + y + ") = " + g +
+          "  (check: " + (A * x + M * y) + ")."
+  });
+
+  // Inverse readout
+  let inv = null;
+  if (g === 1) {
+    inv = ((x % M) + M) % M;
+  }
+  steps.push({
+    type: "done",
+    phase: "done",
+    activeRow: -2,
+    divs: divs.slice(),
+    rows: rows.slice(),
+    g: g, x: x, y: y, inv: inv,
+    desc: g === 1
+      ? "gcd = 1 → inverse exists. Reduce x mod m: a⁻¹ ≡ " + inv + " (mod " + M + "). Check: " +
+        A + "·" + inv + " mod " + M + " = " + ((A * inv) % M) + "."
+      : "gcd = " + g + " ≠ 1 → a and m are NOT coprime, so a has NO inverse mod m."
+  });
+
+  return { steps, divs, rows, g, x, y, inv };
+}
+
+// ---------- Render helpers ----------
+function renderForward(step) {
+  const tbl = document.getElementById("fwdTable");
+  let html = "<tr><th>step</th><th>a</th><th>b</th><th>q = a/b</th><th>r = a mod b</th></tr>";
+  const divs = step.divs;
+  for (let i = 0; i < divs.length; i++) {
+    const d = divs[i];
+    const cls = (step.phase === "forward" && step.activeRow === i + 1) ? " class='active'" : "";
+    const gcls = (d.r === 0) ? " class='gcdrow'" : "";
+    const rowClass = (d.r === 0) ? gcls : cls;
+    html += "<tr" + rowClass + "><td>" + (i + 1) + "</td><td>" + d.a + "</td><td>" + d.b +
+            "</td><td>" + d.q + "</td><td>" + d.r + "</td></tr>";
+  }
+  if (divs.length === 0) {
+    html += "<tr><td colspan='5' style='text-align:center;color:var(--muted)'>(no divisions yet)</td></tr>";
+  }
+  tbl.innerHTML = html;
+}
+
+function renderBack(step) {
+  const tbl = document.getElementById("backTable");
+  let html = "<tr><th>r</th><th>s (·a)</th><th>t (·m)</th><th>check r = s·a + t·m</th></tr>";
+  const rows = step.rows;
+  const A = state.a, M = state.m;
+  for (let i = 0; i < rows.length; i++) {
+    const rw = rows[i];
+    const check = rw.s * A + rw.t * M;
+    const isGcd = (step.phase !== "forward") && (rw.r === step.g) && (i === rows.length - 2 || rw.r === step.g);
+    let cls = "";
+    if (step.type !== "init" && step.type !== "divide" && rw.r === step.g) cls = " class='gcdrow'";
+    html += "<tr" + cls + "><td>" + rw.r + "</td><td class='col-x'>" + rw.s +
+            "</td><td class='col-y'>" + rw.t + "</td><td>" + check + "</td></tr>";
+  }
+  tbl.innerHTML = html;
+}
+
+function renderBezout(step) {
+  const box = document.getElementById("bezoutBox");
+  if (step.type === "init") {
+    box.innerHTML = "Invariant: every row satisfies <b>r = s·a + t·m</b>. Watch r shrink to gcd.";
+    return;
+  }
+  if (step.g !== undefined) {
+    box.innerHTML = "Bezout: <span class='x'>" + state.a + "·(" + step.x + ")</span> + " +
+      "<span class='y'>" + state.m + "·(" + step.y + ")</span> = <span class='g'>" + step.g + "</span>";
+  } else {
+    box.innerHTML = "Running forward division; coefficients tracked in the right table.";
+  }
+}
+
+function renderSubst(step) {
+  // The back-substitution chain. Each coefficient row {r, s, t} satisfies r = s*A + t*M.
+  // During the forward phase we reveal rows as they are produced; during the back/done
+  // phase every row is shown and the gcd row is marked as the assembled Bezout pair.
+  const list = document.getElementById("substList");
+  const rows = step.rows || [];
+  const A = state.a, M = state.m;
+  // How many rows to reveal: forward reveals up to (activeRow + 1) rows; otherwise all.
+  let reveal = rows.length;
+  if (step.phase === "forward") {
+    // activeRow is 1-based division index; rows = 2 seed rows + one per division.
+    reveal = (step.activeRow > 0) ? step.activeRow + 2 : 2;
+  }
+  if (reveal > rows.length) reveal = rows.length;
+
+  // Index of the gcd row (last row whose r is the gcd and is non-... we use second-to-last
+  // because the very last row has r = 0). The gcd row is rows[rows.length - 2] after the loop.
+  const gcdIdx = rows.length - 2;
+
+  let html = "";
+  for (let i = 0; i < rows.length; i++) {
+    const rw = rows[i];
+    const check = rw.s * A + rw.t * M;
+    let cls = "";
+    if (i < reveal) cls = "shown";
+    // Highlight the most recently revealed row in the forward phase.
+    if (step.phase === "forward" && i === reveal - 1 && reveal > 2) cls = "current";
+    // In the back / done phase, mark the gcd-bearing row green.
+    if (step.phase !== "forward" && i === gcdIdx) cls = "final";
+
+    const meaning = rw.r + " = (" + rw.s + ")&middot;a + (" + rw.t + ")&middot;m";
+    const verify = "check: " + check;
+    let tail = "";
+    if (step.phase !== "forward" && i === gcdIdx) {
+      tail = " &nbsp;&larr; gcd row: x = <span class='coef'>" + rw.s +
+             "</span>, y = <span class='coef'>" + rw.t + "</span>";
+    }
+    html += "<li class='" + cls + "'>" +
+            "<span class='lbl'>row " + i + ":</span> " +
+            "<span class='rem'>r=" + rw.r + "</span> &nbsp; " + meaning +
+            " &nbsp; <span class='lbl'>(" + verify + ")</span>" + tail + "</li>";
+  }
+  // When finished, append the inverse readout line into the chain.
+  if (step.type === "done") {
+    if (step.inv !== null && step.inv !== undefined) {
+      html += "<li class='final'>Normalize x into [0, m): a<sup>&minus;1</sup> &equiv; " +
+              "<span class='coef'>" + step.inv + "</span> (mod " + M + ")  &mdash;  check " +
+              A + "&middot;" + step.inv + " mod " + M + " = " + (((A * step.inv) % M + M) % M) + "</li>";
+    } else {
+      html += "<li class='shown' style='border-left-color:var(--bad);color:var(--bad)'>" +
+              "gcd = " + step.g + " &ne; 1 &rarr; no inverse (a and m share a factor)</li>";
+    }
+  }
+  list.innerHTML = html;
+}
+
+function renderInverse(step) {
+  const box = document.getElementById("invBox");
+  if (step.type !== "done") {
+    box.className = "invbox";
+    box.innerHTML = "Modular inverse appears here once the back-substitution finishes and gcd = 1.";
+    return;
+  }
+  if (step.inv !== null && step.inv !== undefined) {
+    box.className = "invbox";
+    box.innerHTML = state.a + "<sup>&minus;1</sup> mod " + state.m + " = <span class='val'>" + step.inv +
+      "</span> &nbsp; (since gcd = 1; x = " + step.x + " normalized into [0, m))";
+  } else {
+    box.className = "invbox none";
+    box.innerHTML = "No inverse: gcd(" + state.a + ", " + state.m + ") = <span class='val'>" + step.g +
+      "</span> &ne; 1, so " + state.a + " and " + state.m + " are not coprime.";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  a: 3,
+  m: 11,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  g: 1, x: 0, y: 0
+};
+
+function applyStep(step) {
+  state.g = step.g !== undefined ? step.g : state.g;
+  state.x = step.x !== undefined ? step.x : state.x;
+  state.y = step.y !== undefined ? step.y : state.y;
+  renderForward(step);
+  renderBack(step);
+  renderBezout(step);
+  renderSubst(step);
+  renderInverse(step);
+  const tag = document.getElementById("phaseTag");
+  tag.textContent = step.phase;
+  tag.className = "phase " + (step.phase === "forward" ? "fwd" : step.phase === "done" ? "done" : "back");
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1200);
+}
+
+function rebuild() {
+  let a = parseInt(document.getElementById("aInput").value, 10);
+  let m = parseInt(document.getElementById("mInput").value, 10);
+  if (isNaN(m) || m < 1) m = 1;
+  if (isNaN(a) || a < 0) a = 0;
+  // reduce a into [0, m) for a clean display, but keep at least the modulus positive
+  if (m >= 1) a = ((a % m) + m) % m;
+  document.getElementById("aInput").value = a;
+  document.getElementById("mInput").value = m;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.a = a;
+  state.m = m;
+  state.plan = buildPlan(a, m);
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("mInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

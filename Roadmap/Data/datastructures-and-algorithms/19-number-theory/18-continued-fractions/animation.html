@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Continued Fractions — Euclid Steps, Convergents, and the Number Line</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --below: #58a6ff;
+    --above: #d29922;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 96px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table.steps {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+  }
+  table.steps td, table.steps th {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: right;
+    color: var(--text);
+  }
+  table.steps th { color: var(--muted); background: var(--panel-2); font-weight: 600; }
+  table.steps tr.active td { background: rgba(88, 166, 255, 0.18); color: #fff; }
+  table.steps tr.done td { color: var(--good); }
+  .quot { color: var(--accent-2); font-weight: 700; }
+  .cf {
+    font-family: var(--mono);
+    font-size: 18px;
+    margin: 4px 0 12px;
+    letter-spacing: 1px;
+  }
+  .cf .term { color: var(--muted); }
+  .cf .term.shown { color: var(--good); font-weight: 700; }
+  .conv-list { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
+  .conv {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .conv.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .conv .frac { color: var(--accent-2); font-weight: 700; min-width: 88px; }
+  .conv .side.below { color: var(--below); }
+  .conv .side.above { color: var(--above); }
+  .conv .err { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+  line.axis { stroke: var(--muted); stroke-width: 2; }
+  line.tick { stroke: var(--border); stroke-width: 1; }
+  text.ticklbl { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+  line.target { stroke: var(--bad); stroke-width: 2; stroke-dasharray: 4 3; }
+  text.targetlbl { fill: var(--bad); font-size: 12px; font-family: var(--mono); font-weight: 700; }
+  circle.cv { stroke: #0d1117; stroke-width: 1.5; }
+  circle.cv.below { fill: var(--below); }
+  circle.cv.above { fill: var(--above); }
+  text.cvlbl { font-size: 11px; font-family: var(--mono); fill: var(--text); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Continued Fractions — From Euclid Steps to Convergents on a Number Line</h1>
+  <p>The CF of p/q is the list of Euclidean quotients [a0; a1, a2, ...]; its convergents p<sub>k</sub>/q<sub>k</sub> = a<sub>k</sub>p<sub>k-1</sub>+p<sub>k-2</sub> over a<sub>k</sub>q<sub>k-1</sub>+q<sub>k-2</sub> close in on the target, alternating above and below.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="presetSel">
+        <option value="43/19">43 / 19</option>
+        <option value="355/113">355 / 113 (pi)</option>
+        <option value="89/55">89 / 55 (Fibonacci)</option>
+        <option value="415/93">415 / 93</option>
+      </select>
+    </label>
+    <label>p = <input type="number" id="pInput" value="43" min="0" /></label>
+    <label>q = <input type="number" id="qInput" value="19" min="1" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Euclidean steps &rarr; partial quotients</h2>
+      <div class="cf" id="cfStr"></div>
+      <table class="steps" id="euclidTable">
+        <thead>
+          <tr><th>p</th><th>=</th><th>a&middot;q</th><th>+ r</th><th>quotient a</th></tr>
+        </thead>
+        <tbody id="euclidBody"></tbody>
+      </table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--accent-2)"></span> partial quotient a<sub>k</sub></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Convergents p<sub>k</sub>/q<sub>k</sub></h2>
+      <div class="conv-list" id="convList"></div>
+      <div class="legend" style="margin-top:14px;">
+        <span><span class="swatch" style="background:var(--below)"></span> below target (even k)</span>
+        <span><span class="swatch" style="background:var(--above)"></span> above target (odd k)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Convergents closing in on the target</h2>
+    <svg id="lineSvg" height="160" viewBox="0 0 1120 160" preserveAspectRatio="none"></svg>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We run Euclid on p/q, peel off the partial quotients a<sub>0</sub>, a<sub>1</sub>, ..., then build each convergent with the recurrence and plot it.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Exact integer arithmetic (no floating point in the recurrence). Convergents satisfy the determinant identity
+    <code>p_k q_{k-1} - p_{k-1} q_k = (-1)^{k-1}</code> and the error bound <code>|x - p_k/q_k| &lt; 1/q_k&sup2;</code>.
+    See <code>junior.md</code> for the worked example and <code>professional.md</code> for the proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Presets ----------
+const PRESETS = {
+  "43/19":   [43, 19],
+  "355/113": [355, 113],
+  "89/55":   [89, 55],
+  "415/93":  [415, 93]
+};
+
+// ---------- Core continued-fraction computation ----------
+// Returns { quotients: [...], rows: [{p,q,a,r}], convergents: [{p,q,a,k}] }
+function computeCF(p, q) {
+  const quotients = [];
+  const rows = [];
+  let pp = p, qq = q;
+  let guard = 0;
+  while (qq !== 0 && guard < 200) {
+    const a = Math.floor(pp / qq);
+    const r = pp - a * qq;
+    quotients.push(a);
+    rows.push({ p: pp, q: qq, a: a, r: r });
+    pp = qq; qq = r;
+    guard++;
+  }
+  // convergents via recurrence
+  const convergents = [];
+  let pPrev = 1, pPrev2 = 0; // p_{-1}, p_{-2}
+  let qPrev = 0, qPrev2 = 1; // q_{-1}, q_{-2}
+  for (let k = 0; k < quotients.length; k++) {
+    const a = quotients[k];
+    const pk = a * pPrev + pPrev2;
+    const qk = a * qPrev + qPrev2;
+    convergents.push({ p: pk, q: qk, a: a, k: k });
+    pPrev2 = pPrev; pPrev = pk;
+    qPrev2 = qPrev; qPrev = qk;
+  }
+  return { quotients, rows, convergents };
+}
+
+// ---------- Build a step plan ----------
+// Step 0: init. Then for each k: one "euclid" reveal + one "convergent" reveal.
+// We interleave so the user sees a quotient appear, then its convergent plotted.
+function buildPlan(cf) {
+  const steps = [];
+  steps.push({
+    type: "init",
+    euclidShown: 0,
+    convShown: 0,
+    desc: "Start: run the Euclidean algorithm on p/q. Each quotient becomes a partial quotient a_k."
+  });
+  const n = cf.quotients.length;
+  for (let k = 0; k < n; k++) {
+    const row = cf.rows[k];
+    steps.push({
+      type: "euclid",
+      euclidShown: k + 1,
+      convShown: k,
+      k: k,
+      desc: "Euclid: " + row.p + " = " + row.a + "&middot;" + row.q + " + " + row.r +
+            "  &rarr;  partial quotient a<sub>" + k + "</sub> = " + row.a + "."
+    });
+    const c = cf.convergents[k];
+    const side = (k % 2 === 0) ? "below" : "above";
+    steps.push({
+      type: "convergent",
+      euclidShown: k + 1,
+      convShown: k + 1,
+      k: k,
+      desc: "Convergent: p<sub>" + k + "</sub>/q<sub>" + k + "</sub> = " + c.p + "/" + c.q +
+            " = a<sub>" + k + "</sub>&middot;p<sub>" + (k - 1) + "</sub> + p<sub>" + (k - 2) + "</sub> over the same for q. " +
+            "This one sits <b>" + side + "</b> the target."
+    });
+  }
+  steps.push({
+    type: "done",
+    euclidShown: n,
+    convShown: n,
+    desc: "Done. The last convergent equals the target exactly: p/q = " +
+          cf.convergents[n - 1].p + "/" + cf.convergents[n - 1].q + "."
+  });
+  return steps;
+}
+
+// ---------- Rendering ----------
+function renderCFString(cf, shown) {
+  const el = document.getElementById("cfStr");
+  let html = "[";
+  for (let i = 0; i < cf.quotients.length; i++) {
+    const cls = (i < shown) ? "term shown" : "term";
+    const sep = (i === 0) ? "" : (i === 1 ? "; " : ", ");
+    html += "<span class='" + cls + "'>" + sep + cf.quotients[i] + "</span>";
+  }
+  html += "]";
+  el.innerHTML = html;
+}
+
+function renderEuclid(cf, shown, activeK) {
+  const body = document.getElementById("euclidBody");
+  let html = "";
+  for (let i = 0; i < shown; i++) {
+    const row = cf.rows[i];
+    const cls = (i === activeK) ? "active" : "";
+    html += "<tr class='" + cls + "'><td>" + row.p + "</td><td>=</td><td>" +
+            row.a + "&middot;" + row.q + "</td><td>+ " + row.r + "</td>" +
+            "<td class='quot'>a<sub>" + i + "</sub> = " + row.a + "</td></tr>";
+  }
+  body.innerHTML = html;
+}
+
+function renderConvergents(cf, shown, activeK) {
+  const list = document.getElementById("convList");
+  let html = "";
+  const target = cf.convergents.length ? cf.convergents[cf.convergents.length - 1] : null;
+  for (let i = 0; i < shown; i++) {
+    const c = cf.convergents[i];
+    const side = (i % 2 === 0) ? "below" : "above";
+    const cls = (i === activeK) ? "conv active" : "conv";
+    let errTxt = "";
+    if (target) {
+      // exact error |c - target| as a fraction magnitude, shown as decimal
+      const cv = c.p / c.q;
+      const tv = target.p / target.q;
+      const err = Math.abs(cv - tv);
+      errTxt = (i === cf.convergents.length - 1) ? "exact" : ("err &asymp; " + err.toExponential(2));
+    }
+    html += "<div class='" + cls + "'>" +
+            "<span class='frac'>p<sub>" + i + "</sub>/q<sub>" + i + "</sub> = " + c.p + "/" + c.q + "</span>" +
+            "<span class='side " + side + "'>" + side + "</span>" +
+            "<span class='err'>" + errTxt + "</span></div>";
+  }
+  list.innerHTML = html;
+}
+
+function renderLine(cf, shown, activeK) {
+  const svg = document.getElementById("lineSvg");
+  const W = 1120, H = 160;
+  const padL = 50, padR = 50;
+  const axisY = 96;
+  if (!cf.convergents.length) { svg.innerHTML = ""; return; }
+  const target = cf.convergents[cf.convergents.length - 1];
+  const tv = target.p / target.q;
+  // domain: a window around the target wide enough to show convergent c0 (a0) and c1
+  let lo = Math.floor(cf.quotients[0]) - 0.5;
+  let hi = tv + (tv - lo);
+  if (cf.convergents.length > 1) {
+    hi = Math.max(hi, cf.convergents[1].p / cf.convergents[1].q + 0.2);
+  }
+  if (hi - lo < 1) { lo = tv - 1; hi = tv + 1; }
+  const xOf = (v) => padL + (v - lo) / (hi - lo) * (W - padL - padR);
+
+  let html = "";
+  // axis
+  html += "<line class='axis' x1='" + padL + "' y1='" + axisY + "' x2='" + (W - padR) + "' y2='" + axisY + "'/>";
+  // integer ticks
+  const tickStart = Math.ceil(lo), tickEnd = Math.floor(hi);
+  for (let t = tickStart; t <= tickEnd; t++) {
+    const x = xOf(t);
+    html += "<line class='tick' x1='" + x + "' y1='" + (axisY - 6) + "' x2='" + x + "' y2='" + (axisY + 6) + "'/>";
+    html += "<text class='ticklbl' x='" + x + "' y='" + (axisY + 22) + "' text-anchor='middle'>" + t + "</text>";
+  }
+  // target line
+  const tx = xOf(tv);
+  html += "<line class='target' x1='" + tx + "' y1='20' x2='" + tx + "' y2='" + (axisY + 8) + "'/>";
+  html += "<text class='targetlbl' x='" + tx + "' y='16' text-anchor='middle'>x = " + target.p + "/" + target.q + "</text>";
+  // convergent markers; stagger vertically so labels do not overlap
+  for (let i = 0; i < shown; i++) {
+    const c = cf.convergents[i];
+    const v = c.p / c.q;
+    const x = xOf(v);
+    const side = (i % 2 === 0) ? "below" : "above";
+    const dir = (i % 2 === 0) ? 1 : -1;       // below convergents drop down, above rise up
+    const offset = 16 + (i % 3) * 16;
+    const y = axisY + dir * offset;
+    const r = (i === activeK) ? 7 : 5;
+    html += "<line class='tick' x1='" + x + "' y1='" + axisY + "' x2='" + x + "' y2='" + y + "'/>";
+    html += "<circle class='cv " + side + "' cx='" + x + "' cy='" + y + "' r='" + r + "'/>";
+    const ly = (dir === 1) ? y + 16 : y - 10;
+    html += "<text class='cvlbl' x='" + x + "' y='" + ly + "' text-anchor='middle'>" + c.p + "/" + c.q + "</text>";
+  }
+  svg.innerHTML = html;
+}
+
+// ---------- Animation state ----------
+const state = {
+  cf: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadCF(p, q) {
+  state.cf = computeCF(p, q);
+  state.plan = buildPlan(state.cf);
+  state.stepIdx = 0;
+  applyStep(0);
+  updateButtons();
+}
+
+function applyStep(idx) {
+  const step = state.plan[idx];
+  const activeK = (step.type === "euclid" || step.type === "convergent") ? step.k : -1;
+  renderCFString(state.cf, step.euclidShown);
+  renderEuclid(state.cf, step.euclidShown, step.type === "euclid" ? step.k : -1);
+  renderConvergents(state.cf, step.convShown, step.type === "convergent" ? step.k : -1);
+  renderLine(state.cf, step.convShown, step.type === "convergent" ? step.k : -1);
+  document.getElementById("stepInfo").textContent = "step " + idx + " / " + (state.plan.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  applyStep(idx);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+function rebuild() {
+  let p = parseInt(document.getElementById("pInput").value, 10);
+  let q = parseInt(document.getElementById("qInput").value, 10);
+  if (isNaN(p) || p < 0) p = 0;
+  if (isNaN(q) || q < 1) q = 1;
+  document.getElementById("pInput").value = p;
+  document.getElementById("qInput").value = q;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadCF(p, q);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("presetSel").addEventListener("change", () => {
+  const pr = PRESETS[document.getElementById("presetSel").value];
+  document.getElementById("pInput").value = pr[0];
+  document.getElementById("qInput").value = pr[1];
+  rebuild();
+});
+document.getElementById("pInput").addEventListener("change", rebuild);
+document.getElementById("qInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

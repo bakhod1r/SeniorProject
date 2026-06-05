@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Profile DP — Broken-Profile Domino Tiling</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --cell-free: #1c2330;
+    --cell-filled: #1f6feb;
+    --cell-cur: #d29922;
+    --cell-vert: #3fb950;
+    --cell-horiz: #a371f7;
+    --cell-blocked: #30363d;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 64px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+  .frontier {
+    display: flex;
+    gap: 6px;
+    margin: 6px 0 4px;
+    flex-wrap: wrap;
+  }
+  .fcell {
+    width: 40px; height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+    background: var(--panel-2);
+    color: var(--muted);
+    transition: all 0.2s ease;
+  }
+  .fcell.on { background: var(--cell-filled); color: #fff; border-color: var(--accent); }
+  .fcell.cur { box-shadow: 0 0 0 2px var(--cell-cur) inset; }
+  .fcol { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; width: 40px; }
+  .bitstr {
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 4px;
+    margin: 8px 0 2px;
+  }
+  .bitstr .on { color: var(--good); font-weight: 700; }
+  .bitstr .off { color: var(--muted); }
+  .moves {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .move {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .move.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .move .tag { font-weight: 700; min-width: 110px; }
+  .move.skip .tag { color: var(--cell-cur); }
+  .move.vert .tag { color: var(--cell-vert); }
+  .move.horiz .tag { color: var(--cell-horiz); }
+  .move.dead { opacity: 0.4; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  rect.gcell { stroke: var(--border); stroke-width: 1.5; }
+  text.clabel { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  .count-big { font-family: var(--mono); font-size: 22px; color: var(--good); font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Profile DP — Broken-Profile Domino Tiling</h1>
+  <p>Sweep an n&times;m grid <b>cell by cell</b>. Carry an m-bit <b>frontier mask</b>. At each free cell: <b>place vertical</b> (set the bit below), <b>place horizontal</b> (consume the right cell), or <b>skip</b> a filled cell. Cost O(n&middot;m&middot;2<sup>m</sup>).</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>n (rows) = <input type="number" id="nInput" value="3" min="1" max="6" /></label>
+    <label>m (cols) = <input type="number" id="mInput" value="3" min="1" max="6" /></label>
+    <label>Path:
+      <select id="pathSel">
+        <option value="first">first tiling found</option>
+        <option value="explore">explore decisions</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Grid sweep (cell <span id="curCellLabel">(0,0)</span>)</h2>
+      <svg id="gridSvg" width="280" height="280" viewBox="0 0 280 280"></svg>
+      <div class="interp" id="interpBox">
+        The <b>frontier</b> is the m-cell staircase between decided and undecided cells.
+        Bit c of the mask = "frontier cell in column c already covered".
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--cell-free)"></span> free</span>
+        <span><span class="swatch" style="background:var(--cell-filled)"></span> filled (bit=1)</span>
+        <span><span class="swatch" style="background:var(--cell-cur)"></span> current cell</span>
+        <span><span class="swatch" style="background:var(--cell-vert)"></span> vertical</span>
+        <span><span class="swatch" style="background:var(--cell-horiz)"></span> horizontal</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Frontier mask (m bits)</h2>
+      <div class="bitstr" id="bitStr"></div>
+      <div class="step-counter" id="maskInfo" style="margin:2px 0 8px;"></div>
+      <div class="frontier" id="frontierCells"></div>
+      <div class="frontier" id="frontierCols"></div>
+      <h2 style="margin-top:16px;">Transition at current cell</h2>
+      <div class="moves" id="moves"></div>
+      <div class="step-counter" id="countInfo" style="margin-top:14px;">Running tiling count (this board):</div>
+      <div class="count-big" id="countBig">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We sweep cells in reading order, carrying the frontier mask, and at each free cell we branch into place-vertical / place-horizontal.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Counting semiring (+,&times;); the panel shows one decision path through the broken-profile DP and, separately, the exact total number of tilings of the chosen board (computed by the full sweep).
+    The answer of the full DP is dp[mask=0] after all n&middot;m cells. See <code>junior.md</code> and <code>professional.md</code> for the proof that each decision appends one piece and the bijection between tilings and decision paths.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const MOD = 1000000007;
+
+// ---------- Full broken-profile count (for the displayed total) ----------
+function countTilings(n, m) {
+  if ((n * m) % 2 !== 0) return 0;
+  let R = n, C = m;
+  if (C > R) { const t = R; R = C; C = t; }
+  const full = 1 << C;
+  let dp = new Array(full).fill(0);
+  dp[0] = 1;
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      const ndp = new Array(full).fill(0);
+      const bit = 1 << c;
+      for (let mask = 0; mask < full; mask++) {
+        const v = dp[mask];
+        if (v === 0) continue;
+        if (mask & bit) {
+          const t = mask ^ bit;
+          ndp[t] = (ndp[t] + v) % MOD;
+        } else {
+          if (r + 1 < R) {
+            const t = mask | bit;
+            ndp[t] = (ndp[t] + v) % MOD;
+          }
+          if (c + 1 < C && (mask & (1 << (c + 1))) === 0) {
+            const t = mask | (1 << (c + 1));
+            ndp[t] = (ndp[t] + v) % MOD;
+          }
+        }
+      }
+      dp = ndp;
+    }
+  }
+  return dp[0];
+}
+
+// ---------- Build a single decision-path "story" through the DP ----------
+// We trace ONE consistent sequence of decisions that yields a full tiling
+// (the first one found by greedy reading-order backtracking), recording at
+// each cell the mask before, the move chosen, and the mask after. This gives
+// an honest illustration of the broken-profile transitions.
+function buildStory(n, m) {
+  // grid 'filled' marks; placements list of {type, cells:[{r,c}]}
+  const filled = [];
+  for (let r = 0; r < n; r++) filled.push(new Array(m).fill(false));
+  const placements = [];        // dominoes placed, in order
+  const steps = [];             // animation steps
+
+  // helper: compute the m-bit frontier mask at position pos = r*m + c.
+  // bit c' set means the frontier cell in column c' is already filled.
+  // Frontier cells: (r, c..m-1) and (r+1, 0..c-1).
+  function frontierMask(r, c) {
+    let mask = 0;
+    for (let cc = c; cc < m; cc++) {
+      if (filled[r][cc]) mask |= (1 << cc);
+    }
+    if (r + 1 < n) {
+      for (let cc = 0; cc < c; cc++) {
+        if (filled[r + 1][cc]) mask |= (1 << cc);
+      }
+    }
+    return mask;
+  }
+
+  steps.push({
+    type: "init", r: 0, c: 0,
+    maskBefore: 0, maskAfter: 0,
+    moves: [],
+    snapshot: snapshot(),
+    desc: "Start. The frontier mask is all zeros (every frontier cell free). We sweep in reading order (row by row, left to right)."
+  });
+
+  function snapshot() {
+    return {
+      filled: filled.map(row => row.slice()),
+      placements: placements.map(p => ({ type: p.type, cells: p.cells.map(x => ({ r: x.r, c: x.c })) }))
+    };
+  }
+
+  // backtracking that records the FIRST full tiling's decisions
+  function rec(pos) {
+    if (pos === n * m) return true; // all cells decided
+    const r = Math.floor(pos / m), c = pos % m;
+    const maskBefore = frontierMask(r, c);
+    const bit = 1 << c;
+
+    // enumerate legal moves for narration
+    const moves = [];
+    if (filled[r][c]) {
+      moves.push({ kind: "skip", legal: true });
+    } else {
+      moves.push({ kind: "vert", legal: (r + 1 < n && !filled[r + 1][c]) });
+      moves.push({ kind: "horiz", legal: (c + 1 < m && !filled[r][c + 1]) });
+    }
+
+    if (filled[r][c]) {
+      // skip: advance, mask bit clears for this column
+      steps.push({
+        type: "skip", r, c, maskBefore,
+        maskAfter: maskBefore & ~bit, moves,
+        snapshot: snapshot(),
+        desc: "Cell (" + r + "," + c + ") is already filled (bit " + c + " = 1). Skip: advance and clear bit " + c + "."
+      });
+      return rec(pos + 1);
+    }
+
+    // try vertical first
+    if (r + 1 < n && !filled[r + 1][c]) {
+      filled[r][c] = true; filled[r + 1][c] = true;
+      placements.push({ type: "vert", cells: [{ r, c }, { r: r + 1, c }] });
+      steps.push({
+        type: "vert", r, c, maskBefore,
+        maskAfter: maskBefore | bit, moves,
+        snapshot: snapshot(),
+        desc: "Cell (" + r + "," + c + ") is free. Place a VERTICAL domino covering (" + r + "," + c + ") and (" + (r + 1) + "," + c + "). Set bit " + c + " so the cell below is marked filled."
+      });
+      if (rec(pos + 1)) return true;
+      // undo
+      placements.pop();
+      filled[r][c] = false; filled[r + 1][c] = false;
+      steps.push({
+        type: "backtrack", r, c, maskBefore,
+        maskAfter: maskBefore, moves,
+        snapshot: snapshot(),
+        desc: "Vertical at (" + r + "," + c + ") led to a dead end downstream. Backtrack and try horizontal."
+      });
+    }
+
+    // try horizontal
+    if (c + 1 < m && !filled[r][c + 1]) {
+      filled[r][c] = true; filled[r][c + 1] = true;
+      placements.push({ type: "horiz", cells: [{ r, c }, { r, c: c + 1 }] });
+      steps.push({
+        type: "horiz", r, c, maskBefore,
+        maskAfter: maskBefore | (1 << (c + 1)), moves,
+        snapshot: snapshot(),
+        desc: "Cell (" + r + "," + c + ") is free. Place a HORIZONTAL domino covering (" + r + "," + c + ") and (" + r + "," + (c + 1) + "). Set bit " + (c + 1) + " (right cell consumed)."
+      });
+      if (rec(pos + 1)) return true;
+      placements.pop();
+      filled[r][c] = false; filled[r][c + 1] = false;
+      steps.push({
+        type: "backtrack", r, c, maskBefore,
+        maskAfter: maskBefore, moves,
+        snapshot: snapshot(),
+        desc: "Horizontal at (" + r + "," + c + ") also failed. Backtrack further."
+      });
+    }
+    return false;
+  }
+
+  const ok = rec(0);
+  steps.push({
+    type: "done", r: n - 1, c: m - 1,
+    maskBefore: 0, maskAfter: 0, moves: [],
+    snapshot: snapshot(),
+    success: ok,
+    desc: ok
+      ? "Done. A complete tiling is found; the frontier is empty (mask = 0). The full DP sums all such decision paths into the total count shown."
+      : "No tiling exists for this board (odd area or impossible). The DP total is 0."
+  });
+  return steps;
+}
+
+// ---------- Rendering ----------
+function renderGrid(snapshot, n, m, curR, curC, showCur) {
+  const svg = document.getElementById("gridSvg");
+  const W = 280, H = 280;
+  const pad = 14;
+  const cw = Math.floor((W - 2 * pad) / m);
+  const ch = Math.floor((H - 2 * pad) / n);
+  const sz = Math.min(cw, ch);
+  const ox = Math.floor((W - sz * m) / 2);
+  const oy = Math.floor((H - sz * n) / 2);
+  let html = "";
+  const filled = snapshot.filled;
+  // base cells
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < m; c++) {
+      const x = ox + c * sz, y = oy + r * sz;
+      let fill = "var(--cell-free)";
+      if (filled[r][c]) fill = "var(--cell-filled)";
+      if (showCur && r === curR && c === curC) fill = "var(--cell-cur)";
+      html += "<rect class='gcell' x='" + x + "' y='" + y + "' width='" + sz + "' height='" + sz + "' rx='4' fill='" + fill + "'/>";
+      html += "<text class='clabel' x='" + (x + 3) + "' y='" + (y + 12) + "'>" + r + "," + c + "</text>";
+    }
+  }
+  // overlay placed dominoes as rounded rects spanning two cells
+  for (const p of snapshot.placements) {
+    const a = p.cells[0], b = p.cells[1];
+    const x1 = ox + Math.min(a.c, b.c) * sz;
+    const y1 = oy + Math.min(a.r, b.r) * sz;
+    const w = (a.c === b.c ? 1 : 2) * sz;
+    const h = (a.r === b.r ? 1 : 2) * sz;
+    const col = p.type === "vert" ? "var(--cell-vert)" : "var(--cell-horiz)";
+    html += "<rect x='" + (x1 + 3) + "' y='" + (y1 + 3) + "' width='" + (w - 6) + "' height='" + (h - 6) +
+            "' rx='6' fill='" + col + "' opacity='0.85' stroke='#0d1117' stroke-width='2'/>";
+  }
+  svg.innerHTML = html;
+}
+
+function renderMask(mask, m, curC, showCur) {
+  const bs = document.getElementById("bitStr");
+  let html = "";
+  for (let c = m - 1; c >= 0; c--) {
+    const on = (mask >> c) & 1;
+    html += "<span class='" + (on ? "on" : "off") + "'>" + on + "</span>";
+  }
+  bs.innerHTML = html;
+  document.getElementById("maskInfo").textContent =
+    "mask = " + mask + " (bits shown high→low, bit c ↔ frontier column c)";
+
+  const fc = document.getElementById("frontierCells");
+  const cols = document.getElementById("frontierCols");
+  let fh = "", ch = "";
+  for (let c = 0; c < m; c++) {
+    const on = (mask >> c) & 1;
+    let cls = "fcell" + (on ? " on" : "");
+    if (showCur && c === curC) cls += " cur";
+    fh += "<div class='" + cls + "'>" + on + "</div>";
+    ch += "<div class='fcol'>c" + c + "</div>";
+  }
+  fc.innerHTML = fh;
+  cols.innerHTML = ch;
+}
+
+function renderMoves(step) {
+  const el = document.getElementById("moves");
+  const labels = {
+    skip: ["SKIP (filled)", "skip"],
+    vert: ["PLACE VERTICAL", "vert"],
+    horiz: ["PLACE HORIZONTAL", "horiz"]
+  };
+  const chosen = step.type;
+  let html = "";
+  if (!step.moves || step.moves.length === 0) {
+    html = "<div class='move'><span class='tag'>&mdash;</span> no decision at this step</div>";
+  } else {
+    for (const mv of step.moves) {
+      const [text, cls] = labels[mv.kind];
+      let c = "move " + cls;
+      if (!mv.legal) c += " dead";
+      if (mv.kind === chosen) c += " active";
+      let note = mv.legal ? "" : " (illegal here)";
+      if (mv.kind === chosen) note = " ← chosen";
+      html += "<div class='" + c + "'><span class='tag'>" + text + "</span><span>" + note + "</span></div>";
+    }
+  }
+  el.innerHTML = html;
+}
+
+// ---------- Animation state ----------
+const state = {
+  n: 3, m: 3,
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  total: 0
+};
+
+function loadBoard(n, m) {
+  state.n = n; state.m = m;
+  state.steps = buildStory(n, m);
+  state.total = countTilings(n, m);
+  state.stepIdx = 0;
+  applyStep(0);
+}
+
+function applyStep(idx) {
+  const step = state.steps[idx];
+  state.stepIdx = idx;
+  const showCur = step.type !== "init" && step.type !== "done";
+  // grid uses the snapshot AFTER the move (for placement steps it already
+  // contains the new domino); for clarity show maskAfter alongside.
+  renderGrid(step.snapshot, state.n, state.m, step.r, step.c, showCur);
+  const maskToShow = (step.type === "init" || step.type === "done")
+    ? step.maskBefore
+    : step.maskAfter;
+  renderMask(maskToShow, state.m, step.c, showCur);
+  renderMoves(step);
+  document.getElementById("curCellLabel").textContent = "(" + step.r + "," + step.c + ")";
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("countBig").textContent =
+    state.total === 0 ? "0 (no tiling)" : state.total.toString();
+  const ib = document.getElementById("interpBox");
+  if (step.type === "vert") {
+    ib.innerHTML = "Placed a <b>vertical</b> domino. Bit <b>" + step.c +
+      "</b> is now set: when the sweep reaches the cell below, it will read it as already filled.";
+  } else if (step.type === "horiz") {
+    ib.innerHTML = "Placed a <b>horizontal</b> domino. Bit <b>" + (step.c + 1) +
+      "</b> is now set: the cell to the right is consumed.";
+  } else if (step.type === "skip") {
+    ib.innerHTML = "Cell already filled (bit was 1). <b>Skip</b>: advance one cell and clear bit " + step.c + ".";
+  } else if (step.type === "backtrack") {
+    ib.innerHTML = "<b>Backtrack</b>: this branch could not complete. The full DP instead <i>sums</i> all branches; here we trace one path to a valid tiling.";
+  } else if (step.type === "done") {
+    ib.innerHTML = "Frontier empty (<b>mask = 0</b>) after all n&middot;m cells &mdash; a complete tiling. The DP total counts every such path.";
+  } else {
+    ib.innerHTML = "The <b>frontier</b> is the m-cell staircase between decided and undecided cells. Bit c = \"frontier cell in column c already covered\".";
+  }
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) applyStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+function rebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  let m = parseInt(document.getElementById("mInput").value, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  if (isNaN(m) || m < 1) m = 1;
+  if (n > 6) n = 6;
+  if (m > 6) m = 6;
+  document.getElementById("nInput").value = n;
+  document.getElementById("mInput").value = m;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadBoard(n, m);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("mInput").addEventListener("change", rebuild);
+document.getElementById("pathSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

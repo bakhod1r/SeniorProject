@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>0-1 BFS — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .legend .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  button {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    flex: 1;
+    min-width: 70px;
+  }
+
+  button:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #4a96e6; color: #fff; }
+
+  .speed-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; }
+
+  .grid-wrap { display: flex; justify-content: center; padding: 8px 0 18px; }
+
+  table.grid { border-collapse: collapse; }
+  table.grid td {
+    width: 56px;
+    height: 56px;
+    border: 1px solid var(--border);
+    text-align: center;
+    vertical-align: middle;
+    font-size: 13px;
+    position: relative;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+    background: var(--bg);
+  }
+
+  td .dval {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  td .wmark {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  td.free   { background: #14241a; }
+  td.wall   { background: #2a1416; }
+  td.source { box-shadow: inset 0 0 0 2px var(--blue); }
+  td.target { box-shadow: inset 0 0 0 2px var(--purple); }
+  td.current{ background: var(--yellow) !important; color: #000; }
+  td.settled{ background: #1b3a22; }
+  td.front  { box-shadow: inset 0 0 0 3px var(--green); }
+  td.back   { box-shadow: inset 0 0 0 3px var(--orange); }
+
+  .deque-area { margin-top: 8px; }
+  .deque-strip {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-height: 78px;
+  }
+
+  .deque-cell {
+    min-width: 60px;
+    padding: 8px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    text-align: center;
+    font-size: 12px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .deque-cell .dq-node { font-weight: 700; font-size: 14px; }
+  .deque-cell .dq-dist { color: var(--muted); font-size: 11px; }
+  .deque-cell.bucket-d   { border-color: var(--green); }
+  .deque-cell.bucket-d1  { border-color: var(--orange); }
+  .deque-cell.stale      { opacity: 0.4; text-decoration: line-through; }
+
+  .ends {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    padding: 0 6px;
+  }
+
+  .status {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-height: 70px;
+  }
+  .status .k { color: var(--blue); font-weight: 600; }
+  .status .g { color: var(--green); }
+  .status .o { color: var(--orange); }
+  .status .r { color: var(--red); }
+
+  .metrics { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; }
+  .metric { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+  .metric .mv { font-weight: 700; color: var(--blue); }
+
+  .code-note {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 12px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .code-note .hl { color: var(--yellow); }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>0-1 BFS — push 0 to the front, 1 to the back</h1>
+  <div class="legend">
+    <span class="chip"><span class="swatch" style="background:#14241a;border:1px solid var(--green)"></span>free (0-edge)</span>
+    <span class="chip"><span class="swatch" style="background:#2a1416;border:1px solid var(--red)"></span>obstacle (1-edge)</span>
+    <span class="chip"><span class="swatch" style="background:var(--yellow)"></span>current</span>
+    <span class="chip"><span class="swatch" style="background:#1b3a22"></span>settled</span>
+    <span class="chip"><span class="swatch" style="background:var(--green)"></span>front (bucket d)</span>
+    <span class="chip"><span class="swatch" style="background:var(--orange)"></span>back (bucket d+1)</span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Controls</h2>
+
+    <div class="control-group">
+      <div class="btn-row">
+        <button id="stepBtn" class="primary">Step</button>
+        <button id="runBtn">Run</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>slow</span>
+        <input id="speed" type="range" min="120" max="1200" value="600" step="60" />
+        <span>fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Maze</h2>
+      <div class="btn-row">
+        <button id="maze1">Maze A</button>
+        <button id="maze2">Maze B</button>
+        <button id="maze3">Maze C</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);line-height:1.5;margin:6px 0 0">
+        Source is top-left (blue), target is bottom-right (purple). Entering a free
+        cell costs <b style="color:var(--green)">0</b>, entering an obstacle costs
+        <b style="color:var(--red)">1</b>. The number in each cell is its current
+        best distance.
+      </p>
+    </div>
+
+    <div class="control-group">
+      <h2>Why it works</h2>
+      <div class="code-note">relax(u -&gt; v, w):
+  if dist[u]+w &lt; dist[v]:
+    dist[v] = dist[u]+w
+    <span class="hl">if w==0: deque.push_front(v)</span>
+    <span class="hl">else:    deque.push_back(v)</span>
+The deque holds at most TWO
+distance values: d (front)
+and d+1 (back). pop_front is
+always the minimum =&gt; O(V+E).</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Grid</h2>
+    <div class="grid-wrap">
+      <table class="grid" id="grid"></table>
+    </div>
+
+    <h2>Deque (front &rarr; back)</h2>
+    <div class="deque-area">
+      <div class="deque-strip" id="deque"></div>
+      <div class="ends">
+        <span>&larr; FRONT (pop_front here, push 0-edges here)</span>
+        <span>BACK (push 1-edges here) &rarr;</span>
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px">Status</h2>
+    <div class="status" id="status">Press <span class="k">Step</span> or <span class="k">Run</span> to begin 0-1 BFS from the blue source.</div>
+
+    <div class="metrics">
+      <div class="metric">steps: <span class="mv" id="mSteps">0</span></div>
+      <div class="metric">settled: <span class="mv" id="mSettled">0</span></div>
+      <div class="metric">pushes: <span class="mv" id="mPush">0</span></div>
+      <div class="metric">stale skips: <span class="mv" id="mStale">0</span></div>
+      <div class="metric">distinct dist in deque: <span class="mv" id="mLevels">0</span></div>
+    </div>
+  </section>
+</main>
+
+<footer>0-1 BFS visualization — a deque used as a 2-bucket priority queue. Self-contained, no external dependencies.</footer>
+
+<script>
+"use strict";
+
+// ---------- Mazes (0 = free, 1 = obstacle) ----------
+const MAZES = {
+  A: [
+    [0,0,1,0,0],
+    [1,0,1,0,1],
+    [0,0,0,0,0],
+    [0,1,1,1,0],
+    [0,0,0,1,0]
+  ],
+  B: [
+    [0,1,0,0,0],
+    [0,1,0,1,0],
+    [0,1,0,1,0],
+    [0,0,0,1,0],
+    [1,1,1,1,0]
+  ],
+  C: [
+    [0,1,1,1,0],
+    [0,1,0,0,0],
+    [0,1,0,1,1],
+    [0,1,0,0,0],
+    [0,0,1,1,0]
+  ]
+};
+
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+const INF = Infinity;
+
+// ---------- State ----------
+let grid, R, C;
+let dist, settled, inDeque;
+let deque;            // array of {node, d}  front = index 0
+let frontStack, back; // we model a deque as: frontStack (reversed) + back queue
+let timer = null;
+let metrics = { steps:0, settled:0, push:0, stale:0 };
+let phase;            // 'pop' | 'relax' | 'done'
+let cur = null;       // current popped node id
+let relaxIdx = 0;     // which neighbor we're relaxing
+let lastStatus = "";
+
+// We implement the deque as two arrays to keep O(1) both ends AND
+// render the logical order front->back easily.
+// logical order = frontStack reversed, then back in order.
+function dequeItems() {
+  const items = [];
+  for (let i = frontStack.length - 1; i >= 0; i--) items.push(frontStack[i]);
+  for (let i = 0; i < back.length; i++) items.push(back[i]);
+  return items;
+}
+function dequeEmpty() { return frontStack.length === 0 && back.length === 0; }
+function pushFront(item) { frontStack.push(item); metrics.push++; }
+function pushBack(item)  { back.push(item); metrics.push++; }
+function popFront() {
+  if (frontStack.length > 0) return frontStack.pop();
+  // move back into frontStack reversed
+  while (back.length > 0) frontStack.push(back.pop());
+  return frontStack.pop();
+}
+
+function id(r, c) { return r * C + c; }
+function rc(v) { return [Math.floor(v / C), v % C]; }
+
+// ---------- Init ----------
+function init(mazeKey) {
+  grid = MAZES[mazeKey].map(row => row.slice());
+  R = grid.length; C = grid[0].length;
+  dist = new Array(R * C).fill(INF);
+  settled = new Array(R * C).fill(false);
+  frontStack = []; back = [];
+  metrics = { steps:0, settled:0, push:0, stale:0 };
+  phase = 'pop';
+  cur = null; relaxIdx = 0;
+
+  dist[0] = grid[0][0]; // entering source cell costs its own value (0 here)
+  pushBack({ node: 0, d: dist[0] });
+
+  stopRun();
+  render();
+  setStatus(`Initialized. Source = (0,0), target = (${R-1},${C-1}). Deque seeded with the source at distance ${dist[0]}.`);
+}
+
+// ---------- One step of the algorithm ----------
+function step() {
+  if (phase === 'done') return;
+
+  if (phase === 'pop') {
+    if (dequeEmpty()) {
+      finish();
+      return;
+    }
+    const it = popFront();
+    metrics.steps++;
+    // stale check
+    if (settled[it.node] || it.d > dist[it.node]) {
+      metrics.stale++;
+      const [r,c] = rc(it.node);
+      setStatus(`Popped <span class="o">node (${r},${c})</span> with stored dist ${it.d}, but it is already settled / has a smaller dist (${dist[it.node]}). <span class="r">Stale — skip.</span>`);
+      render(it.node);
+      return; // stay in pop phase
+    }
+    settled[it.node] = true;
+    metrics.settled++;
+    cur = it.node;
+    relaxIdx = 0;
+    phase = 'relax';
+    const [r,c] = rc(cur);
+    setStatus(`<span class="g">Settled</span> node (${r},${c}) at distance <span class="k">${dist[cur]}</span> (first front-pop = optimal). Now relaxing its neighbors.`);
+    render(cur);
+    return;
+  }
+
+  if (phase === 'relax') {
+    if (relaxIdx >= DIRS.length) {
+      phase = 'pop';
+      step(); // immediately move to next pop for smoother flow
+      return;
+    }
+    const [r,c] = rc(cur);
+    const [dr,dc] = DIRS[relaxIdx];
+    relaxIdx++;
+    const nr = r + dr, nc = c + dc;
+    if (nr < 0 || nr >= R || nc < 0 || nc >= C) { step(); return; }
+    const w = grid[nr][nc];
+    const v = id(nr, nc);
+    const nd = dist[cur] + w;
+    if (nd < dist[v]) {
+      dist[v] = nd;
+      if (w === 0) {
+        pushFront({ node: v, d: nd });
+        setStatus(`Edge (${r},${c}) &rarr; (${nr},${nc}) has weight <span class="g">0</span>: dist becomes ${nd}. <span class="g">push_front</span> &mdash; stays in bucket d.`);
+      } else {
+        pushBack({ node: v, d: nd });
+        setStatus(`Edge (${r},${c}) &rarr; (${nr},${nc}) has weight <span class="o">1</span>: dist becomes ${nd}. <span class="o">push_back</span> &mdash; moves to bucket d+1.`);
+      }
+      render(cur, v);
+    } else {
+      // no improvement, continue silently to next neighbor
+      step();
+    }
+    return;
+  }
+}
+
+function finish() {
+  phase = 'done';
+  stopRun();
+  const tgt = id(R-1, C-1);
+  const ans = dist[tgt] === INF ? "unreachable" : dist[tgt];
+  setStatus(`<span class="g">Done.</span> Minimum cost (obstacles removed) from source to target = <span class="k">${ans}</span>. Every vertex was settled exactly once &rarr; O(V+E).`);
+  render();
+}
+
+// ---------- Rendering ----------
+function distinctLevels() {
+  const s = new Set();
+  for (const it of dequeItems()) {
+    if (!settled[it.node] && it.d <= dist[it.node]) s.add(it.d);
+  }
+  return s.size;
+}
+
+function render(currentNode = null, justPushed = null) {
+  const table = document.getElementById('grid');
+  table.innerHTML = '';
+  for (let r = 0; r < R; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < C; c++) {
+      const td = document.createElement('td');
+      const v = id(r, c);
+      td.classList.add(grid[r][c] === 1 ? 'wall' : 'free');
+      if (settled[v]) td.classList.add('settled');
+      if (v === 0) td.classList.add('source');
+      if (v === id(R-1, C-1)) td.classList.add('target');
+      if (currentNode !== null && v === currentNode) td.classList.add('current');
+      if (justPushed !== null && v === justPushed) {
+        td.classList.add(grid[r][c] === 0 ? 'front' : 'back');
+      }
+      const dlabel = dist[v] === INF ? '∞' : dist[v];
+      td.innerHTML = `<span class="wmark">${grid[r][c]}</span><span class="dval">${dlabel}</span>`;
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+
+  // deque
+  const dq = document.getElementById('deque');
+  dq.innerHTML = '';
+  const items = dequeItems();
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'deque-cell';
+    empty.style.opacity = '0.5';
+    empty.textContent = '(empty)';
+    dq.appendChild(empty);
+  } else {
+    // smallest live distance = bucket d
+    let minD = INF;
+    for (const it of items) if (!settled[it.node] && it.d <= dist[it.node]) minD = Math.min(minD, it.d);
+    for (const it of items) {
+      const cell = document.createElement('div');
+      cell.className = 'deque-cell';
+      const isStale = settled[it.node] || it.d > dist[it.node];
+      if (isStale) cell.classList.add('stale');
+      else if (it.d === minD) cell.classList.add('bucket-d');
+      else cell.classList.add('bucket-d1');
+      const [r,c] = rc(it.node);
+      cell.innerHTML = `<div class="dq-node">(${r},${c})</div><div class="dq-dist">d=${it.d}</div>`;
+      dq.appendChild(cell);
+    }
+  }
+
+  document.getElementById('mSteps').textContent = metrics.steps;
+  document.getElementById('mSettled').textContent = metrics.settled;
+  document.getElementById('mPush').textContent = metrics.push;
+  document.getElementById('mStale').textContent = metrics.stale;
+  document.getElementById('mLevels').textContent = distinctLevels();
+}
+
+function setStatus(html) {
+  lastStatus = html;
+  document.getElementById('status').innerHTML = html;
+}
+
+// ---------- Run loop ----------
+function startRun() {
+  if (timer) return;
+  const btn = document.getElementById('runBtn');
+  btn.textContent = 'Pause';
+  btn.classList.add('primary');
+  const tick = () => {
+    if (phase === 'done') { stopRun(); return; }
+    step();
+    const delay = 1320 - parseInt(document.getElementById('speed').value, 10);
+    timer = setTimeout(tick, Math.max(120, delay));
+  };
+  tick();
+}
+
+function stopRun() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  const btn = document.getElementById('runBtn');
+  btn.textContent = 'Run';
+  btn.classList.remove('primary');
+}
+
+function toggleRun() {
+  if (timer) stopRun(); else startRun();
+}
+
+// ---------- Wiring ----------
+document.getElementById('stepBtn').addEventListener('click', () => { stopRun(); step(); });
+document.getElementById('runBtn').addEventListener('click', toggleRun);
+document.getElementById('resetBtn').addEventListener('click', () => init(currentMaze));
+document.getElementById('maze1').addEventListener('click', () => { currentMaze = 'A'; init('A'); });
+document.getElementById('maze2').addEventListener('click', () => { currentMaze = 'B'; init('B'); });
+document.getElementById('maze3').addEventListener('click', () => { currentMaze = 'C'; init('C'); });
+
+let currentMaze = 'A';
+init('A');
+</script>
+</body>
+</html>

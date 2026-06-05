@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kadane's Algorithm — Maximum Subarray Sweep</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-cur: rgba(88, 166, 255, 0.30);
+    --hi-best: rgba(63, 185, 80, 0.30);
+    --hi-ptr: rgba(210, 153, 34, 0.55);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 280px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .array-area {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 16px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+  .cells { display: flex; gap: 6px; align-items: flex-end; min-height: 96px; }
+  .cell {
+    position: relative;
+    min-width: 46px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .idx { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .box {
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    transition: all 0.2s ease;
+  }
+  .box.neg { color: var(--bad); }
+  .box.pos { color: var(--good); }
+  .box.zero { color: var(--muted); }
+  .cell.in-cur .box { background: var(--hi-cur); border-color: var(--accent); }
+  .cell.in-best .box { box-shadow: 0 0 0 2px var(--good) inset; }
+  .cell.pointer .box { border-color: var(--accent-2); background: var(--hi-ptr); color: #fff; }
+  .ptrmark { height: 14px; font-size: 12px; color: var(--accent-2); font-weight: 700; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    margin-bottom: 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .stat .k { color: var(--muted); }
+  .stat .v { font-weight: 700; font-size: 18px; }
+  .stat.be .v { color: var(--accent); }
+  .stat.best .v { color: var(--good); }
+  .stat.flash { box-shadow: 0 0 0 2px var(--good) inset; }
+  .recur {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    line-height: 1.8;
+  }
+  .recur .pick { color: var(--good); font-weight: 700; }
+  .recur .drop { color: var(--muted); text-decoration: line-through; }
+  .recur b { color: var(--accent); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .answer {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+  }
+  .answer b { color: var(--good); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kadane's Algorithm — Sweeping for the Maximum Subarray</h1>
+  <p>bestEndingHere = max(a[i], bestEndingHere + a[i]); bestSoFar tracks the global maximum. Watch the recurrence <b>extend</b> or <b>restart</b> at each index.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Preset:
+      <select id="preset">
+        <option value="classic">Classic [-2,1,-3,4,-1,2,1,-5,4]</option>
+        <option value="allneg">All-negative [-3,-1,-2]</option>
+        <option value="allpos">All-positive [2,1,3,4]</option>
+        <option value="mixed">Mixed [4,-1,2,1,-7,3,8,-2]</option>
+        <option value="custom">Custom</option>
+      </select>
+    </label>
+    <label>a = <input type="text" id="arrInput" value="-2,1,-3,4,-1,2,1,-5,4" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="array-area">
+    <div class="cells" id="cells"></div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Running state at index <span id="curIdx">0</span></h2>
+      <div class="stat be" id="statBe">
+        <span class="k">bestEndingHere</span><span class="v" id="beVal">-</span>
+      </div>
+      <div class="stat best" id="statBest">
+        <span class="k">bestSoFar</span><span class="v" id="bestVal">-</span>
+      </div>
+      <div class="recur" id="recurBox">
+        Press <b>Step</b> to begin the sweep.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Current vs best window</h2>
+      <div class="answer" id="curWindow">current run: &mdash;</div>
+      <div class="answer" id="bestWindow" style="margin-top:8px;">best window so far: &mdash;</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-cur)"></span> current run (ends at pointer)</span>
+        <span><span class="swatch" style="box-shadow:0 0 0 2px var(--good) inset"></span> best window so far</span>
+        <span><span class="swatch" style="background:var(--hi-ptr)"></span> pointer i</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We sweep left to right. At each index, the best subarray ending here is either a[i] alone (restart) or the previous run extended by a[i].</div>
+
+  <div class="footnote">
+    Self-contained visualization. The classic (non-empty) contract: both variables start at a[0], so an all-negative array correctly yields the least-negative element &mdash; never a phantom 0.
+    See <code>junior.md</code> and <code>professional.md</code> for the proof that a negative running prefix is never worth carrying forward.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Presets ----------
+const PRESETS = {
+  classic: [-2, 1, -3, 4, -1, 2, 1, -5, 4],
+  allneg: [-3, -1, -2],
+  allpos: [2, 1, 3, 4],
+  mixed: [4, -1, 2, 1, -7, 3, 8, -2]
+};
+
+// ---------- Build the step plan ----------
+// Each step corresponds to processing one index i. We record the running
+// bestEndingHere, bestSoFar, the current run window [curStart..i], the best
+// window [bestL..bestR], whether this step was a restart, and a narration.
+function buildPlan(a) {
+  const steps = [];
+  if (a.length === 0) {
+    return [{ type: "empty", desc: "Empty array: no non-empty subarray exists." }];
+  }
+  let be = a[0];
+  let best = a[0];
+  let curStart = 0;
+  let bestL = 0, bestR = 0;
+
+  steps.push({
+    i: 0,
+    be, best,
+    curStart, curEnd: 0,
+    bestL, bestR,
+    restart: true,
+    newBest: true,
+    desc: "Initialize: bestEndingHere = bestSoFar = a[0] = " + a[0] +
+          ". The run starts at index 0. (We init to a[0], not 0, so all-negative arrays work.)"
+  });
+
+  for (let i = 1; i < a.length; i++) {
+    const extend = be + a[i];
+    const restart = a[i] > extend;
+    let chosen;
+    if (restart) {
+      chosen = a[i];
+      curStart = i;
+    } else {
+      chosen = extend;
+    }
+    be = chosen;
+    let newBest = false;
+    if (be > best) {
+      best = be;
+      bestL = curStart;
+      bestR = i;
+      newBest = true;
+    }
+    let desc;
+    if (restart) {
+      desc = "Index " + i + " (a[i] = " + a[i] + "): a[i] = " + a[i] +
+             " beats the extension (be+a[i] = " + extend + "), so we RESTART the run at index " + i + ".";
+    } else {
+      desc = "Index " + i + " (a[i] = " + a[i] + "): extending wins (be+a[i] = " + extend +
+             " ≥ a[i] = " + a[i] + "), so we EXTEND the run.";
+    }
+    if (newBest) desc += " New global best: bestSoFar = " + be + ".";
+    steps.push({
+      i, be, best,
+      curStart, curEnd: i,
+      bestL, bestR,
+      restart, newBest,
+      extend, ai: a[i],
+      desc
+    });
+  }
+  steps.push({
+    i: a.length - 1,
+    be, best,
+    curStart, curEnd: a.length - 1,
+    bestL, bestR,
+    restart: false,
+    newBest: false,
+    done: true,
+    desc: "Done. The maximum subarray sum is " + best + ", achieved by a[" + bestL + ".." + bestR + "]."
+  });
+  return steps;
+}
+
+// ---------- Render the array cells ----------
+function renderCells(a) {
+  const host = document.getElementById("cells");
+  host.innerHTML = "";
+  for (let i = 0; i < a.length; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.id = "cell-" + i;
+    const ptr = document.createElement("div");
+    ptr.className = "ptrmark";
+    ptr.id = "ptr-" + i;
+    ptr.innerHTML = "";
+    const box = document.createElement("div");
+    let cls = "box ";
+    if (a[i] < 0) cls += "neg";
+    else if (a[i] > 0) cls += "pos";
+    else cls += "zero";
+    box.className = cls;
+    box.textContent = a[i];
+    const idx = document.createElement("div");
+    idx.className = "idx";
+    idx.textContent = i;
+    cell.appendChild(ptr);
+    cell.appendChild(box);
+    cell.appendChild(idx);
+    host.appendChild(cell);
+  }
+}
+
+// ---------- Apply a step to the DOM ----------
+function applyStep(step) {
+  const a = state.a;
+  // clear all cell classes / pointers
+  for (let i = 0; i < a.length; i++) {
+    const cell = document.getElementById("cell-" + i);
+    cell.className = "cell";
+    document.getElementById("ptr-" + i).innerHTML = "";
+  }
+  if (step.type === "empty") {
+    document.getElementById("narrate").innerHTML = step.desc;
+    return;
+  }
+  // highlight current run window
+  for (let i = step.curStart; i <= step.curEnd; i++) {
+    document.getElementById("cell-" + i).classList.add("in-cur");
+  }
+  // highlight best window
+  for (let i = step.bestL; i <= step.bestR; i++) {
+    document.getElementById("cell-" + i).classList.add("in-best");
+  }
+  // pointer
+  const pcell = document.getElementById("cell-" + step.i);
+  pcell.classList.add("pointer");
+  document.getElementById("ptr-" + step.i).innerHTML = "&#9660; i";
+
+  // stats
+  document.getElementById("curIdx").textContent = step.i;
+  document.getElementById("beVal").textContent = step.be;
+  document.getElementById("bestVal").textContent = step.best;
+
+  const statBe = document.getElementById("statBe");
+  const statBest = document.getElementById("statBest");
+  statBe.classList.toggle("flash", step.restart === true && !step.done);
+  statBest.classList.toggle("flash", step.newBest === true);
+
+  // recurrence box
+  const recur = document.getElementById("recurBox");
+  if (step.i === 0 && step.curStart === 0 && step.curEnd === 0 && step.ai === undefined && !step.done) {
+    recur.innerHTML = "bestEndingHere = bestSoFar = <b>a[0]</b> = " + step.be;
+  } else if (step.done) {
+    recur.innerHTML = "Sweep complete. <span class='pick'>bestSoFar = " + step.best + "</span>";
+  } else {
+    if (step.restart) {
+      recur.innerHTML =
+        "be = max(<span class='pick'>a[i]=" + step.ai + "</span>, " +
+        "<span class='drop'>be+a[i]=" + step.extend + "</span>) = <b>" + step.be + "</b> &nbsp;&rarr;&nbsp; <span class='pick'>RESTART</span>";
+    } else {
+      recur.innerHTML =
+        "be = max(<span class='drop'>a[i]=" + step.ai + "</span>, " +
+        "<span class='pick'>be+a[i]=" + step.extend + "</span>) = <b>" + step.be + "</b> &nbsp;&rarr;&nbsp; EXTEND";
+    }
+  }
+
+  // windows text
+  const curSlice = a.slice(step.curStart, step.curEnd + 1);
+  document.getElementById("curWindow").innerHTML =
+    "current run: a[" + step.curStart + ".." + step.curEnd + "] = [" + curSlice.join(", ") +
+    "] (sum " + step.be + ")";
+  const bestSlice = a.slice(step.bestL, step.bestR + 1);
+  document.getElementById("bestWindow").innerHTML =
+    "best window so far: <b>a[" + step.bestL + ".." + step.bestR + "]</b> = [" + bestSlice.join(", ") +
+    "] (sum <b>" + step.best + "</b>)";
+
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+// ---------- Animation state ----------
+const state = {
+  a: [],
+  plan: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+function parseArray(text) {
+  const parts = text.split(/[\s,]+/).filter(s => s.length > 0);
+  const out = [];
+  for (const p of parts) {
+    const v = parseInt(p, 10);
+    if (!isNaN(v)) out.push(v);
+  }
+  return out;
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  let a = parseArray(document.getElementById("arrInput").value);
+  if (a.length === 0) a = [0];
+  if (a.length > 16) a = a.slice(0, 16); // keep the view tidy
+  state.a = a;
+  state.plan = buildPlan(a);
+  state.stepIdx = 0;
+  renderCells(a);
+  applyStep(state.plan[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.length - 1);
+  updateButtons();
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("preset").addEventListener("change", (e) => {
+  const key = e.target.value;
+  if (key !== "custom" && PRESETS[key]) {
+    document.getElementById("arrInput").value = PRESETS[key].join(",");
+    rebuild();
+  }
+});
+document.getElementById("arrInput").addEventListener("change", () => {
+  document.getElementById("preset").value = "custom";
+  rebuild();
+});
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

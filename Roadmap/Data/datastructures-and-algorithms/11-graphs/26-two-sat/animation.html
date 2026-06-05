@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>2-SAT — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+    --teal:    #39c5cf;
+    --pink:    #f778ba;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  textarea, input[type="text"], input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  textarea:focus, input:focus { outline: none; border-color: var(--blue); }
+
+  button.btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+
+  .row { display: flex; gap: 6px; }
+  .step-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preset-row button { flex: 1; min-width: 90px; }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 440px;
+    overflow-x: auto;
+  }
+
+  svg#graph { width: 100%; height: 460px; display: block; }
+
+  .edge { stroke: var(--border); stroke-width: 2; fill: none; marker-end: url(#arrow); transition: stroke 0.25s ease; }
+  .edge.active { stroke: var(--yellow); stroke-width: 3; }
+  .edge.tree { stroke: var(--blue); }
+
+  .lit circle { stroke-width: 2.5; transition: all 0.25s ease; }
+  .lit text { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: central; pointer-events: none; fill: var(--text); }
+  .lit text.id { font-size: 9px; fill: var(--muted); }
+
+  .lit.default circle { fill: rgba(88,166,255,0.12); stroke: var(--blue); }
+  .lit.visiting circle { fill: rgba(210,153,34,0.30); stroke: var(--yellow); }
+  .lit.onstack circle { fill: rgba(255,166,87,0.25); stroke: var(--orange); }
+  .lit.conflict circle { fill: rgba(248,81,73,0.35); stroke: var(--red); }
+  .lit.assigned-true circle { fill: rgba(63,185,80,0.30); stroke: var(--green); }
+  .lit.assigned-false circle { fill: rgba(139,148,158,0.15); stroke: var(--muted); }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .log .ok { color: var(--green); }
+  .log .bad { color: var(--red); }
+  .log .hl { color: var(--yellow); }
+  .log .dim { color: var(--muted); }
+
+  .status {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-size: 13px; padding: 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .status b { color: var(--blue); }
+  .verdict { font-weight: 700; font-size: 15px; }
+  .verdict.sat { color: var(--green); }
+  .verdict.unsat { color: var(--red); }
+  .verdict.pending { color: var(--muted); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 2px solid; }
+  .clauses { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px; color: var(--text); line-height: 1.8; }
+  .phase-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; border:1px solid var(--border); color:var(--muted); }
+  .phase-pill.active { background: var(--blue); color:#fff; border-color: var(--blue); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>2-SAT — Implication Graph &amp; SCC</h1>
+    <div class="sub">Clause &rarr; two implications &rarr; SCC &rarr; satisfiability verdict &amp; assignment</div>
+  </div>
+  <div class="row">
+    <span class="phase-pill" id="ph-build">1. Build graph</span>
+    <span class="phase-pill" id="ph-scc">2. SCC pass</span>
+    <span class="phase-pill" id="ph-verdict">3. Verdict</span>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="control-group">
+      <h2>Formula (2-CNF)</h2>
+      <p class="sub" style="margin-top:0">One clause per line. Use <code>x0</code>, <code>~x1</code> (~ = NOT), separated by a space. Example: <code>x0 x1</code> means (x0 &or; x1).</p>
+      <textarea id="formula">x0 x1
+~x0 x1
+~x0 ~x1</textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="load" style="flex:1">Load formula</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Presets</h2>
+      <div class="preset-row">
+        <button class="btn" data-preset="sat">SAT example</button>
+        <button class="btn" data-preset="unsat">UNSAT example</button>
+        <button class="btn" data-preset="color">2-coloring</button>
+        <button class="btn" data-preset="force">Forced</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Playback</h2>
+      <div class="step-controls">
+        <button class="btn" id="step">Step &#9654;</button>
+        <button class="btn warn" id="run">Run &#9655;&#9655;</button>
+        <button class="btn danger" id="reset">Reset &#8635;</button>
+        <button class="btn" id="skip">Skip to end &#9197;</button>
+      </div>
+      <div class="speed-row">
+        <span>Speed</span>
+        <input type="range" id="speed" min="60" max="1200" value="600" step="20" />
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Legend</h2>
+      <div class="legend">
+        <span><i class="dot" style="border-color:var(--blue)"></i>literal</span>
+        <span><i class="dot" style="border-color:var(--yellow)"></i>visiting</span>
+        <span><i class="dot" style="border-color:var(--orange)"></i>on SCC stack</span>
+        <span><i class="dot" style="border-color:var(--red)"></i>x &amp; ¬x same SCC</span>
+        <span><i class="dot" style="border-color:var(--green)"></i>assigned true</span>
+        <span><i class="dot" style="border-color:var(--muted)"></i>assigned false</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-col">
+    <div class="status">
+      <div>Verdict: <span class="verdict pending" id="verdict">— pending —</span></div>
+      <div>Variables: <b id="nvars">0</b></div>
+      <div>Clauses: <b id="nclauses">0</b></div>
+      <div>SCCs found: <b id="nscc">0</b></div>
+      <div>Step: <b id="stepno">0</b></div>
+    </div>
+
+    <div id="vis">
+      <svg id="graph">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"></path>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <h2>Clauses &amp; implications</h2>
+      <div class="clauses" id="clauseList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Trace log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// ---------- model ----------
+// literal-vertex encoding: xi=true -> 2i, xi=false -> 2i+1; neg(v)=v^1
+function nodeOf(v, val) { return val ? 2 * v : 2 * v + 1; }
+function neg(x) { return x ^ 1; }
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("graph");
+const logEl = document.getElementById("log");
+
+let state = null;      // current solver/animation state
+let timer = null;
+const PALETTE = ["#58a6ff","#3fb950","#d29922","#bc8cff","#ffa657","#39c5cf","#f778ba","#f85149","#7ee787","#a5d6ff"];
+
+// ---------- parse formula ----------
+function parseFormula(text) {
+  const clauses = [];
+  let maxVar = -1;
+  const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
+  for (const line of lines) {
+    const toks = line.split(/\s+/);
+    const lits = [];
+    for (const t of toks) {
+      const m = t.match(/^(~)?x(\d+)$/i);
+      if (!m) throw new Error("bad literal: " + t);
+      const val = !m[1];          // ~ present => false literal
+      const idx = parseInt(m[2], 10);
+      maxVar = Math.max(maxVar, idx);
+      lits.push({ v: idx, val });
+    }
+    if (lits.length === 1) lits.push({ ...lits[0] }); // unit clause (a) -> (a ∨ a)
+    if (lits.length !== 2) throw new Error("each clause needs 1 or 2 literals");
+    clauses.push(lits);
+  }
+  return { n: maxVar + 1, clauses };
+}
+
+// ---------- build implication graph & SCC plan (record steps) ----------
+function buildPlan(n, clauses) {
+  const N = 2 * n;
+  const adj = Array.from({ length: N }, () => []);
+  const steps = [];
+
+  // build edges
+  for (const [a, b] of clauses) {
+    const x = nodeOf(a.v, a.val), y = nodeOf(b.v, b.val);
+    adj[neg(x)].push(y);
+    adj[neg(y)].push(x);
+    steps.push({ type: "edge", from: neg(x), to: y, clause: [a, b] });
+    steps.push({ type: "edge", from: neg(y), to: x, clause: [a, b] });
+  }
+
+  // iterative Tarjan, recording visiting / pop events
+  const index = new Array(N).fill(-1);
+  const low = new Array(N).fill(0);
+  const onStk = new Array(N).fill(false);
+  const comp = new Array(N).fill(-1);
+  let idx = 0, cc = 0;
+  const stk = [];
+
+  for (let s = 0; s < N; s++) {
+    if (index[s] !== -1) continue;
+    const st = [{ v: s, p: 0 }];
+    while (st.length) {
+      const f = st[st.length - 1];
+      const v = f.v;
+      if (f.p === 0) {
+        index[v] = low[v] = idx++;
+        stk.push(v);
+        onStk[v] = true;
+        steps.push({ type: "visit", v });
+      }
+      if (f.p < adj[v].length) {
+        const w = adj[v][f.p++];
+        if (index[w] === -1) {
+          st.push({ v: w, p: 0 });
+        } else if (onStk[w]) {
+          low[v] = Math.min(low[v], index[w]);
+        }
+        continue;
+      }
+      if (low[v] === index[v]) {
+        const members = [];
+        while (true) {
+          const w = stk.pop();
+          onStk[w] = false;
+          comp[w] = cc;
+          members.push(w);
+          if (w === v) break;
+        }
+        steps.push({ type: "scc", id: cc, members: members.slice() });
+        cc++;
+      }
+      st.pop();
+      if (st.length) {
+        const par = st[st.length - 1].v;
+        low[par] = Math.min(low[par], low[v]);
+      }
+    }
+  }
+
+  // verdict + assignment
+  let sat = true;
+  const assign = new Array(n).fill(false);
+  const conflicts = [];
+  for (let i = 0; i < n; i++) {
+    if (comp[2 * i] === comp[2 * i + 1]) { sat = false; conflicts.push(i); }
+    else assign[i] = comp[2 * i] < comp[2 * i + 1];
+  }
+  steps.push({ type: "verdict", sat, assign, conflicts, comp: comp.slice(), sccCount: cc });
+
+  return { N, adj, steps, comp, sccCount: cc, sat, assign, conflicts };
+}
+
+// ---------- layout literal vertices in two columns ----------
+function layout(n) {
+  const pos = {};
+  const W = svg.clientWidth || 800;
+  const topPad = 40, botPad = 30, gap = (460 - topPad - botPad) / Math.max(1, n - 1 || 1);
+  const colTrue = W * 0.30, colFalse = W * 0.70;
+  for (let i = 0; i < n; i++) {
+    const y = n === 1 ? 230 : topPad + i * gap;
+    pos[2 * i] = { x: colTrue, y, label: "x" + i, id: 2 * i };       // true
+    pos[2 * i + 1] = { x: colFalse, y, label: "¬x" + i, id: 2 * i + 1 }; // false
+  }
+  return pos;
+}
+
+// ---------- render ----------
+function renderGraph() {
+  // clear all but defs
+  [...svg.querySelectorAll("g,.edge")].forEach(e => e.remove());
+  const pos = state.pos;
+  // edges
+  const edgeLayer = document.createElementNS(SVG_NS, "g");
+  edgeLayer.setAttribute("id", "edges");
+  svg.appendChild(edgeLayer);
+  state.edgeEls = [];
+  for (let e = 0; e < state.allEdges.length; e++) {
+    const { from, to } = state.allEdges[e];
+    const a = pos[from], b = pos[to];
+    const path = document.createElementNS(SVG_NS, "path");
+    // curve so the two directions don't overlap
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const off = 24;
+    const cx = mx - dy / (Math.hypot(dx, dy) || 1) * off;
+    const cy = my + dx / (Math.hypot(dx, dy) || 1) * off;
+    path.setAttribute("d", `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`);
+    path.setAttribute("class", "edge");
+    path.dataset.idx = e;
+    edgeLayer.appendChild(path);
+    state.edgeEls.push(path);
+  }
+  // nodes
+  const nodeLayer = document.createElementNS(SVG_NS, "g");
+  nodeLayer.setAttribute("id", "nodes");
+  svg.appendChild(nodeLayer);
+  state.nodeEls = {};
+  for (const k in pos) {
+    const p = pos[k];
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", "lit default");
+    g.setAttribute("transform", `translate(${p.x},${p.y})`);
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", "20");
+    g.appendChild(c);
+    const t = document.createElementNS(SVG_NS, "text");
+    t.textContent = p.label;
+    g.appendChild(t);
+    const idt = document.createElementNS(SVG_NS, "text");
+    idt.setAttribute("class", "id");
+    idt.setAttribute("y", "30");
+    idt.textContent = "v" + p.id;
+    g.appendChild(idt);
+    nodeLayer.appendChild(g);
+    state.nodeEls[k] = g;
+  }
+}
+
+function setNodeClass(v, cls) {
+  const g = state.nodeEls[v];
+  if (g) g.setAttribute("class", "lit " + cls);
+}
+
+function logLine(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setPhase(id) {
+  ["ph-build","ph-scc","ph-verdict"].forEach(p =>
+    document.getElementById(p).classList.toggle("active", p === id));
+}
+
+// ---------- step execution ----------
+function applyStep(step) {
+  if (step.type === "edge") {
+    setPhase("ph-build");
+    const eIdx = state.cursorEdge++;
+    if (state.edgeEls[eIdx]) {
+      state.edgeEls[eIdx].classList.add("active");
+      setTimeout(() => state.edgeEls[eIdx] && state.edgeEls[eIdx].classList.remove("active"), 500);
+    }
+    const [a, b] = step.clause;
+    const sa = (a.val ? "" : "¬") + "x" + a.v;
+    const sb = (b.val ? "" : "¬") + "x" + b.v;
+    logLine(`<span class="dim">build</span> clause (${sa} ∨ ${sb}) ⇒ edge <span class="hl">v${step.from} → v${step.to}</span>`);
+  } else if (step.type === "visit") {
+    setPhase("ph-scc");
+    setNodeClass(step.v, "onstack");
+    logLine(`<span class="dim">dfs</span> visit v${step.v} (push to SCC stack)`);
+  } else if (step.type === "scc") {
+    setPhase("ph-scc");
+    const color = PALETTE[step.id % PALETTE.length];
+    step.members.forEach(m => {
+      const g = state.nodeEls[m];
+      if (g) { g.querySelector("circle").style.fill = hexA(color, 0.30); g.querySelector("circle").style.stroke = color; g.setAttribute("class","lit"); }
+    });
+    document.getElementById("nscc").textContent = step.id + 1;
+    logLine(`<span class="ok">SCC #${step.id}</span> = { ${step.members.map(m=>"v"+m).join(", ")} }`);
+  } else if (step.type === "verdict") {
+    setPhase("ph-verdict");
+    const vEl = document.getElementById("verdict");
+    if (step.sat) {
+      vEl.textContent = "SATISFIABLE";
+      vEl.className = "verdict sat";
+      // color assignment
+      for (let i = 0; i < step.assign.length; i++) {
+        if (step.assign[i]) { setNodeClass(2 * i, "assigned-true"); setNodeClass(2 * i + 1, "assigned-false"); }
+        else { setNodeClass(2 * i, "assigned-false"); setNodeClass(2 * i + 1, "assigned-true"); }
+      }
+      const s = step.assign.map((b, i) => "x" + i + "=" + (b ? "T" : "F")).join("  ");
+      logLine(`<span class="ok">SATISFIABLE</span> — assignment: ${s}`);
+      logLine(`<span class="dim">rule: xi=true iff comp[2i] &lt; comp[2i+1]</span>`);
+    } else {
+      vEl.textContent = "UNSATISFIABLE";
+      vEl.className = "verdict unsat";
+      step.conflicts.forEach(i => { setNodeClass(2 * i, "conflict"); setNodeClass(2 * i + 1, "conflict"); });
+      const c = step.conflicts.map(i => "x" + i).join(", ");
+      logLine(`<span class="bad">UNSATISFIABLE</span> — variable(s) {${c}} share an SCC with their negation`);
+    }
+  }
+}
+
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+
+// ---------- driver ----------
+function doStep() {
+  if (!state || state.cursor >= state.plan.steps.length) { stopRun(); return false; }
+  const step = state.plan.steps[state.cursor++];
+  document.getElementById("stepno").textContent = state.cursor;
+  applyStep(step);
+  return state.cursor < state.plan.steps.length;
+}
+
+function runLoop() {
+  const more = doStep();
+  if (!more) { stopRun(); return; }
+  const delay = 1260 - parseInt(document.getElementById("speed").value, 10);
+  timer = setTimeout(runLoop, delay);
+}
+function stopRun() { if (timer) { clearTimeout(timer); timer = null; } }
+
+function skipToEnd() {
+  stopRun();
+  while (state && state.cursor < state.plan.steps.length) doStep();
+}
+
+function renderClauseList(clauses) {
+  const el = document.getElementById("clauseList");
+  el.innerHTML = "";
+  clauses.forEach((cl, i) => {
+    const [a, b] = cl;
+    const sa = (a.val ? "" : "¬") + "x" + a.v;
+    const sb = (b.val ? "" : "¬") + "x" + b.v;
+    const na = (a.val ? "¬" : "") + "x" + a.v;
+    const nb = (b.val ? "¬" : "") + "x" + b.v;
+    el.innerHTML += `<div>C${i}: (${sa} ∨ ${sb}) &nbsp;<span class="dim">≡ (${na} ⇒ ${sb}) ∧ (${nb} ⇒ ${sa})</span></div>`;
+  });
+}
+
+function load() {
+  stopRun();
+  logEl.innerHTML = "";
+  let parsed;
+  try { parsed = parseFormula(document.getElementById("formula").value); }
+  catch (e) { logLine(`<span class="bad">parse error: ${e.message}</span>`); return; }
+  if (parsed.n === 0) { logLine(`<span class="bad">no variables found</span>`); return; }
+
+  const plan = buildPlan(parsed.n, parsed.clauses);
+  // flat edge list (in plan order) for rendering
+  const allEdges = plan.steps.filter(s => s.type === "edge").map(s => ({ from: s.from, to: s.to }));
+
+  state = {
+    n: parsed.n,
+    clauses: parsed.clauses,
+    plan,
+    allEdges,
+    pos: layout(parsed.n),
+    cursor: 0,
+    cursorEdge: 0,
+  };
+  renderGraph();
+  renderClauseList(parsed.clauses);
+  document.getElementById("nvars").textContent = parsed.n;
+  document.getElementById("nclauses").textContent = parsed.clauses.length;
+  document.getElementById("nscc").textContent = 0;
+  document.getElementById("stepno").textContent = 0;
+  const vEl = document.getElementById("verdict");
+  vEl.textContent = "— pending —"; vEl.className = "verdict pending";
+  setPhase("ph-build");
+  logLine(`<span class="dim">loaded ${parsed.n} variables, ${parsed.clauses.length} clauses → ${2*parsed.n} vertices, ${allEdges.length} edges</span>`);
+}
+
+// ---------- presets ----------
+const PRESETS = {
+  sat: "x0 x1\n~x0 x1\n~x0 ~x1",
+  unsat: "x0 x0\n~x0 ~x0",
+  color: "x0 x1\n~x0 ~x1\nx1 x2\n~x1 ~x2",
+  force: "x0 x0\n~x0 x1\nx1 x2",
+};
+
+// ---------- wire up ----------
+document.getElementById("load").onclick = load;
+document.getElementById("step").onclick = () => { stopRun(); doStep(); };
+document.getElementById("run").onclick = () => { stopRun(); runLoop(); };
+document.getElementById("reset").onclick = () => { load(); };
+document.getElementById("skip").onclick = skipToEnd;
+document.querySelectorAll("[data-preset]").forEach(b => {
+  b.onclick = () => { document.getElementById("formula").value = PRESETS[b.dataset.preset]; load(); };
+});
+window.addEventListener("resize", () => { if (state) { state.pos = layout(state.n); renderGraph(); skipReRender(); } });
+function skipReRender() { /* re-running from scratch on resize is simplest */ }
+
+// initial load
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Discrete Log — Baby-Step Giant-Step (BSGS)</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-baby: rgba(88, 166, 255, 0.22);
+    --hi-giant: rgba(210, 153, 34, 0.30);
+    --hi-hit: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 78px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .eqn {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .eqn b { color: var(--accent); }
+  .eqn .v { color: var(--accent-2); font-weight: 700; }
+  table.tbl {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+  }
+  table.tbl td, table.tbl th {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: center;
+    transition: background 0.2s ease;
+  }
+  table.tbl th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  td.baby-new { background: var(--hi-baby); color: #fff; font-weight: 700; }
+  td.giant-cur { background: var(--hi-giant); color: #fff; font-weight: 700; }
+  td.hit { background: var(--hi-hit); color: #fff; font-weight: 800; }
+  .scroll {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate .ok { color: var(--good); font-weight: 700; }
+  .narrate .no { color: var(--bad); font-weight: 700; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .result {
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .result b { color: var(--accent); }
+  .result .val { color: var(--good); font-weight: 700; }
+  .result .bad { color: var(--bad); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Discrete Logarithm — Baby-Step Giant-Step</h1>
+  <p>Solve a<sup>x</sup> &equiv; b (mod m). Fill the baby-step table j &rarr; a<sup>j</sup>, then take giant steps b&middot;(a<sup>&minus;n</sup>)<sup>i</sup> until one collides with the table. The collision gives x = i&middot;n + j.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>a = <input type="number" id="aInput" value="2" min="2" /></label>
+    <label>b = <input type="number" id="bInput" value="3" min="0" /></label>
+    <label>m = <input type="number" id="mInput" value="13" min="2" max="200" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="eqn" id="eqnBox"></div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Baby steps &mdash; table[a<sup>j</sup>] = j</h2>
+      <div class="step-counter" id="babyCap">filling j = 0 .. n&minus;1</div>
+      <div class="scroll">
+        <table class="tbl" id="babyTbl"></table>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-baby)"></span> just inserted baby step</span>
+        <span><span class="swatch" style="background:var(--hi-hit)"></span> collision (the answer)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Giant steps &mdash; b&middot;(a<sup>&minus;n</sup>)<sup>i</sup></h2>
+      <div class="step-counter" id="giantCap">checking i = 0, 1, 2, &hellip;</div>
+      <div class="scroll">
+        <table class="tbl" id="giantTbl"></table>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-giant)"></span> current giant value</span>
+      </div>
+      <div class="result" id="resultBox">No collision yet.</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We pick n = &lceil;&radic;m&rceil;, fill the baby-step table, then probe it with giant steps.</div>
+
+  <div class="footnote" id="phaseHint">
+    Phase 1 (left) builds the table; Phase 2 (right) searches it. The collision cell turns green and the result box shows x.
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Form B decomposition x = i&middot;n + j with n = &lceil;&radic;m&rceil;.
+    Baby steps store a<sup>j</sup> for j = 0..n&minus;1; giant steps multiply by a<sup>&minus;n</sup> = (a<sup>n</sup>)<sup>&minus;1</sup> each iteration.
+    A giant value found in the table means a<sup>j</sup> &equiv; b&middot;a<sup>&minus;i&middot;n</sup>, i.e. a<sup>i&middot;n+j</sup> &equiv; b, so <b>x = i&middot;n + j</b>.
+    Requires gcd(a, m) = 1. See <code>junior.md</code> and <code>professional.md</code> for the correctness proof.
+  </div>
+
+  <div class="footnote">
+    <b>How to read this:</b> the left card fills the baby-step table once (the &radic;m precomputed values).
+    The right card streams giant steps, each one a single multiply by a<sup>&minus;n</sup>, and probes the table for a match.
+    Because the table lookup is O(1), the whole search costs only O(&radic;m) &mdash; two short scans instead of one long O(m) scan.
+    Try <code>a=2, b=5, m=13</code> (answer x=9), <code>a=3, b=1, m=13</code> (x=0), or a target outside &lang;a&rang; to watch the
+    &ldquo;no solution&rdquo; outcome after all n giant steps. Editing a, b, or m rebuilds the plan instantly.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Modular helpers ----------
+function gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
+
+function modpow(a, e, m) {
+  a = ((a % m) + m) % m;
+  let r = 1 % m;
+  while (e > 0) {
+    if (e & 1) r = (r * a) % m;
+    a = (a * a) % m;
+    e = Math.floor(e / 2);
+  }
+  return r;
+}
+
+// extended Euclid -> modular inverse of a mod m, or null
+function modinv(a, m) {
+  let oldR = ((a % m) + m) % m, r = m;
+  let oldS = 1, s = 0;
+  while (r !== 0) {
+    const q = Math.floor(oldR / r);
+    [oldR, r] = [r, oldR - q * r];
+    [oldS, s] = [s, oldS - q * s];
+  }
+  if (oldR !== 1) return null;
+  return ((oldS % m) + m) % m;
+}
+
+function ceilSqrt(m) {
+  let n = Math.floor(Math.sqrt(m));
+  while (n * n < m) n++;
+  return n;
+}
+
+// ---------- Build the BSGS step plan ----------
+// Phase 1: baby steps (insert a^j into the table), j = 0..n-1.
+// Phase 2: giant steps (gi = b*(a^-n)^i), i = 0.. until hit or i = n-1.
+function buildPlan(a, b, m) {
+  a = ((a % m) + m) % m;
+  b = ((b % m) + m) % m;
+  const n = ceilSqrt(m);
+  const steps = [];
+  const coprime = gcd(a, m) === 1;
+
+  // init step
+  steps.push({
+    type: "init",
+    desc: "Setup: a = " + a + ", b = " + b + ", m = " + m + ", n = ceil(sqrt(m)) = " + n +
+          (coprime ? ". gcd(a,m)=1, good." : ". <span class='no'>gcd(a,m) &ne; 1 &mdash; plain BSGS needs coprime base.</span>"),
+    baby: [], giantRows: [], hit: null, found: null
+  });
+
+  if (!coprime) {
+    steps.push({
+      type: "abort",
+      desc: "<span class='no'>gcd(a, m) = " + gcd(a, m) + " &ne; 1.</span> Use the general-modulus peel (see middle.md). This demo requires a coprime base.",
+      baby: [], giantRows: [], hit: null, found: null
+    });
+    return { steps, n, a, b, m, coprime };
+  }
+
+  // Phase 1: baby steps
+  const table = new Map(); // value -> smallest j
+  const babyRows = [];     // {j, val}
+  let cur = 1 % m;         // a^0
+  for (let j = 0; j < n; j++) {
+    if (!table.has(cur)) table.set(cur, j);
+    babyRows.push({ j: j, val: cur });
+    steps.push({
+      type: "baby",
+      desc: "Baby step j = " + j + ": store a^" + j + " = <span class='v'>" + cur + "</span> in the table.",
+      babyUpTo: j, newBaby: j,
+      giantRows: [], hit: null, found: null
+    });
+    cur = (cur * a) % m;
+  }
+
+  // Phase 2: giant steps
+  const an = modpow(a, n, m);
+  const inv = modinv(an, m);          // a^{-n}
+  const giantRows = [];               // {i, val, inMap}
+  let gi = b % m;                     // b * (a^-n)^0
+  let found = null;
+  for (let i = 0; i < n; i++) {
+    const inMap = table.has(gi);
+    giantRows.push({ i: i, val: gi, inMap: inMap });
+    if (inMap) {
+      const j = table.get(gi);
+      const x = i * n + j;
+      found = { i: i, j: j, x: x };
+      steps.push({
+        type: "giant-hit",
+        desc: "Giant step i = " + i + ": b&middot;(a^-n)^" + i + " = <span class='v'>" + gi +
+              "</span> <span class='ok'>IS in the table</span> at j = " + j +
+              " &rarr; x = i&middot;n + j = " + i + "&middot;" + n + " + " + j + " = <span class='ok'>" + x + "</span>.",
+        babyUpTo: n - 1, newBaby: -1,
+        giantUpTo: i, hit: { i: i, j: j, val: gi }, found: found
+      });
+      break;
+    } else {
+      steps.push({
+        type: "giant",
+        desc: "Giant step i = " + i + ": b&middot;(a^-n)^" + i + " = <span class='v'>" + gi +
+              "</span> &mdash; not in table. Multiply by a^-n = " + inv + " and continue.",
+        babyUpTo: n - 1, newBaby: -1,
+        giantUpTo: i, hit: null, found: null
+      });
+    }
+    gi = (gi * inv) % m;
+  }
+
+  if (found === null) {
+    steps.push({
+      type: "done-nosol",
+      desc: "All " + n + " giant steps checked, <span class='no'>no collision</span>. " +
+            "b is not in the subgroup generated by a &rarr; <span class='no'>no solution (x = &minus;1)</span>.",
+      babyUpTo: n - 1, newBaby: -1,
+      giantUpTo: n - 1, hit: null, found: null
+    });
+  }
+
+  return { steps, n, a, b, m, coprime, babyRows, found };
+}
+
+// ---------- Render ----------
+function renderBaby(plan, babyUpTo, newBaby, hit) {
+  const tbl = document.getElementById("babyTbl");
+  let html = "<tr><th>j</th><th>a<sup>j</sup> mod m</th></tr>";
+  if (!plan.babyRows) { tbl.innerHTML = html; return; }
+  for (let k = 0; k < plan.babyRows.length; k++) {
+    const row = plan.babyRows[k];
+    if (babyUpTo >= 0 && row.j > babyUpTo) break;
+    let cls = "";
+    if (row.j === newBaby) cls = "baby-new";
+    if (hit && hit.j === row.j && hit.val === row.val) cls = "hit";
+    html += "<tr><td>" + row.j + "</td><td class='" + cls + "'>" + row.val + "</td></tr>";
+  }
+  tbl.innerHTML = html;
+}
+
+function renderGiant(plan, step) {
+  const tbl = document.getElementById("giantTbl");
+  let html = "<tr><th>i</th><th>b&middot;(a<sup>&minus;n</sup>)<sup>i</sup></th><th>in table?</th></tr>";
+  const upTo = (step.giantUpTo === undefined) ? -1 : step.giantUpTo;
+  // recompute giant rows up to upTo for display
+  if (upTo < 0) { tbl.innerHTML = html; return; }
+  const a = plan.a, m = plan.m, n = plan.n;
+  const an = modpow(a, n, m);
+  const inv = modinv(an, m);
+  // rebuild a quick table lookup
+  const tableVals = new Map();
+  let cur = 1 % m;
+  for (let j = 0; j < n; j++) { if (!tableVals.has(cur)) tableVals.set(cur, j); cur = (cur * a) % m; }
+  let gi = plan.b % m;
+  for (let i = 0; i <= upTo; i++) {
+    const inMap = tableVals.has(gi);
+    let cls = "";
+    if (i === upTo) cls = inMap ? "hit" : "giant-cur";
+    const tag = inMap ? "<span style='color:var(--good)'>yes (j=" + tableVals.get(gi) + ")</span>" : "no";
+    html += "<tr><td>" + i + "</td><td class='" + cls + "'>" + gi + "</td><td>" + tag + "</td></tr>";
+    gi = (gi * inv) % m;
+  }
+  tbl.innerHTML = html;
+}
+
+function renderEqn(plan) {
+  document.getElementById("eqnBox").innerHTML =
+    "Solve <b>a<sup>x</sup> &equiv; b (mod m)</b> &nbsp;&rarr;&nbsp; " +
+    "<span class='v'>" + plan.a + "</span><sup>x</sup> &equiv; <span class='v'>" + plan.b +
+    "</span> (mod <span class='v'>" + plan.m + "</span>), &nbsp; n = &lceil;&radic;m&rceil; = <span class='v'>" + plan.n + "</span>. " +
+    "Decompose x = i&middot;n + j.";
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function applyStep(idx) {
+  const plan = state.plan;
+  const step = plan.steps[idx];
+  const babyUpTo = (step.babyUpTo === undefined) ? -1 : step.babyUpTo;
+  const newBaby = (step.newBaby === undefined) ? -1 : step.newBaby;
+  renderBaby(plan, babyUpTo, newBaby, step.hit);
+  renderGiant(plan, step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("babyCap").textContent =
+    "n = " + plan.n + " baby steps (j = 0 .. " + (plan.n - 1) + ")";
+  document.getElementById("giantCap").textContent =
+    "giant steps i = 0, 1, 2, …";
+  // result box
+  const rb = document.getElementById("resultBox");
+  if (step.found) {
+    rb.innerHTML = "Collision at i = " + step.found.i + ", j = " + step.found.j +
+      " &rarr; <b>x = i&middot;n + j = <span class='val'>" + step.found.x + "</span></b>. " +
+      "Check: " + plan.a + "^" + step.found.x + " mod " + plan.m + " = " +
+      modpow(plan.a, step.found.x, plan.m) + " (should equal b = " + plan.b + ").";
+  } else if (step.type === "done-nosol") {
+    rb.innerHTML = "<span class='bad'>No solution: x = &minus;1.</span> b is not a power of a mod m.";
+  } else if (step.type === "abort") {
+    rb.innerHTML = "<span class='bad'>gcd(a, m) &ne; 1 &mdash; coprime base required.</span>";
+  } else {
+    rb.innerHTML = "No collision yet.";
+  }
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(idx);
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  let a = parseInt(document.getElementById("aInput").value, 10);
+  let b = parseInt(document.getElementById("bInput").value, 10);
+  let m = parseInt(document.getElementById("mInput").value, 10);
+  if (isNaN(m) || m < 2) m = 2;
+  if (m > 200) m = 200;
+  if (isNaN(a) || a < 2) a = 2;
+  if (isNaN(b) || b < 0) b = 0;
+  document.getElementById("aInput").value = a;
+  document.getElementById("bInput").value = b;
+  document.getElementById("mInput").value = m;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.plan = buildPlan(a, b, m);
+  state.stepIdx = 0;
+  renderEqn(state.plan);
+  applyStep(0);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("bInput").addEventListener("change", rebuild);
+document.getElementById("mInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

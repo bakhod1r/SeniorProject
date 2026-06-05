@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Polynomial Operations — Schoolbook Multiply & Horner Evaluation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-a: rgba(88, 166, 255, 0.30);
+    --hi-b: rgba(210, 153, 34, 0.30);
+    --hi-c: rgba(63, 185, 80, 0.42);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"], .controls input[type="number"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input.poly { width: 150px; }
+  .controls input.num { width: 70px; }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .mode-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .mode-tabs button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .arr { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .cell {
+    min-width: 44px;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 14px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .cell .idx { font-size: 10px; color: var(--muted); }
+  .cell.hi-a { background: var(--hi-a); border-color: var(--accent); }
+  .cell.hi-b { background: var(--hi-b); border-color: var(--accent-2); }
+  .cell.hi-c { background: var(--hi-c); border-color: var(--good); color: #fff; font-weight: 700; }
+  .cell.done { border-color: var(--good); }
+  .arr-label { font-size: 12px; color: var(--muted); margin-top: 8px; font-family: var(--mono); }
+  .formula {
+    margin-top: 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    min-height: 44px;
+  }
+  .formula b { color: var(--accent); }
+  .formula .pa { color: var(--accent); }
+  .formula .pb { color: var(--accent-2); }
+  .formula .val { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .err { color: var(--bad); font-size: 12px; min-height: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Polynomial Operations — Schoolbook Multiply &amp; Horner Evaluation</h1>
+  <p>Multiplying polynomials is <b>convolving</b> their coefficient arrays: (P&middot;Q)[k] = &Sigma;<sub>i+j=k</sub> P[i]&middot;Q[j]. Horner evaluates P(x&#8320;) in O(n). All arithmetic is mod p.</p>
+</header>
+
+<div class="wrap">
+  <div class="mode-tabs">
+    <button id="tabMul" class="active">Multiply (convolution)</button>
+    <button id="tabHorner">Horner evaluation</button>
+  </div>
+
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>P = <input type="text" id="pInput" class="poly" value="3,5,2" /></label>
+    <label id="qLabel">Q = <input type="text" id="qInput" class="poly" value="4,1" /></label>
+    <label id="xLabel" style="display:none;">x&#8320; = <input type="number" id="xInput" class="num" value="2" /></label>
+    <label>mod p = <input type="number" id="modInput" class="num" value="97" min="2" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+  <div class="err" id="errBox"></div>
+
+  <div class="layout">
+    <div class="card" id="leftCard">
+      <h2 id="leftTitle">Inputs</h2>
+      <div class="arr-label">P (coefficient of x<sup>i</sup> at index i)</div>
+      <div class="arr" id="pArr"></div>
+      <div class="arr-label" id="qArrLabel">Q</div>
+      <div class="arr" id="qArr"></div>
+      <div class="formula" id="formulaBox">Press <b>Step</b> to begin.</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-a)"></span> P[i] (current)</span>
+        <span><span class="swatch" style="background:var(--hi-b)"></span> Q[j] (current)</span>
+        <span><span class="swatch" style="background:var(--hi-c)"></span> target slot</span>
+      </div>
+    </div>
+
+    <div class="card" id="rightCard">
+      <h2 id="rightTitle">Product (P&middot;Q)</h2>
+      <div class="arr-label" id="resultLabel">result[k] accumulates P[i]&middot;Q[j] for every i+j=k</div>
+      <div class="arr" id="resultArr"></div>
+      <div class="formula" id="resultFormula"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    Multiply mode: each P[i]&middot;Q[j] product drops into result slot i+j. Watch the product array fill cell by cell.
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>How to read this</h2>
+    <p style="font-size:13px; color:var(--muted); margin:6px 0;">
+      <b>Multiply mode</b> shows schoolbook convolution. Edit <code>P</code> and <code>Q</code> as comma-separated
+      coefficients (index 0 is the constant term). Each step highlights one <code>P[i]</code> (blue) and one
+      <code>Q[j]</code> (gold), multiplies them, and adds the product into result slot <code>k = i + j</code> (green).
+      After all <code>i,j</code> pairs, the green array is the full product <code>P&middot;Q</code> mod <code>p</code>.
+    </p>
+    <p style="font-size:13px; color:var(--muted); margin:6px 0;">
+      <b>Horner mode</b> evaluates <code>P(x&#8320;)</code>. Starting from <code>acc = 0</code>, each step walks one
+      coefficient from the highest power down, applying <code>acc = acc&middot;x&#8320; + P[i]</code> (mod <code>p</code>).
+      The final accumulator is <code>P(x&#8320;)</code> &mdash; computed in just <code>n</code> multiply-adds, the optimal cost.
+    </p>
+    <p style="font-size:13px; color:var(--muted); margin:6px 0;">
+      Use <b>Step</b> to advance one operation, <b>Run</b> to autoplay, and <b>Reset</b> to rebuild from the current
+      inputs. Change <code>mod p</code> to see how reduction keeps every coefficient in <code>[0, p)</code>.
+    </p>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization, no external dependencies. Coefficients are reduced mod <code>p</code> (default a small prime so values stay readable).
+    Multiplying two polynomials is exactly convolving their coefficient arrays; fast methods (Karatsuba, FFT, NTT) compute this same convolution in <code>O(n log n)</code>.
+    Horner's rule evaluates P(x&#8320;) with n multiply-adds. See <code>junior.md</code> and <code>professional.md</code> for details.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  mode: "mul",          // "mul" or "horner"
+  P: [3, 5, 2],
+  Q: [4, 1],
+  x0: 2,
+  mod: 97,
+  plan: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// ---------- Parsing ----------
+function parsePoly(str) {
+  const parts = str.split(",").map(s => s.trim()).filter(s => s.length > 0);
+  const arr = parts.map(s => {
+    const v = Number(s);
+    if (!Number.isFinite(v) || !Number.isInteger(v)) return NaN;
+    return v;
+  });
+  return arr;
+}
+
+function reduce(v, mod) {
+  let r = v % mod;
+  if (r < 0) r += mod;
+  return r;
+}
+
+// ---------- Build multiply plan ----------
+// Each step records (i, j, k, partialResult) so we can replay the convolution.
+function buildMulPlan(P, Q, mod) {
+  const steps = [];
+  const n = P.length, m = Q.length;
+  const result = new Array(n + m - 1).fill(0);
+  steps.push({
+    type: "init",
+    i: -1, j: -1, k: -1,
+    result: result.slice(),
+    desc: "Start: result has " + (n + m - 1) + " slots, all zero. Product degree = deg P + deg Q = " + (n - 1) + " + " + (m - 1) + " = " + (n + m - 2) + "."
+  });
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      const k = i + j;
+      const prod = reduce(P[i] * Q[j], mod);
+      result[k] = reduce(result[k] + prod, mod);
+      steps.push({
+        type: "mul",
+        i: i, j: j, k: k,
+        prod: prod,
+        result: result.slice(),
+        desc: "P[" + i + "]&middot;Q[" + j + "] = " + P[i] + "&middot;" + Q[j] +
+              " = " + prod + " (mod " + mod + "). Add into result[" + k + "] (since " + i + "+" + j + " = " + k + ")."
+      });
+    }
+  }
+  steps.push({
+    type: "done",
+    i: -1, j: -1, k: -1,
+    result: result.slice(),
+    desc: "Done. result = [" + result.join(", ") + "] is the convolution P&middot;Q mod " + mod + "."
+  });
+  return steps;
+}
+
+// ---------- Build Horner plan ----------
+// acc starts at 0; for i from high to low: acc = acc*x0 + P[i].
+function buildHornerPlan(P, x0, mod) {
+  const steps = [];
+  let acc = 0;
+  const n = P.length;
+  steps.push({
+    type: "init",
+    i: -1, acc: 0,
+    desc: "Start: acc = 0. We read coefficients from the highest power down to the constant term."
+  });
+  for (let i = n - 1; i >= 0; i--) {
+    const before = acc;
+    acc = reduce(acc * x0 + P[i], mod);
+    steps.push({
+      type: "horner",
+      i: i, acc: acc, before: before,
+      desc: "acc = acc&middot;x&#8320; + P[" + i + "] = " + before + "&middot;" + x0 + " + " + P[i] +
+            " = " + acc + " (mod " + mod + ")."
+    });
+  }
+  steps.push({
+    type: "done",
+    i: -1, acc: acc,
+    desc: "Done. P(" + x0 + ") = " + acc + " (mod " + mod + ")."
+  });
+  return steps;
+}
+
+// ---------- Render coefficient array ----------
+function renderArray(container, arr, opts) {
+  opts = opts || {};
+  container.innerHTML = "";
+  for (let i = 0; i < arr.length; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if (opts.hiClass && opts.hiIndex === i) cell.classList.add(opts.hiClass);
+    if (opts.doneUpTo !== undefined && i <= opts.doneUpTo) cell.classList.add("done");
+    cell.innerHTML = "<span>" + arr[i] + "</span><span class='idx'>x<sup>" + i + "</sup></span>";
+    container.appendChild(cell);
+  }
+  if (arr.length === 0) {
+    container.innerHTML = "<div class='step-counter'>(empty)</div>";
+  }
+}
+
+// ---------- Apply a step ----------
+function applyStep(step) {
+  const pArr = document.getElementById("pArr");
+  const qArr = document.getElementById("qArr");
+  const resultArr = document.getElementById("resultArr");
+  const formula = document.getElementById("formulaBox");
+  const resultFormula = document.getElementById("resultFormula");
+
+  if (state.mode === "mul") {
+    renderArray(pArr, state.P, { hiClass: "hi-a", hiIndex: step.i });
+    renderArray(qArr, state.Q, { hiClass: "hi-b", hiIndex: step.j });
+    renderArray(resultArr, step.result, { hiClass: "hi-c", hiIndex: step.k });
+    if (step.type === "mul") {
+      formula.innerHTML = "<span class='pa'>P[" + step.i + "] = " + state.P[step.i] + "</span> &times; " +
+        "<span class='pb'>Q[" + step.j + "] = " + state.Q[step.j] + "</span> = " +
+        "<span class='val'>" + step.prod + "</span>";
+      resultFormula.innerHTML = "result[<b>" + step.k + "</b>] is now <span class='val'>" +
+        step.result[step.k] + "</span> &nbsp;(slot k = i+j = " + step.i + "+" + step.j + ")";
+    } else if (step.type === "init") {
+      formula.innerHTML = "result initialized to zeros, length " + step.result.length + ".";
+      resultFormula.innerHTML = "";
+    } else {
+      formula.innerHTML = "Convolution complete.";
+      resultFormula.innerHTML = "P&middot;Q = [" + step.result.join(", ") + "]";
+    }
+  } else {
+    // horner
+    renderArray(pArr, state.P, { hiClass: "hi-a", hiIndex: step.i });
+    if (step.type === "horner") {
+      formula.innerHTML = "acc = <b>" + step.before + "</b> &middot; x&#8320;(" + state.x0 + ") + " +
+        "<span class='pa'>P[" + step.i + "] = " + state.P[step.i] + "</span> = " +
+        "<span class='val'>" + step.acc + "</span>";
+    } else if (step.type === "init") {
+      formula.innerHTML = "acc = 0 (running accumulator).";
+    } else {
+      formula.innerHTML = "P(" + state.x0 + ") = <span class='val'>" + step.acc + "</span>";
+    }
+    // show accumulator as a single-cell result
+    renderArray(resultArr, [step.acc], { hiClass: "hi-c", hiIndex: 0 });
+    resultFormula.innerHTML = step.type === "done"
+      ? "Final value P(" + state.x0 + ") = <span class='val'>" + step.acc + "</span>"
+      : "current acc = <span class='val'>" + step.acc + "</span>";
+  }
+
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+// ---------- Step navigation ----------
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 950);
+}
+
+// ---------- Rebuild from inputs ----------
+function rebuild() {
+  const errBox = document.getElementById("errBox");
+  errBox.textContent = "";
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+
+  let mod = parseInt(document.getElementById("modInput").value, 10);
+  if (!Number.isFinite(mod) || mod < 2) { mod = 97; document.getElementById("modInput").value = 97; }
+  state.mod = mod;
+
+  const P = parsePoly(document.getElementById("pInput").value);
+  if (P.some(v => Number.isNaN(v)) || P.length === 0) {
+    errBox.textContent = "P must be a comma-separated list of integers, e.g. 3,5,2";
+    return;
+  }
+  state.P = P.map(v => reduce(v, mod));
+
+  if (state.mode === "mul") {
+    const Q = parsePoly(document.getElementById("qInput").value);
+    if (Q.some(v => Number.isNaN(v)) || Q.length === 0) {
+      errBox.textContent = "Q must be a comma-separated list of integers, e.g. 4,1";
+      return;
+    }
+    state.Q = Q.map(v => reduce(v, mod));
+    state.plan = buildMulPlan(state.P, state.Q, mod);
+  } else {
+    let x0 = parseInt(document.getElementById("xInput").value, 10);
+    if (!Number.isFinite(x0)) { x0 = 0; document.getElementById("xInput").value = 0; }
+    state.x0 = reduce(x0, mod);
+    state.plan = buildHornerPlan(state.P, state.x0, mod);
+  }
+
+  state.stepIdx = 0;
+  // sync displayed P input to reduced values for clarity
+  applyStep(state.plan[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.length - 1);
+  updateButtons();
+}
+
+// ---------- Mode switching ----------
+function setMode(mode) {
+  state.mode = mode;
+  const isMul = mode === "mul";
+  document.getElementById("tabMul").classList.toggle("active", isMul);
+  document.getElementById("tabHorner").classList.toggle("active", !isMul);
+  document.getElementById("qLabel").style.display = isMul ? "" : "none";
+  document.getElementById("xLabel").style.display = isMul ? "none" : "";
+  document.getElementById("qArrLabel").style.display = isMul ? "" : "none";
+  document.getElementById("qArr").style.display = isMul ? "" : "none";
+  document.getElementById("leftTitle").textContent = isMul ? "Inputs P and Q" : "Input P and x₀";
+  document.getElementById("rightTitle").innerHTML = isMul ? "Product (P&middot;Q)" : "Horner accumulator";
+  document.getElementById("resultLabel").innerHTML = isMul
+    ? "result[k] accumulates P[i]&middot;Q[j] for every i+j=k"
+    : "acc = acc&middot;x₀ + P[i], walking i from high to low";
+  document.getElementById("narrate").innerHTML = isMul
+    ? "Multiply mode: each P[i]&middot;Q[j] product drops into result slot i+j."
+    : "Horner mode: start acc = 0; repeatedly multiply by x₀ and add the next coefficient.";
+  rebuild();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("tabMul").addEventListener("click", () => setMode("mul"));
+document.getElementById("tabHorner").addEventListener("click", () => setMode("horner"));
+["pInput", "qInput", "xInput", "modInput"].forEach(id => {
+  document.getElementById(id).addEventListener("change", rebuild);
+});
+
+// ---------- Initial load ----------
+setMode("mul");
+</script>
+</body>
+</html>

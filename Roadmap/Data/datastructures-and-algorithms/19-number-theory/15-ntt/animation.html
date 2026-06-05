@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Number-Theoretic Transform (NTT) — Iterative Butterfly over a Small Prime</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hiA: rgba(88, 166, 255, 0.28);
+    --hiB: rgba(210, 153, 34, 0.28);
+    --hiPair: rgba(63, 185, 80, 0.34);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  header code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 120px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .arr { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .cell {
+    min-width: 40px;
+    height: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 14px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    padding: 2px 6px;
+  }
+  .cell .idx { font-size: 9px; color: var(--muted); }
+  .cell.hiA { background: var(--hiA); border-color: var(--accent); }
+  .cell.hiB { background: var(--hiB); border-color: var(--accent-2); }
+  .cell.hiPair { background: var(--hiPair); border-color: var(--good); color: #fff; font-weight: 700; }
+  .label { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate .val { color: var(--good); font-weight: 700; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .info {
+    margin-top: 10px;
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .info b { color: var(--accent); }
+  .info .ok { color: var(--good); font-weight: 700; }
+  .info .bad { color: var(--bad); font-weight: 700; }
+  .phase-bar { display: flex; gap: 6px; margin: 4px 0 12px; flex-wrap: wrap; }
+  .phase {
+    font-size: 11px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: var(--panel-2);
+  }
+  .phase.active { border-color: var(--accent); color: #fff; background: #1f6feb; }
+  .phase.done { border-color: var(--good); color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  .footnote code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Number-Theoretic Transform — Iterative Butterfly over a Small Prime</h1>
+  <p>NTT = FFT in <code>Z/pZ</code>. Watch bit-reversal &rarr; butterfly stages with root <code>&omega; = g<sup>(p-1)/n</sup></code> &rarr; pointwise multiply &rarr; inverse NTT &rarr; <code>n<sup>-1</sup></code> scaling, all exact integers mod a small NTT-friendly prime.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Prime:
+      <select id="primeSel">
+        <option value="17">p = 17 (g=3, n&le;16)</option>
+        <option value="97">p = 97 (g=5, n&le;32)</option>
+        <option value="193">p = 193 (g=5, n&le;64)</option>
+      </select>
+    </label>
+    <label>a = <input type="text" id="aInput" value="1,2" /></label>
+    <label>b = <input type="text" id="bInput" value="3,4" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="phase-bar" id="phaseBar"></div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Working array A</h2>
+      <div class="arr" id="arrA"></div>
+      <div class="label" id="labelA">coefficients of a (padded to n)</div>
+      <h2 style="margin-top:16px;">Working array B</h2>
+      <div class="arr" id="arrB"></div>
+      <div class="label" id="labelB">coefficients of b (padded to n)</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hiA)"></span> butterfly lower (u)</span>
+        <span><span class="swatch" style="background:var(--hiB)"></span> butterfly upper (v)</span>
+        <span><span class="swatch" style="background:var(--hiPair)"></span> combined / active</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Transform parameters &amp; result</h2>
+      <div class="info" id="paramBox"></div>
+      <h2 style="margin-top:16px;">Result C (product coefficients)</h2>
+      <div class="arr" id="arrC"></div>
+      <div class="label" id="labelC">filled after the inverse transform</div>
+      <div class="info" id="checkBox" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We multiply two polynomials mod a small NTT-friendly prime using the iterative NTT: bit-reversal, butterfly stages, pointwise product, inverse, then scaling by n<sup>-1</sup>.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Counting is exact integer arithmetic mod the chosen prime <code>p = c&middot;2<sup>k</sup>+1</code>; the root is <code>&omega; = g<sup>(p-1)/n</sup> mod p</code>.
+    The butterfly <code>(u + &omega;<sup>j</sup>v, u &minus; &omega;<sup>j</sup>v)</code> is the same as in <code>15-divide-and-conquer/05-fft</code>; here every operation is modular. See <code>junior.md</code>, <code>middle.md</code>, and <code>professional.md</code> for the math.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- NTT-friendly small primes with primitive roots ----------
+const PRIMES = {
+  "17":  { p: 17,  g: 3,  maxN: 16 },   // 17  = 1*2^4 + 1
+  "97":  { p: 97,  g: 5,  maxN: 32 },   // 97  = 3*2^5 + 1
+  "193": { p: 193, g: 5,  maxN: 64 }    // 193 = 3*2^6 + 1
+};
+
+// ---------- modular helpers ----------
+function power(a, e, mod) {
+  a = ((a % mod) + mod) % mod;
+  let r = 1;
+  while (e > 0) {
+    if (e & 1) r = (r * a) % mod;
+    a = (a * a) % mod;
+    e = Math.floor(e / 2);
+  }
+  return r;
+}
+function inv(a, mod) { return power(a, mod - 2, mod); }
+
+function nextPow2(m) {
+  let n = 1;
+  while (n < m) n <<= 1;
+  return n;
+}
+
+// schoolbook oracle for the check box
+function schoolbook(a, b, mod) {
+  const c = new Array(a.length + b.length - 1).fill(0);
+  for (let i = 0; i < a.length; i++)
+    for (let j = 0; j < b.length; j++)
+      c[i + j] = (c[i + j] + a[i] * b[j]) % mod;
+  return c;
+}
+
+// ---------- Build a step-by-step plan of the whole NTT multiply ----------
+// Each step is a snapshot: {phase, A, B, hiA, hiB, hiPair, desc, params, C}
+function buildPlan(aIn, bIn, prime) {
+  const { p, g } = prime;
+  const need = aIn.length + bIn.length - 1;
+  const n = nextPow2(need);
+  const steps = [];
+
+  // pad
+  const A = new Array(n).fill(0);
+  const B = new Array(n).fill(0);
+  for (let i = 0; i < aIn.length; i++) A[i] = ((aIn[i] % p) + p) % p;
+  for (let i = 0; i < bIn.length; i++) B[i] = ((bIn[i] % p) + p) % p;
+
+  const omega = power(g, Math.floor((p - 1) / n), p);
+  const params = { p, g, n, omega, need };
+
+  function snap(phase, desc, hiA, hiB, hiPair, C) {
+    steps.push({
+      phase,
+      A: A.slice(),
+      B: B.slice(),
+      hiA: hiA || [],
+      hiB: hiB || [],
+      hiPair: hiPair || [],
+      desc,
+      C: C ? C.slice() : null
+    });
+  }
+
+  snap("setup",
+    "Pad a and b to n = " + n + " (next power of two &ge; len(a)+len(b)&minus;1 = " + need +
+    "). Build the root &omega; = " + g + "<sup>(" + p + "&minus;1)/" + n + "</sup> mod " + p + " = <b>" + omega + "</b>.",
+    [], [], []);
+
+  // ----- bit-reversal permutation (applied to both arrays) -----
+  function bitReverse(arr) {
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { const t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    }
+  }
+  bitReverse(A);
+  bitReverse(B);
+  snap("bitrev",
+    "Bit-reversal permutation: reorder both arrays so the iterative butterflies operate on the right pairs in place (the recursion's even/odd split, done once up front).",
+    A.map((_, i) => i), B.map((_, i) => i), []);
+
+  // ----- forward NTT of A, then of B, with butterfly snapshots -----
+  function forward(arr, which, label) {
+    for (let len = 2; len <= n; len <<= 1) {
+      const wlen = power(g, Math.floor((p - 1) / len), p);
+      for (let i = 0; i < n; i += len) {
+        let w = 1;
+        for (let k = 0; k < len / 2; k++) {
+          const lo = i + k, hi = i + k + len / 2;
+          const u = arr[lo];
+          const v = (arr[hi] * w) % p;
+          arr[lo] = (u + v) % p;
+          arr[hi] = ((u - v) % p + p) % p;
+          const hiArr = which === "A" ? [lo] : [];
+          const hiArrB = which === "B" ? [lo] : [];
+          snap("fwd" + which,
+            "Forward NTT of " + label + ", stage len=" + len + ": butterfly on indices (" + lo + ", " + hi +
+            ") with twiddle &omega;<sup>" + k + "</sup>=" + w + " &rarr; (u+&omega;v, u&minus;&omega;v) = (" +
+            arr[lo] + ", " + arr[hi] + ") mod " + p + ".",
+            which === "A" ? [lo, hi] : [],
+            which === "B" ? [lo, hi] : [],
+            []);
+          w = (w * wlen) % p;
+        }
+      }
+    }
+  }
+  forward(A, "A", "a");
+  snap("fwdAdone", "Forward NTT of a complete: A now holds the evaluations &acirc;[t] = A(&omega;<sup>t</sup>).", [], [], []);
+  forward(B, "B", "b");
+  snap("fwdBdone", "Forward NTT of b complete: B now holds the evaluations b&#770;[t] = B(&omega;<sup>t</sup>).", [], [], []);
+
+  // ----- pointwise multiply -----
+  const C = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    C[i] = (A[i] * B[i]) % p;
+  }
+  // show pointwise as one combined snapshot (store product in A so we can invert it)
+  for (let i = 0; i < n; i++) A[i] = C[i];
+  snap("pointwise",
+    "Pointwise product: C&#770;[t] = &acirc;[t]&middot;b&#770;[t] mod " + p +
+    ". This is where convolution becomes a cheap O(n) entrywise multiply (the convolution theorem).",
+    [], [], A.map((_, i) => i), C);
+
+  // ----- inverse NTT of the product (forward with inverse root) -----
+  bitReverse(A);
+  snap("ibitrev", "Bit-reversal again, to run the inverse transform (forward butterfly with &omega;<sup>-1</sup>).",
+    A.map((_, i) => i), [], [], C);
+  for (let len = 2; len <= n; len <<= 1) {
+    let wlen = power(g, Math.floor((p - 1) / len), p);
+    wlen = inv(wlen, p); // inverse stage root
+    for (let i = 0; i < n; i += len) {
+      let w = 1;
+      for (let k = 0; k < len / 2; k++) {
+        const lo = i + k, hi = i + k + len / 2;
+        const u = A[lo];
+        const v = (A[hi] * w) % p;
+        A[lo] = (u + v) % p;
+        A[hi] = ((u - v) % p + p) % p;
+        snap("inv",
+          "Inverse NTT, stage len=" + len + ": butterfly on (" + lo + ", " + hi +
+          ") with &omega;<sup>-" + k + "</sup>=" + w + " &rarr; (" + A[lo] + ", " + A[hi] + ") mod " + p + ".",
+          [lo, hi], [], [], C);
+        w = (w * wlen) % p;
+      }
+    }
+  }
+  // scale by n^{-1}
+  const ninv = inv(n, p);
+  for (let i = 0; i < n; i++) A[i] = (A[i] * ninv) % p;
+  const result = A.slice(0, need);
+  snap("scale",
+    "Scale every entry by n<sup>-1</sup> = " + n + "<sup>-1</sup> = " + ninv + " mod " + p +
+    ". Trim to the first " + need + " coefficients &rarr; the exact product.",
+    [], [], A.map((_, i) => i < need ? i : -1).filter(x => x >= 0), result.concat(new Array(n - need).fill(0)));
+
+  snap("done",
+    "Done. C = <span class='val'>[" + result.join(", ") + "]</span> &mdash; the exact coefficients of a(x)&middot;b(x) mod " + p + ".",
+    [], [], result.map((_, i) => i), result.concat(new Array(n - need).fill(0)));
+
+  return { steps, params, result, oracle: schoolbook(
+    aIn.map(x => ((x % p) + p) % p),
+    bIn.map(x => ((x % p) + p) % p), p) };
+}
+
+// ---------- Phases for the progress bar ----------
+const PHASE_ORDER = [
+  { key: "setup",     label: "pad + root" },
+  { key: "bitrev",    label: "bit-reverse" },
+  { key: "fwd",       label: "forward NTT" },
+  { key: "pointwise", label: "pointwise" },
+  { key: "inv",       label: "inverse NTT" },
+  { key: "scale",     label: "scale n⁻¹" },
+  { key: "done",      label: "result" }
+];
+
+function phaseGroup(phase) {
+  if (phase === "setup") return "setup";
+  if (phase === "bitrev") return "bitrev";
+  if (phase.startsWith("fwd")) return "fwd";
+  if (phase === "pointwise") return "pointwise";
+  if (phase === "ibitrev" || phase === "inv") return "inv";
+  if (phase === "scale") return "scale";
+  return "done";
+}
+
+// ---------- Rendering ----------
+function renderArray(el, arr, hi, hiClass) {
+  el.innerHTML = "";
+  for (let i = 0; i < arr.length; i++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    if (hi && hi.indexOf(i) >= 0) c.classList.add(hiClass);
+    c.innerHTML = "<span class='idx'>" + i + "</span>" + arr[i];
+    el.appendChild(c);
+  }
+}
+
+function renderStep(step, plan) {
+  // arrays A and B with their highlights
+  const arrA = document.getElementById("arrA");
+  const arrB = document.getElementById("arrB");
+  renderArray(arrA, step.A, step.hiA.concat(step.hiPair), step.hiA.length ? "hiA" : "hiPair");
+  // distinguish pair vs single by re-applying classes
+  arrA.querySelectorAll(".cell").forEach((cell, i) => {
+    cell.classList.remove("hiA", "hiB", "hiPair");
+    if (step.hiPair.indexOf(i) >= 0) cell.classList.add("hiPair");
+    else if (step.hiA.indexOf(i) >= 0) cell.classList.add("hiA");
+  });
+  renderArray(arrB, step.B, [], "hiB");
+  arrB.querySelectorAll(".cell").forEach((cell, i) => {
+    cell.classList.remove("hiA", "hiB", "hiPair");
+    if (step.hiB.indexOf(i) >= 0) cell.classList.add("hiB");
+  });
+
+  // result array
+  const arrC = document.getElementById("arrC");
+  if (step.C) {
+    renderArray(arrC, step.C, step.phase === "done" ? step.C.map((_, i) => i) : [], "hiPair");
+  } else {
+    arrC.innerHTML = "<span class='label'>(not computed yet)</span>";
+  }
+
+  // params box
+  const pm = plan.params;
+  document.getElementById("paramBox").innerHTML =
+    "<b>p</b> = " + pm.p + " &nbsp; <b>g</b> = " + pm.g + " &nbsp; <b>n</b> = " + pm.n +
+    " &nbsp; <b>&omega;</b> = " + pm.omega + "<br>" +
+    "result length = " + pm.need + " &nbsp; &omega;<sup>n</sup> mod p = " + power(pm.omega, pm.n, pm.p) +
+    " &nbsp; &omega;<sup>n/2</sup> mod p = " + power(pm.omega, pm.n / 2, pm.p) + " (= p&minus;1 = &minus;1)";
+
+  // check box (only meaningful at the end)
+  const cb = document.getElementById("checkBox");
+  if (step.phase === "done") {
+    const got = plan.result.join(", ");
+    const exp = plan.oracle.join(", ");
+    const ok = got === exp;
+    cb.innerHTML = "Schoolbook oracle: [" + exp + "]<br>NTT result: [" + got + "]<br>" +
+      (ok ? "<span class='ok'>MATCH &#10003; exact, no rounding</span>"
+          : "<span class='bad'>MISMATCH</span>");
+  } else {
+    cb.innerHTML = "The schoolbook oracle check appears once the inverse transform finishes.";
+  }
+
+  // labels
+  document.getElementById("labelA").textContent =
+    (phaseGroup(step.phase) === "fwd" || phaseGroup(step.phase) === "inv" || step.phase === "pointwise")
+      ? "transformed / working values (mod " + pm.p + ")"
+      : "coefficients of a (padded to n)";
+
+  // narration
+  document.getElementById("narrate").innerHTML = step.desc;
+
+  // phase bar
+  renderPhaseBar(step);
+}
+
+function renderPhaseBar(step) {
+  const bar = document.getElementById("phaseBar");
+  bar.innerHTML = "";
+  const curGroup = phaseGroup(step.phase);
+  const order = PHASE_ORDER.map(x => x.key);
+  const curIdx = order.indexOf(curGroup);
+  PHASE_ORDER.forEach((ph, i) => {
+    const el = document.createElement("span");
+    el.className = "phase";
+    if (i < curIdx) el.classList.add("done");
+    if (i === curIdx) el.classList.add("active");
+    el.textContent = ph.label;
+    bar.appendChild(el);
+  });
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function parseArr(s) {
+  const parts = s.split(/[, ]+/).map(x => x.trim()).filter(x => x.length > 0);
+  const out = [];
+  for (const t of parts) {
+    const v = parseInt(t, 10);
+    if (!isNaN(v)) out.push(v);
+  }
+  return out.length ? out : [0];
+}
+
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const key = document.getElementById("primeSel").value;
+  const prime = PRIMES[key];
+  let a = parseArr(document.getElementById("aInput").value);
+  let b = parseArr(document.getElementById("bInput").value);
+  // clamp transform size to the prime's capacity
+  let need = a.length + b.length - 1;
+  while (nextPow2(need) > prime.maxN) {
+    if (a.length >= b.length && a.length > 1) a = a.slice(0, a.length - 1);
+    else if (b.length > 1) b = b.slice(0, b.length - 1);
+    else break;
+    need = a.length + b.length - 1;
+  }
+  document.getElementById("aInput").value = a.join(",");
+  document.getElementById("bInput").value = b.join(",");
+  state.plan = buildPlan(a, b, prime);
+  state.stepIdx = 0;
+  renderStep(state.plan.steps[0], state.plan);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  renderStep(state.plan.steps[idx], state.plan);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("primeSel").addEventListener("change", rebuild);
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("bInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

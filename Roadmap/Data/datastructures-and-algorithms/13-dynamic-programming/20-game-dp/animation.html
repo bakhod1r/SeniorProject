@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Game DP — Pick-from-Ends Score-Difference Table</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --hi-dep: rgba(210, 153, 34, 0.32);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .coins { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .coin {
+    width: 46px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 2px solid var(--border);
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+    transition: all 0.2s ease;
+  }
+  .coin.endL { border-color: var(--accent); color: #fff; box-shadow: 0 0 0 2px var(--accent) inset; }
+  .coin.endR { border-color: var(--accent-2); color: #fff; box-shadow: 0 0 0 2px var(--accent-2) inset; }
+  .coin.gone { opacity: 0.25; text-decoration: line-through; }
+  .coin .idx { position: relative; }
+  .coinwrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .coinwrap .lbl { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 42px;
+    height: 40px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .matrix td.empty { background: #10141b; color: #3b4250; }
+  .matrix td.filled { color: var(--text); }
+  .matrix td.dep { background: var(--hi-dep); }
+  .matrix td.cur { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .matrix td.base { background: rgba(88,166,255,0.12); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .calc {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    min-height: 64px;
+  }
+  .calc b { color: var(--accent); }
+  .calc .val { color: var(--good); font-weight: 700; }
+  .calc .chosen { color: var(--good); font-weight: 700; }
+  .calc .other { color: var(--muted); }
+  .result {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+  }
+  .result .win { color: var(--good); font-weight: 700; }
+  .result .lose { color: var(--bad); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Game DP — Filling the Score-Difference Table</h1>
+  <p>dp[i][j] = max( a[i] &minus; dp[i+1][j], a[j] &minus; dp[i][j&minus;1] ) is the best score difference the player to move can force on coins a[i..j]. Watch the interval table fill by increasing length.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Coins:
+      <select id="arrSel">
+        <option value="a">[5, 3, 7, 10]</option>
+        <option value="b">[1, 5, 233, 7]</option>
+        <option value="c">[8, 15, 3, 7]</option>
+        <option value="d">[2, 2, 2, 2]</option>
+        <option value="e">[1, 5, 2]</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Coins a[i..j]</h2>
+      <div class="coins" id="coins"></div>
+      <div class="calc" id="calcBox">
+        Press <b>Step</b> to fill the first cell. Each cell asks: take the left coin or the right coin?
+      </div>
+      <div class="result" id="resultBox">Final answer appears here once the table is full.</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:rgba(88,166,255,0.12)"></span> base dp[i][i]=a[i]</span>
+        <span><span class="swatch" style="background:var(--hi-dep)"></span> dependency cell</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> current dp[i][j]</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>dp[i][j] interval table</h2>
+      <div class="step-counter" id="lenInfo" style="margin-bottom:8px;"></div>
+      <table class="matrix" id="dpMat"></table>
+      <div class="step-counter" style="margin-top:10px;">
+        rows = i (left index), cols = j (right index); only i &le; j is used.
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We fill by increasing interval length: first all single coins (the base case), then pairs, then triples, up to the whole row. dp[0][n&minus;1] &ge; 0 means player 1 wins or ties.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Zero-sum, perfect-information pick-from-ends game; dp stores the score <b>difference</b> (player-to-move minus opponent), not raw scores.
+    Recover raw scores via (totalSum &plusmn; dp[0][n&minus;1]) / 2. See <code>junior.md</code> and <code>professional.md</code> for the proof that the subtraction encodes optimal adversarial play.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Array definitions ----------
+const ARRAYS = {
+  a: [5, 3, 7, 10],
+  b: [1, 5, 233, 7],
+  c: [8, 15, 3, 7],
+  d: [2, 2, 2, 2],
+  e: [1, 5, 2]
+};
+
+// ---------- Build the step plan ----------
+// We model the interval DP fill as a sequence of discrete steps.
+// First the base cells dp[i][i] = a[i] (one step each), then each longer
+// interval (i, j) with the max(take-left, take-right) decision.
+function buildPlan(a) {
+  const n = a.length;
+  const dp = [];
+  for (let i = 0; i < n; i++) dp.push(new Array(n).fill(null));
+  const steps = [];
+
+  // base cells
+  for (let i = 0; i < n; i++) {
+    dp[i][i] = a[i];
+    steps.push({
+      type: "base",
+      i: i, j: i,
+      length: 1,
+      value: a[i],
+      snapshot: snapshot(dp),
+      desc: "Base case: a single coin a[" + i + "] = " + a[i] +
+            ". The player to move takes it, opponent gets nothing, so dp[" + i + "][" + i + "] = " + a[i] + "."
+    });
+  }
+
+  // longer intervals
+  for (let length = 2; length <= n; length++) {
+    for (let i = 0; i + length - 1 < n; i++) {
+      const j = i + length - 1;
+      const left = a[i] - dp[i + 1][j];
+      const right = a[j] - dp[i][j - 1];
+      const value = Math.max(left, right);
+      const takeLeft = left >= right;
+      dp[i][j] = value;
+      steps.push({
+        type: "fill",
+        i: i, j: j,
+        length: length,
+        left: left, right: right,
+        leftDep: [i + 1, j],
+        rightDep: [i, j - 1],
+        ai: a[i], aj: a[j],
+        dpL: dp[i + 1][j], dpR: dp[i][j - 1],
+        takeLeft: takeLeft,
+        value: value,
+        snapshot: snapshot(dp),
+        desc: "Interval (" + i + "," + j + ") = coins a[" + i + ".." + j + "]. Take left (" + a[i] +
+              " − dp[" + (i + 1) + "][" + j + "]=" + dp[i + 1][j] + " = " + left + ") or take right (" +
+              a[j] + " − dp[" + i + "][" + (j - 1) + "]=" + dp[i][j - 1] + " = " + right +
+              "). dp = max = " + value + "."
+      });
+    }
+  }
+
+  // done
+  const final = dp[0][n - 1];
+  const total = a.reduce((s, x) => s + x, 0);
+  steps.push({
+    type: "done",
+    i: 0, j: n - 1,
+    length: n,
+    value: final,
+    total: total,
+    snapshot: snapshot(dp),
+    desc: "Done. dp[0][" + (n - 1) + "] = " + final + ". Player 1 " +
+          (final > 0 ? "wins" : final < 0 ? "loses" : "ties") +
+          ". Raw scores: P1 = (" + total + (final >= 0 ? "+" : "") + final + ")/2 = " +
+          ((total + final) / 2) + ", P2 = " + ((total - final) / 2) + "."
+  });
+
+  return { steps, n, total, final };
+}
+
+function snapshot(dp) {
+  return dp.map(row => row.slice());
+}
+
+// ---------- Render helpers ----------
+function renderCoins(a, step) {
+  const box = document.getElementById("coins");
+  box.innerHTML = "";
+  const n = a.length;
+  // determine active interval for highlight
+  let lo = -1, hi = -1, takeLeft = null;
+  if (step && (step.type === "fill" || step.type === "base" || step.type === "done")) {
+    lo = step.i; hi = step.j;
+    if (step.type === "fill") takeLeft = step.takeLeft;
+  }
+  for (let k = 0; k < n; k++) {
+    const wrap = document.createElement("div");
+    wrap.className = "coinwrap";
+    const c = document.createElement("div");
+    c.className = "coin";
+    c.textContent = a[k];
+    if (lo >= 0) {
+      if (k < lo || k > hi) {
+        c.classList.add("gone");
+      } else if (k === lo && takeLeft === true) {
+        c.classList.add("endL");
+      } else if (k === hi && takeLeft === false) {
+        c.classList.add("endR");
+      } else if (k === lo) {
+        c.classList.add("endL");
+      } else if (k === hi) {
+        c.classList.add("endR");
+      }
+    }
+    const lbl = document.createElement("div");
+    lbl.className = "lbl";
+    lbl.textContent = "i=" + k;
+    wrap.appendChild(c);
+    wrap.appendChild(lbl);
+    box.appendChild(wrap);
+  }
+}
+
+function renderMatrix(dp, step) {
+  const table = document.getElementById("dpMat");
+  const n = dp.length;
+  let html = "<tr><th>i\\j</th>";
+  for (let j = 0; j < n; j++) html += "<th>" + j + "</th>";
+  html += "</tr>";
+  for (let i = 0; i < n; i++) {
+    html += "<tr><th>" + i + "</th>";
+    for (let j = 0; j < n; j++) {
+      let cls = "";
+      let txt = "";
+      if (j < i) {
+        cls = "empty";
+        txt = "&middot;";
+      } else if (dp[i][j] === null) {
+        cls = "empty";
+        txt = "";
+      } else {
+        cls = "filled";
+        txt = dp[i][j];
+        if (i === j) cls += " base";
+      }
+      // highlight current + dependencies
+      if (step) {
+        if (step.i === i && step.j === j && (step.type === "fill" || step.type === "base" || step.type === "done")) {
+          cls = (cls.indexOf("empty") >= 0 ? "filled" : cls) + " cur";
+        }
+        if (step.type === "fill") {
+          if (step.leftDep[0] === i && step.leftDep[1] === j) cls += " dep";
+          if (step.rightDep[0] === i && step.rightDep[1] === j) cls += " dep";
+        }
+      }
+      html += "<td class='" + cls + "'>" + txt + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+}
+
+function renderCalc(step) {
+  const box = document.getElementById("calcBox");
+  if (step.type === "base") {
+    box.innerHTML = "<b>dp[" + step.i + "][" + step.j + "]</b> = a[" + step.i +
+      "] = <span class='val'>" + step.value + "</span> &nbsp; (base case: one coin).";
+  } else if (step.type === "fill") {
+    const leftCls = step.takeLeft ? "chosen" : "other";
+    const rightCls = step.takeLeft ? "other" : "chosen";
+    box.innerHTML =
+      "<b>dp[" + step.i + "][" + step.j + "]</b> = max(<br>" +
+      "&nbsp;&nbsp;<span class='" + leftCls + "'>take left: a[" + step.i + "]=" + step.ai +
+      " &minus; dp[" + (step.i + 1) + "][" + step.j + "]=" + step.dpL + " &rarr; " + step.left + "</span>,<br>" +
+      "&nbsp;&nbsp;<span class='" + rightCls + "'>take right: a[" + step.j + "]=" + step.aj +
+      " &minus; dp[" + step.i + "][" + (step.j - 1) + "]=" + step.dpR + " &rarr; " + step.right + "</span><br>" +
+      ") = <span class='val'>" + step.value + "</span> &nbsp; (" +
+      (step.takeLeft ? "take left" : "take right") + ")";
+  } else if (step.type === "done") {
+    box.innerHTML = "Table complete. <b>dp[0][" + step.j + "] = <span class='val'>" +
+      step.value + "</span></b> is player 1's optimal score difference.";
+  }
+}
+
+function renderResult(step, plan) {
+  const box = document.getElementById("resultBox");
+  if (step.type === "done") {
+    const d = plan.final, t = plan.total;
+    const p1 = (t + d) / 2, p2 = (t - d) / 2;
+    let verdict;
+    if (d > 0) verdict = "<span class='win'>Player 1 wins</span>";
+    else if (d < 0) verdict = "<span class='lose'>Player 1 loses</span>";
+    else verdict = "<span class='win'>Tie</span>";
+    box.innerHTML = "difference dp[0][" + step.j + "] = " + d + " &rarr; " + verdict +
+      "<br>total sum = " + t + " &rarr; P1 = " + p1 + ", P2 = " + p2 + " &nbsp;(" + p1 + " + " + p2 + " = " + t + ")";
+  } else {
+    box.innerHTML = "Final answer appears here once the table is full.";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  a: null,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadArray(key) {
+  state.a = ARRAYS[key].slice();
+  state.plan = buildPlan(state.a);
+  state.stepIdx = 0;
+  gotoStep(0);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  renderCoins(state.a, step);
+  renderMatrix(step.snapshot, step);
+  if (step.type === "fill" || step.type === "base" || step.type === "done") renderCalc(step);
+  renderResult(step, state.plan);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("lenInfo").textContent =
+    step.type === "done" ? "interval length = " + state.a.length + " (full row)"
+                         : "interval length = " + step.length;
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1200);
+}
+
+function rebuild() {
+  const key = document.getElementById("arrSel").value;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadArray(key);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("arrSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

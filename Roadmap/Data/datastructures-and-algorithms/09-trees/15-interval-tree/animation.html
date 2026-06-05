@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interval Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:20px;text-align:center}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+button{padding:8px 18px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.95rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text],input[type=number]{padding:8px 14px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.95rem;font-family:monospace}
+input[type=text]{width:340px}
+input[type=number]{width:90px}
+input[type=range]{width:160px;accent-color:var(--blue)}
+.layout{display:flex;gap:14px;width:100%;max-width:1300px;flex-wrap:wrap;justify-content:center}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:18px;flex:1;min-width:520px;min-height:380px;overflow:auto;position:relative}
+.side-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px;width:280px;min-height:380px;display:flex;flex-direction:column}
+.side-panel h3{color:var(--blue);margin-bottom:10px;font-size:1rem}
+.hits-list{font-family:monospace;font-size:.85rem;line-height:1.6;flex:1;overflow:auto}
+.hits-list .hit{color:var(--green);padding:2px 4px;border-radius:3px;margin-bottom:2px}
+.hits-list .empty{color:var(--muted);font-style:italic}
+svg{display:block;width:100%;height:auto}
+.node-rect{fill:var(--bg);stroke:var(--border);stroke-width:2;transition:all .25s}
+.node-rect.visited{stroke:var(--yellow);stroke-width:3;fill:rgba(210,153,34,.12)}
+.node-rect.hit{stroke:var(--green);stroke-width:3;fill:rgba(63,185,80,.18)}
+.node-rect.pruned{stroke:var(--border);opacity:.25}
+.node-text{fill:var(--text);font-family:monospace;font-size:13px;text-anchor:middle;dominant-baseline:middle}
+.node-text.max{fill:var(--purple);font-size:11px}
+.node-text.pruned{opacity:.3}
+.edge{stroke:var(--border);stroke-width:2;fill:none;transition:opacity .25s}
+.edge.pruned{opacity:.2}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:16px 20px;width:100%;max-width:1300px;margin-bottom:16px;margin-top:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.92rem;line-height:1.6}
+.step-info .highlight{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.step-info .pp{color:var(--purple);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 20px;display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.15rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:18px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:800px}
+.q-label{color:var(--muted);font-size:.85rem;margin-right:4px}
+</style>
+</head>
+<body>
+<h1>Interval Tree</h1>
+<p class="subtitle">Augmented BST: each node holds interval + subtreeMax. Query O(log n + k).</p>
+
+<div class="badges">
+<span class="badge best">Build: O(n log n)</span>
+<span class="badge best">Insert: O(log n)</span>
+<span class="badge worst">Query: O(log n + k)</span>
+<span class="badge space">Space: O(n)</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="intervalsInput" placeholder="Intervals: [15,20],[10,30],[17,19],[5,20],[12,15],[30,40]">
+<button onclick="loadIntervals()">Build Tree</button>
+<button onclick="genRandom()" class="secondary">Random</button>
+</div>
+
+<div class="input-control">
+<span class="q-label">Query:</span>
+<input type="number" id="qLo" value="14" placeholder="lo">
+<input type="number" id="qHi" value="16" placeholder="hi">
+<button onclick="runQuery()">Query Overlap</button>
+<button onclick="stabQuery()" class="secondary">Stab (lo only)</button>
+</div>
+
+<div class="controls">
+<button id="startBtn" onclick="start()">▶ Animate</button>
+<button id="stepBtn" onclick="stepFwd()">▷ Step</button>
+<button id="pauseBtn" onclick="pause()" disabled>❚❚ Pause</button>
+<button id="resetBtn" onclick="resetView()" class="secondary">↺ Reset</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<span style="color:var(--muted);font-size:.8rem">slow</span>
+<input type="range" id="speedSlider" min="1" max="10" value="6">
+<span style="color:var(--muted);font-size:.8rem">fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg)"></div>Default</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.18);border-color:var(--yellow)"></div>Visited</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.25);border-color:var(--green)"></div>Hit (overlap)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--surface);opacity:.3"></div>Pruned subtree</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Nodes</div><div class="stat-value" id="nNodes">0</div></div>
+<div><div class="stat-label">Height</div><div class="stat-value" id="height">0</div></div>
+<div><div class="stat-label">Intervals</div><div class="stat-value" id="nIntervals">0</div></div>
+<div><div class="stat-label">Visited</div><div class="stat-value" id="visited">0</div></div>
+<div><div class="stat-label">Hits</div><div class="stat-value" id="hits">0</div></div>
+</div>
+
+<div class="layout">
+<div class="canvas-container" id="canvas">
+<svg id="treeSvg" viewBox="0 0 800 420"></svg>
+</div>
+<div class="side-panel">
+<h3>Overlapping Intervals</h3>
+<div class="hits-list" id="hitsList"><div class="empty">No query yet. Type a range above and press "Query Overlap".</div></div>
+</div>
+</div>
+
+<div class="info-panel">
+<h3>Algorithm Trace</h3>
+<div class="step-info" id="info">Build a tree, then issue a query.</div>
+</div>
+
+<p class="footer-note">Overlap test (closed): a.lo &le; b.hi AND b.lo &le; a.hi. Prune-left iff left.subtreeMax &ge; q.lo. Prune-right iff node.lo &le; q.hi. CLRS 14.3.</p>
+
+<script>
+let intervals = [[15,20],[10,30],[17,19],[5,20],[12,15],[30,40]];
+let root = null;
+let steps = [], idx = 0, running = false, timer = null;
+let lastQuery = null;
+let layout = {};  // nodeId -> {x, y}
+
+let nextId = 0;
+function makeNode(lo, hi) {
+  return { id: nextId++, lo, hi, subtreeMax: hi, left: null, right: null };
+}
+
+function insert(node, iv) {
+  if (node === null) return makeNode(iv[0], iv[1]);
+  if (iv[0] < node.lo) node.left = insert(node.left, iv);
+  else                 node.right = insert(node.right, iv);
+  if (iv[1] > node.subtreeMax) node.subtreeMax = iv[1];
+  return node;
+}
+
+function buildTree() {
+  nextId = 0;
+  root = null;
+  for (const iv of intervals) root = insert(root, iv);
+  computeLayout();
+}
+
+function treeHeight(n) {
+  if (n === null) return 0;
+  return 1 + Math.max(treeHeight(n.left), treeHeight(n.right));
+}
+
+function nodeCount(n) {
+  if (n === null) return 0;
+  return 1 + nodeCount(n.left) + nodeCount(n.right);
+}
+
+function computeLayout() {
+  layout = {};
+  const h = treeHeight(root);
+  const W = Math.max(800, Math.pow(2, h-1) * 90);
+  const H = Math.max(60 + h * 80, 360);
+  document.getElementById('treeSvg').setAttribute('viewBox', `0 0 ${W} ${H}`);
+  function rec(node, lo, hi, depth) {
+    if (node === null) return;
+    const x = (lo + hi) / 2;
+    const y = 40 + depth * 80;
+    layout[node.id] = { x, y };
+    rec(node.left,  lo, x, depth + 1);
+    rec(node.right, x, hi, depth + 1);
+  }
+  rec(root, 0, W, 0);
+}
+
+function overlaps(a, b) {
+  return a[0] <= b[1] && b[0] <= a[1];
+}
+
+function genQuerySteps(q, isStab) {
+  const out = [];
+  const visited = new Set();
+  const pruned  = new Set();
+  const hits    = [];
+  const stabPoint = isStab ? q[0] : null;
+  out.push({ type: 'init', q, isStab, visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+             note: isStab
+               ? `<b>Stabbing query</b> at point <span class="highlight">${q[0]}</span>. Start at root.`
+               : `<b>Overlap query</b> for <span class="highlight">[${q[0]}, ${q[1]}]</span>. Start at root.` });
+
+  function walk(node) {
+    if (node === null) return;
+    visited.add(node.id);
+    const iv = [node.lo, node.hi];
+    out.push({ type: 'visit', q, isStab, current: node.id,
+               visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+               note: `Visit <span class="pp">[${node.lo}, ${node.hi}]</span> (subtreeMax=${node.subtreeMax}). Test overlap with query.` });
+    if (overlaps(iv, q)) {
+      hits.push(node);
+      out.push({ type: 'hit', q, isStab, current: node.id,
+                 visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+                 note: `<span class="ok">HIT</span>: [${node.lo}, ${node.hi}] overlaps [${q[0]}, ${q[1]}]. Report.` });
+    } else {
+      out.push({ type: 'nohit', q, isStab, current: node.id,
+                 visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+                 note: `No overlap with [${q[0]}, ${q[1]}]. Continue with prune tests.` });
+    }
+    // Left subtree
+    if (node.left !== null) {
+      if (node.left.subtreeMax >= q[0]) {
+        out.push({ type: 'go-left', q, isStab, current: node.id,
+                   visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+                   note: `left.subtreeMax = ${node.left.subtreeMax} &ge; q.lo = ${q[0]} &rArr; descend left.` });
+        walk(node.left);
+      } else {
+        markPruned(node.left, pruned);
+        out.push({ type: 'prune-left', q, isStab, current: node.id,
+                   visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+                   note: `left.subtreeMax = ${node.left.subtreeMax} &lt; q.lo = ${q[0]} &rArr; <span class="bad">prune left subtree</span>.` });
+      }
+    }
+    // Right subtree
+    if (node.right !== null) {
+      if (node.lo <= q[1]) {
+        out.push({ type: 'go-right', q, isStab, current: node.id,
+                   visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+                   note: `node.lo = ${node.lo} &le; q.hi = ${q[1]} &rArr; descend right.` });
+        walk(node.right);
+      } else {
+        markPruned(node.right, pruned);
+        out.push({ type: 'prune-right', q, isStab, current: node.id,
+                   visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+                   note: `node.lo = ${node.lo} &gt; q.hi = ${q[1]} &rArr; <span class="bad">prune right subtree</span>.` });
+      }
+    }
+  }
+  walk(root);
+  out.push({ type: 'done', q, isStab, current: null,
+             visited: new Set(visited), pruned: new Set(pruned), hits: [...hits],
+             note: `<span class="ok">Query complete</span>. ${hits.length} overlap(s) reported, ${visited.size} node(s) visited.` });
+  return out;
+}
+
+function markPruned(node, set) {
+  if (node === null) return;
+  set.add(node.id);
+  markPruned(node.left, set);
+  markPruned(node.right, set);
+}
+
+function renderTree(state) {
+  const svg = document.getElementById('treeSvg');
+  let html = '';
+  function rec(node) {
+    if (node === null) return;
+    const p = layout[node.id];
+    // edges first
+    if (node.left !== null) {
+      const c = layout[node.left.id];
+      const pruned = state && state.pruned.has(node.left.id) ? ' pruned' : '';
+      html += `<line class="edge${pruned}" x1="${p.x}" y1="${p.y+22}" x2="${c.x}" y2="${c.y-22}"/>`;
+    }
+    if (node.right !== null) {
+      const c = layout[node.right.id];
+      const pruned = state && state.pruned.has(node.right.id) ? ' pruned' : '';
+      html += `<line class="edge${pruned}" x1="${p.x}" y1="${p.y+22}" x2="${c.x}" y2="${c.y-22}"/>`;
+    }
+    rec(node.left);
+    rec(node.right);
+  }
+  function recNodes(node) {
+    if (node === null) return;
+    const p = layout[node.id];
+    let cls = '';
+    let txtCls = '';
+    if (state) {
+      if (state.pruned.has(node.id))                cls = ' pruned', txtCls = ' pruned';
+      else if (state.hits.some(h => h.id === node.id)) cls = ' hit';
+      else if (state.visited.has(node.id))          cls = ' visited';
+    }
+    html += `<rect class="node-rect${cls}" x="${p.x-46}" y="${p.y-22}" width="92" height="44" rx="6"/>`;
+    html += `<text class="node-text${txtCls}" x="${p.x}" y="${p.y-4}">[${node.lo}, ${node.hi}]</text>`;
+    html += `<text class="node-text max${txtCls}" x="${p.x}" y="${p.y+12}">max=${node.subtreeMax}</text>`;
+    recNodes(node.left);
+    recNodes(node.right);
+  }
+  rec(root);
+  recNodes(root);
+  svg.innerHTML = html;
+}
+
+function renderHits(state) {
+  const el = document.getElementById('hitsList');
+  if (!state || state.hits.length === 0) {
+    el.innerHTML = '<div class="empty">No hits yet.</div>';
+    return;
+  }
+  el.innerHTML = state.hits.map(h => `<div class="hit">[${h.lo}, ${h.hi}]</div>`).join('');
+}
+
+function renderInfo(state) {
+  document.getElementById('info').innerHTML = state.note;
+}
+
+function updateStats(state) {
+  document.getElementById('nNodes').textContent     = nodeCount(root);
+  document.getElementById('height').textContent     = treeHeight(root);
+  document.getElementById('nIntervals').textContent = intervals.length;
+  if (state) {
+    document.getElementById('visited').textContent = state.visited.size;
+    document.getElementById('hits').textContent    = state.hits.length;
+  } else {
+    document.getElementById('visited').textContent = '0';
+    document.getElementById('hits').textContent    = '0';
+  }
+}
+
+function render(state) {
+  renderTree(state);
+  renderHits(state);
+  renderInfo(state);
+  updateStats(state);
+}
+
+function delay() { return 1100 - parseInt(document.getElementById('speedSlider').value) * 100; }
+
+function start() {
+  if (steps.length === 0) {
+    document.getElementById('info').innerHTML = 'Run a query first.';
+    return;
+  }
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+function tick() {
+  if (!running || idx >= steps.length) { pause(); return; }
+  render(steps[idx]); idx++;
+  timer = setTimeout(tick, delay());
+}
+function stepFwd() {
+  if (steps.length === 0) return;
+  if (idx < steps.length) { render(steps[idx]); idx++; }
+}
+function pause() {
+  running = false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function runQuery() {
+  const lo = parseInt(document.getElementById('qLo').value);
+  const hi = parseInt(document.getElementById('qHi').value);
+  if (isNaN(lo) || isNaN(hi) || lo > hi) {
+    document.getElementById('info').innerHTML = '<span class="bad">Invalid query: need lo &le; hi.</span>';
+    return;
+  }
+  lastQuery = [lo, hi];
+  steps = genQuerySteps([lo, hi], false);
+  idx = 0;
+  pause();
+  render(steps[0]);
+}
+
+function stabQuery() {
+  const lo = parseInt(document.getElementById('qLo').value);
+  if (isNaN(lo)) {
+    document.getElementById('info').innerHTML = '<span class="bad">Invalid stab point.</span>';
+    return;
+  }
+  lastQuery = [lo, lo];
+  steps = genQuerySteps([lo, lo], true);
+  idx = 0;
+  pause();
+  render(steps[0]);
+}
+
+function loadIntervals() {
+  const raw = document.getElementById('intervalsInput').value.trim();
+  if (!raw) return;
+  const matches = raw.match(/\[\s*-?\d+\s*,\s*-?\d+\s*\]/g);
+  if (!matches) return;
+  const parsed = matches.map(m => {
+    const nums = m.match(/-?\d+/g).map(Number);
+    return [Math.min(nums[0], nums[1]), Math.max(nums[0], nums[1])];
+  });
+  if (parsed.length === 0) return;
+  intervals = parsed;
+  buildTree();
+  steps = []; idx = 0;
+  render(null);
+  document.getElementById('info').innerHTML = `Built tree with ${intervals.length} interval(s). Issue a query.`;
+}
+
+function genRandom() {
+  const n = 6 + Math.floor(Math.random() * 4);
+  intervals = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(Math.random() * 40);
+    const b = a + 2 + Math.floor(Math.random() * 15);
+    intervals.push([a, b]);
+  }
+  document.getElementById('intervalsInput').value =
+    intervals.map(iv => `[${iv[0]},${iv[1]}]`).join(',');
+  buildTree();
+  steps = []; idx = 0;
+  render(null);
+  document.getElementById('info').innerHTML = `Random tree of ${intervals.length} interval(s) built.`;
+}
+
+function resetView() {
+  pause();
+  steps = []; idx = 0;
+  render(null);
+  document.getElementById('info').innerHTML = 'Reset. Issue a new query.';
+}
+
+// Init
+document.getElementById('intervalsInput').value =
+  intervals.map(iv => `[${iv[0]},${iv[1]}]`).join(',');
+buildTree();
+render(null);
+document.getElementById('info').innerHTML =
+  'Tree built. Default query is [14, 16]. Press <span class="highlight">Query Overlap</span> then <span class="highlight">Animate</span>.';
+</script>
+</body>
+</html>

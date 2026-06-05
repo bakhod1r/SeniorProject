@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rod Cutting — Filling the DP Array</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 86px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .matrix td, .matrix th {
+    border: 1px solid var(--border);
+    width: 40px;
+    height: 38px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .matrix td.filled { color: var(--text); }
+  .matrix td.cur { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .matrix td.dep { background: var(--hi-col); }
+  .matrix td.empty { color: var(--muted); }
+  .cand {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .cline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .cline.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cline.win { border-color: var(--good); }
+  .cline .ctag { color: var(--accent-2); font-weight: 700; min-width: 40px; }
+  .cline .cval { margin-left: auto; color: var(--good); font-weight: 700; }
+  .cline .cval.lose { color: var(--muted); font-weight: 400; }
+  .priceTable { font-family: var(--mono); font-size: 13px; margin-top: 4px; }
+  .priceTable td, .priceTable th { border: 1px solid var(--border); padding: 4px 8px; text-align: center; }
+  .priceTable th { background: var(--panel-2); color: var(--muted); }
+  .rod-area { margin-top: 8px; }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+  rect.seg { stroke: #0d1117; stroke-width: 2; }
+  text.seglbl { fill: #fff; font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  text.gridlbl { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rod Cutting — Filling the DP Array</h1>
+  <p>dp[len] = max over first cut c of ( price[c] + dp[len &minus; c] ). Watch each length try every first cut, keep the max, record the choice, then reconstruct the pieces on a rod.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Price sheet:
+      <select id="sheetSel">
+        <option value="clrs8">CLRS (n=8)</option>
+        <option value="small4">Small (n=4)</option>
+        <option value="whole">Whole-best (n=5)</option>
+        <option value="unit">Unit-best (n=6)</option>
+      </select>
+    </label>
+    <label>n = <input type="number" id="nInput" value="8" min="1" max="12" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Price table &amp; dp[] array</h2>
+      <table class="priceTable" id="priceTbl"></table>
+      <div class="step-counter" style="margin:10px 0 4px;">dp[len] = best revenue for a rod of length len</div>
+      <table class="matrix" id="dpTbl"></table>
+      <div class="step-counter" style="margin:10px 0 4px;">choice[len] = first cut that achieved dp[len]</div>
+      <table class="matrix" id="choiceTbl"></table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> length being filled</span>
+        <span><span class="swatch" style="background:var(--hi-col)"></span> dependency dp[len&minus;c]</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Trying each first cut c</h2>
+      <div class="cand" id="candList"></div>
+      <div class="interp" id="interpBox">
+        For length <b>len</b>, try c = 1..len: candidate = price[c] + dp[len &minus; c]. Keep the maximum.
+      </div>
+      <h2 style="margin-top:18px;">Reconstructed cut on the rod</h2>
+      <div class="rod-area">
+        <svg id="rodSvg" width="520" height="70" viewBox="0 0 520 70"></svg>
+      </div>
+      <div class="step-counter" id="rodInfo" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We fill dp[0], dp[1], &hellip;, dp[n] in order; each length tries every first cut and keeps the best.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Exact integer revenue (no modulus needed at these sizes). The reconstruction follows
+    <code>choice[]</code> backward: len &rarr; len &minus; choice[len] until 0. See <code>junior.md</code> and <code>professional.md</code>
+    for the optimal-substructure proof that the best plan for len is the best first cut plus the best plan for the remainder.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Price-sheet definitions ----------
+// price[0] = 0 always; price[i] = revenue for a length-i piece.
+const SHEETS = {
+  clrs8:  { n: 8, price: [0,1,5,8,9,10,17,17,20], name: "CLRS table" },
+  small4: { n: 4, price: [0,1,5,8,9],            name: "Small table" },
+  whole:  { n: 5, price: [0,1,3,5,7,20],         name: "Whole-rod best" },
+  unit:   { n: 6, price: [0,5,6,7,8,9,10],       name: "Unit-piece best" }
+};
+
+// ---------- Build the step plan ----------
+// Each "fill length" produces: one step per candidate cut c, then a commit step.
+// Finally a sequence of reconstruction steps draws pieces on the rod.
+function buildPlan(price, n) {
+  const steps = [];
+  const dp = new Array(n + 1).fill(null);
+  const choice = new Array(n + 1).fill(0);
+  dp[0] = 0;
+
+  steps.push({
+    type: "base",
+    dp: dp.slice(), choice: choice.slice(),
+    curLen: 0, cands: [], best: 0, bestC: 0,
+    desc: "Base case: dp[0] = 0 (an empty rod earns nothing)."
+  });
+
+  for (let len = 1; len <= n; len++) {
+    let best = -Infinity;
+    let bestC = 0;
+    const cands = [];
+    for (let c = 1; c <= len; c++) {
+      const val = price[c] + dp[len - c];
+      const win = val > best;
+      if (win) { best = val; bestC = c; }
+      cands.push({ c: c, dep: len - c, depVal: dp[len - c], priceC: price[c], val: val, runningBest: best, runningC: bestC });
+      steps.push({
+        type: "try",
+        dp: dp.slice(), choice: choice.slice(),
+        curLen: len, cands: cands.slice(), activeC: c,
+        best: best, bestC: bestC,
+        desc: "Length " + len + ", try first cut c = " + c + ": price[" + c + "] + dp[" + (len - c) + "] = "
+              + price[c] + " + " + dp[len - c] + " = " + val
+              + (win ? " — new best!" : " — not better than " + best + ".")
+      });
+    }
+    dp[len] = best;
+    choice[len] = bestC;
+    steps.push({
+      type: "commit",
+      dp: dp.slice(), choice: choice.slice(),
+      curLen: len, cands: cands.slice(), best: best, bestC: bestC,
+      desc: "Commit dp[" + len + "] = " + best + ", choice[" + len + "] = " + bestC
+            + " (first piece of length " + bestC + ")."
+    });
+  }
+
+  // Reconstruction
+  const pieces = [];
+  let L = n;
+  const reconSteps = [];
+  while (L > 0 && choice[L] > 0) {
+    const c = choice[L];
+    pieces.push(c);
+    reconSteps.push({ from: L, piece: c, to: L - c, snapshot: pieces.slice() });
+    L -= c;
+  }
+  for (const rs of reconSteps) {
+    steps.push({
+      type: "recon",
+      dp: dp.slice(), choice: choice.slice(),
+      curLen: n, cands: [], best: dp[n], bestC: choice[n],
+      pieces: rs.snapshot, n: n,
+      desc: "Reconstruct: at length " + rs.from + ", cut a piece of length " + rs.piece
+            + "; remaining length = " + rs.to + "."
+    });
+  }
+  steps.push({
+    type: "done",
+    dp: dp.slice(), choice: choice.slice(),
+    curLen: n, cands: [], best: dp[n], bestC: choice[n],
+    pieces: pieces.slice(), n: n,
+    desc: "Done. Best revenue dp[" + n + "] = " + dp[n] + " with cut list ["
+          + pieces.join(", ") + "] (sums to " + pieces.reduce((a,b)=>a+b,0) + ")."
+  });
+
+  return { steps, price, n, finalDp: dp.slice(), finalChoice: choice.slice() };
+}
+
+// ---------- Render helpers ----------
+function renderPriceTable(price, n) {
+  const t = document.getElementById("priceTbl");
+  let head = "<tr><th>length i</th>";
+  let row = "<tr><th>price[i]</th>";
+  for (let i = 1; i <= n; i++) {
+    head += "<th>" + i + "</th>";
+    row += "<td>" + price[i] + "</td>";
+  }
+  head += "</tr>";
+  row += "</tr>";
+  t.innerHTML = head + row;
+}
+
+function renderArray(tableId, arr, opts) {
+  opts = opts || {};
+  const t = document.getElementById(tableId);
+  let head = "<tr><th>len</th>";
+  let row = "<tr><th>" + (opts.label || "") + "</th>";
+  for (let i = 0; i < arr.length; i++) {
+    head += "<th>" + i + "</th>";
+    let cls = "empty";
+    let txt = "&middot;";
+    if (arr[i] !== null && arr[i] !== undefined) {
+      cls = "filled";
+      txt = arr[i];
+    }
+    if (opts.cur === i) cls = "cur";
+    else if (opts.dep === i) cls = "dep";
+    row += "<td class='" + cls + "'>" + txt + "</td>";
+  }
+  head += "</tr>";
+  row += "</tr>";
+  t.innerHTML = head + row;
+}
+
+function renderCandidates(step) {
+  const el = document.getElementById("candList");
+  el.innerHTML = "";
+  if (!step.cands || step.cands.length === 0) {
+    el.innerHTML = "<div class='cline'><span class='ctag'>&mdash;</span> no candidates for this step</div>";
+    return;
+  }
+  for (const cand of step.cands) {
+    const div = document.createElement("div");
+    div.className = "cline";
+    const isActive = (step.type === "try" && step.activeC === cand.c);
+    const isWin = (step.bestC === cand.c) && cand.val === step.best;
+    if (isActive) div.classList.add("active");
+    if (isWin) div.classList.add("win");
+    const valCls = (cand.val === step.best) ? "cval" : "cval lose";
+    div.innerHTML =
+      "<span class='ctag'>c=" + cand.c + "</span>"
+      + "<span>price[" + cand.c + "] + dp[" + cand.dep + "] = " + cand.priceC + " + " + cand.depVal + "</span>"
+      + "<span class='" + valCls + "'>= " + cand.val + "</span>";
+    el.appendChild(div);
+  }
+}
+
+function renderRod(step) {
+  const svg = document.getElementById("rodSvg");
+  svg.innerHTML = "";
+  const n = state.plan.n;
+  const W = 500, X0 = 10, Y0 = 14, H = 30;
+  const unit = W / n;
+  // grid background
+  for (let i = 0; i <= n; i++) {
+    const x = X0 + i * unit;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x); line.setAttribute("y1", Y0);
+    line.setAttribute("x2", x); line.setAttribute("y2", Y0 + H);
+    line.setAttribute("stroke", "#30363d"); line.setAttribute("stroke-width", "1");
+    svg.appendChild(line);
+    const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    lbl.setAttribute("x", x); lbl.setAttribute("y", Y0 + H + 14);
+    lbl.setAttribute("text-anchor", "middle"); lbl.setAttribute("class", "gridlbl");
+    lbl.textContent = i;
+    svg.appendChild(lbl);
+  }
+  // outline of full rod
+  const outline = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  outline.setAttribute("x", X0); outline.setAttribute("y", Y0);
+  outline.setAttribute("width", W); outline.setAttribute("height", H);
+  outline.setAttribute("fill", "none"); outline.setAttribute("stroke", "#8b949e"); outline.setAttribute("stroke-width", "1");
+  svg.appendChild(outline);
+
+  const colors = ["#1f6feb", "#3fb950", "#d29922", "#a371f7", "#db61a2", "#2eb6c0"];
+  const pieces = step.pieces || [];
+  let pos = 0;
+  pieces.forEach((p, idx) => {
+    const x = X0 + pos * unit;
+    const w = p * unit;
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", x + 1); rect.setAttribute("y", Y0 + 1);
+    rect.setAttribute("width", Math.max(0, w - 2)); rect.setAttribute("height", H - 2);
+    rect.setAttribute("class", "seg");
+    rect.setAttribute("fill", colors[idx % colors.length]);
+    svg.appendChild(rect);
+    const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    lbl.setAttribute("x", x + w / 2); lbl.setAttribute("y", Y0 + H / 2 + 4);
+    lbl.setAttribute("text-anchor", "middle"); lbl.setAttribute("class", "seglbl");
+    lbl.textContent = p;
+    svg.appendChild(lbl);
+    pos += p;
+  });
+
+  let info = "";
+  if (pieces.length > 0) {
+    const price = state.plan.price;
+    const revenue = pieces.reduce((a, b) => a + price[b], 0);
+    info = "pieces: [" + pieces.join(", ") + "]  |  total length " + pieces.reduce((a,b)=>a+b,0)
+         + " / " + n + "  |  revenue " + revenue;
+  } else {
+    info = "Cut list appears here once dp[] is filled and reconstruction runs.";
+  }
+  document.getElementById("rodInfo").textContent = info;
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function applyStep(step) {
+  // dependency cell for the active candidate (try step)
+  let depIdx = -1;
+  if (step.type === "try") {
+    const ac = step.cands[step.cands.length - 1];
+    depIdx = ac ? ac.dep : -1;
+  }
+  renderArray("dpTbl", step.dp, { label: "dp", cur: step.curLen, dep: depIdx });
+  renderArray("choiceTbl", step.choice, { label: "choice", cur: step.curLen });
+  renderCandidates(step);
+  renderRod(step);
+
+  // interpretation box
+  if (step.type === "done") {
+    document.getElementById("interpBox").innerHTML =
+      "Final: <b>dp[" + step.n + "]</b> = <span class='val'>" + step.best + "</span>"
+      + " &mdash; the maximum revenue, achieved by the reconstructed cut list.";
+  } else if (step.type === "commit") {
+    document.getElementById("interpBox").innerHTML =
+      "Committed <b>dp[" + step.curLen + "]</b> = <span class='val'>" + step.best + "</span>,"
+      + " first cut <b>" + step.bestC + "</b>.";
+  } else if (step.type === "recon") {
+    document.getElementById("interpBox").innerHTML =
+      "Reconstructing by walking <b>choice[]</b> backward: subtract the chosen cut and repeat.";
+  } else if (step.type === "try") {
+    document.getElementById("interpBox").innerHTML =
+      "Candidate for c = <b>" + step.activeC + "</b>: price[" + step.activeC + "] + dp[len &minus; "
+      + step.activeC + "]. Running best so far = <span class='val'>" + step.best + "</span>.";
+  } else {
+    document.getElementById("interpBox").innerHTML =
+      "Base case <b>dp[0] = 0</b>. Filling proceeds for len = 1, 2, &hellip;, n.";
+  }
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  applyStep(step);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function loadSheet(key, nOverride) {
+  const sheet = SHEETS[key];
+  let n = nOverride;
+  if (isNaN(n) || n < 1) n = sheet.n;
+  if (n > sheet.n) n = sheet.n; // cannot exceed the sheet's table length
+  if (n > 12) n = 12;
+  document.getElementById("nInput").value = n;
+  document.getElementById("nInput").max = sheet.n;
+  renderPriceTable(sheet.price, n);
+  state.plan = buildPlan(sheet.price, n);
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = state.plan.steps[0].desc;
+  updateButtons();
+}
+
+function rebuild() {
+  const key = document.getElementById("sheetSel").value;
+  const n = parseInt(document.getElementById("nInput").value, 10);
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadSheet(key, n);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("sheetSel").addEventListener("change", () => {
+  // when switching sheets, default n to that sheet's length
+  const key = document.getElementById("sheetSel").value;
+  document.getElementById("nInput").value = SHEETS[key].n;
+  rebuild();
+});
+document.getElementById("nInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

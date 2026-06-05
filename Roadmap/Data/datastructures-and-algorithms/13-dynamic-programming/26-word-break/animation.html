@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Word Break — String Segmentation DP</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-scan: rgba(88, 166, 255, 0.22);
+    --hi-chunk: rgba(210, 153, 34, 0.30);
+    --hi-true: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .strip { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0 4px; }
+  .cell {
+    width: 34px;
+    height: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 16px;
+    background: var(--panel-2);
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .cell .idx { font-size: 9px; color: var(--muted); margin-top: 2px; }
+  .cell.scan { background: var(--hi-scan); border-color: var(--accent); }
+  .cell.chunk { background: var(--hi-chunk); border-color: var(--accent-2); }
+  .dpstrip { display: flex; gap: 4px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .dpcell {
+    width: 34px;
+    height: 38px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--panel-2);
+    color: var(--muted);
+    transition: all 0.2s ease;
+  }
+  .dpcell .didx { font-size: 9px; color: var(--muted); font-weight: 400; }
+  .dpcell.t { background: var(--hi-true); color: #fff; border-color: var(--good); }
+  .dpcell.f { color: var(--bad); }
+  .dpcell.active { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .dict { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .word {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .word.hit { background: var(--hi-true); border-color: var(--good); color: #fff; }
+  .word.miss { background: rgba(248,81,73,0.15); border-color: var(--bad); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .interp .no { color: var(--bad); font-weight: 700; }
+  .result {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 15px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    min-height: 24px;
+  }
+  .result .seg {
+    display: inline-block;
+    margin: 2px 3px;
+    padding: 2px 8px;
+    background: var(--hi-true);
+    border: 1px solid var(--good);
+    border-radius: 5px;
+    color: #fff;
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Word Break — Scanning the dp[] Array</h1>
+  <p>dp[i] is <b>true</b> if the prefix s[0..i) can be segmented into dictionary words: dp[i] = OR over j of (dp[j] AND s[j..i) is a word). Watch the scan fill dp and reconstruct one segmentation.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Example:
+      <select id="exSel">
+        <option value="leetcode">leetcode / {leet, code}</option>
+        <option value="applepen">applepenapple / {apple, pen}</option>
+        <option value="cats">catsanddog / {cat,cats,and,sand,dog}</option>
+        <option value="fail">catsandog / {cats,dog,sand,and,cat}</option>
+        <option value="aaaa">aaaa / {a, aa}</option>
+      </select>
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>String &amp; current scan</h2>
+      <div class="strip" id="charStrip"></div>
+      <div class="step-counter">Dictionary:</div>
+      <div class="dict" id="dictBox"></div>
+      <div class="interp" id="interpBox">
+        Testing chunk <b>s[j..i)</b> against the dictionary; dp[i] turns green when a word ends here and dp[j] was already true.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-scan)"></span> scan end i</span>
+        <span><span class="swatch" style="background:var(--hi-chunk)"></span> chunk s[j..i)</span>
+        <span><span class="swatch" style="background:var(--hi-true)"></span> dp = true</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>dp[] boolean array</h2>
+      <div class="dpstrip" id="dpStrip"></div>
+      <div class="step-counter" id="dpExplain" style="margin-top:8px;"></div>
+      <div class="step-counter" style="margin-top:14px;">Reconstructed segmentation (one valid split):</div>
+      <div class="result" id="resultBox">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We seed dp[0] = true (the empty prefix), then scan each end index i and test every chunk s[j..i) against the dictionary.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Boolean DP, the Word Break I decision version. dp[0] = true is the empty-prefix base case;
+    the answer is dp[n]. The inner loop tests chunks s[j..i); when one is a dictionary word and dp[j] is already true, dp[i] becomes true.
+    See <code>junior.md</code> and <code>professional.md</code> for the recurrence and its correctness proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Example definitions ----------
+const EXAMPLES = {
+  leetcode: { s: "leetcode", dict: ["leet", "code"] },
+  applepen: { s: "applepenapple", dict: ["apple", "pen"] },
+  cats:     { s: "catsanddog", dict: ["cat", "cats", "and", "sand", "dog"] },
+  fail:     { s: "catsandog", dict: ["cats", "dog", "sand", "and", "cat"] },
+  aaaa:     { s: "aaaa", dict: ["a", "aa"] }
+};
+
+// ---------- Build the step plan ----------
+// Each step records the (i, j) being tested, whether the chunk is a word,
+// whether dp[j] was true, the resulting dp snapshot, and a parent pointer.
+function buildPlan(s, dictArr) {
+  const dict = new Set(dictArr);
+  let maxLen = 0;
+  for (const w of dictArr) maxLen = Math.max(maxLen, w.length);
+  const n = s.length;
+  const dp = new Array(n + 1).fill(false);
+  const from = new Array(n + 1).fill(-1); // parent pointer for reconstruction
+  dp[0] = true;
+  const steps = [];
+
+  steps.push({
+    type: "init", i: -1, j: -1, chunk: "", isWord: false, dpJ: false,
+    dp: dp.slice(), from: from.slice(),
+    desc: "Seed dp[0] = true: the empty prefix is segmentable using zero words. This base case anchors the whole recurrence."
+  });
+
+  for (let i = 1; i <= n; i++) {
+    const start = Math.max(0, i - maxLen);
+    let foundAt = -1;
+    for (let j = start; j < i; j++) {
+      const chunk = s.slice(j, i);
+      const isWord = dict.has(chunk);
+      const dpJ = dp[j];
+      let becameTrue = false;
+      if (dpJ && isWord && !dp[i]) {
+        dp[i] = true;
+        from[i] = j;
+        becameTrue = true;
+        foundAt = j;
+      }
+      steps.push({
+        type: "test", i: i, j: j, chunk: chunk, isWord: isWord, dpJ: dpJ,
+        becameTrue: becameTrue,
+        dp: dp.slice(), from: from.slice(),
+        desc: "i = " + i + ", j = " + j + ": chunk \"" + chunk + "\" " +
+          (isWord ? "IS a dictionary word" : "is NOT a word") +
+          ", and dp[" + j + "] = " + dpJ + ". " +
+          (becameTrue
+            ? "Both hold → dp[" + i + "] = true. The OR is satisfied; stop scanning this i."
+            : "Condition fails → dp[" + i + "] unchanged.")
+      });
+      if (becameTrue) break; // OR satisfied, early exit
+    }
+    if (foundAt === -1) {
+      steps.push({
+        type: "fail-i", i: i, j: -1, chunk: "", isWord: false, dpJ: false,
+        dp: dp.slice(), from: from.slice(),
+        desc: "No chunk ending at i = " + i + " completes a segmentation → dp[" + i + "] stays false."
+      });
+    }
+  }
+
+  steps.push({
+    type: "done", i: n, j: -1, chunk: "", isWord: false, dpJ: false,
+    dp: dp.slice(), from: from.slice(),
+    desc: dp[n]
+      ? "Done. dp[" + n + "] = true → \"" + s + "\" IS segmentable. We follow the parent pointers to recover one segmentation."
+      : "Done. dp[" + n + "] = false → \"" + s + "\" is NOT segmentable."
+  });
+
+  return { steps, n: n, segmentable: dp[n] };
+}
+
+// ---------- Reconstruct one segmentation from parent pointers ----------
+function reconstruct(s, from, n) {
+  if (from[n] === -1 && n !== 0) return null;
+  const words = [];
+  let i = n;
+  while (i > 0) {
+    const j = from[i];
+    if (j === -1) return null;
+    words.push(s.slice(j, i));
+    i = j;
+  }
+  words.reverse();
+  return words;
+}
+
+// ---------- Render helpers ----------
+function renderChars(s, step) {
+  const strip = document.getElementById("charStrip");
+  strip.innerHTML = "";
+  for (let k = 0; k < s.length; k++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    // chunk is s[j..i): characters with j <= k < i
+    if (step.i >= 0 && step.j >= 0 && k >= step.j && k < step.i) {
+      cell.classList.add("chunk");
+    } else if (step.i >= 0 && k === step.i - 1) {
+      // mark the scan frontier character lightly
+    }
+    cell.innerHTML = "<div>" + s[k] + "</div><div class='idx'>" + k + "</div>";
+    strip.appendChild(cell);
+  }
+}
+
+function renderDict(dictArr, step) {
+  const box = document.getElementById("dictBox");
+  box.innerHTML = "";
+  for (const w of dictArr) {
+    const el = document.createElement("span");
+    el.className = "word";
+    if (step.type === "test" && step.chunk === w) {
+      el.classList.add(step.isWord ? "hit" : "miss");
+    }
+    el.textContent = w;
+    box.appendChild(el);
+  }
+}
+
+function renderDp(step, n) {
+  const strip = document.getElementById("dpStrip");
+  strip.innerHTML = "";
+  for (let k = 0; k <= n; k++) {
+    const cell = document.createElement("div");
+    cell.className = "dpcell " + (step.dp[k] ? "t" : "f");
+    if (k === step.i) cell.classList.add("active");
+    if (step.type === "test" && k === step.j) cell.classList.add("active");
+    cell.innerHTML = "<div>" + (step.dp[k] ? "T" : "F") + "</div><div class='didx'>" + k + "</div>";
+    strip.appendChild(cell);
+  }
+}
+
+function renderInterp(step) {
+  const box = document.getElementById("interpBox");
+  if (step.type === "init") {
+    box.innerHTML = "Base case: <b>dp[0] = true</b> (empty prefix needs zero words).";
+  } else if (step.type === "test") {
+    box.innerHTML =
+      "Chunk <b>s[" + step.j + ".." + step.i + ")</b> = \"" + step.chunk + "\" " +
+      (step.isWord
+        ? "<span class='val'>is a word</span>"
+        : "<span class='no'>not a word</span>") +
+      "; dp[" + step.j + "] = " +
+      (step.dpJ ? "<span class='val'>true</span>" : "<span class='no'>false</span>") +
+      (step.becameTrue ? " &rarr; <span class='val'>dp[" + step.i + "] = true</span>" : "");
+  } else if (step.type === "fail-i") {
+    box.innerHTML = "Nothing ends at <b>i = " + step.i + "</b> &rarr; <span class='no'>dp[" + step.i + "] = false</span>.";
+  } else {
+    box.innerHTML = step.dp[step.i]
+      ? "<span class='val'>dp[" + step.i + "] = true</span> &mdash; the string is segmentable."
+      : "<span class='no'>dp[" + step.i + "] = false</span> &mdash; not segmentable.";
+  }
+}
+
+function renderResult(step) {
+  const box = document.getElementById("resultBox");
+  if (step.type !== "done") {
+    box.innerHTML = "&mdash;";
+    return;
+  }
+  if (!state.plan.segmentable) {
+    box.innerHTML = "<span class='no' style='font-family:var(--mono)'>NOT SEGMENTABLE</span>";
+    return;
+  }
+  const words = reconstruct(state.s, step.from, state.plan.n);
+  if (!words) { box.innerHTML = "&mdash;"; return; }
+  box.innerHTML = words.map(w => "<span class='seg'>" + w + "</span>").join(" ");
+}
+
+// ---------- Animation state ----------
+const state = {
+  s: "",
+  dictArr: [],
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function loadExample(key) {
+  const ex = EXAMPLES[key];
+  state.s = ex.s;
+  state.dictArr = ex.dict;
+  state.plan = buildPlan(ex.s, ex.dict);
+  state.stepIdx = 0;
+  applyStep(state.plan.steps[0]);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = state.plan.steps[0].desc;
+  updateButtons();
+}
+
+function applyStep(step) {
+  renderChars(state.s, step);
+  renderDict(state.dictArr, step);
+  renderDp(step, state.plan.n);
+  renderInterp(step);
+  renderResult(step);
+  document.getElementById("dpExplain").textContent =
+    "dp[i] = OR over j of ( dp[j] AND s[j..i) in dict ).  Answer = dp[" + state.plan.n + "].";
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.plan.steps[idx];
+  applyStep(step);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  document.getElementById("narrate").innerHTML = step.desc;
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  const key = document.getElementById("exSel").value;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadExample(key);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("exSel").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

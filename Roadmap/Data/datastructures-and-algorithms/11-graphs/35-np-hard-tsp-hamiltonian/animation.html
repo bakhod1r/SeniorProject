@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TSP & Hamiltonian — Held–Karp DP and 2-opt</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+
+  .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+  .mode-pill button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+    font-size: 12px; font-weight: 500; transition: all 0.15s ease;
+  }
+  .mode-pill button.active { background: var(--blue); color: #fff; }
+
+  main {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 60px);
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .sidebar {
+    padding: 20px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .panel { flex: 1; padding: 20px; overflow: auto; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  button.ctrl {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: all 0.12s ease;
+  }
+  button.ctrl:hover { border-color: var(--blue); }
+  button.ctrl:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.ctrl.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  button.ctrl.danger { border-color: var(--red); color: var(--red); }
+
+  .legend { font-size: 12px; color: var(--muted); line-height: 1.9; margin-top: 14px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+  .status {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.6; margin-bottom: 16px;
+  }
+  .status .big { font-size: 15px; font-weight: 600; color: var(--blue); }
+  .status code { color: var(--orange); font-family: "SF Mono", Menlo, monospace; }
+
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 18px 0 8px; }
+
+  /* DP table */
+  table.dp { border-collapse: collapse; font-size: 11px; font-family: "SF Mono", Menlo, monospace; }
+  table.dp th, table.dp td {
+    border: 1px solid var(--border); padding: 3px 7px; text-align: center; min-width: 34px;
+  }
+  table.dp th { background: var(--bg); color: var(--muted); position: sticky; }
+  table.dp td.inf { color: #4d5560; }
+  table.dp td.val { color: var(--green); }
+  table.dp td.active { background: rgba(88,166,255,0.25); color: var(--blue); font-weight: 700; }
+  table.dp td.justset { background: rgba(63,185,80,0.25); color: var(--green); font-weight: 700; }
+  table.dp tr.maskrow td.maskcell { color: var(--purple); background: var(--bg); }
+
+  canvas { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+
+  .row { display: flex; gap: 6px; align-items: center; margin: 8px 0; font-size: 13px; }
+  input[type=range] { flex: 1; }
+  .kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 11px; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TSP &amp; Hamiltonian — Held–Karp DP &amp; 2-opt</h1>
+  <div class="mode-pill">
+    <button id="modeHK" class="active">Held–Karp DP</button>
+    <button id="mode2opt">2-opt Tour</button>
+  </div>
+</header>
+
+<main>
+  <aside class="sidebar">
+    <div class="controls">
+      <button class="ctrl primary" id="btnStep">Step</button>
+      <button class="ctrl" id="btnRun">Run</button>
+      <button class="ctrl danger" id="btnReset">Reset</button>
+    </div>
+
+    <div class="row" id="speedRow">
+      <span style="color:var(--muted);font-size:12px;">Speed</span>
+      <input type="range" id="speed" min="1" max="60" value="22" />
+    </div>
+
+    <div class="status" id="status">Ready.</div>
+
+    <h3>Distance matrix</h3>
+    <div id="matrixBox" style="font-family:monospace;font-size:11px;color:var(--muted);white-space:pre;line-height:1.5;"></div>
+
+    <div class="legend" id="legend"></div>
+    <div class="note" id="note"></div>
+
+    <h3>How to read it</h3>
+    <div class="note">
+      <strong>Held–Karp mode:</strong> the table is the DP. Rows are subsets
+      <code>mask</code> (each must contain city 0); columns are the current end
+      city <code>i</code>. A cell holds <code>dp[mask][i]</code> = the shortest
+      path that starts at 0, visits exactly the cities in <code>mask</code>, and
+      ends at <code>i</code>. Stepping fills cells from small masks to the full
+      set, then closes the cycle with <code>+ d[i][0]</code> to read off the
+      optimal tour length 80 for this instance.
+      <br><br>
+      <strong>2-opt mode:</strong> points sit in the plane. We start from a
+      deliberately scrambled tour and repeatedly remove two edges and reconnect
+      them (reversing the middle segment) whenever that shortens the tour —
+      visually, uncrossing crossings — until no improving move remains.
+    </div>
+
+    <h3>Keyboard</h3>
+    <div class="note">
+      <span class="kbd">Space</span> / <span class="kbd">→</span> step &nbsp;·&nbsp;
+      <span class="kbd">Enter</span> run/pause &nbsp;·&nbsp;
+      <span class="kbd">R</span> reset
+    </div>
+  </aside>
+
+  <section class="panel" id="panel"></section>
+</main>
+
+<script>
+/* ============================================================
+   Shared 4-city instance (matches junior.md walkthrough, OPT = 80)
+   ============================================================ */
+const DIST = [
+  [0, 10, 15, 20],
+  [10, 0, 35, 25],
+  [15, 35, 0, 30],
+  [20, 25, 30, 0],
+];
+const N = DIST.length;
+const INF = Infinity;
+
+/* ---- 2-opt instance: points in the plane ---- */
+const POINTS = [
+  {x: 80,  y: 80},
+  {x: 360, y: 100},
+  {x: 120, y: 320},
+  {x: 320, y: 300},
+  {x: 220, y: 180},
+  {x: 60,  y: 220},
+  {x: 400, y: 240},
+];
+
+let mode = 'HK';
+let timer = null;
+
+const statusEl = document.getElementById('status');
+const panel = document.getElementById('panel');
+const legendEl = document.getElementById('legend');
+const noteEl = document.getElementById('note');
+const matrixBox = document.getElementById('matrixBox');
+const btnStep = document.getElementById('btnStep');
+const btnRun = document.getElementById('btnRun');
+const btnReset = document.getElementById('btnReset');
+const speedEl = document.getElementById('speed');
+
+function fmtMatrix() {
+  let s = '     ' + DIST.map((_, j) => String(j).padStart(4)).join('') + '\n';
+  for (let i = 0; i < N; i++) {
+    s += String(i).padStart(3) + '  ' + DIST[i].map(v => String(v).padStart(4)).join('') + '\n';
+  }
+  matrixBox.textContent = s;
+}
+fmtMatrix();
+
+/* ============================================================
+   HELD–KARP step generator
+   We precompute the full sequence of "events" so Step/Run/Reset
+   can walk forward deterministically.
+   ============================================================ */
+let hk = null;
+
+function buildHKSteps() {
+  const full = (1 << N) - 1;
+  const dp = Array.from({length: 1 << N}, () => new Array(N).fill(INF));
+  dp[1][0] = 0;
+  const steps = [];
+
+  // Initial event
+  steps.push({type: 'init', mask: 1, i: 0,
+    msg: `Base case: dp[{0}][0] = 0 (sitting at start city 0).`});
+
+  for (let mask = 1; mask <= full; mask++) {
+    if ((mask & 1) === 0) continue; // every path starts at 0
+    for (let i = 0; i < N; i++) {
+      if (dp[mask][i] === INF || (mask & (1 << i)) === 0) continue;
+      for (let j = 0; j < N; j++) {
+        if (mask & (1 << j)) continue;
+        const nm = mask | (1 << j);
+        const nd = dp[mask][i] + DIST[i][j];
+        const improved = nd < dp[nm][j];
+        if (improved) dp[nm][j] = nd;
+        steps.push({
+          type: 'relax', mask, i, j, nm, nd, improved,
+          msg: `From dp[${maskStr(mask)}][${i}] = ${valStr(dp[mask][i])}, extend to ${j}: ` +
+               `${valStr(nd - DIST[i][j])} + d[${i}][${j}]=${DIST[i][j]} = ${nd}. ` +
+               (improved ? `<span style="color:var(--green)">improved dp[${maskStr(nm)}][${j}]</span>` :
+                           `<span style="color:var(--muted)">not better, keep</span>`),
+          snapshot: dp.map(r => r.slice())
+        });
+      }
+    }
+  }
+
+  // closing the cycle
+  let best = INF, last = -1;
+  const closeEvents = [];
+  for (let i = 1; i < N; i++) {
+    const total = dp[full][i] + DIST[i][0];
+    closeEvents.push({i, total});
+    if (total < best) { best = total; last = i; }
+  }
+  steps.push({type: 'close', closeEvents, best, last, full,
+    msg: `Close the cycle: min over i of dp[FULL][i] + d[i][0] = <span style="color:var(--blue);font-weight:700">${best}</span>.`});
+
+  // capture final dp for table rendering
+  return {steps, dp, full, best, last};
+}
+
+function maskStr(m) {
+  const set = [];
+  for (let b = 0; b < N; b++) if (m & (1 << b)) set.push(b);
+  return '{' + set.join(',') + '}';
+}
+function valStr(v) { return v === INF ? '∞' : String(v); }
+
+function initHK() {
+  const built = buildHKSteps();
+  hk = {
+    steps: built.steps,
+    idx: -1,
+    full: built.full,
+    // running dp that we rebuild as we step
+    dp: Array.from({length: 1 << N}, () => new Array(N).fill(INF)),
+    closed: null,
+  };
+}
+
+function renderHK() {
+  const full = (1 << N) - 1;
+  // figure highlight from current step
+  const cur = hk.idx >= 0 ? hk.steps[hk.idx] : null;
+
+  // table
+  let html = '<table class="dp"><tr><th>mask \\ end i</th>';
+  for (let i = 0; i < N; i++) html += `<th>i=${i}</th>`;
+  html += '</tr>';
+  for (let mask = 1; mask <= full; mask++) {
+    if ((mask & 1) === 0) continue;
+    html += `<tr class="maskrow"><td class="maskcell">${maskStr(mask)}</td>`;
+    for (let i = 0; i < N; i++) {
+      const v = hk.dp[mask][i];
+      let cls = v === INF ? 'inf' : 'val';
+      let label = v === INF ? '∞' : v;
+      if (cur && cur.type === 'relax') {
+        if (cur.mask === mask && cur.i === i) { cls = 'active'; }
+        if (cur.improved && cur.nm === mask && cur.j === i) { cls = 'justset'; }
+      }
+      if (cur && cur.type === 'init' && mask === 1 && i === 0) cls = 'justset';
+      html += `<td class="${cls}">${label}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+
+  if (hk.closed) {
+    html += '<h3>Closing the cycle (+ d[i][0])</h3><table class="dp"><tr><th>end i</th><th>dp[FULL][i]</th><th>+ d[i][0]</th><th>total</th></tr>';
+    for (const e of hk.closed.closeEvents) {
+      const isBest = e.i === hk.closed.last;
+      html += `<tr><td>${e.i}</td><td>${valStr(hk.dp[full][e.i])}</td><td>${DIST[e.i][0]}</td>` +
+              `<td class="${isBest ? 'justset' : 'val'}">${e.total}</td></tr>`;
+    }
+    html += `</table><p style="font-size:14px;margin-top:12px;">Optimal tour length = ` +
+            `<span style="color:var(--blue);font-weight:700;font-size:18px">${hk.closed.best}</span></p>`;
+  }
+
+  panel.innerHTML = html;
+
+  statusEl.innerHTML = cur
+    ? `<div class="big">Step ${hk.idx + 1} / ${hk.steps.length}</div>${cur.msg}`
+    : `<div class="big">Held–Karp ready</div>Press <span class="kbd">Step</span> to fill <code>dp[mask][i]</code> = shortest path from 0 covering <code>mask</code>, ending at <code>i</code>.`;
+}
+
+function hkStep() {
+  if (hk.idx >= hk.steps.length - 1) return false;
+  hk.idx++;
+  const ev = hk.steps[hk.idx];
+  if (ev.type === 'init') {
+    hk.dp[1][0] = 0;
+  } else if (ev.type === 'relax') {
+    if (ev.improved) hk.dp[ev.nm][ev.j] = ev.nd;
+  } else if (ev.type === 'close') {
+    hk.closed = ev;
+  }
+  renderHK();
+  return hk.idx < hk.steps.length - 1;
+}
+
+/* ============================================================
+   2-opt step generator
+   ============================================================ */
+let to = null;
+
+function dist2(a, b) {
+  const dx = POINTS[a].x - POINTS[b].x, dy = POINTS[a].y - POINTS[b].y;
+  return Math.hypot(dx, dy);
+}
+function tourLen(t) {
+  let s = 0;
+  for (let i = 0; i < t.length; i++) s += dist2(t[i], t[(i + 1) % t.length]);
+  return s;
+}
+
+function nearestNeighborTour() {
+  const n = POINTS.length;
+  const seen = new Array(n).fill(false);
+  const tour = [0]; seen[0] = true;
+  while (tour.length < n) {
+    const last = tour[tour.length - 1];
+    let best = -1, bd = Infinity;
+    for (let j = 0; j < n; j++) if (!seen[j] && dist2(last, j) < bd) { bd = dist2(last, j); best = j; }
+    seen[best] = true; tour.push(best);
+  }
+  return tour;
+}
+
+function build2optSteps() {
+  // A deliberately scrambled starting tour so there are visible crossings
+  // for 2-opt to uncross. (Nearest-neighbor on these points is already nearly
+  // optimal, which would show no improvement.)
+  let tour = [0, 3, 1, 5, 2, 6, 4];
+  const n = tour.length;
+  const steps = [{tour: tour.slice(), msg: `Initial (scrambled) tour with crossings. Length = ${tourLen(tour).toFixed(1)}. Watch 2-opt uncross them.`, hi: null}];
+  let improved = true;
+  let guard = 0;
+  while (improved && guard < 2000) {
+    improved = false;
+    for (let i = 0; i < n - 1 && !improved; i++) {
+      for (let k = i + 1; k < n && !improved; k++) {
+        const a = tour[i], b = tour[(i + 1) % n];
+        const c = tour[k], e = tour[(k + 1) % n];
+        if (a === c || a === e || b === c) continue;
+        const delta = dist2(a, c) + dist2(b, e) - dist2(a, b) - dist2(c, e);
+        if (delta < -1e-9) {
+          // reverse segment i+1..k
+          let l = i + 1, r = k;
+          while (l < r) { const t = tour[l]; tour[l] = tour[r]; tour[r] = t; l++; r--; }
+          improved = true;
+          steps.push({
+            tour: tour.slice(),
+            msg: `2-opt: removed edges (${a},${b}) & (${c},${e}), added (${a},${c}) & (${b},${e}). ` +
+                 `gain ${(-delta).toFixed(1)}. New length = ${tourLen(tour).toFixed(1)}.`,
+            hi: [a, b, c, e]
+          });
+        }
+      }
+    }
+    guard++;
+  }
+  steps.push({tour: tour.slice(), msg: `No improving 2-opt move remains. Locally optimal. Length = ${tourLen(tour).toFixed(1)}.`, hi: null, done: true});
+  return steps;
+}
+
+function init2opt() {
+  to = {steps: build2optSteps(), idx: 0};
+}
+
+function render2opt() {
+  const ev = to.steps[to.idx];
+  panel.innerHTML = '<canvas id="cv" width="500" height="400"></canvas>';
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  const t = ev.tour;
+  // edges
+  ctx.lineWidth = 2;
+  for (let i = 0; i < t.length; i++) {
+    const a = t[i], b = t[(i + 1) % t.length];
+    const isHi = ev.hi && ((ev.hi[0] === a && ev.hi[2] === b) || (ev.hi[0] === b && ev.hi[2] === a) ||
+                           (ev.hi[1] === a && ev.hi[3] === b) || (ev.hi[1] === b && ev.hi[3] === a));
+    ctx.strokeStyle = isHi ? '#3fb950' : '#58a6ff';
+    ctx.beginPath();
+    ctx.moveTo(POINTS[a].x, POINTS[a].y);
+    ctx.lineTo(POINTS[b].x, POINTS[b].y);
+    ctx.stroke();
+  }
+  // nodes
+  for (let i = 0; i < POINTS.length; i++) {
+    ctx.fillStyle = i === 0 ? '#ffa657' : '#bc8cff';
+    ctx.beginPath();
+    ctx.arc(POINTS[i].x, POINTS[i].y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0d1117';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(i), POINTS[i].x, POINTS[i].y);
+  }
+
+  statusEl.innerHTML = `<div class="big">Step ${to.idx + 1} / ${to.steps.length}</div>${ev.msg}`;
+}
+
+function twoOptStep() {
+  if (to.idx >= to.steps.length - 1) return false;
+  to.idx++;
+  render2opt();
+  return to.idx < to.steps.length - 1;
+}
+
+/* ============================================================
+   Controls
+   ============================================================ */
+function setMode(m) {
+  mode = m;
+  stopRun();
+  document.getElementById('modeHK').classList.toggle('active', m === 'HK');
+  document.getElementById('mode2opt').classList.toggle('active', m === '2opt');
+  reset();
+}
+
+function reset() {
+  stopRun();
+  if (mode === 'HK') {
+    initHK();
+    hk.idx = -1;
+    hk.dp = Array.from({length: 1 << N}, () => new Array(N).fill(INF));
+    hk.closed = null;
+    renderHK();
+    legendEl.innerHTML =
+      '<span class="sw" style="background:rgba(88,166,255,0.6)"></span> source state dp[mask][i]<br>' +
+      '<span class="sw" style="background:rgba(63,185,80,0.6)"></span> just-updated dp[nm][j]<br>' +
+      '<span class="sw" style="background:#4d5560"></span> still ∞ (unreached)';
+    noteEl.innerHTML = 'Each row is a subset <code>mask</code> (must contain city 0); each column an end city <code>i</code>. Watch values fill from small masks to the full set, then the cycle closes.';
+  } else {
+    init2opt();
+    render2opt();
+    legendEl.innerHTML =
+      '<span class="sw" style="background:#58a6ff"></span> tour edge<br>' +
+      '<span class="sw" style="background:#3fb950"></span> edge just added by a 2-opt move<br>' +
+      '<span class="sw" style="background:#ffa657"></span> start (city 0) &nbsp; <span class="sw" style="background:#bc8cff"></span> other city';
+    noteEl.innerHTML = 'Starting from a nearest-neighbor tour, each step removes two edges and reconnects them, reversing the segment between — uncrossing crossings until no improving move remains.';
+  }
+}
+
+function singleStep() {
+  if (mode === 'HK') hkStep();
+  else twoOptStep();
+}
+
+function run() {
+  if (timer) { stopRun(); return; }
+  btnRun.textContent = 'Pause';
+  btnRun.classList.add('primary');
+  const tick = () => {
+    let more = (mode === 'HK') ? hkStep() : twoOptStep();
+    if (!more) { stopRun(); return; }
+    timer = setTimeout(tick, 1000 / Number(speedEl.value));
+  };
+  tick();
+}
+
+function stopRun() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  btnRun.textContent = 'Run';
+  btnRun.classList.remove('primary');
+}
+
+btnStep.addEventListener('click', () => { stopRun(); singleStep(); });
+btnRun.addEventListener('click', run);
+btnReset.addEventListener('click', reset);
+document.getElementById('modeHK').addEventListener('click', () => setMode('HK'));
+document.getElementById('mode2opt').addEventListener('click', () => setMode('2opt'));
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); stopRun(); singleStep(); }
+  else if (e.key === 'Enter') { e.preventDefault(); run(); }
+  else if (e.key === 'r' || e.key === 'R') { reset(); }
+});
+
+/* init */
+setMode('HK');
+</script>
+</body>
+</html>
+</content>

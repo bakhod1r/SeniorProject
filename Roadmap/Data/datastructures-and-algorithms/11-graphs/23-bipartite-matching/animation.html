@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bipartite Matching — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    height: fit-content;
+  }
+
+  .control-group { margin-bottom: 18px; }
+
+  .control-group h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    flex: 1;
+    min-width: 0;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.12s ease;
+  }
+
+  .btn:hover { border-color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn.success { background: var(--green); border-color: var(--green); color: #04260f; }
+  .btn.warn    { background: var(--yellow); border-color: var(--yellow); color: #281d00; }
+  .btn.danger  { background: var(--red); border-color: var(--red); color: #fff; }
+
+  .step-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+
+  .speed-row input[type="range"] { flex: 1; }
+
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #vis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  svg#graph {
+    width: 100%;
+    height: 440px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .info-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 44px;
+    color: var(--text);
+    margin-top: 14px;
+  }
+
+  .info-bar code {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .stats-row .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  #log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.match { color: var(--green); }
+  #log .entry.try { color: var(--blue); }
+  #log .entry.aug { color: var(--purple); }
+  #log .entry.fail { color: var(--red); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .legend .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid;
+  }
+
+  .dot.d-free   { background: rgba(88,166,255,0.15); border-color: var(--blue); }
+  .dot.d-cur    { background: rgba(210,153,34,0.3);  border-color: var(--yellow); }
+  .dot.d-match  { background: rgba(63,185,80,0.3);   border-color: var(--green); }
+  .dot.d-path   { background: rgba(188,140,255,0.25);border-color: var(--purple); }
+
+  .legend .line { width: 22px; height: 0; border-top-width: 3px; border-top-style: solid; }
+  .line.l-match { border-color: var(--green); }
+  .line.l-edge  { border-color: var(--muted); border-top-style: dashed; }
+  .line.l-path  { border-color: var(--purple); }
+
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bipartite Matching — Kuhn's Augmenting Paths</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="kuhn" class="active">Kuhn (DFS)</button>
+    <button data-mode="info">How it works</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="control-row">
+        <input type="text" id="graphSpec" placeholder="edges: 0-0,0-1,1-0,2-1,2-2" />
+      </div>
+      <div class="control-row">
+        <button class="btn success" id="btnBuild" style="flex:1">Build Graph</button>
+        <button class="btn" id="btnRandom">Random</button>
+      </div>
+      <div class="control-row">
+        <button class="btn danger" id="btnReset" style="flex:1">Reset Matching</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run Matching</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnStart">Start</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn" id="btnRun">Run</button>
+        <button class="btn" id="btnStop">Stop</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="120" max="1400" value="650" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Algorithm</h2>
+      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
+        For each free left vertex <code style="background:rgba(88,166,255,0.15);color:var(--blue);padding:1px 5px;border-radius:3px;">u</code>:<br>
+        try each right neighbor <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;">v</code>.<br>
+        If <code style="background:rgba(63,185,80,0.2);color:var(--green);padding:1px 5px;border-radius:3px;">v</code> is free or its owner can move,
+        claim <code style="background:rgba(188,140,255,0.2);color:var(--purple);padding:1px 5px;border-radius:3px;">v</code>
+        (augmenting path).<br>
+        <b>Reset visited[] per left vertex.</b>
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="graph" viewBox="0 0 900 440" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Build a graph (or click <code>Random</code>), then press <code>Start</code> and step through Kuhn's algorithm.</div>
+      <div class="stats-row">
+        <div class="stat">Matching size: <b id="statSize">0</b></div>
+        <div class="stat">Current left: <b id="statLeft">-</b></div>
+        <div class="stat">Step: <b id="statStep">0</b></div>
+        <div class="stat">DFS calls: <b id="statDfs">0</b></div>
+        <div class="stat">Augmentations: <b id="statAug">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-free"></span>free vertex</span>
+        <span><span class="dot d-cur"></span>current</span>
+        <span><span class="dot d-match"></span>matched</span>
+        <span><span class="dot d-path"></span>on path</span>
+        <span><span class="line l-edge"></span>edge</span>
+        <span><span class="line l-match"></span>matched edge</span>
+        <span><span class="line l-path"></span>augmenting</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Algorithm Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Bipartite matching (Kuhn) visualizer
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const state = {
+  nL: 0,
+  nR: 0,
+  adj: [],          // adj[u] = list of right neighbors
+  matchR: [],       // matchR[v] = left vertex matched to right v, or -1
+  matchL: [],       // matchL[u] = right vertex matched to left u, or -1
+  edges: [],        // [u, v] pairs for drawing
+  steps: 0,
+  dfsCalls: 0,
+  augments: 0,
+  speedMs: 650,
+  running: false,
+  // generator-driven stepping
+  gen: null,
+  curLeft: -1,
+  pathEdges: new Set(), // "u-v" keys currently on the explored path
+  visited: [],
+};
+
+// ---------- DOM helpers ----------
+const $ = (id) => document.getElementById(id);
+const svg = $("graph");
+
+function showToast(msg, type) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (type ? " " + type : "");
+  setTimeout(() => { t.className = "toast"; }, 1800);
+}
+
+function log(msg, cls) {
+  const div = document.createElement("div");
+  div.className = "entry " + (cls || "");
+  const ts = document.createElement("span");
+  ts.className = "ts";
+  ts.textContent = String(state.steps).padStart(3, "0");
+  div.appendChild(ts);
+  div.appendChild(document.createTextNode(msg));
+  const box = $("log");
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateStats() {
+  const size = state.matchR.filter((x) => x !== -1).length;
+  $("statSize").textContent = size;
+  $("statLeft").textContent = state.curLeft === -1 ? "-" : "L" + state.curLeft;
+  $("statStep").textContent = state.steps;
+  $("statDfs").textContent = state.dfsCalls;
+  $("statAug").textContent = state.augments;
+}
+
+// ---------- Graph parsing & layout ----------
+function parseSpec(spec) {
+  const edges = [];
+  let maxL = -1, maxR = -1;
+  spec.split(",").forEach((tok) => {
+    tok = tok.trim();
+    if (!tok) return;
+    const parts = tok.split("-");
+    if (parts.length !== 2) return;
+    const u = parseInt(parts[0], 10);
+    const v = parseInt(parts[1], 10);
+    if (Number.isNaN(u) || Number.isNaN(v)) return;
+    edges.push([u, v]);
+    if (u > maxL) maxL = u;
+    if (v > maxR) maxR = v;
+  });
+  return { edges, nL: maxL + 1, nR: maxR + 1 };
+}
+
+function buildGraph(spec) {
+  const { edges, nL, nR } = parseSpec(spec);
+  if (nL <= 0 || nR <= 0 || edges.length === 0) {
+    showToast("Invalid graph spec", "error");
+    return;
+  }
+  state.nL = nL;
+  state.nR = nR;
+  state.edges = edges;
+  state.adj = Array.from({ length: nL }, () => []);
+  edges.forEach(([u, v]) => state.adj[u].push(v));
+  resetMatching();
+  $("log").innerHTML = "";
+  log(`Built graph: ${nL} left, ${nR} right, ${edges.length} edges.`, "op");
+  render();
+}
+
+function resetMatching() {
+  state.matchR = new Array(state.nR).fill(-1);
+  state.matchL = new Array(state.nL).fill(-1);
+  state.steps = 0;
+  state.dfsCalls = 0;
+  state.augments = 0;
+  state.curLeft = -1;
+  state.gen = null;
+  state.running = false;
+  state.pathEdges = new Set();
+  state.visited = new Array(state.nR).fill(false);
+  updateStats();
+  render();
+}
+
+function randomGraph() {
+  const nL = 4 + Math.floor(Math.random() * 2); // 4-5
+  const nR = nL;
+  const edges = [];
+  const seen = new Set();
+  for (let u = 0; u < nL; u++) {
+    const deg = 1 + Math.floor(Math.random() * 3);
+    for (let k = 0; k < deg; k++) {
+      const v = Math.floor(Math.random() * nR);
+      const key = u + "-" + v;
+      if (!seen.has(key)) { seen.add(key); edges.push([u, v]); }
+    }
+  }
+  $("graphSpec").value = edges.map((e) => e[0] + "-" + e[1]).join(",");
+  buildGraph($("graphSpec").value);
+}
+
+// ---------- Coordinates ----------
+function leftXY(u) {
+  const gap = 400 / Math.max(1, state.nL);
+  return { x: 240, y: 40 + gap * u + gap / 2 };
+}
+function rightXY(v) {
+  const gap = 400 / Math.max(1, state.nR);
+  return { x: 660, y: 40 + gap * v + gap / 2 };
+}
+
+// ---------- Rendering ----------
+function render() {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  // edges first
+  state.edges.forEach(([u, v]) => {
+    const a = leftXY(u), b = rightXY(v);
+    const line = document.createElementNS(SVG_NS, "line");
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    const matched = state.matchR[v] === u;
+    const onPath = state.pathEdges.has(u + "-" + v);
+    if (onPath) {
+      line.setAttribute("stroke", "var(--purple)");
+      line.setAttribute("stroke-width", "4");
+    } else if (matched) {
+      line.setAttribute("stroke", "var(--green)");
+      line.setAttribute("stroke-width", "3.5");
+    } else {
+      line.setAttribute("stroke", "var(--muted)");
+      line.setAttribute("stroke-width", "1.4");
+      line.setAttribute("stroke-dasharray", "5 5");
+      line.setAttribute("opacity", "0.7");
+    }
+    svg.appendChild(line);
+  });
+
+  // left vertices
+  for (let u = 0; u < state.nL; u++) drawVertex(leftXY(u), "L" + u, vertexClassL(u));
+  // right vertices
+  for (let v = 0; v < state.nR; v++) drawVertex(rightXY(v), "R" + v, vertexClassR(v));
+
+  // column labels
+  drawLabel(240, 22, "LEFT");
+  drawLabel(660, 22, "RIGHT");
+}
+
+function vertexClassL(u) {
+  if (u === state.curLeft) return "cur";
+  if (state.matchL[u] !== -1) return "match";
+  return "free";
+}
+function vertexClassR(v) {
+  if (state.matchR[v] !== -1) return "match";
+  return "free";
+}
+
+function colorFor(cls) {
+  switch (cls) {
+    case "cur":   return { fill: "rgba(210,153,34,0.3)",  stroke: "#d29922" };
+    case "match": return { fill: "rgba(63,185,80,0.3)",   stroke: "#3fb950" };
+    case "path":  return { fill: "rgba(188,140,255,0.25)",stroke: "#bc8cff" };
+    default:      return { fill: "rgba(88,166,255,0.15)", stroke: "#58a6ff" };
+  }
+}
+
+function drawVertex(pos, label, cls) {
+  const c = colorFor(cls);
+  const circle = document.createElementNS(SVG_NS, "circle");
+  circle.setAttribute("cx", pos.x);
+  circle.setAttribute("cy", pos.y);
+  circle.setAttribute("r", 20);
+  circle.setAttribute("fill", c.fill);
+  circle.setAttribute("stroke", c.stroke);
+  circle.setAttribute("stroke-width", "2.5");
+  svg.appendChild(circle);
+  const text = document.createElementNS(SVG_NS, "text");
+  text.setAttribute("x", pos.x);
+  text.setAttribute("y", pos.y + 4);
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("fill", "var(--text)");
+  text.setAttribute("font-size", "13");
+  text.setAttribute("font-family", "SF Mono, Menlo, monospace");
+  text.textContent = label;
+  svg.appendChild(text);
+}
+
+function drawLabel(x, y, txt) {
+  const t = document.createElementNS(SVG_NS, "text");
+  t.setAttribute("x", x);
+  t.setAttribute("y", y);
+  t.setAttribute("text-anchor", "middle");
+  t.setAttribute("fill", "var(--muted)");
+  t.setAttribute("font-size", "11");
+  t.setAttribute("letter-spacing", "1.5");
+  t.textContent = txt;
+  svg.appendChild(t);
+}
+
+// ---------- Kuhn as a step generator ----------
+// The generator yields after each meaningful action so the UI can render.
+function* kuhnGenerator() {
+  for (let u = 0; u < state.nL; u++) {
+    state.curLeft = u;
+    state.visited = new Array(state.nR).fill(false);
+    state.pathEdges = new Set();
+    state.steps++;
+    log(`Process left L${u}: reset visited[], start DFS.`, "op");
+    updateStats();
+    render();
+    yield;
+
+    const ok = yield* tryKuhn(u);
+    if (ok) {
+      state.augments++;
+      log(`L${u} matched via augmenting path. Matching size = ${state.matchR.filter(x => x!==-1).length}.`, "aug");
+    } else {
+      log(`L${u} could not be matched (no augmenting path).`, "fail");
+    }
+    state.pathEdges = new Set();
+    updateStats();
+    render();
+    yield;
+  }
+  state.curLeft = -1;
+  const size = state.matchR.filter((x) => x !== -1).length;
+  log(`Done. Maximum matching size = ${size}.`, "match");
+  updateStats();
+  render();
+  showToast("Maximum matching = " + size, "success");
+}
+
+function* tryKuhn(u) {
+  state.dfsCalls++;
+  for (const v of state.adj[u]) {
+    if (!state.visited[v]) {
+      state.visited[v] = true;
+      state.steps++;
+      state.pathEdges.add(u + "-" + v);
+      log(`  try L${u} -> R${v}: ` + (state.matchR[v] === -1 ? "R" + v + " is free." : "R" + v + " owned by L" + state.matchR[v] + ", recurse."), "try");
+      updateStats();
+      render();
+      yield;
+
+      if (state.matchR[v] === -1) {
+        claim(u, v);
+        log(`  claim L${u} - R${v}.`, "match");
+        render();
+        yield;
+        return true;
+      } else {
+        const owner = state.matchR[v];
+        // remove the owner's matched edge from path view temporarily handled in claim
+        const ok = yield* tryKuhn(owner);
+        if (ok) {
+          claim(u, v);
+          log(`  reassign: L${u} takes R${v} (L${owner} moved).`, "match");
+          render();
+          yield;
+          return true;
+        } else {
+          // backtrack: drop this path edge
+          state.pathEdges.delete(u + "-" + v);
+          log(`  backtrack from L${u} -> R${v}.`, "fail");
+          render();
+          yield;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function claim(u, v) {
+  // detach previous partner of u if any (u re-matches to a new v)
+  if (state.matchL[u] !== -1) {
+    state.matchR[state.matchL[u]] = -1;
+  }
+  state.matchR[v] = u;
+  state.matchL[u] = v;
+}
+
+// ---------- Driving the generator ----------
+function ensureGen() {
+  if (!state.gen) {
+    if (state.nL === 0) { showToast("Build a graph first", "error"); return false; }
+    resetMatching();
+    state.gen = kuhnGenerator();
+    log("Started Kuhn's algorithm.", "op");
+  }
+  return true;
+}
+
+function stepOnce() {
+  if (!ensureGen()) return;
+  const res = state.gen.next();
+  if (res.done) {
+    state.gen = null;
+    state.running = false;
+  }
+}
+
+function runLoop() {
+  if (!state.running) return;
+  if (!ensureGen()) { state.running = false; return; }
+  const res = state.gen.next();
+  if (res.done) {
+    state.gen = null;
+    state.running = false;
+    return;
+  }
+  setTimeout(runLoop, state.speedMs);
+}
+
+// ---------- Event wiring ----------
+$("btnBuild").addEventListener("click", () => buildGraph($("graphSpec").value));
+$("btnRandom").addEventListener("click", randomGraph);
+$("btnReset").addEventListener("click", () => { resetMatching(); $("log").innerHTML = ""; log("Matching reset.", "op"); });
+
+$("btnStart").addEventListener("click", () => {
+  if (state.nL === 0) { showToast("Build a graph first", "error"); return; }
+  resetMatching();
+  state.gen = kuhnGenerator();
+  $("log").innerHTML = "";
+  log("Started Kuhn's algorithm.", "op");
+  stepOnce();
+});
+
+$("btnStep").addEventListener("click", () => {
+  state.running = false;
+  stepOnce();
+});
+
+$("btnRun").addEventListener("click", () => {
+  if (state.running) return;
+  state.running = true;
+  runLoop();
+});
+
+$("btnStop").addEventListener("click", () => { state.running = false; });
+
+$("speed").addEventListener("input", (e) => { state.speedMs = 1520 - parseInt(e.target.value, 10); });
+
+// mode pill (Kuhn / info)
+document.querySelectorAll("#modePill button").forEach((b) => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#modePill button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    if (b.dataset.mode === "info") {
+      $("info").innerHTML = "Kuhn finds <b>augmenting paths</b> with DFS. The <code>visited[]</code> array is reset for every left vertex. Matched edges are green, the current explored path is purple. Complexity: <code>O(V&middot;E)</code>.";
+    } else {
+      $("info").innerHTML = "Press <code>Start</code>, then <code>Step</code> to advance one DFS decision, or <code>Run</code> to animate.";
+    }
+  });
+});
+
+// ---------- Initial demo ----------
+(function init() {
+  state.speedMs = 1520 - 650;
+  $("graphSpec").value = "0-0,0-1,1-0,2-1,2-2";
+  buildGraph($("graphSpec").value);
+})();
+</script>
+</body>
+</html>

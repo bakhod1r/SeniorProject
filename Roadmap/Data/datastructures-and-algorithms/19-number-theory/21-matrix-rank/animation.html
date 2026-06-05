@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Matrix Rank — Row Reduction and Counting Pivots</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.18);
+    --hi-pivotrow: rgba(210, 153, 34, 0.20);
+    --hi-pivot: rgba(63, 185, 80, 0.45);
+    --hi-elim: rgba(248, 81, 73, 0.22);
+    --hi-zero: rgba(139, 148, 158, 0.22);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  table.matrix {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  table.matrix td, table.matrix th {
+    border: 1px solid var(--border);
+    min-width: 46px;
+    height: 40px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.25s ease, color 0.25s ease;
+    padding: 0 6px;
+  }
+  table.matrix th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  table.matrix td.hrow { background: var(--hi-row); }
+  table.matrix td.hpivotrow { background: var(--hi-pivotrow); }
+  table.matrix td.hpivot { background: var(--hi-pivot); color: #fff; font-weight: 800; }
+  table.matrix td.helim { background: var(--hi-elim); }
+  table.matrix td.hzero { background: var(--hi-zero); color: var(--muted); }
+  table.matrix td[contenteditable="true"] { outline: none; }
+  table.matrix td[contenteditable="true"]:focus { background: rgba(88,166,255,0.14); color: #fff; }
+  .rowtag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding-left: 8px;
+  }
+  .rowtag.pivot { color: var(--good); font-weight: 700; }
+  .rowtag.zero { color: var(--bad); font-weight: 700; }
+  .counter {
+    margin-top: 14px;
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  .bignum {
+    font-family: var(--mono);
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--good);
+  }
+  .counter .lbl { color: var(--muted); font-size: 13px; }
+  .pivotdots { display: flex; gap: 6px; margin-top: 6px; }
+  .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--panel-2);
+  }
+  .dot.on { background: var(--good); border-color: var(--good); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Matrix Rank — Row-Reduce and Count the Pivots</h1>
+  <p>The <b>rank</b> = number of independent rows = number of nonzero <b>pivots</b> after Gaussian elimination. Watch each pivot get claimed and dependent rows collapse to all-zeros.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Example:
+      <select id="exSel">
+        <option value="rankdef">Rank-deficient 3&times;3</option>
+        <option value="full3">Full-rank 3&times;3</option>
+        <option value="wide">Wide 3&times;4 (n &gt; m)</option>
+        <option value="tall">Tall 4&times;3 (m &gt; n)</option>
+        <option value="zero">Zero / dependent rows</option>
+      </select>
+    </label>
+    <button id="btnEdit">Edit matrix &#9998;</button>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Matrix (row reduction)</h2>
+      <div style="display:flex; align-items:flex-start; gap:4px;">
+        <table class="matrix" id="theMatrix"></table>
+        <div id="rowTags"></div>
+      </div>
+      <div class="hint" id="editHint">Click <b>Edit matrix</b> to type your own integer entries, then press Step.</div>
+      <div class="interp" id="interpBox">
+        Scanning columns left to right; the first nonzero entry at/below the pivot row becomes a <b>pivot</b>.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-pivot)"></span> pivot</span>
+        <span><span class="swatch" style="background:var(--hi-pivotrow)"></span> pivot row</span>
+        <span><span class="swatch" style="background:var(--hi-elim)"></span> row being eliminated</span>
+        <span><span class="swatch" style="background:var(--hi-zero)"></span> zero (dependent) row</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Rank = pivot count</h2>
+      <div class="counter">
+        <div>
+          <div class="bignum" id="rankNum">0</div>
+          <div class="lbl">pivots found so far</div>
+        </div>
+        <div>
+          <div class="step-counter" id="dimInfo"></div>
+          <div class="step-counter" id="nullInfo"></div>
+        </div>
+      </div>
+      <div class="pivotdots" id="pivotDots"></div>
+      <div class="interp" id="resultBox" style="margin-top:16px;">
+        Each pivot marks one <b>independent row</b>. Rows that reduce to all zeros were dependent and do <b>not</b> count.
+      </div>
+      <div class="interp" id="rnBox" style="margin-top:10px;">
+        rank-nullity: <b>rank</b> + <b>nullity</b> = <b>n</b> (columns)
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We scan each column for a pivot, swap it up, eliminate the column from the other rows, and increment the rank counter.</div>
+
+  <div class="footnote">
+    Self-contained visualization over exact integer/rational arithmetic (no rounding here). Over the <b>reals</b> a tolerance <code>eps</code> decides "zero"; over <b>Z/pZ</b> and <b>GF(2)</b> zero is exact.
+    See <code>junior.md</code> for the walkthrough and <code>professional.md</code> for the proof that #pivots = rank and that row rank = column rank.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Example matrices ----------
+const EXAMPLES = {
+  rankdef: [[1, 2, 3], [2, 4, 7], [1, 2, 4]],   // rank 2 (row dependence)
+  full3:   [[2, 1, 1], [1, 3, 2], [1, 0, 4]],   // rank 3
+  wide:    [[1, 2, 0, 1], [2, 4, 1, 3], [0, 0, 1, 1]], // 3x4, rank 2 or 3
+  tall:    [[1, 0, 0], [0, 1, 0], [1, 1, 0], [2, 3, 0]], // 4x3, rank 2 (col 2 all zero)
+  zero:    [[0, 0, 0], [1, 2, 3], [2, 4, 6]]    // rank 1
+};
+
+// ---------- Build the step plan (rational elimination) ----------
+// Each step is a snapshot of the matrix plus highlight + narration info.
+// We use fractions implicitly via floating with rounding to keep entries clean
+// on the chosen integer examples; rank logic uses an exact-zero test on rationals.
+
+function frac(n, d) { return { n: n, d: d }; }
+function reduce(f) {
+  let a = Math.abs(f.n), b = Math.abs(f.d);
+  while (b) { [a, b] = [b, a % b]; }
+  const g = a || 1;
+  let n = f.n / g, d = f.d / g;
+  if (d < 0) { n = -n; d = -d; }
+  return { n: n, d: d };
+}
+function fsub(x, y) { return reduce(frac(x.n * y.d - y.n * x.d, x.d * y.d)); }
+function fmul(x, y) { return reduce(frac(x.n * y.n, x.d * y.d)); }
+function fdiv(x, y) { return reduce(frac(x.n * y.d, x.d * y.n)); }
+function fisZero(x) { return x.n === 0; }
+function ftext(x) {
+  if (x.d === 1) return String(x.n);
+  return x.n + "/" + x.d;
+}
+
+function toFracMatrix(intMat) {
+  return intMat.map(row => row.map(v => frac(v, 1)));
+}
+function cloneF(m) { return m.map(r => r.map(c => ({ n: c.n, d: c.d }))); }
+
+function buildPlan(intMat) {
+  const m = intMat.length;
+  const n = intMat[0].length;
+  let mat = toFracMatrix(intMat);
+  const steps = [];
+  const zeroRows = new Set();
+  const pivotRows = [];
+
+  steps.push({
+    mat: cloneF(mat),
+    rank: 0,
+    highlight: { type: "init" },
+    pivotRows: [],
+    zeroRows: new Set(),
+    desc: "Start. result rank = 0. We scan columns left to right, looking for a pivot at or below the current pivot row."
+  });
+
+  let rowPivot = 0;
+  for (let col = 0; col < n && rowPivot < m; col++) {
+    // find a nonzero entry at/below rowPivot in this column
+    let sel = -1;
+    for (let r = rowPivot; r < m; r++) {
+      if (!fisZero(mat[r][col])) { sel = r; break; }
+    }
+    // scanning step
+    steps.push({
+      mat: cloneF(mat),
+      rank: rowPivot,
+      highlight: { type: "scan", col: col, sel: sel, rowPivot: rowPivot },
+      pivotRows: pivotRows.slice(),
+      zeroRows: new Set(zeroRows),
+      desc: sel === -1
+        ? "Column " + col + ": no nonzero entry at/below row " + rowPivot + " — NO pivot here. Skip this column; rank unchanged."
+        : "Column " + col + ": found a nonzero entry in row " + sel + ". This will be our next pivot."
+    });
+    if (sel === -1) continue; // free column, no pivot
+
+    if (sel !== rowPivot) {
+      [mat[rowPivot], mat[sel]] = [mat[sel], mat[rowPivot]];
+      steps.push({
+        mat: cloneF(mat),
+        rank: rowPivot,
+        highlight: { type: "swap", col: col, rowPivot: rowPivot, from: sel },
+        pivotRows: pivotRows.slice(),
+        zeroRows: new Set(zeroRows),
+        desc: "Swap row " + sel + " up to the pivot position (row " + rowPivot + ")."
+      });
+    }
+
+    // eliminate the column from every other row
+    const piv = mat[rowPivot][col];
+    for (let r = 0; r < m; r++) {
+      if (r === rowPivot || fisZero(mat[r][col])) continue;
+      const factor = fdiv(mat[r][col], piv);
+      for (let c = col; c < n; c++) {
+        mat[r][c] = fsub(mat[r][c], fmul(factor, mat[rowPivot][c]));
+      }
+      // detect a newly-zeroed row
+      if (mat[r].every(fisZero)) zeroRows.add(r);
+      steps.push({
+        mat: cloneF(mat),
+        rank: rowPivot + 1,
+        highlight: { type: "elim", col: col, rowPivot: rowPivot, target: r },
+        pivotRows: pivotRows.concat([rowPivot]),
+        zeroRows: new Set(zeroRows),
+        desc: "Eliminate column " + col + " from row " + r + ": row" + r + " -= (" + ftext(factor) + ")*row" + rowPivot + "."
+          + (mat[r].every(fisZero) ? " Row " + r + " collapsed to ALL ZEROS — it was a dependent row." : "")
+      });
+    }
+
+    pivotRows.push(rowPivot);
+    rowPivot++;
+    steps.push({
+      mat: cloneF(mat),
+      rank: rowPivot,
+      highlight: { type: "pivotdone", col: col, rowPivot: rowPivot - 1 },
+      pivotRows: pivotRows.slice(),
+      zeroRows: new Set(zeroRows),
+      desc: "Pivot claimed in column " + col + ". One more independent row — rank is now " + rowPivot + "."
+    });
+  }
+
+  steps.push({
+    mat: cloneF(mat),
+    rank: rowPivot,
+    highlight: { type: "done" },
+    pivotRows: pivotRows.slice(),
+    zeroRows: new Set(zeroRows),
+    desc: "Done. rank = " + rowPivot + " pivots. nullity = n - rank = " + (n - rowPivot)
+      + " (free columns). " + (m - rowPivot) + " row(s) reduced to zero."
+  });
+
+  return { steps: steps, m: m, n: n };
+}
+
+// ---------- Rendering ----------
+function renderMatrix(step) {
+  const table = document.getElementById("theMatrix");
+  const tags = document.getElementById("rowTags");
+  const mat = step.mat;
+  const m = mat.length, n = mat[0].length;
+  const hl = step.highlight || {};
+  let html = "<tr><th></th>";
+  for (let j = 0; j < n; j++) html += "<th>c" + j + "</th>";
+  html += "</tr>";
+  for (let i = 0; i < m; i++) {
+    html += "<tr><th>r" + i + "</th>";
+    for (let j = 0; j < n; j++) {
+      let cls = "";
+      if (step.zeroRows && step.zeroRows.has(i)) cls = "hzero";
+      if (hl.type === "scan") {
+        if (j === hl.col && i >= hl.rowPivot) cls = (i === hl.sel) ? "hpivot" : "hrow";
+      } else if (hl.type === "swap") {
+        if (i === hl.rowPivot && j === hl.col) cls = "hpivot";
+      } else if (hl.type === "elim") {
+        if (i === hl.rowPivot) cls = "hpivotrow";
+        if (i === hl.target) cls = "helim";
+        if (i === hl.rowPivot && j === hl.col) cls = "hpivot";
+      } else if (hl.type === "pivotdone") {
+        if (i === hl.rowPivot && j === hl.col) cls = "hpivot";
+        else if (i === hl.rowPivot) cls = "hpivotrow";
+      }
+      html += "<td class='" + cls + "'>" + ftext(mat[i][j]) + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+
+  // row tags
+  let thtml = "<div style='height:40px'></div>"; // header spacer
+  for (let i = 0; i < m; i++) {
+    let t = "&nbsp;", cls = "rowtag";
+    if (step.zeroRows && step.zeroRows.has(i)) { t = "zero row"; cls += " zero"; }
+    else if (step.pivotRows && step.pivotRows.indexOf(i) !== -1) { t = "pivot row"; cls += " pivot"; }
+    thtml += "<div class='" + cls + "' style='height:40px;line-height:40px'>" + t + "</div>";
+  }
+  tags.innerHTML = thtml;
+}
+
+function renderCounters(step, plan) {
+  document.getElementById("rankNum").textContent = step.rank;
+  document.getElementById("dimInfo").textContent =
+    "matrix is " + plan.m + " × " + plan.n + " ; max possible rank = " + Math.min(plan.m, plan.n);
+  const nullity = plan.n - step.rank;
+  document.getElementById("nullInfo").textContent =
+    "nullity = n − rank = " + plan.n + " − " + step.rank + " = " + nullity;
+  // pivot dots
+  const dots = document.getElementById("pivotDots");
+  let d = "";
+  const maxr = Math.min(plan.m, plan.n);
+  for (let i = 0; i < maxr; i++) {
+    d += "<div class='dot" + (i < step.rank ? " on" : "") + "'></div>";
+  }
+  dots.innerHTML = d;
+  document.getElementById("rnBox").innerHTML =
+    "rank-nullity: <b>" + step.rank + "</b> + <b>" + nullity + "</b> = <b>" + plan.n + "</b> (columns)";
+}
+
+// ---------- State ----------
+const state = {
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  editing: false,
+  intMat: null
+};
+
+function loadExample(key) {
+  state.intMat = EXAMPLES[key].map(r => r.slice());
+  rebuildPlan();
+}
+
+function rebuildPlan() {
+  state.plan = buildPlan(state.intMat);
+  state.stepIdx = 0;
+  showStep();
+}
+
+function showStep() {
+  const step = state.plan.steps[state.stepIdx];
+  renderMatrix(step);
+  renderCounters(step, state.plan);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1);
+  const hl = step.highlight || {};
+  document.getElementById("interpBox").innerHTML =
+    hl.type === "done"
+      ? "Final <b>rank = " + step.rank + "</b>. Every pivot is one independent row; the rest collapsed to zero rows."
+      : "Scanning columns left to right; the first nonzero entry at/below the pivot row becomes a <b>pivot</b>.";
+  document.getElementById("resultBox").innerHTML =
+    hl.type === "done"
+      ? "rank = <span class='val'>" + step.rank + "</span> pivots. " + (state.plan.m - step.rank) + " dependent row(s) became zero."
+      : "Each pivot marks one <b>independent row</b>. Rows that reduce to all zeros were dependent and do <b>not</b> count.";
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    showStep();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = (atEnd && !state.running) || state.editing;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+  document.getElementById("btnRun").disabled = state.editing;
+}
+
+function run() {
+  if (state.editing) return;
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuildPlan();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1050);
+}
+
+// ---------- Editing the matrix ----------
+function enterEdit() {
+  state.editing = true;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  const mat = state.intMat;
+  const m = mat.length, n = mat[0].length;
+  const table = document.getElementById("theMatrix");
+  document.getElementById("rowTags").innerHTML = "";
+  let html = "<tr><th></th>";
+  for (let j = 0; j < n; j++) html += "<th>c" + j + "</th>";
+  html += "</tr>";
+  for (let i = 0; i < m; i++) {
+    html += "<tr><th>r" + i + "</th>";
+    for (let j = 0; j < n; j++) {
+      html += "<td contenteditable='true' data-i='" + i + "' data-j='" + j + "'>" + mat[i][j] + "</td>";
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+  document.getElementById("editHint").innerHTML =
+    "<b>Editing.</b> Type integers, then press <b>Apply</b> to row-reduce your matrix.";
+  document.getElementById("btnEdit").textContent = "Apply ✓";
+  updateButtons();
+}
+
+function applyEdit() {
+  const cells = document.querySelectorAll("#theMatrix td[contenteditable='true']");
+  cells.forEach(td => {
+    const i = +td.getAttribute("data-i");
+    const j = +td.getAttribute("data-j");
+    let v = parseInt(td.textContent.trim(), 10);
+    if (isNaN(v)) v = 0;
+    state.intMat[i][j] = v;
+  });
+  state.editing = false;
+  document.getElementById("btnEdit").textContent = "Edit matrix ✎";
+  document.getElementById("editHint").innerHTML =
+    "Click <b>Edit matrix</b> to type your own integer entries, then press Step.";
+  rebuildPlan();
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.editing) return;
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (state.editing) return;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.stepIdx = 0;
+  showStep();
+});
+document.getElementById("exSel").addEventListener("change", (e) => {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.editing = false;
+  document.getElementById("btnEdit").textContent = "Edit matrix ✎";
+  loadExample(e.target.value);
+});
+document.getElementById("btnEdit").addEventListener("click", () => {
+  if (state.editing) applyEdit();
+  else enterEdit();
+});
+
+// ---------- Initial load ----------
+loadExample("rankdef");
+</script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pollard's Rho — Factoring by Cycle Detection</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-tort: rgba(88, 166, 255, 0.30);
+    --hi-hare: rgba(210, 153, 34, 0.30);
+    --hi-hit: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 110px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input.small { width: 64px; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .seqtable {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .seqtable td, .seqtable th {
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    text-align: center;
+    color: var(--text);
+    transition: background 0.2s ease;
+  }
+  .seqtable th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .seqtable td.tort { background: var(--hi-tort); font-weight: 700; }
+  .seqtable td.hare { background: var(--hi-hare); font-weight: 700; }
+  .gcdbox {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 12px 14px;
+  }
+  .gcdbox .lbl { color: var(--muted); }
+  .gcdbox .num { color: var(--accent); font-weight: 700; }
+  .gcdbox .res1 { color: var(--muted); }
+  .gcdbox .resN { color: var(--bad); font-weight: 700; }
+  .gcdbox .resOK { color: var(--good); font-weight: 700; }
+  .factor-banner {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 15px;
+    text-align: center;
+    opacity: 0.5;
+    transition: all 0.3s ease;
+  }
+  .factor-banner.pop {
+    opacity: 1;
+    border-color: var(--good);
+    box-shadow: 0 0 0 1px var(--good) inset, 0 0 18px rgba(63,185,80,0.35);
+    color: #fff;
+  }
+  .factor-banner .f { color: var(--good); font-weight: 800; font-size: 18px; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  circle.node { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.5; }
+  circle.node.tort { stroke: var(--accent); stroke-width: 3; }
+  circle.node.hare { stroke: var(--accent-2); stroke-width: 3; }
+  circle.node.both { stroke: var(--good); stroke-width: 3.5; }
+  text.nlabel { fill: var(--muted); font-size: 9px; font-family: var(--mono); }
+  line.rhoedge { stroke: var(--border); stroke-width: 1.5; marker-end: url(#arrow); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .pill { display:inline-block; padding:2px 8px; border:1px solid var(--border); border-radius:12px; font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .pill.tort { color: var(--accent); border-color: var(--accent); }
+  .pill.hare { color: var(--accent-2); border-color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pollard's Rho — Factoring by Cycle Detection</h1>
+  <p>Walk x &larr; (x&sup2; + c) mod n. The <b>tortoise</b> (1 step) and <b>hare</b> (2 steps) chase around the &rho;-shaped orbit; gcd(|x &minus; y|, n) pops out a factor.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>n = <input type="number" id="nInput" value="8051" min="4" max="100000" /></label>
+    <label>c = <input type="number" id="cInput" class="small" value="1" min="1" max="999" /></label>
+    <span class="step-counter" id="stepInfo">round 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>The &rho; orbit (sequence mod n)</h2>
+      <svg id="rhoSvg" viewBox="0 0 360 300" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-tort)"></span> tortoise x (1 step)</span>
+        <span><span class="swatch" style="background:var(--hi-hare)"></span> hare y (2 steps)</span>
+        <span><span class="swatch" style="background:var(--hi-hit)"></span> factor found</span>
+      </div>
+      <div class="factor-banner" id="factorBanner">
+        no factor yet &mdash; gcd is still 1
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Iteration &amp; gcd</h2>
+      <div class="step-counter" id="mapInfo">f(x) = (x&sup2; + 1) mod 8051</div>
+      <table class="seqtable" id="seqTable"></table>
+      <div class="gcdbox" id="gcdBox">
+        <span class="lbl">tortoise</span> <span class="pill tort" id="pTort">x = 2</span>
+        &nbsp; <span class="lbl">hare</span> <span class="pill hare" id="pHare">y = 2</span>
+        <div style="margin-top:8px;">
+          gcd(|x &minus; y|, n) = gcd(<span class="num" id="gDiff">0</span>, <span class="num" id="gN">8051</span>)
+          = <span id="gRes" class="res1">1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    Press <b>Step</b> to begin. Each round advances the tortoise once and the hare twice, then computes
+    gcd(|x &minus; y|, n). When that gcd lands strictly between 1 and n, it is a nontrivial factor.
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. The sequence x &larr; (x&sup2; + c) mod n is deterministic but pseudo-random;
+    reduced modulo a hidden prime p | n it collides after about &radic;p steps (birthday paradox), so
+    gcd(|x &minus; y|, n) reveals a factor in expected O(n<sup>1/4</sup>) time. A gcd of <b>n</b> is a
+    <i>collapse</i> &mdash; restart with a new c. See <code>junior.md</code> and <code>professional.md</code> for the proof.
+    <br /><br />
+    Try <code>n = 8051</code> (= 83 &times; 97) with <code>c = 1</code> to watch the factor pop out in a few rounds,
+    or change <code>c</code> to see a different orbit. A real implementation uses an overflow-safe
+    <code>mulmod</code> (__int128 / Montgomery) and pairs rho with Miller-Rabin (sibling 08) to fully factor by
+    recursion. This demo keeps n small so products stay exact in double-precision integers.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Number theory helpers ----------
+function gcd(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b !== 0) { const t = a % b; a = b; b = t; }
+  return a;
+}
+// safe-ish modular multiply for the small n this demo uses (n <= 100000 keeps products < 2^53)
+function mulmod(a, b, n) {
+  return (a * b) % n;
+}
+function fmap(x, c, n) {
+  return (mulmod(x, x, n) + c) % n;
+}
+
+// smallest prime factor (for laying out the hidden cycle nicely / sanity)
+function smallestFactor(n) {
+  if (n % 2 === 0) return 2;
+  for (let d = 3; d * d <= n; d += 2) {
+    if (n % d === 0) return d;
+  }
+  return n; // prime
+}
+
+// ---------- Build the step plan ----------
+// Each "round": tortoise = f(tortoise); hare = f(f(hare)); d = gcd(|x-y|, n).
+// We stop when 1 < d < n (success) or d == n (collapse) or a safety cap.
+function buildPlan(n, c) {
+  const steps = [];
+  let x = 2, y = 2;
+  // record the full trajectory of the tortoise so we can draw the rho shape
+  const traj = [2];
+  const seen = new Map();
+  seen.set(2, 0);
+  let cycleStart = -1, cycleLen = -1;
+  // generate a bounded trajectory for drawing
+  let cur = 2;
+  for (let i = 1; i <= 60; i++) {
+    cur = fmap(cur, c, n);
+    if (seen.has(cur)) { cycleStart = seen.get(cur); cycleLen = i - cycleStart; traj.push(cur); break; }
+    seen.set(cur, i);
+    traj.push(cur);
+  }
+
+  steps.push({
+    type: "init", x: 2, y: 2, diff: 0, d: 1, round: 0,
+    history: [{ x: 2, y: 2, diff: 0, d: 1 }],
+    desc: "Start: tortoise x = 2, hare y = 2. We will advance x by one f-step and y by two f-steps each round."
+  });
+
+  const history = [{ x: 2, y: 2, diff: 0, d: 1 }];
+  let round = 0;
+  const SAFETY = 80;
+  while (round < SAFETY) {
+    round++;
+    x = fmap(x, c, n);                 // tortoise: 1 step
+    y = fmap(fmap(y, c, n), c, n);     // hare: 2 steps
+    const diff = Math.abs(x - y);
+    const d = gcd(diff, n);
+    history.push({ x, y, diff, d });
+    let type = "step", desc;
+    if (d > 1 && d < n) {
+      type = "success";
+      desc = "gcd(|" + x + " - " + y + "|, " + n + ") = gcd(" + diff + ", " + n + ") = " + d +
+             ". This is strictly between 1 and n &mdash; a nontrivial FACTOR! n = " + d + " &times; " + (n / d) + ".";
+    } else if (d === n) {
+      type = "collapse";
+      desc = "gcd(" + diff + ", " + n + ") = n. The tortoise and hare collided mod n before splitting &mdash; a collapse. Restart with a different c.";
+    } else {
+      desc = "Round " + round + ": x = " + x + ", y = " + y + ". gcd(|x - y|, n) = gcd(" + diff + ", " + n + ") = 1. No collision yet &mdash; keep walking.";
+    }
+    steps.push({ type, x, y, diff, d, round, history: history.slice(), desc });
+    if (type === "success" || type === "collapse") break;
+  }
+  return { steps, traj, cycleStart, cycleLen, n, c };
+}
+
+// ---------- Rendering ----------
+function renderRho(plan, step) {
+  const svg = document.getElementById("rhoSvg");
+  const traj = plan.traj;
+  const m = traj.length;
+  // Lay out the rho: tail as a line, cycle as a circle.
+  const cs = plan.cycleStart >= 0 ? plan.cycleStart : m;
+  const cl = plan.cycleLen > 0 ? plan.cycleLen : 0;
+  const cx = 235, cy = 150, R = 92;
+  const pos = [];
+  // tail nodes: straight diagonal in from top-left
+  for (let i = 0; i < cs; i++) {
+    const t = cs <= 1 ? 0 : i / cs;
+    pos.push([30 + t * 110, 40 + t * 95]);
+  }
+  // cycle nodes: around the circle
+  for (let i = 0; i < cl; i++) {
+    const ang = -Math.PI / 2 + (2 * Math.PI * i) / cl;
+    pos.push([cx + R * Math.cos(ang), cy + R * Math.sin(ang)]);
+  }
+  // if no detected cycle (rare for demo), spread remaining on circle
+  while (pos.length < m) {
+    const i = pos.length;
+    const ang = (2 * Math.PI * i) / m;
+    pos.push([cx + R * Math.cos(ang), cy + R * Math.sin(ang)]);
+  }
+
+  // which trajectory indices are the current tortoise / hare values?
+  const tortVal = step.x, hareVal = step.y;
+  let html = '<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="#30363d"/></marker></defs>';
+  // edges along the trajectory
+  for (let i = 0; i + 1 < m; i++) {
+    const [x1, y1] = pos[i];
+    const [x2, y2] = pos[i + 1];
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    html += '<line class="rhoedge" x1="' + (x1 + ux * 9) + '" y1="' + (y1 + uy * 9) +
+            '" x2="' + (x2 - ux * 11) + '" y2="' + (y2 - uy * 11) + '"/>';
+  }
+  // closing edge of the cycle
+  if (cl > 1) {
+    const a = cs + cl - 1, b = cs;
+    const [x1, y1] = pos[a], [x2, y2] = pos[b];
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    html += '<line class="rhoedge" x1="' + (x1 + ux * 9) + '" y1="' + (y1 + uy * 9) +
+            '" x2="' + (x2 - ux * 11) + '" y2="' + (y2 - uy * 11) + '"/>';
+  }
+  // nodes
+  for (let i = 0; i < m; i++) {
+    const [px, py] = pos[i];
+    const val = traj[i];
+    let cls = "node";
+    const isT = (val === tortVal);
+    const isH = (val === hareVal);
+    if (isT && isH) cls += " both";
+    else if (isT) cls += " tort";
+    else if (isH) cls += " hare";
+    html += '<circle class="' + cls + '" cx="' + px + '" cy="' + py + '" r="10"/>';
+    html += '<text class="nlabel" x="' + px + '" y="' + (py + 3) + '" text-anchor="middle">' + val + '</text>';
+  }
+  svg.innerHTML = html;
+}
+
+function renderSeq(step, n) {
+  const table = document.getElementById("seqTable");
+  const hist = step.history;
+  // show the last up-to-8 rounds
+  const start = Math.max(0, hist.length - 8);
+  let html = "<tr><th>rnd</th><th>x (tortoise)</th><th>y (hare)</th><th>|x&minus;y|</th><th>gcd</th></tr>";
+  for (let i = start; i < hist.length; i++) {
+    const h = hist[i];
+    const last = (i === hist.length - 1);
+    const xcls = last ? " class='tort'" : "";
+    const ycls = last ? " class='hare'" : "";
+    html += "<tr><td>" + i + "</td><td" + xcls + ">" + h.x + "</td><td" + ycls + ">" + h.y +
+            "</td><td>" + h.diff + "</td><td>" + h.d + "</td></tr>";
+  }
+  table.innerHTML = html;
+}
+
+function renderGcd(step, n) {
+  document.getElementById("pTort").textContent = "x = " + step.x;
+  document.getElementById("pHare").textContent = "y = " + step.y;
+  document.getElementById("gDiff").textContent = step.diff;
+  document.getElementById("gN").textContent = n;
+  const res = document.getElementById("gRes");
+  res.textContent = step.d;
+  res.className = step.type === "success" ? "resOK" : (step.type === "collapse" ? "resN" : "res1");
+
+  const banner = document.getElementById("factorBanner");
+  if (step.type === "success") {
+    banner.classList.add("pop");
+    banner.innerHTML = "FACTOR FOUND: <span class='f'>" + step.d + "</span> &nbsp; (n = " + step.d + " &times; " + (n / step.d) + ")";
+  } else if (step.type === "collapse") {
+    banner.classList.remove("pop");
+    banner.innerHTML = "COLLAPSE: gcd = n. Restart with a new c.";
+  } else {
+    banner.classList.remove("pop");
+    banner.innerHTML = "no factor yet &mdash; gcd is still 1";
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  n: 8051,
+  c: 1,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function applyStep(step) {
+  renderRho(state.plan, step);
+  renderSeq(step, state.n);
+  renderGcd(step, state.n);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "round " + step.round + " / " + (state.plan.steps.length - 1);
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+function load(n, c) {
+  state.n = n;
+  state.c = c;
+  state.plan = buildPlan(n, c);
+  state.stepIdx = 0;
+  document.getElementById("mapInfo").innerHTML =
+    "f(x) = (x&sup2; + " + c + ") mod " + n + "&nbsp;&nbsp;&middot;&nbsp;&nbsp;smallest prime factor p = " + smallestFactor(n);
+  applyStep(state.plan.steps[0]);
+  updateButtons();
+}
+
+function rebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  let c = parseInt(document.getElementById("cInput").value, 10);
+  if (isNaN(n) || n < 4) n = 4;
+  if (n > 100000) n = 100000;
+  if (isNaN(c) || c < 1) c = 1;
+  if (c > 999) c = 999;
+  document.getElementById("nInput").value = n;
+  document.getElementById("cInput").value = c;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  load(n, c);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("cInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>

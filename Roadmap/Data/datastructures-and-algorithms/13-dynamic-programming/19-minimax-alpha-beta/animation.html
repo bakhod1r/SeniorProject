@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Minimax & Alpha-Beta Pruning — Adversarial Search</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --max: #58a6ff;
+    --min: #d29922;
+    --pruned: #6e3030;
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stat {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 12px;
+    margin-top: 8px;
+  }
+  .stat b { color: var(--accent); }
+  .stat .max { color: var(--max); font-weight: 700; }
+  .stat .min { color: var(--min); font-weight: 700; }
+  .stat .val { color: var(--good); font-weight: 700; }
+  .stat .cut { color: var(--bad); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  /* SVG element styles */
+  .nodeMax { fill: var(--panel-2); stroke: var(--max); stroke-width: 2.5; }
+  .nodeMin { fill: var(--panel-2); stroke: var(--min); stroke-width: 2.5; }
+  .nodeLeaf { fill: var(--panel-2); stroke: var(--muted); stroke-width: 2; }
+  .nodeActive { stroke: var(--good); stroke-width: 4; }
+  .nodePruned { fill: var(--pruned); stroke: var(--bad); stroke-width: 2; opacity: 0.5; }
+  .nodeDone { fill: #14301c; }
+  .edge { stroke: var(--muted); stroke-width: 2; }
+  .edgePruned { stroke: var(--bad); stroke-width: 2; stroke-dasharray: 4 3; opacity: 0.5; }
+  .edgeActive { stroke: var(--good); stroke-width: 3; }
+  text.val { fill: #fff; font-size: 14px; font-weight: 700; font-family: var(--mono); }
+  text.lbl { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  text.ab { font-size: 10px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Minimax &amp; Alpha-Beta Pruning — Searching a Game Tree</h1>
+  <p>MAX (&#9650;) maximizes, MIN (&#9660;) minimizes. Watch depth-first search propagate the (&alpha;,&nbsp;&beta;) window and <b>cut off</b> branches that cannot change the value. The pruned result equals plain minimax.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Tree:
+      <select id="treeSel">
+        <option value="t1">Example A (cutoff at B)</option>
+        <option value="t2">Example B (two cutoffs)</option>
+        <option value="t3">Example C (no pruning)</option>
+      </select>
+    </label>
+    <label>Speed
+      <input type="range" id="speed" min="200" max="1600" value="900" step="100" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Game tree (depth-first, left to right)</h2>
+      <svg id="treeSvg" viewBox="0 0 760 360" preserveAspectRatio="xMidYMid meet">
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="border-color:var(--max);background:var(--panel-2)"></span> MAX node (&#9650;)</span>
+        <span><span class="swatch" style="border-color:var(--min);background:var(--panel-2)"></span> MIN node (&#9660;)</span>
+        <span><span class="swatch" style="background:var(--good)"></span> active (being searched)</span>
+        <span><span class="swatch" style="background:var(--pruned);border-color:var(--bad)"></span> pruned (cut off)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Search state</h2>
+      <div class="stat" id="windowBox">
+        window at current node:<br>
+        <span class="max">&alpha; = &minus;&infin;</span> &nbsp; <span class="min">&beta; = +&infin;</span>
+      </div>
+      <div class="stat" id="valueBox">
+        node value: <span class="val">&mdash;</span>
+      </div>
+      <div class="stat" id="countBox">
+        leaves evaluated: <b>0</b><br>
+        leaves pruned: <span class="cut">0</span>
+      </div>
+      <div class="stat" id="resultBox">
+        root minimax value: <span class="val">&mdash;</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    Press <b>Step</b> to begin. We do a depth-first walk: descend to leaves, bubble values up taking <span style="color:var(--max)">max</span> at MAX nodes and <span style="color:var(--min)">min</span> at MIN nodes, and prune whenever <code>&alpha; &ge; &beta;</code>.
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Leaf values are from MAX's perspective. A <b>beta cutoff</b> fires at a MAX node when its running value reaches &beta;; an <b>alpha cutoff</b> fires at a MIN node when its running value drops to &alpha;. Pruned branches are never evaluated, yet the root value is identical to a full minimax search &mdash; see <code>junior.md</code> and the proof in <code>professional.md</code>.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Tree definitions ----------
+// A node: { type: "max"|"min"|"leaf", value (leaves), children: [...] }
+// Trees are depth-2 or depth-3, root is MAX.
+const TREES = {
+  // Classic example: MAX over three MIN nodes; cutoff at the middle.
+  t1: {
+    name: "MAX / MIN / leaves — cutoff at B",
+    root: {
+      type: "max",
+      children: [
+        { type: "min", label: "A", children: [ {type:"leaf",value:3}, {type:"leaf",value:5}, {type:"leaf",value:6} ] },
+        { type: "min", label: "B", children: [ {type:"leaf",value:1}, {type:"leaf",value:2}, {type:"leaf",value:0} ] },
+        { type: "min", label: "C", children: [ {type:"leaf",value:9}, {type:"leaf",value:7}, {type:"leaf",value:8} ] }
+      ]
+    }
+  },
+  // Two cutoffs: B and C both get pruned after their first child.
+  t2: {
+    name: "Two cutoffs",
+    root: {
+      type: "max",
+      children: [
+        { type: "min", label: "A", children: [ {type:"leaf",value:5}, {type:"leaf",value:6}, {type:"leaf",value:7} ] },
+        { type: "min", label: "B", children: [ {type:"leaf",value:4}, {type:"leaf",value:9}, {type:"leaf",value:8} ] },
+        { type: "min", label: "C", children: [ {type:"leaf",value:3}, {type:"leaf",value:9}, {type:"leaf",value:9} ] }
+      ]
+    }
+  },
+  // No pruning: values arranged so every node must be examined.
+  t3: {
+    name: "No pruning (worst ordering)",
+    root: {
+      type: "max",
+      children: [
+        { type: "min", label: "A", children: [ {type:"leaf",value:1}, {type:"leaf",value:2}, {type:"leaf",value:3} ] },
+        { type: "min", label: "B", children: [ {type:"leaf",value:4}, {type:"leaf",value:5}, {type:"leaf",value:6} ] },
+        { type: "min", label: "C", children: [ {type:"leaf",value:7}, {type:"leaf",value:8}, {type:"leaf",value:9} ] }
+      ]
+    }
+  }
+};
+
+const NEG_INF = -Infinity, POS_INF = Infinity;
+
+// ---------- Layout: assign x,y to every node, and an id ----------
+function layout(tree) {
+  const nodes = [];
+  const edges = [];
+  let leafX = 0;
+  const W = 760, leafGap = 70, topY = 40, levelGap = 130;
+
+  function depthOf(n) {
+    if (n.type === "leaf") return 0;
+    return 1 + Math.max(...n.children.map(depthOf));
+  }
+  const maxDepth = depthOf(tree.root);
+
+  let idc = 0;
+  function assign(node, depth, parentId) {
+    const id = idc++;
+    node.id = id;
+    node.depth = depth;
+    node.parentId = parentId;
+    let x;
+    if (node.type === "leaf") {
+      x = 60 + leafX * leafGap;
+      leafX++;
+    } else {
+      const cs = node.children.map(c => assign(c, depth + 1, id));
+      x = cs.reduce((a, c) => a + c.x, 0) / cs.length;
+    }
+    node.x = x;
+    node.y = topY + depth * levelGap;
+    nodes[id] = node;
+    if (parentId !== -1) edges.push({ from: parentId, to: id });
+    return node;
+  }
+  assign(tree.root, 0, -1);
+  return { nodes, edges, maxDepth };
+}
+
+// ---------- Build the step plan by simulating alpha-beta ----------
+// Each "step" records the visual state to show: which node is active,
+// its (alpha,beta), updated value, narration, and pruning markers.
+function buildPlan(tree) {
+  const steps = [];
+  const pruned = new Set();   // ids of pruned nodes (and their subtrees)
+  let leavesEval = 0, leavesPruned = 0;
+  let rootValue = null;
+
+  function markSubtreePruned(node) {
+    if (pruned.has(node.id)) return;
+    pruned.add(node.id);
+    if (node.type === "leaf") { leavesPruned++; return; }
+    node.children.forEach(markSubtreePruned);
+  }
+
+  function snapshot(activeId, alpha, beta, value, desc, type) {
+    steps.push({
+      activeId,
+      alpha, beta, value,
+      pruned: new Set(pruned),
+      leavesEval, leavesPruned,
+      rootValue,
+      desc, type
+    });
+  }
+
+  function alphabeta(node, alpha, beta) {
+    if (node.type === "leaf") {
+      leavesEval++;
+      snapshot(node.id, alpha, beta, node.value,
+        "Leaf evaluated: value = " + node.value + " (from MAX's perspective).",
+        "leaf");
+      return node.value;
+    }
+    if (node.type === "max") {
+      snapshot(node.id, alpha, beta, null,
+        "Enter MAX node with window (α=" + fmt(alpha) + ", β=" + fmt(beta) + "). MAX takes the largest child value.",
+        "enter");
+      let best = NEG_INF;
+      const cs = node.children;
+      for (let i = 0; i < cs.length; i++) {
+        const v = alphabeta(cs[i], alpha, beta);
+        best = Math.max(best, v);
+        alpha = Math.max(alpha, best);
+        snapshot(node.id, alpha, beta, best,
+          "Child returned " + v + ". MAX value so far = " + best + "; raise α to " + fmt(alpha) + ".",
+          "update");
+        if (alpha >= beta) {
+          for (let j = i + 1; j < cs.length; j++) markSubtreePruned(cs[j]);
+          snapshot(node.id, alpha, beta, best,
+            "β-cutoff! α=" + fmt(alpha) + " ≥ β=" + fmt(beta) + ". MIN above won't allow this; prune the remaining children.",
+            "cutoff");
+          break;
+        }
+      }
+      if (node.parentId === -1) rootValue = best;
+      snapshot(node.id, alpha, beta, best,
+        "MAX node returns " + best + ".", "return");
+      return best;
+    } else { // min
+      snapshot(node.id, alpha, beta, null,
+        "Enter MIN node with window (α=" + fmt(alpha) + ", β=" + fmt(beta) + "). MIN takes the smallest child value.",
+        "enter");
+      let best = POS_INF;
+      const cs = node.children;
+      for (let i = 0; i < cs.length; i++) {
+        const v = alphabeta(cs[i], alpha, beta);
+        best = Math.min(best, v);
+        beta = Math.min(beta, best);
+        snapshot(node.id, alpha, beta, best,
+          "Child returned " + v + ". MIN value so far = " + best + "; lower β to " + fmt(beta) + ".",
+          "update");
+        if (beta <= alpha) {
+          for (let j = i + 1; j < cs.length; j++) markSubtreePruned(cs[j]);
+          snapshot(node.id, alpha, beta, best,
+            "α-cutoff! β=" + fmt(beta) + " ≤ α=" + fmt(alpha) + ". MAX above already has something at least this good; prune the rest.",
+            "cutoff");
+          break;
+        }
+      }
+      snapshot(node.id, alpha, beta, best,
+        "MIN node returns " + best + ".", "return");
+      return best;
+    }
+  }
+
+  const finalVal = alphabeta(tree.root, NEG_INF, POS_INF);
+  rootValue = finalVal;
+  snapshot(-1, NEG_INF, POS_INF, finalVal,
+    "Done. Root minimax value = " + finalVal + ". Pruned branches never changed it — alpha-beta is lossless.",
+    "done");
+  return steps;
+}
+
+function fmt(x) {
+  if (x === Infinity) return "+∞";
+  if (x === -Infinity) return "−∞";
+  return "" + x;
+}
+
+// ---------- Rendering ----------
+function renderTree(L) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  // edges
+  L.edges.forEach(e => {
+    const a = L.nodes[e.from], b = L.nodes[e.to];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y + 18);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y - 18);
+    line.setAttribute("class", "edge");
+    line.setAttribute("data-from", e.from);
+    line.setAttribute("data-to", e.to);
+    edgeLayer.appendChild(line);
+  });
+  // nodes
+  L.nodes.forEach(n => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("data-id", n.id);
+    let shape;
+    if (n.type === "leaf") {
+      shape = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      shape.setAttribute("x", n.x - 18); shape.setAttribute("y", n.y - 16);
+      shape.setAttribute("width", 36); shape.setAttribute("height", 32);
+      shape.setAttribute("rx", 5);
+      shape.setAttribute("class", "nodeLeaf");
+    } else {
+      shape = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      shape.setAttribute("cx", n.x); shape.setAttribute("cy", n.y);
+      shape.setAttribute("r", 18);
+      shape.setAttribute("class", n.type === "max" ? "nodeMax" : "nodeMin");
+    }
+    shape.setAttribute("data-shape", n.id);
+    g.appendChild(shape);
+
+    // type marker / value
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", n.x); t.setAttribute("y", n.y + 5);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "val");
+    t.setAttribute("data-valtext", n.id);
+    if (n.type === "leaf") t.textContent = n.value;
+    else t.textContent = (n.type === "max" ? "▲" : "▼");
+    g.appendChild(t);
+
+    // label (A/B/C) for internal min nodes
+    if (n.label) {
+      const lab = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      lab.setAttribute("x", n.x + 24); lab.setAttribute("y", n.y - 12);
+      lab.setAttribute("class", "lbl");
+      lab.textContent = n.label;
+      g.appendChild(lab);
+    }
+    // alpha/beta annotation slot (internal nodes)
+    if (n.type !== "leaf") {
+      const ab = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      ab.setAttribute("x", n.x); ab.setAttribute("y", n.y - 24);
+      ab.setAttribute("text-anchor", "middle");
+      ab.setAttribute("class", "ab");
+      ab.setAttribute("data-ab", n.id);
+      ab.textContent = "";
+      g.appendChild(ab);
+    }
+    nodeLayer.appendChild(g);
+  });
+}
+
+function applyStep(step, L) {
+  // reset shapes to base class
+  L.nodes.forEach(n => {
+    const shape = document.querySelector('[data-shape="' + n.id + '"]');
+    let base = n.type === "leaf" ? "nodeLeaf" : (n.type === "max" ? "nodeMax" : "nodeMin");
+    if (step.pruned.has(n.id)) base = "nodePruned";
+    if (n.id === step.activeId && !step.pruned.has(n.id)) base += " nodeActive";
+    if (step.type === "done" && n.parentId === -1) base += " nodeDone";
+    shape.setAttribute("class", base);
+  });
+  // edges
+  document.querySelectorAll("#edgeLayer line").forEach(line => {
+    const to = parseInt(line.getAttribute("data-to"), 10);
+    let cls = "edge";
+    if (step.pruned.has(to)) cls = "edgePruned";
+    line.setAttribute("class", cls);
+  });
+  // alpha/beta annotation on the active internal node
+  L.nodes.forEach(n => {
+    if (n.type === "leaf") return;
+    const ab = document.querySelector('[data-ab="' + n.id + '"]');
+    if (n.id === step.activeId && !step.pruned.has(n.id)) {
+      ab.textContent = "α=" + fmt(step.alpha) + " β=" + fmt(step.beta);
+      ab.setAttribute("fill", "#c9d1d9");
+    } else {
+      ab.textContent = "";
+    }
+  });
+  // panels
+  document.getElementById("windowBox").innerHTML =
+    "window at current node:<br><span class='max'>α = " + fmt(step.alpha) +
+    "</span> &nbsp; <span class='min'>β = " + fmt(step.beta) + "</span>";
+  document.getElementById("valueBox").innerHTML =
+    "node value: <span class='val'>" + (step.value === null ? "—" : step.value) + "</span>";
+  document.getElementById("countBox").innerHTML =
+    "leaves evaluated: <b>" + step.leavesEval + "</b><br>leaves pruned: <span class='cut'>" +
+    step.leavesPruned + "</span>";
+  document.getElementById("resultBox").innerHTML =
+    "root minimax value: <span class='val'>" +
+    (step.rootValue === null ? "—" : step.rootValue) + "</span>";
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+// ---------- Animation state ----------
+const state = {
+  treeKey: "t1",
+  L: null,
+  steps: null,
+  idx: 0,
+  running: false,
+  timer: null
+};
+
+function loadTree(key) {
+  // deep clone the tree so ids/layout are fresh each load
+  const tree = JSON.parse(JSON.stringify(TREES[key]));
+  state.treeKey = key;
+  state.L = layout(tree);
+  state.steps = buildPlan(tree);
+  state.idx = 0;
+  renderTree(state.L);
+  applyStep(state.steps[0], state.L);
+  document.getElementById("stepInfo").textContent =
+    "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(i) {
+  if (i < 0 || i >= state.steps.length) return;
+  state.idx = i;
+  applyStep(state.steps[i], state.L);
+  document.getElementById("stepInfo").textContent =
+    "step " + i + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) gotoStep(state.idx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) {
+    loadTree(state.treeKey); // restart
+  }
+  state.running = true;
+  updateButtons();
+  const speed = parseInt(document.getElementById("speed").value, 10);
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, speed);
+}
+
+function reset() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  loadTree(document.getElementById("treeSel").value);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", reset);
+document.getElementById("treeSel").addEventListener("change", reset);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.running) { clearInterval(state.timer); run(); }
+});
+
+// ---------- Initial load ----------
+loadTree("t1");
+</script>
+</body>
+</html>

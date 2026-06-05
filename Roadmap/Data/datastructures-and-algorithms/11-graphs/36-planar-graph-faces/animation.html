@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Planar Graphs & Euler's Formula — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+    --teal:    #39c5cf;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header .mode-pill {
+    display: inline-flex;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .mode-pill button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .mode-pill button.active {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+
+  button.ctrl {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  button.ctrl:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  button.ctrl:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.ctrl.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.ctrl.danger  { background: transparent; border-color: var(--red); color: var(--red); }
+
+  .euler-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 10px 0;
+  }
+  .euler-cell {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .euler-cell .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .euler-cell .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .euler-cell.v .value { color: var(--blue); }
+  .euler-cell.e .value { color: var(--orange); }
+  .euler-cell.f .value { color: var(--green); }
+  .euler-cell.sum .value { color: var(--purple); }
+
+  .formula {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 17px;
+    text-align: center;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 8px 0;
+  }
+  .formula.ok    { border-color: var(--green); }
+  .formula.bad   { border-color: var(--red); }
+
+  .bound-line {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 13px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+  .bound-line.violate { border-color: var(--red); color: var(--red); }
+  .bound-line.pass    { border-color: var(--green); color: var(--green); }
+
+  .legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; margin-top: 12px; }
+  .legend .item { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+
+  .log {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    height: 120px;
+    overflow-y: auto;
+    margin-top: 12px;
+    white-space: pre-wrap;
+  }
+  .log .new { color: var(--text); }
+
+  svg { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 10px; }
+
+  .step-caption {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--blue);
+    border-radius: 6px;
+    font-size: 13px;
+    min-height: 20px;
+  }
+
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Planar Graphs &amp; Euler's Formula — V − E + F = 2</h1>
+  <div class="mode-pill" id="modePill">
+    <button data-mode="planar" class="active">Planar build</button>
+    <button data-mode="k5">K5 (non-planar)</button>
+    <button data-mode="k33">K3,3 (non-planar)</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls + Euler counters -->
+  <section class="panel">
+    <h2>Controls</h2>
+    <div class="controls">
+      <button class="ctrl primary" id="btnStep">Step ▶</button>
+      <button class="ctrl" id="btnRun">Run ⏩</button>
+      <button class="ctrl danger" id="btnReset">Reset ↺</button>
+    </div>
+
+    <h2>Euler counters</h2>
+    <div class="euler-row">
+      <div class="euler-cell v"><div class="label">V</div><div class="value" id="cV">0</div></div>
+      <div class="euler-cell e"><div class="label">E</div><div class="value" id="cE">0</div></div>
+      <div class="euler-cell f"><div class="label">F</div><div class="value" id="cF">1</div></div>
+      <div class="euler-cell sum"><div class="label">V−E+F</div><div class="value" id="cSum">—</div></div>
+    </div>
+
+    <div class="formula" id="formulaBox">V − E + F = ?</div>
+
+    <h2>Planarity edge bound</h2>
+    <div class="bound-line" id="boundBox">E ≤ 3V − 6 : add edges to test</div>
+
+    <div class="legend">
+      <div class="item"><span class="swatch" style="background:#1f6feb33;border-color:#1f6feb"></span> bounded face (shaded)</div>
+      <div class="item"><span class="swatch" style="background:transparent;border-color:#8b949e"></span> outer (unbounded) face — still counted!</div>
+      <div class="item"><span class="swatch" style="background:var(--orange)"></span> edge just added</div>
+      <div class="item"><span class="swatch" style="background:var(--red)"></span> crossing / non-planar edge</div>
+    </div>
+
+    <div class="log" id="log"></div>
+    <p class="hint">In <b>Planar build</b> mode each edge that closes a cycle splits one face into two, so F goes up and V−E+F stays at 2. In <b>K5</b>/<b>K3,3</b> mode the build flags the edge that pushes E past the planarity bound — proof the graph cannot be drawn without a crossing.</p>
+  </section>
+
+  <!-- RIGHT: drawing -->
+  <section class="panel">
+    <h2>Drawing</h2>
+    <svg id="canvas" viewBox="0 0 600 460" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="step-caption" id="caption">Press <b>Step</b> to add the first edge.</div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Scenarios. Each has named vertices with positions, and an ordered edge list.
+// "faceDelta" tells the animation whether adding this edge closes a cycle
+// (splits a face -> F += 1) or is a tree edge (F unchanged). For the
+// non-planar scenarios we also mark which edge first violates the bound.
+// ---------------------------------------------------------------------------
+
+const SCENARIOS = {
+  // A planar graph built up edge by edge: square + diagonal + extra vertex.
+  planar: {
+    triangleFree: false,
+    verts: {
+      a: [150, 110], b: [450, 110], c: [450, 330], d: [150, 330], e: [300, 220]
+    },
+    // closesCycle: true => this edge completes a cycle, splitting a face.
+    edges: [
+      { u: "a", v: "b", closesCycle: false },
+      { u: "b", v: "c", closesCycle: false },
+      { u: "c", v: "d", closesCycle: false },
+      { u: "d", v: "a", closesCycle: true  },  // closes the outer square -> F: 1 -> 2
+      { u: "a", v: "c", closesCycle: true  },  // diagonal -> F: 2 -> 3
+      { u: "e", v: "a", closesCycle: false },  // new vertex e, tree edge
+      { u: "e", v: "b", closesCycle: true  },  // -> F: 3 -> 4
+      { u: "e", v: "c", closesCycle: true  }   // -> F: 4 -> 5
+    ],
+    note: "Square + diagonal + central vertex. Connected & planar; V−E+F stays 2."
+  },
+
+  // K5: 5 vertices, all 10 edges. Violates E <= 3V - 6 = 9 at edge #10.
+  k5: {
+    triangleFree: false,
+    verts: (() => {
+      const o = {}; const cx = 300, cy = 220, R = 150;
+      for (let i = 0; i < 5; i++) {
+        const ang = -Math.PI / 2 + i * 2 * Math.PI / 5;
+        o[String.fromCharCode(97 + i)] = [
+          Math.round(cx + R * Math.cos(ang)),
+          Math.round(cy + R * Math.sin(ang))
+        ];
+      }
+      return o;
+    })(),
+    edges: (() => {
+      const names = ["a", "b", "c", "d", "e"];
+      const es = [];
+      for (let i = 0; i < 5; i++)
+        for (let j = i + 1; j < 5; j++)
+          es.push({ u: names[i], v: names[j], closesCycle: true });
+      return es; // 10 edges
+    })(),
+    note: "K5: complete graph on 5 vertices. 10 edges > 3·5−6 = 9 ⇒ non-planar."
+  },
+
+  // K3,3: bipartite 3+3, 9 edges. Violates triangle-free bound 2V-4 = 8 at edge #9.
+  k33: {
+    triangleFree: true,
+    verts: {
+      a: [120, 110], b: [300, 110], c: [480, 110],   // top part
+      x: [120, 330], y: [300, 330], z: [480, 330]    // bottom part
+    },
+    edges: (() => {
+      const top = ["a", "b", "c"], bot = ["x", "y", "z"];
+      const es = [];
+      for (const t of top) for (const b of bot) es.push({ u: t, v: b, closesCycle: true });
+      return es; // 9 edges
+    })(),
+    note: "K3,3: three-houses-three-utilities. 9 edges > 2·6−4 = 8 ⇒ non-planar."
+  }
+};
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let mode = "planar";
+let stepIdx = 0;          // number of edges added so far
+let runTimer = null;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const els = {
+  canvas: document.getElementById("canvas"),
+  cV: document.getElementById("cV"),
+  cE: document.getElementById("cE"),
+  cF: document.getElementById("cF"),
+  cSum: document.getElementById("cSum"),
+  formula: document.getElementById("formulaBox"),
+  bound: document.getElementById("boundBox"),
+  log: document.getElementById("log"),
+  caption: document.getElementById("caption"),
+  btnStep: document.getElementById("btnStep"),
+  btnRun: document.getElementById("btnRun"),
+  btnReset: document.getElementById("btnReset")
+};
+
+// ---------------------------------------------------------------------------
+// Derived counts at the current step
+// ---------------------------------------------------------------------------
+function currentVerts() {
+  // Vertices that are endpoints of any edge added so far, plus all positioned
+  // vertices that appear up to this point. For simplicity we count vertices
+  // that are incident to an added edge (matches the "build" narrative).
+  const sc = SCENARIOS[mode];
+  const used = new Set();
+  for (let i = 0; i < stepIdx; i++) {
+    used.add(sc.edges[i].u);
+    used.add(sc.edges[i].v);
+  }
+  return used;
+}
+
+function counts() {
+  const sc = SCENARIOS[mode];
+  const V = currentVerts().size;
+  const E = stepIdx;
+  // F via the actual face-split narrative: start at 1 (outer face), +1 per cycle-closing edge.
+  let F = V > 0 ? 1 : 0;
+  for (let i = 0; i < stepIdx; i++) if (sc.edges[i].closesCycle) F += 1;
+  return { V, E, F };
+}
+
+function bound(V, triangleFree) {
+  return triangleFree ? 2 * V - 4 : 3 * V - 6;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function clearCanvas() {
+  while (els.canvas.firstChild) els.canvas.removeChild(els.canvas.firstChild);
+}
+
+function line(x1, y1, x2, y2, color, w, dash) {
+  const l = document.createElementNS(SVG_NS, "line");
+  l.setAttribute("x1", x1); l.setAttribute("y1", y1);
+  l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+  l.setAttribute("stroke", color);
+  l.setAttribute("stroke-width", w || 2.5);
+  l.setAttribute("stroke-linecap", "round");
+  if (dash) l.setAttribute("stroke-dasharray", dash);
+  els.canvas.appendChild(l);
+}
+
+function circle(x, y, r, fill, stroke) {
+  const c = document.createElementNS(SVG_NS, "circle");
+  c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", r);
+  c.setAttribute("fill", fill); c.setAttribute("stroke", stroke);
+  c.setAttribute("stroke-width", 2);
+  els.canvas.appendChild(c);
+}
+
+function label(x, y, txt, color) {
+  const t = document.createElementNS(SVG_NS, "text");
+  t.setAttribute("x", x); t.setAttribute("y", y + 5);
+  t.setAttribute("text-anchor", "middle");
+  t.setAttribute("font-family", "SF Mono, Consolas, monospace");
+  t.setAttribute("font-size", "14");
+  t.setAttribute("font-weight", "700");
+  t.setAttribute("fill", color || "#fff");
+  t.textContent = txt;
+  els.canvas.appendChild(t);
+}
+
+function polygon(pts, fill) {
+  const p = document.createElementNS(SVG_NS, "polygon");
+  p.setAttribute("points", pts.map(p => p.join(",")).join(" "));
+  p.setAttribute("fill", fill);
+  p.setAttribute("stroke", "none");
+  els.canvas.appendChild(p);
+}
+
+// Shade simple bounded faces for the planar scenario so the user sees regions.
+function shadePlanarFaces() {
+  const sc = SCENARIOS.planar;
+  const V = sc.verts;
+  const addedKeys = new Set();
+  for (let i = 0; i < stepIdx; i++) {
+    const e = sc.edges[i];
+    addedKeys.add(e.u + e.v);
+    addedKeys.add(e.v + e.u);
+  }
+  const has = (a, b) => addedKeys.has(a + b);
+  const fills = ["#1f6feb33", "#3fb95033", "#bc8cff33", "#ffa65733"];
+  let fi = 0;
+  // square interior (only meaningful before the diagonal splits it)
+  if (has("a", "b") && has("b", "c") && has("c", "d") && has("d", "a") && !has("a", "c")) {
+    polygon([V.a, V.b, V.c, V.d], fills[fi++ % fills.length]);
+  }
+  // two triangles once the diagonal a-c is present
+  if (has("a", "c")) {
+    polygon([V.a, V.b, V.c], fills[fi++ % fills.length]);
+    polygon([V.a, V.c, V.d], fills[fi++ % fills.length]);
+  }
+  // central-vertex triangles
+  if (has("e", "a") && has("e", "b") && has("a", "b")) polygon([V.e, V.a, V.b], fills[fi++ % fills.length]);
+  if (has("e", "b") && has("e", "c") && has("b", "c")) polygon([V.e, V.b, V.c], fills[fi++ % fills.length]);
+}
+
+function render() {
+  clearCanvas();
+  const sc = SCENARIOS[mode];
+
+  // Outer-face frame (dashed) to remind: the surrounding region is a face too.
+  const frame = document.createElementNS(SVG_NS, "rect");
+  frame.setAttribute("x", 8); frame.setAttribute("y", 8);
+  frame.setAttribute("width", 584); frame.setAttribute("height", 444);
+  frame.setAttribute("fill", "none");
+  frame.setAttribute("stroke", "#8b949e");
+  frame.setAttribute("stroke-width", 1);
+  frame.setAttribute("stroke-dasharray", "4 6");
+  frame.setAttribute("rx", 8);
+  els.canvas.appendChild(frame);
+  label(74, 28, "outer face", "#8b949e");
+
+  if (mode === "planar") shadePlanarFaces();
+
+  const { V } = counts();
+  const Vmax = currentVerts();
+  const violated = isViolated();
+
+  // edges
+  for (let i = 0; i < stepIdx; i++) {
+    const e = sc.edges[i];
+    const p1 = sc.verts[e.u], p2 = sc.verts[e.v];
+    let color = "#58a6ff";
+    let w = 2.5;
+    if (i === stepIdx - 1) { color = "#ffa657"; w = 4; }      // just-added edge
+    // In non-planar modes, color the bound-violating edge(s) red.
+    if (violated.violated && i >= violated.firstBadIndex) { color = "#f85149"; }
+    line(p1[0], p1[1], p2[0], p2[1], color, w, null);
+  }
+
+  // vertices
+  for (const name of Object.keys(sc.verts)) {
+    if (!Vmax.has(name)) continue;
+    const [x, y] = sc.verts[name];
+    circle(x, y, 16, "#161b22", "#58a6ff");
+    label(x, y, name, "#e6edf3");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bound / violation logic
+// ---------------------------------------------------------------------------
+function isViolated() {
+  const sc = SCENARIOS[mode];
+  const { V, E } = counts();
+  if (V < 3) return { violated: false, firstBadIndex: Infinity };
+  const b = bound(V, sc.triangleFree);
+  // find the first edge index (1-based count) at which E first exceeds the bound
+  // Recompute incrementally to know which edge broke it.
+  let firstBad = Infinity;
+  let vSet = new Set();
+  for (let i = 0; i < stepIdx; i++) {
+    vSet.add(sc.edges[i].u); vSet.add(sc.edges[i].v);
+    const vv = vSet.size, ee = i + 1;
+    if (vv >= 3 && ee > bound(vv, sc.triangleFree)) { firstBad = i; break; }
+  }
+  return { violated: E > b, firstBadIndex: firstBad, bound: b };
+}
+
+// ---------------------------------------------------------------------------
+// HUD updates
+// ---------------------------------------------------------------------------
+function updateHUD() {
+  const sc = SCENARIOS[mode];
+  const { V, E, F } = counts();
+  els.cV.textContent = V;
+  els.cE.textContent = E;
+  els.cF.textContent = F;
+
+  const sum = V - E + F;
+  els.cSum.textContent = (E === 0 && V === 0) ? "—" : sum;
+
+  // Euler formula box (only meaningful for a connected build).
+  if (E === 0) {
+    els.formula.textContent = "V − E + F = ?";
+    els.formula.className = "formula";
+  } else {
+    const ok = sum === 2;
+    els.formula.textContent = `${V} − ${E} + ${F} = ${sum}` + (ok ? "  ✓ (=2)" : "");
+    els.formula.className = "formula " + (ok ? "ok" : "");
+  }
+
+  // Edge bound box
+  const b = bound(V, sc.triangleFree);
+  const boundStr = sc.triangleFree ? `2V − 4 = ${V < 3 ? "—" : b}` : `3V − 6 = ${V < 3 ? "—" : b}`;
+  const v = isViolated();
+  if (V < 3) {
+    els.bound.className = "bound-line";
+    els.bound.textContent = `E = ${E}, ${boundStr}  (V<3: trivially planar)`;
+  } else if (v.violated) {
+    els.bound.className = "bound-line violate";
+    els.bound.textContent = `E = ${E} > ${b} = ${boundStr.split("=")[0].trim()}  ⇒  NOT PLANAR ✗`;
+  } else {
+    els.bound.className = "bound-line pass";
+    els.bound.textContent = `E = ${E} ≤ ${b}  (${boundStr})  ⇒ passes filter`;
+  }
+}
+
+function logLine(txt) {
+  const div = document.createElement("div");
+  div.className = "new";
+  div.textContent = txt;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+  // fade older lines
+  const kids = els.log.children;
+  for (let i = 0; i < kids.length - 1; i++) kids[i].className = "";
+}
+
+function captionFor(edge, V, E, F) {
+  const sc = SCENARIOS[mode];
+  const v = isViolated();
+  if (v.violated && stepIdx - 1 >= v.firstBadIndex) {
+    return `Edge ${edge.u}–${edge.v}: E=${E} now exceeds the bound (${bound(V, sc.triangleFree)}). ` +
+           `This graph cannot be drawn without a crossing — non-planar. The red edges witness the violation.`;
+  }
+  if (edge.closesCycle) {
+    return `Edge ${edge.u}–${edge.v} closes a cycle → splits a face → F = ${F}. ` +
+           `Check: V−E+F = ${V}−${E}+${F} = ${V - E + F}.`;
+  }
+  return `Edge ${edge.u}–${edge.v} is a tree edge (no new cycle) → F unchanged = ${F}. ` +
+         `V−E+F = ${V - E + F}.`;
+}
+
+// ---------------------------------------------------------------------------
+// Step / Run / Reset
+// ---------------------------------------------------------------------------
+function step() {
+  const sc = SCENARIOS[mode];
+  if (stepIdx >= sc.edges.length) {
+    stopRun();
+    els.caption.innerHTML = "<b>Done.</b> " + sc.note;
+    els.btnStep.disabled = true;
+    els.btnRun.disabled = true;
+    return;
+  }
+  const edge = sc.edges[stepIdx];
+  stepIdx += 1;
+  render();
+  const { V, E, F } = counts();
+  updateHUD();
+  logLine(`+ edge ${edge.u}–${edge.v}   V=${V} E=${E} F=${F}  (V−E+F=${V - E + F})`);
+  els.caption.innerHTML = captionFor(edge, V, E, F);
+}
+
+function run() {
+  if (runTimer) { stopRun(); return; }
+  els.btnRun.textContent = "Pause ⏸";
+  runTimer = setInterval(() => {
+    const sc = SCENARIOS[mode];
+    if (stepIdx >= sc.edges.length) { stopRun(); return; }
+    step();
+  }, 750);
+}
+
+function stopRun() {
+  if (runTimer) clearInterval(runTimer);
+  runTimer = null;
+  els.btnRun.textContent = "Run ⏩";
+}
+
+function reset() {
+  stopRun();
+  stepIdx = 0;
+  els.btnStep.disabled = false;
+  els.btnRun.disabled = false;
+  els.log.innerHTML = "";
+  render();
+  updateHUD();
+  els.caption.innerHTML = "Press <b>Step</b> to add the first edge.";
+}
+
+// ---------------------------------------------------------------------------
+// Mode switching
+// ---------------------------------------------------------------------------
+document.getElementById("modePill").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button");
+  if (!btn) return;
+  for (const b of document.querySelectorAll("#modePill button")) b.classList.remove("active");
+  btn.classList.add("active");
+  mode = btn.dataset.mode;
+  reset();
+});
+
+els.btnStep.addEventListener("click", step);
+els.btnRun.addEventListener("click", run);
+els.btnReset.addEventListener("click", reset);
+
+// keyboard: space = step, r = reset
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") { e.preventDefault(); step(); }
+  else if (e.key === "r" || e.key === "R") { reset(); }
+});
+
+// initial paint
+reset();
+</script>
+</body>
+</html>
