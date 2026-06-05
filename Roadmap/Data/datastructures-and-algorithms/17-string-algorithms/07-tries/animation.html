@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tries (Prefix Trees) — Insert, Search, startsWith, Autocomplete</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-path: rgba(88, 166, 255, 0.55);
+    --hi-end: rgba(63, 185, 80, 0.55);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls input#words { width: 320px; }
+  .controls input#query { width: 130px; }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: auto; }
+  circle.node { fill: var(--panel-2); stroke: var(--border); stroke-width: 2; transition: all 0.25s ease; }
+  circle.node.onpath { fill: var(--hi-path); stroke: var(--accent); }
+  circle.node.isend { stroke: var(--good); stroke-width: 3; }
+  circle.node.matched { fill: var(--hi-end); stroke: var(--good); stroke-width: 3; }
+  text.elabel { fill: var(--accent-2); font-size: 13px; font-weight: 700; font-family: var(--mono); }
+  text.elabel.onpath { fill: #fff; }
+  line.edge { stroke: var(--muted); stroke-width: 2; transition: stroke 0.25s ease; }
+  line.edge.onpath { stroke: var(--accent); stroke-width: 3; }
+  text.rootlbl { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .resultbox {
+    margin-top: 12px;
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .resultbox b { color: var(--accent); }
+  .resultbox .yes { color: var(--good); font-weight: 700; }
+  .resultbox .no { color: var(--bad); font-weight: 700; }
+  .matchlist { margin-top: 8px; }
+  .chip {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    margin: 3px 4px 0 0;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .chip.hit { border-color: var(--good); color: var(--good); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tries (Prefix Trees) — Build &amp; Query a Trie</h1>
+  <p>Insert words one character per edge; shared prefixes share a path. Then walk <b>search</b> / <b>startsWith</b> / <b>autocomplete</b> and watch the traversed path and matching words light up.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Words: <input type="text" id="words" value="cat,car,card,care,dog,do" /></label>
+    <label>Mode:
+      <select id="modeSel">
+        <option value="autocomplete">autocomplete</option>
+        <option value="search">search</option>
+        <option value="startsWith">startsWith</option>
+      </select>
+    </label>
+    <label>Query: <input type="text" id="query" value="car" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Trie</h2>
+      <svg id="trieSvg" viewBox="0 0 720 420" preserveAspectRatio="xMidYMid meet">
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="border-color:var(--good)"></span> end-of-word (isEnd)</span>
+        <span><span class="swatch" style="background:var(--hi-path);border-color:var(--accent)"></span> on the walk path</span>
+        <span><span class="swatch" style="background:var(--hi-end);border-color:var(--good)"></span> matched word</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Operation</h2>
+      <div class="step-counter" id="opInfo"></div>
+      <div class="resultbox" id="resultBox">Press <b>Step</b> to begin.</div>
+      <div class="matchlist" id="matchList"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    First we <b>build</b> the trie by inserting each word character by character — words that share a prefix share a path. Then we run the chosen query, walking one edge per character.
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. <code>search</code> needs the final node to be an end-of-word; <code>startsWith</code> only needs the path to exist; <code>autocomplete</code> walks to the prefix then collects every end-of-word below it.
+    See <code>junior.md</code> and <code>professional.md</code> for why every operation is <code>O(L)</code>, independent of the number of words.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Trie model ----------
+function newNode(ch) {
+  return { ch: ch, children: {}, isEnd: false, id: 0, x: 0, y: 0, depth: 0, parent: null };
+}
+
+function buildTrie(words) {
+  const root = newNode("");
+  root.id = 0;
+  let counter = 1;
+  for (const w of words) {
+    let cur = root;
+    for (const c of w) {
+      if (!cur.children[c]) {
+        const n = newNode(c);
+        n.id = counter++;
+        n.parent = cur;
+        n.depth = cur.depth + 1;
+        cur.children[c] = n;
+      }
+      cur = cur.children[c];
+    }
+    cur.isEnd = true;
+  }
+  return root;
+}
+
+// Assign layout positions via an in-order-ish pass: leaves get sequential x slots.
+function layout(root) {
+  const leafOrder = [];
+  let slot = 0;
+  function assign(node) {
+    const keys = Object.keys(node.children).sort();
+    if (keys.length === 0) {
+      node._x = slot++;
+      return;
+    }
+    let sum = 0, count = 0;
+    for (const k of keys) {
+      assign(node.children[k]);
+      sum += node.children[k]._x;
+      count++;
+    }
+    node._x = sum / count;
+  }
+  assign(root);
+
+  const W = 720, H = 420;
+  const marginX = 40, marginTop = 30;
+  const maxSlot = Math.max(slot - 1, 1);
+  let maxDepth = 0;
+  function depthScan(n) {
+    maxDepth = Math.max(maxDepth, n.depth);
+    for (const k in n.children) depthScan(n.children[k]);
+  }
+  depthScan(root);
+  const levelH = (H - marginTop - 30) / Math.max(maxDepth, 1);
+
+  function place(n) {
+    n.x = marginX + (n._x / maxSlot) * (W - 2 * marginX);
+    n.y = marginTop + n.depth * levelH;
+    for (const k in n.children) place(n.children[k]);
+  }
+  place(root);
+}
+
+function allNodes(root) {
+  const out = [];
+  (function walk(n) {
+    out.push(n);
+    const keys = Object.keys(n.children).sort();
+    for (const k of keys) walk(n.children[k]);
+  })(root);
+  return out;
+}
+
+// ---------- Build the step plan ----------
+// Steps walk the query char by char, then (for autocomplete) collect matches.
+function buildPlan(root, mode, query) {
+  const steps = [];
+  let cur = root;
+  const pathIds = [root.id];
+
+  steps.push({
+    pathIds: pathIds.slice(),
+    matched: [],
+    desc: "Start at the root (the empty prefix). We will follow one edge per character of \"" + query + "\".",
+    result: null
+  });
+
+  let broke = false;
+  for (let i = 0; i < query.length; i++) {
+    const c = query[i];
+    const nxt = cur.children[c];
+    if (!nxt) {
+      broke = true;
+      steps.push({
+        pathIds: pathIds.slice(),
+        matched: [],
+        desc: "No edge labeled '" + c + "' from the current node. The path breaks here — the prefix \"" +
+              query.slice(0, i + 1) + "\" does not exist in the trie.",
+        result: mode === "startsWith" ? false : (mode === "search" ? false : "none")
+      });
+      break;
+    }
+    cur = nxt;
+    pathIds.push(cur.id);
+    steps.push({
+      pathIds: pathIds.slice(),
+      matched: [],
+      desc: "Follow edge '" + c + "' → now at node for prefix \"" + query.slice(0, i + 1) +
+            "\"" + (cur.isEnd ? " (this is an end-of-word)" : "") + ".",
+      result: null
+    });
+  }
+
+  if (!broke) {
+    if (mode === "search") {
+      steps.push({
+        pathIds: pathIds.slice(),
+        matched: cur.isEnd ? [cur.id] : [],
+        desc: "Reached the end of \"" + query + "\". search checks isEnd: " +
+              (cur.isEnd ? "this node IS an end-of-word → MATCH." : "this node is NOT an end-of-word → not a stored word."),
+        result: cur.isEnd
+      });
+    } else if (mode === "startsWith") {
+      steps.push({
+        pathIds: pathIds.slice(),
+        matched: [],
+        desc: "Reached the end of prefix \"" + query + "\". startsWith only needs the path to exist (no isEnd check) → TRUE.",
+        result: true
+      });
+    } else {
+      // autocomplete: DFS below cur, collecting isEnd nodes
+      const found = [];
+      (function dfs(n, prefix) {
+        if (n.isEnd) found.push({ id: n.id, word: prefix });
+        for (const k of Object.keys(n.children).sort()) dfs(n.children[k], prefix + k);
+      })(cur, query);
+      const matchedIds = [];
+      for (let j = 0; j < found.length; j++) {
+        matchedIds.push(found[j].id);
+        steps.push({
+          pathIds: pathIds.slice(),
+          matched: matchedIds.slice(),
+          desc: "Autocomplete DFS below \"" + query + "\": collected \"" + found[j].word + "\".",
+          result: "list",
+          words: found.slice(0, j + 1).map(f => f.word)
+        });
+      }
+      if (found.length === 0) {
+        steps.push({
+          pathIds: pathIds.slice(),
+          matched: [],
+          desc: "Prefix \"" + query + "\" exists but no complete word ends at or below it.",
+          result: "list",
+          words: []
+        });
+      }
+    }
+  }
+  return steps;
+}
+
+// ---------- Render ----------
+function renderTrie(root) {
+  const edgeLayer = document.getElementById("edgeLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  edgeLayer.innerHTML = "";
+  nodeLayer.innerHTML = "";
+  const nodes = allNodes(root);
+  for (const n of nodes) {
+    if (n.parent) {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", n.parent.x);
+      line.setAttribute("y1", n.parent.y);
+      line.setAttribute("x2", n.x);
+      line.setAttribute("y2", n.y);
+      line.setAttribute("class", "edge");
+      line.setAttribute("data-edge", n.id);
+      edgeLayer.appendChild(line);
+
+      const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      lbl.setAttribute("x", (n.parent.x + n.x) / 2 + 6);
+      lbl.setAttribute("y", (n.parent.y + n.y) / 2);
+      lbl.setAttribute("class", "elabel");
+      lbl.setAttribute("data-elabel", n.id);
+      lbl.textContent = n.ch;
+      edgeLayer.appendChild(lbl);
+    }
+  }
+  for (const n of nodes) {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", n.x);
+    c.setAttribute("cy", n.y);
+    c.setAttribute("r", 13);
+    c.setAttribute("class", "node" + (n.isEnd ? " isend" : ""));
+    c.setAttribute("data-node", n.id);
+    nodeLayer.appendChild(c);
+    if (n.id === 0) {
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("x", n.x);
+      t.setAttribute("y", n.y - 18);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("class", "rootlbl");
+      t.textContent = "root";
+      nodeLayer.appendChild(t);
+    }
+  }
+}
+
+function applyStep(step) {
+  // reset classes
+  document.querySelectorAll("circle.node").forEach(c => {
+    c.classList.remove("onpath", "matched");
+  });
+  document.querySelectorAll("line.edge").forEach(l => l.classList.remove("onpath"));
+  document.querySelectorAll("text.elabel").forEach(t => t.classList.remove("onpath"));
+
+  const pathSet = new Set(step.pathIds);
+  for (const id of step.pathIds) {
+    const c = document.querySelector('circle.node[data-node="' + id + '"]');
+    if (c) c.classList.add("onpath");
+    const e = document.querySelector('line.edge[data-edge="' + id + '"]');
+    if (e) e.classList.add("onpath");
+    const el = document.querySelector('text.elabel[data-elabel="' + id + '"]');
+    if (el) el.classList.add("onpath");
+  }
+  for (const id of step.matched) {
+    const c = document.querySelector('circle.node[data-node="' + id + '"]');
+    if (c) c.classList.add("matched");
+  }
+
+  document.getElementById("narrate").innerHTML = step.desc;
+
+  const rb = document.getElementById("resultBox");
+  const ml = document.getElementById("matchList");
+  ml.innerHTML = "";
+  const mode = state.mode, q = state.query;
+  if (step.result === true) {
+    rb.innerHTML = "<b>" + mode + "(\"" + q + "\")</b> → <span class='yes'>true</span>";
+  } else if (step.result === false) {
+    rb.innerHTML = "<b>" + mode + "(\"" + q + "\")</b> → <span class='no'>false</span>";
+  } else if (step.result === "none") {
+    rb.innerHTML = "<b>autocomplete(\"" + q + "\")</b> → <span class='no'>no matches (prefix absent)</span>";
+  } else if (step.result === "list") {
+    rb.innerHTML = "<b>autocomplete(\"" + q + "\")</b> → " +
+      (step.words.length ? "<span class='yes'>" + step.words.length + " match(es)</span>" : "<span class='no'>0 matches</span>");
+    for (const w of (step.words || [])) {
+      const chip = document.createElement("span");
+      chip.className = "chip hit";
+      chip.textContent = w;
+      ml.appendChild(chip);
+    }
+  } else {
+    rb.innerHTML = "Walking the query path…";
+  }
+}
+
+// ---------- State + control ----------
+const state = {
+  root: null,
+  mode: "autocomplete",
+  query: "car",
+  steps: [],
+  idx: 0,
+  running: false,
+  timer: null
+};
+
+function parseWords(s) {
+  return s.split(",").map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+}
+
+function rebuild() {
+  const words = parseWords(document.getElementById("words").value);
+  state.mode = document.getElementById("modeSel").value;
+  state.query = document.getElementById("query").value.trim().toLowerCase();
+  state.root = buildTrie(words.length ? words : ["a"]);
+  layout(state.root);
+  renderTrie(state.root);
+  state.steps = buildPlan(state.root, state.mode, state.query);
+  state.idx = 0;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  document.getElementById("opInfo").textContent =
+    state.mode + "(\"" + state.query + "\")  —  " + words.length + " words inserted";
+  applyStep(state.steps[0]);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(i) {
+  if (i < 0 || i >= state.steps.length) return;
+  state.idx = i;
+  applyStep(state.steps[i]);
+  document.getElementById("stepInfo").textContent = "step " + i + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.idx < state.steps.length - 1) gotoStep(state.idx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.idx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.idx >= state.steps.length - 1) gotoStep(0);
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.idx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1000);
+}
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("words").addEventListener("change", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("query").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
