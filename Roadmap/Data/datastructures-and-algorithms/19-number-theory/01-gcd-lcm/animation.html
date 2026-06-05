@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GCD and LCM — The Euclidean Algorithm</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 96px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+  }
+  .row.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .row.done { border-color: var(--good); }
+  .row .a { color: var(--accent); font-weight: 700; min-width: 90px; }
+  .row .op { color: var(--muted); }
+  .row .r { color: var(--accent-2); font-weight: 700; }
+  .pair {
+    font-family: var(--mono);
+    font-size: 22px;
+    letter-spacing: 1px;
+    margin: 4px 0 10px;
+  }
+  .pair .va { color: var(--accent); font-weight: 700; }
+  .pair .vb { color: var(--accent-2); font-weight: 700; }
+  .pair .gcd { color: var(--good); font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .result {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .result b { color: var(--accent); }
+  .result .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  rect.sqA { fill: var(--hi-row); stroke: var(--accent); stroke-width: 1.5; }
+  rect.sqB { fill: var(--hi-col); stroke: var(--accent-2); stroke-width: 1.5; }
+  rect.sqG { fill: var(--hi-cell); stroke: var(--good); stroke-width: 2; }
+  rect.remain { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GCD and LCM — The Euclidean Algorithm</h1>
+  <p>gcd(a, b) = gcd(b, a mod b), looped until b = 0. Watch the pair shrink, and the rectangle tile with squares whose side is the GCD.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>a = <input type="number" id="aInput" value="48" min="0" max="100000" /></label>
+    <label>b = <input type="number" id="bInput" value="18" min="0" max="100000" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Geometric view: tile an a &times; b rectangle</h2>
+      <svg id="tileSvg" width="360" height="240" viewBox="0 0 360 240"></svg>
+      <div class="result" id="tileInfo">
+        Lay the biggest <b>b &times; b</b> squares along the rectangle; the leftover strip is <b>a mod b</b>.
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-row)"></span> b&times;b squares this step</span>
+        <span><span class="swatch" style="background:var(--hi-cell)"></span> final GCD square</span>
+        <span><span class="swatch" style="border-style:dashed"></span> leftover (a mod b)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Algebraic view: gcd(a, b) = gcd(b, a mod b)</h2>
+      <div class="pair" id="pairBox"></div>
+      <div class="step-counter" id="reduceInfo" style="margin-bottom:8px;"></div>
+      <div class="steps" id="stepList"></div>
+      <div class="result" id="resultBox" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. Each step replaces (a, b) with (b, a mod b); the remainder strictly decreases, so we reach b = 0 in O(log min(a, b)) steps.</div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Try these inputs</h2>
+    <ul style="margin:0; padding-left:20px; font-size:13px; color:var(--muted);">
+      <li><b>48, 18</b> &mdash; the worked example; gcd 6, lcm 144, finishes in 3 steps.</li>
+      <li><b>1071, 462</b> &mdash; the classic textbook pair; gcd 21 in 3 steps.</li>
+      <li><b>34, 21</b> &mdash; consecutive Fibonacci numbers (F9, F8): the worst case for their size, 7 steps, every quotient 1, and they turn out coprime (gcd 1).</li>
+      <li><b>100, 1</b> &mdash; one step: gcd(100, 1) = 1, the fastest case.</li>
+      <li><b>0, 9</b> &mdash; the base case: gcd(0, 9) = 9 immediately.</li>
+    </ul>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. The last non-zero second argument is gcd(a, b); the rectangle tiles exactly with squares of that side.
+    Then <code>lcm(a, b) = a / gcd(a, b) * b</code> (divide before multiply to avoid overflow). See <code>junior.md</code> and <code>professional.md</code> for the proof that the substitution a &rarr; a mod b preserves the set of common divisors.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- GCD step plan ----------
+// Each step records the pair (a, b), the quotient q, the remainder r,
+// and a human description. We build the whole trace up front, then animate it.
+function buildPlan(a0, b0) {
+  let a = Math.abs(a0);
+  let b = Math.abs(b0);
+  const steps = [];
+  steps.push({
+    type: "init",
+    a: a, b: b, q: null, r: null,
+    desc: "Start with the pair (a, b) = (" + a + ", " + b + "). We will repeatedly replace it with (b, a mod b)."
+  });
+  // guard against infinite loops on pathological input
+  let guard = 0;
+  while (b !== 0 && guard < 2000) {
+    const q = Math.floor(a / b);
+    const r = a % b;
+    steps.push({
+      type: "reduce",
+      a: a, b: b, q: q, r: r,
+      newA: b, newB: r,
+      desc: a + " = " + q + "·" + b + " + " + r +
+            "  →  gcd(" + a + ", " + b + ") = gcd(" + b + ", " + r + ")."
+    });
+    a = b;
+    b = r;
+    guard++;
+  }
+  const g = a; // last non-zero value
+  steps.push({
+    type: "done",
+    a: a, b: 0, q: null, r: null, gcd: g,
+    desc: "b is now 0, so gcd = a = " + g + ". Every step kept the set of common divisors unchanged."
+  });
+  return { steps: steps, gcd: g, a0: Math.abs(a0), b0: Math.abs(b0) };
+}
+
+// ---------- Animation state ----------
+const state = {
+  plan: null,
+  a: 48,
+  b: 18,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// ---------- Render: algebraic pair ----------
+function renderPair(step) {
+  const box = document.getElementById("pairBox");
+  if (step.type === "done") {
+    box.innerHTML = "gcd = <span class='gcd'>" + step.gcd + "</span>";
+  } else {
+    box.innerHTML = "( <span class='va'>" + step.a + "</span> , <span class='vb'>" + step.b + "</span> )";
+  }
+  const ri = document.getElementById("reduceInfo");
+  if (step.type === "reduce") {
+    ri.textContent = "quotient q = " + step.q + ", remainder r = a mod b = " + step.r;
+  } else if (step.type === "done") {
+    ri.textContent = "the pair reached (g, 0) — done";
+  } else {
+    ri.textContent = "ready to reduce";
+  }
+}
+
+// ---------- Render: step list ----------
+function renderStepList(activeIdx) {
+  const list = document.getElementById("stepList");
+  list.innerHTML = "";
+  const steps = state.plan.steps;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const row = document.createElement("div");
+    row.className = "row";
+    if (i === activeIdx) row.classList.add("active");
+    if (s.type === "done" && i <= activeIdx) row.classList.add("done");
+    let html = "";
+    if (s.type === "init") {
+      html = "<span class='a'>(" + s.a + ", " + s.b + ")</span><span class='op'>start</span>";
+    } else if (s.type === "reduce") {
+      html = "<span class='a'>(" + s.a + ", " + s.b + ")</span>" +
+             "<span class='op'>" + s.a + " = " + s.q + "·" + s.b + " +</span>" +
+             "<span class='r'>" + s.r + "</span>";
+    } else {
+      html = "<span class='a'>(" + s.a + ", 0)</span><span class='op'>gcd =</span>" +
+             "<span class='r'>" + s.gcd + "</span>";
+    }
+    row.innerHTML = html;
+    // dim future steps
+    row.style.opacity = (i <= activeIdx) ? "1" : "0.4";
+    list.appendChild(row);
+  }
+}
+
+// ---------- Render: result box (gcd + lcm) ----------
+function renderResult(step) {
+  const box = document.getElementById("resultBox");
+  if (step.type === "done") {
+    const g = step.gcd;
+    const a0 = state.plan.a0, b0 = state.plan.b0;
+    let lcm = 0;
+    if (a0 !== 0 && b0 !== 0 && g !== 0) {
+      lcm = (a0 / g) * b0;
+    }
+    box.innerHTML =
+      "<b>gcd(" + a0 + ", " + b0 + ")</b> = <span class='val'>" + g + "</span><br>" +
+      "<b>lcm</b> = a / gcd · b = " + a0 + " / " + g + " · " + b0 +
+      " = <span class='val'>" + lcm + "</span><br>" +
+      "check: gcd · lcm = " + (g * lcm) + " = a · b = " + (a0 * b0);
+  } else {
+    box.innerHTML = "Reducing the pair toward (g, 0). The last non-zero second argument will be the GCD.";
+  }
+}
+
+// ---------- Render: geometric tiling ----------
+function renderTiles(step) {
+  const svg = document.getElementById("tileSvg");
+  svg.innerHTML = "";
+  const a0 = state.plan.a0, b0 = state.plan.b0;
+  if (a0 === 0 || b0 === 0) {
+    const t = svgText(180, 120, (a0 === 0 && b0 === 0) ? "gcd(0,0)=0" : "gcd(x,0)=x", "var(--muted)");
+    svg.appendChild(t);
+    return;
+  }
+  // Map the long side to ~330px; keep aspect ratio of a0 x b0.
+  const W = 330, H = 200;
+  const longSide = Math.max(a0, b0);
+  const scale = Math.min(W / longSide, H / Math.min(a0, b0), 200 / longSide);
+  const sc = Math.max(0.4, Math.min(scale, 60)); // clamp for readability
+  // Use a layout where width = a0, height = b0 (orient long side horizontally)
+  let rectW = a0, rectH = b0, swapped = false;
+  if (b0 > a0) { rectW = b0; rectH = a0; swapped = true; }
+  const px = (v) => v * sc;
+  const offX = 14, offY = 14;
+
+  // outer rectangle
+  const outer = svgRect(offX, offY, px(rectW), px(rectH), "remain");
+  svg.appendChild(outer);
+
+  // Replay the reduction to draw nested squares. Use the current step's pair
+  // to decide which squares to highlight ("this step").
+  let curA = rectW, curB = rectH;       // current sub-rectangle dims (curA along the long axis)
+  let x = offX, y = offY;
+  let horizontal = true;                 // direction we peel squares
+  const gcd = state.plan.gcd;
+  const activePair = (step.type === "reduce") ? [step.a, step.b]
+                    : (step.type === "done") ? [gcd, 0] : [rectW, rectH];
+
+  let safety = 0;
+  while (curB > 0 && safety < 200) {
+    safety++;
+    const side = curB;                   // square side = shorter dimension
+    const count = Math.floor(curA / curB);
+    const isFinalSquare = (side === gcd && Math.floor(curA / side) * side === curA);
+    // is this the step currently being shown?
+    const isActive = (step.type === "reduce") &&
+                     ((swapped ? [curB, curA % curB] : [curA, curA % curB]) , (Math.max(curA, curB) === Math.max(step.a, step.b) && Math.min(curA, curB) === Math.min(step.a, step.b)));
+    for (let i = 0; i < count; i++) {
+      let rx, ry, rw, rh;
+      if (horizontal) {
+        rx = x + px(i * side); ry = y; rw = px(side); rh = px(side);
+      } else {
+        rx = x; ry = y + px(i * side); rw = px(side); rh = px(side);
+      }
+      let cls = "sqA";
+      if (side === gcd) cls = "sqG";
+      else if (isActive) cls = "sqB";
+      const sq = svgRect(rx, ry, rw, rh, cls);
+      svg.appendChild(sq);
+    }
+    // advance into the leftover strip
+    const used = count * side;
+    if (horizontal) {
+      x = x + px(used);
+      const newW = curA - used;          // leftover along long axis
+      curA = side;                        // the strip's long axis is now 'side'
+      curB = newW;                        // and short axis is the remainder
+      // strip occupies remaining region; flip orientation
+    } else {
+      y = y + px(used);
+      const newW = curA - used;
+      curA = side;
+      curB = newW;
+    }
+    horizontal = !horizontal;
+    if (curB === 0) break;
+  }
+
+  // label
+  svg.appendChild(svgText(offX + 2, offY - 2, "", "var(--muted)"));
+}
+
+function svgRect(x, y, w, h, cls) {
+  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  r.setAttribute("x", x); r.setAttribute("y", y);
+  r.setAttribute("width", Math.max(0, w)); r.setAttribute("height", Math.max(0, h));
+  r.setAttribute("class", cls);
+  return r;
+}
+function svgText(x, y, txt, fill) {
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  t.setAttribute("x", x); t.setAttribute("y", y);
+  t.setAttribute("fill", fill);
+  t.setAttribute("font-size", "13");
+  t.setAttribute("font-family", "var(--mono)");
+  t.textContent = txt;
+  return t;
+}
+
+// ---------- Apply a step ----------
+function applyStep(idx) {
+  const step = state.plan.steps[idx];
+  renderPair(step);
+  renderStepList(idx);
+  renderResult(step);
+  renderTiles(step);
+  document.getElementById("tileInfo").innerHTML = (step.type === "done")
+    ? "The rectangle is fully tiled. The smallest square's side is <b>gcd = " + step.gcd + "</b>."
+    : "Lay the biggest <b>b&times;b</b> squares; the leftover strip is <b>a mod b</b>, the next step's pair.";
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(idx);
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild(); // restart if at end
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1200);
+}
+
+function rebuild() {
+  let a = parseInt(document.getElementById("aInput").value, 10);
+  let b = parseInt(document.getElementById("bInput").value, 10);
+  if (isNaN(a) || a < 0) a = 0;
+  if (isNaN(b) || b < 0) b = 0;
+  if (a > 100000) a = 100000;
+  if (b > 100000) b = 100000;
+  document.getElementById("aInput").value = a;
+  document.getElementById("bInput").value = b;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.a = a;
+  state.b = b;
+  state.plan = buildPlan(a, b);
+  state.stepIdx = 0;
+  applyStep(0);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("bInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
