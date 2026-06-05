@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stoer-Wagner Global Min Cut — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .subtitle { color: var(--muted); font-size: 13px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  }
+  .badge b { color: var(--blue); }
+  main {
+    display: grid; grid-template-columns: 320px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1040px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  input[type="text"] {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 8px 10px; font-size: 13px; min-width: 120px;
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--blue); }
+  .btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px;
+    transition: all 0.15s ease;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.1); color: #fff; }
+  .btn.success { background: var(--green); color: #06210e; border-color: var(--green); }
+  .btn.warn { background: var(--yellow); color: #241a00; border-color: var(--yellow); }
+  .btn.danger { background: var(--red); color: #2b0606; border-color: var(--red); }
+  .step-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .speed-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .speed-row input[type="range"] { flex: 1; accent-color: var(--blue); }
+  .speed-row label { color: var(--muted); font-size: 12px; }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; }
+  .vis-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+  @media (max-width: 760px) { .vis-grid { grid-template-columns: 1fr; } }
+  .graph-wrap, .keys-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  svg#graph { width: 100%; height: auto; display: block; }
+
+  .keys-wrap h3 { font-size: 12px; color: var(--muted); margin: 4px 6px 10px; text-transform: uppercase; letter-spacing: 0.6px; }
+  table.keys { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.keys th, table.keys td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.keys th { color: var(--muted); font-weight: 600; }
+  tr.in-a td { color: var(--blue); }
+  tr.is-sel td { background: rgba(63,185,80,0.12); color: var(--green); font-weight: 700; }
+  tr.is-last td { background: rgba(248,81,73,0.12); color: var(--red); font-weight: 700; }
+
+  .info-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 14px; line-height: 1.5; min-height: 46px;
+  }
+  .info-bar code { background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--orange); }
+  .stats-row { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+  .stat b { color: var(--blue); }
+  .stat.best b { color: var(--green); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .d-a { background: var(--blue); }
+  .d-sel { background: var(--green); }
+  .d-last { background: var(--red); }
+  .d-merge { background: var(--purple); }
+  .d-out { background: var(--muted); }
+
+  .bigo { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .bigo th, .bigo td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .bigo th { color: var(--muted); }
+  .bigo code { color: var(--orange); }
+
+  #log-panel { }
+  #log { max-height: 220px; overflow-y: auto; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.add { color: var(--green); }
+  #log .entry.cut { color: var(--red); }
+  #log .entry.merge { color: var(--purple); }
+  #log .entry.best { color: var(--blue); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Stoer-Wagner — Global Minimum Cut</h1>
+    <div class="subtitle">Maximum-adjacency ordering, cut-of-the-phase, vertex merge, running global minimum</div>
+  </div>
+  <div class="badges">
+    <span class="badge">Time (array) <b>O(V&sup3;)</b></span>
+    <span class="badge">Time (heap) <b>O(V&middot;E + V&sup2; log V)</b></span>
+    <span class="badge">Space <b>O(V&sup2;)</b></span>
+    <span class="badge">Undirected, w &ge; 0</span>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Graph</h2>
+      <div class="control-row">
+        <button class="btn" id="btnSample" style="flex:1">Sample (4 vertices)</button>
+      </div>
+      <div class="control-row">
+        <button class="btn success" id="btnRandom" style="flex:1">Random Graph</button>
+      </div>
+      <div class="control-row">
+        <input type="text" id="customInput" placeholder="edges: 0-1:3, 0-2:1, 1-2:3, 1-3:1, 2-3:5" />
+      </div>
+      <div class="control-row">
+        <button class="btn" id="btnLoad" style="flex:1">Load Custom</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnRun">Run</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnPause" disabled>Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <label>Slow</label>
+        <input type="range" id="speed" min="1" max="10" value="5" />
+        <label>Fast</label>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Big-O</h2>
+      <table class="bigo">
+        <tr><th>Op</th><th>Cost</th></tr>
+        <tr><td>One phase</td><td><code>O(V&sup2;)</code></td></tr>
+        <tr><td>Phases</td><td><code>V&minus;1</code></td></tr>
+        <tr><td>Total (array)</td><td><code>O(V&sup3;)</code></td></tr>
+        <tr><td>Total (heap)</td><td><code>O(V&middot;E+V&sup2;logV)</code></td></tr>
+        <tr><td>Space</td><td><code>O(V&sup2;)</code></td></tr>
+      </table>
+    </div>
+  </aside>
+
+  <!-- RIGHT: visualization + log -->
+  <div class="right-col">
+    <section class="panel">
+      <h2>Minimum Cut Phase</h2>
+      <div class="vis-grid">
+        <div class="graph-wrap">
+          <svg id="graph" viewBox="0 0 480 380" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="keys-wrap">
+          <h3>w(A, v) keys</h3>
+          <table class="keys" id="keysTable"><tbody></tbody></table>
+        </div>
+      </div>
+      <div style="height:12px"></div>
+      <div class="info-bar" id="info">Click <code>Sample</code> then <code>Run</code> or <code>Step</code> to watch a minimum cut phase build up.</div>
+      <div style="height:10px"></div>
+      <div class="stats-row">
+        <div class="stat">Phase: <b id="statPhase">-</b></div>
+        <div class="stat">|A|: <b id="statA">0</b></div>
+        <div class="stat">s: <b id="statS">-</b></div>
+        <div class="stat">t: <b id="statT">-</b></div>
+        <div class="stat">Cut-of-phase: <b id="statCut">-</b></div>
+        <div class="stat best">Global min: <b id="statBest">&infin;</b></div>
+      </div>
+      <div style="height:10px"></div>
+      <div class="legend">
+        <span><span class="dot d-out"></span>not in A</span>
+        <span><span class="dot d-a"></span>in A</span>
+        <span><span class="dot d-sel"></span>just added (max key)</span>
+        <span><span class="dot d-last"></span>last vertex t (cut-of-phase)</span>
+        <span><span class="dot d-merge"></span>merged super-vertex</span>
+      </div>
+    </section>
+
+    <section class="panel" id="log-panel">
+      <h2>Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+// ===================== STATE =====================
+let n = 0;
+let baseW = [];            // original matrix (for redraw / reset)
+let steps = [];            // precomputed animation steps
+let stepIdx = 0;
+let timer = null;
+let running = false;
+
+// Each step:
+// { type, w, alive, groups, inA, sel, last, key, phase, cut, best, desc, logClass, logMsg }
+
+// ===================== SAMPLE / INPUT =====================
+const SAMPLE = {
+  n: 4,
+  edges: [[0,1,3],[0,2,1],[1,2,3],[1,3,1],[2,3,5]]
+};
+
+function matrixFromEdges(num, edges) {
+  const w = Array.from({length: num}, () => Array(num).fill(0));
+  for (const [u, v, c] of edges) {
+    if (u !== v) { w[u][v] += c; w[v][u] += c; }
+  }
+  return w;
+}
+
+function loadSample() {
+  n = SAMPLE.n;
+  baseW = matrixFromEdges(n, SAMPLE.edges);
+  document.getElementById('customInput').value = "0-1:3, 0-2:1, 1-2:3, 1-3:1, 2-3:5";
+  reset();
+}
+
+function loadRandom() {
+  n = 4 + Math.floor(Math.random() * 4); // 4..7
+  const edges = [];
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++)
+      if (Math.random() < 0.65) edges.push([i, j, 1 + Math.floor(Math.random() * 9)]);
+  // ensure connected-ish: chain
+  for (let i = 1; i < n; i++)
+    if (!edges.some(e => (e[0] === i-1 && e[1] === i) || (e[0] === i && e[1] === i-1)))
+      edges.push([i-1, i, 1 + Math.floor(Math.random() * 9)]);
+  baseW = matrixFromEdges(n, edges);
+  document.getElementById('customInput').value =
+    edges.map(e => `${e[0]}-${e[1]}:${e[2]}`).join(', ');
+  reset();
+}
+
+function loadCustom() {
+  const raw = document.getElementById('customInput').value.trim();
+  if (!raw) return;
+  const edges = [];
+  let maxV = 0;
+  for (const part of raw.split(',')) {
+    const m = part.trim().match(/^(\d+)\s*-\s*(\d+)\s*:\s*(\d+)$/);
+    if (!m) continue;
+    const u = +m[1], v = +m[2], c = +m[3];
+    edges.push([u, v, c]);
+    maxV = Math.max(maxV, u, v);
+  }
+  if (edges.length === 0) { toast("No valid edges. Use u-v:w, comma separated."); return; }
+  n = maxV + 1;
+  baseW = matrixFromEdges(n, edges);
+  reset();
+}
+
+// ===================== STEP GENERATION =====================
+function generateSteps() {
+  steps = [];
+  if (n < 2) return;
+
+  // deep copy working matrix; alive flags; groups for partition tracking
+  const w = baseW.map(r => r.slice());
+  const merged = Array(n).fill(false);
+  const groups = Array.from({length: n}, (_, i) => [i]);
+  let best = Infinity;
+
+  // seed: min weighted degree (shown as initial best)
+  for (let i = 0; i < n; i++) {
+    let d = 0;
+    for (let j = 0; j < n; j++) d += w[i][j];
+    best = Math.min(best, d);
+  }
+  pushStep({
+    type: 'init', w: clone(w), alive: aliveList(merged), groups: cloneGroups(groups),
+    inA: Array(n).fill(false), sel: -1, last: -1, key: Array(n).fill(0),
+    phase: 0, cut: null, best,
+    desc: `Initialized. Seed global min = min weighted degree = <code>${best}</code>.`,
+    logClass: 'op', logMsg: `init: seed best=${best} (min weighted degree)`
+  });
+
+  for (let phase = 0; phase < n - 1; phase++) {
+    const inA = Array(n).fill(false);
+    const key = Array(n).fill(0);
+    let prev = -1, last = -1;
+    const active = aliveList(merged);
+    const m = active.length;
+
+    pushStep({
+      type: 'phase-start', w: clone(w), alive: active.slice(), groups: cloneGroups(groups),
+      inA: inA.slice(), sel: -1, last: -1, key: key.slice(),
+      phase: phase + 1, cut: null, best,
+      desc: `Phase ${phase + 1}: grow set A by maximum adjacency on ${m} vertices.`,
+      logClass: 'op', logMsg: `phase ${phase + 1} start (${m} vertices)`
+    });
+
+    for (let added = 0; added < m; added++) {
+      // pick max-key alive un-added vertex
+      let selV = -1;
+      for (const v of active) {
+        if (!inA[v] && (selV === -1 || key[v] > key[selV])) selV = v;
+      }
+      inA[selV] = true;
+      prev = last; last = selV;
+      // update keys
+      for (const v of active) if (!inA[v]) key[v] += w[selV][v];
+
+      const isLast = (added === m - 1);
+      pushStep({
+        type: isLast ? 'add-last' : 'add', w: clone(w), alive: active.slice(),
+        groups: cloneGroups(groups), inA: inA.slice(), sel: selV, last: isLast ? selV : -1,
+        key: key.slice(), phase: phase + 1, cut: isLast ? key[selV] : null, best,
+        desc: isLast
+          ? `Added <b>${label(groups, selV)}</b> last &rarr; this is <b>t</b>. Cut-of-the-phase = w(A,t) = <code>${key[selV]}</code>.`
+          : `Added <b>${label(groups, selV)}</b> (largest key into A). Updated remaining keys.`,
+        logClass: isLast ? 'cut' : 'add',
+        logMsg: isLast
+          ? `t=${label(groups, selV)} added last; cut-of-phase=${key[selV]}`
+          : `add ${label(groups, selV)} (key=${key[selV]})`
+      });
+    }
+
+    const cut = key[last];
+    const newBest = Math.min(best, cut);
+    const improved = newBest < best;
+    best = newBest;
+
+    pushStep({
+      type: 'record', w: clone(w), alive: active.slice(), groups: cloneGroups(groups),
+      inA: inA.slice(), sel: -1, last, key: key.slice(),
+      phase: phase + 1, cut, best,
+      desc: improved
+        ? `New global minimum! cut-of-phase = <code>${cut}</code> &lt; previous. best = <code>${best}</code>.`
+        : `cut-of-phase = <code>${cut}</code>. Global min stays <code>${best}</code>.`,
+      logClass: improved ? 'best' : 'op',
+      logMsg: improved ? `NEW BEST = ${cut}` : `cut-of-phase=${cut}, best unchanged (${best})`
+    });
+
+    // merge last into prev
+    merged[last] = true;
+    groups[prev] = groups[prev].concat(groups[last]);
+    for (let v = 0; v < n; v++) {
+      if (!merged[v] && v !== prev) {
+        w[prev][v] += w[last][v];
+        w[v][prev] += w[v][last];
+      }
+    }
+
+    pushStep({
+      type: 'merge', w: clone(w), alive: aliveList(merged), groups: cloneGroups(groups),
+      inA: Array(n).fill(false), sel: -1, last: -1, key: Array(n).fill(0),
+      phase: phase + 1, cut, best, mergePrev: prev, mergeLast: last,
+      desc: `Merge s=<b>${origLabel(groups, prev)}</b> and t into one super-vertex <b>${label(groups, prev)}</b>; shared edge weights add.`,
+      logClass: 'merge',
+      logMsg: `merge s,t -> {${groups[prev].join(',')}}`
+    });
+  }
+
+  pushStep({
+    type: 'done', w: [], alive: [], groups: [],
+    inA: [], sel: -1, last: -1, key: [],
+    phase: n - 1, cut: null, best,
+    desc: `Done. Global minimum cut = <code>${best}</code> (smallest cut-of-the-phase over all ${n-1} phases).`,
+    logClass: 'best', logMsg: `RESULT: global min cut = ${best}`
+  });
+}
+
+function pushStep(s) { steps.push(s); }
+function clone(m) { return m.map(r => r.slice()); }
+function cloneGroups(g) { return g.map(x => x.slice()); }
+function aliveList(merged) { const a = []; for (let i = 0; i < merged.length; i++) if (!merged[i]) a.push(i); return a; }
+function label(groups, v) { return groups[v].length === 1 ? String(v) : '{' + groups[v].join(',') + '}'; }
+function origLabel(groups, v) { return label(groups, v); }
+
+// ===================== RENDERING =====================
+function nodePos(i, total) {
+  // place vertices on a circle
+  const cx = 240, cy = 185, R = 130;
+  const ang = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(total, 1);
+  return { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) };
+}
+
+function render(s) {
+  const svg = document.getElementById('graph');
+  if (!s || s.type === 'done') {
+    svg.innerHTML = `<text x="240" y="190" fill="#3fb950" font-size="16" text-anchor="middle">Global min cut = ${s ? s.best : ''}</text>`;
+  } else {
+    const alive = s.alive;
+    const pos = {};
+    alive.forEach((v, idx) => pos[v] = nodePos(idx, alive.length));
+    let edgesSvg = '', nodesSvg = '';
+
+    // edges among alive vertices
+    for (let a = 0; a < alive.length; a++) {
+      for (let b = a + 1; b < alive.length; b++) {
+        const u = alive[a], v = alive[b];
+        const wt = s.w[u][v];
+        if (wt <= 0) continue;
+        const p1 = pos[u], p2 = pos[v];
+        // edge color: red if it crosses the cut-of-phase (one endpoint is the last vertex t)
+        const crossesCut = (s.last !== -1) && (u === s.last || v === s.last);
+        const color = crossesCut ? 'var(--red)' : 'var(--border)';
+        const sw = crossesCut ? 3 : 1.5;
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        edgesSvg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${color}" stroke-width="${sw}"/>`;
+        edgesSvg += `<rect x="${mx-9}" y="${my-9}" width="18" height="14" rx="3" fill="var(--bg)" stroke="var(--border)"/>`;
+        edgesSvg += `<text x="${mx}" y="${my+1}" fill="${crossesCut ? 'var(--red)' : 'var(--muted)'}" font-size="10" text-anchor="middle">${wt}</text>`;
+      }
+    }
+    // nodes
+    for (const v of alive) {
+      const p = pos[v];
+      let fill = 'var(--surface)', stroke = 'var(--muted)';
+      if (s.last === v) { fill = 'rgba(248,81,73,0.25)'; stroke = 'var(--red)'; }
+      else if (s.sel === v) { fill = 'rgba(63,185,80,0.25)'; stroke = 'var(--green)'; }
+      else if (s.inA[v]) { fill = 'rgba(88,166,255,0.18)'; stroke = 'var(--blue)'; }
+      const isSuper = s.groups[v] && s.groups[v].length > 1;
+      if (isSuper && s.last !== v && s.sel !== v && !s.inA[v]) stroke = 'var(--purple)';
+      const txt = label(s.groups, v);
+      const r = isSuper ? 22 : 18;
+      nodesSvg += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+      nodesSvg += `<text x="${p.x}" y="${p.y+4}" fill="var(--text)" font-size="${isSuper ? 10 : 13}" text-anchor="middle" font-weight="600">${txt}</text>`;
+    }
+    svg.innerHTML = edgesSvg + nodesSvg;
+  }
+
+  // keys table
+  renderKeys(s);
+
+  // stats
+  document.getElementById('statPhase').textContent = s.phase || '-';
+  document.getElementById('statA').textContent = s.inA ? s.inA.filter(Boolean).length : 0;
+  document.getElementById('statS').textContent = (s.type === 'merge' && s.mergePrev !== undefined) ? labelSafe(s, s.mergePrev) : '-';
+  document.getElementById('statT').textContent = s.last !== -1 ? labelSafe(s, s.last) : '-';
+  document.getElementById('statCut').textContent = (s.cut === null || s.cut === undefined) ? '-' : s.cut;
+  document.getElementById('statBest').textContent = (s.best === Infinity) ? '∞' : s.best;
+  document.getElementById('info').innerHTML = s.desc;
+}
+
+function labelSafe(s, v) { return (s.groups && s.groups[v]) ? label(s.groups, v) : String(v); }
+
+function renderKeys(s) {
+  const tbody = document.querySelector('#keysTable tbody');
+  if (!s.alive || s.alive.length === 0) { tbody.innerHTML = ''; return; }
+  let rows = '';
+  for (const v of s.alive) {
+    let cls = '';
+    if (s.last === v) cls = 'is-last';
+    else if (s.sel === v) cls = 'is-sel';
+    else if (s.inA && s.inA[v]) cls = 'in-a';
+    const inAtxt = (s.inA && s.inA[v]) ? '✓' : '';
+    rows += `<tr class="${cls}"><td>${label(s.groups, v)}</td><td>${s.key ? s.key[v] : 0}</td><td>${inAtxt}</td></tr>`;
+  }
+  tbody.innerHTML = `<tr><th>vertex</th><th>w(A,v)</th><th>in A</th></tr>` + rows;
+}
+
+// ===================== LOG =====================
+function addLog(s) {
+  const log = document.getElementById('log');
+  const ts = new Date().toLocaleTimeString().split(' ')[0];
+  const div = document.createElement('div');
+  div.className = 'entry ' + (s.logClass || 'op');
+  div.innerHTML = `<span class="ts">${ts}</span>${s.logMsg || ''}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ===================== CONTROLS =====================
+function speedMs() { return 1100 - document.getElementById('speed').value * 95; }
+
+function ensureSteps() { if (steps.length === 0) generateSteps(); }
+
+function runAll() {
+  ensureSteps();
+  running = true;
+  document.getElementById('btnRun').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  tick();
+}
+function tick() {
+  if (!running || stepIdx >= steps.length) { pause(); return; }
+  const s = steps[stepIdx];
+  render(s); addLog(s);
+  stepIdx++;
+  timer = setTimeout(tick, speedMs());
+}
+function stepOne() {
+  ensureSteps();
+  if (stepIdx >= steps.length) return;
+  const s = steps[stepIdx];
+  render(s); addLog(s);
+  stepIdx++;
+}
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('btnRun').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+}
+function reset() {
+  pause();
+  steps = []; stepIdx = 0;
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('statPhase').textContent = '-';
+  document.getElementById('statA').textContent = '0';
+  document.getElementById('statS').textContent = '-';
+  document.getElementById('statT').textContent = '-';
+  document.getElementById('statCut').textContent = '-';
+  document.getElementById('statBest').textContent = '∞';
+  document.getElementById('info').innerHTML =
+    'Loaded a graph with <code>' + n + '</code> vertices. Click <code>Run</code> or <code>Step</code>.';
+  // draw the initial graph (no A yet)
+  const alive = Array.from({length: n}, (_, i) => i);
+  render({
+    type: 'phase-start', w: baseW, alive,
+    groups: Array.from({length: n}, (_, i) => [i]),
+    inA: Array(n).fill(false), sel: -1, last: -1, key: Array(n).fill(0),
+    phase: '-', cut: null, best: Infinity,
+    desc: document.getElementById('info').innerHTML
+  });
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const info = document.getElementById('info');
+  const old = info.innerHTML;
+  info.innerHTML = '<span style="color:var(--red)">' + msg + '</span>';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { info.innerHTML = old; }, 2500);
+}
+
+// ===================== WIRE UP =====================
+document.getElementById('btnSample').onclick = loadSample;
+document.getElementById('btnRandom').onclick = loadRandom;
+document.getElementById('btnLoad').onclick = loadCustom;
+document.getElementById('btnRun').onclick = runAll;
+document.getElementById('btnStep').onclick = stepOne;
+document.getElementById('btnPause').onclick = pause;
+document.getElementById('btnReset').onclick = () => { generateSteps.length; stepIdx = 0; steps = []; reset(); };
+
+// init
+loadSample();
+</script>
+</body>
+</html>
