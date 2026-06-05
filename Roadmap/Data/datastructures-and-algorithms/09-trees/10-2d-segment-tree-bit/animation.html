@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Fenwick Tree (2D BIT) — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.7rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:14px;text-align:center;max-width:920px;font-size:.9rem;line-height:1.5}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.t{color:var(--green);border-color:var(--green)}
+.badge.s{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:7px 15px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.9rem;transition:all .25s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.up{border-color:var(--yellow);color:var(--yellow)}
+button.up:hover:not(:disabled){background:var(--yellow);color:var(--bg)}
+button.dn{border-color:var(--purple);color:var(--purple)}
+button.dn:hover:not(:disabled){background:var(--purple);color:var(--bg)}
+input[type=number]{padding:6px 8px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.9rem;width:56px}
+label.lbl{color:var(--muted);font-size:.82rem}
+.speed-control{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.speed-control label{color:var(--muted);font-size:.82rem}
+.speed-control input[type=range]{width:130px;accent-color:var(--blue)}
+.grids{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;align-items:flex-start;margin-bottom:14px;width:100%;max-width:1200px}
+.grid-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px}
+.grid-panel h3{color:var(--blue);font-size:.9rem;margin-bottom:10px;font-family:monospace;text-align:center}
+.grid{display:grid;gap:4px}
+.colhdr,.rowhdr{color:var(--muted);font-size:.62rem;font-family:monospace;display:flex;align-items:center;justify-content:center}
+.cell{width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--border);border-radius:5px;font-family:monospace;font-size:.85rem;font-weight:700;transition:all .25s;position:relative}
+/* states */
+.cell.touched{border-color:var(--yellow);background:rgba(210,153,34,.22);color:var(--yellow)}
+.cell.accum{border-color:var(--green);background:rgba(63,185,80,.22);color:var(--green)}
+.cell.target{border-color:var(--blue);background:rgba(88,166,255,.22);color:var(--blue);box-shadow:0 0 0 2px var(--blue)}
+/* inclusion-exclusion rectangle shading on the grid */
+.cell.plus{background:rgba(63,185,80,.16)}
+.cell.minus{background:rgba(248,81,73,.16)}
+.cell.inrect{outline:2px solid var(--orange);outline-offset:-2px}
+.info-panel,.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1200px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.88rem;line-height:1.6}
+.step-info .hl{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .ie{color:var(--orange);font-weight:600}
+.stats{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:10px 18px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.05rem;font-weight:700;font-family:monospace}
+.bigo{display:flex;gap:0;flex-wrap:wrap;justify-content:center;width:100%;max-width:1200px;margin-bottom:14px;border:2px solid var(--border);border-radius:12px;overflow:hidden}
+.bigo .col{flex:1;min-width:130px;padding:10px;text-align:center;border-right:1px solid var(--border);background:var(--surface)}
+.bigo .col:last-child{border-right:none}
+.bigo .op{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.bigo .cx{color:var(--green);font-size:1rem;font-weight:700;font-family:monospace;margin-top:2px}
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+.log{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 16px;width:100%;max-width:1200px;height:120px;overflow-y:auto;font-family:monospace;font-size:.78rem;line-height:1.5}
+.log .entry{color:var(--muted)}
+.log .entry b{color:var(--text)}
+.footer{color:var(--muted);font-size:.74rem;margin-top:8px;text-align:center;max-width:900px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>2D Fenwick Tree (2D Binary Indexed Tree)</h1>
+<p class="subtitle">
+A <strong>BIT of BITs</strong>: point update + rectangle sum on a grid in <strong>O(log n · log m)</strong>.
+An update nests two upward <code>lowbit</code> walks (rows × columns), touching log&nbsp;n · log&nbsp;m cells.
+A rectangle sum is inclusion-exclusion of four top-left prefixes: <code>+P(r2,c2) − P(r1-1,c2) − P(r2,c1-1) + P(r1-1,c1-1)</code>.
+</p>
+
+<div class="badges">
+  <span class="badge t">Update: O(log n · log m)</span>
+  <span class="badge t">Rect query: O(log n · log m)</span>
+  <span class="badge s">Memory: (n+1)(m+1)</span>
+  <span class="badge s">1-indexed both axes</span>
+</div>
+
+<div class="input-control">
+  <label class="lbl">Update cell&nbsp; r:</label><input type="number" id="uR" value="2" min="1">
+  <label class="lbl">c:</label><input type="number" id="uC" value="3" min="1">
+  <label class="lbl">+Δ:</label><input type="number" id="uD" value="5">
+  <button class="up" onclick="doUpdate()">update(r, c, +Δ)</button>
+  <button class="secondary" onclick="resetGrid()">↺ Reset grid</button>
+</div>
+
+<div class="input-control">
+  <label class="lbl">Rectangle&nbsp; r1:</label><input type="number" id="r1" value="2" min="1">
+  <label class="lbl">c1:</label><input type="number" id="c1" value="2" min="1">
+  <label class="lbl">r2:</label><input type="number" id="r2" value="4" min="1">
+  <label class="lbl">c2:</label><input type="number" id="c2" value="4" min="1">
+  <button class="dn" onclick="doRect()">rectSum(r1,c1,r2,c2)</button>
+  <button class="secondary" onclick="clearHighlights()">Clear highlights</button>
+</div>
+
+<div class="speed-control">
+  <label>Animation step delay:</label>
+  <span style="color:var(--muted);font-size:.78rem">Fast</span>
+  <input type="range" id="speed" min="60" max="900" value="420">
+  <span style="color:var(--muted);font-size:.78rem">Slow</span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color"></div>Idle</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.22);border-color:var(--yellow)"></div>Touched (update walk)</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.22);border-color:var(--green)"></div>Accumulated (prefix walk)</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.22);border-color:var(--blue)"></div>Target cell</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(255,166,87,.3);border-color:var(--orange)"></div>Query rectangle</div>
+</div>
+
+<div class="stats">
+  <div><div class="stat-label">n × m</div><div class="stat-value" id="dim">8 × 8</div></div>
+  <div><div class="stat-label">log₂n · log₂m</div><div class="stat-value" id="logp">9</div></div>
+  <div><div class="stat-label">Cells touched</div><div class="stat-value" id="touchCnt">0</div></div>
+  <div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+  <div><div class="stat-label">Result</div><div class="stat-value" id="result">-</div></div>
+</div>
+
+<div class="bigo">
+  <div class="col"><div class="op">Point update</div><div class="cx">O(log n·log m)</div></div>
+  <div class="col"><div class="op">Prefix(r,c)</div><div class="cx">O(log n·log m)</div></div>
+  <div class="col"><div class="op">Rectangle sum</div><div class="cx">O(log n·log m)</div></div>
+  <div class="col"><div class="op">Memory</div><div class="cx">O(n·m)</div></div>
+  <div class="col"><div class="op">Static (no upd)</div><div class="cx">O(1) SAT</div></div>
+</div>
+
+<div class="grids">
+  <div class="grid-panel">
+    <h3>A — original grid (1-indexed)</h3>
+    <div class="grid" id="gridA"></div>
+  </div>
+  <div class="grid-panel">
+    <h3>T — 2D BIT cells</h3>
+    <div class="grid" id="gridT"></div>
+  </div>
+</div>
+
+<div class="info-panel">
+  <h3>Trace</h3>
+  <div class="step-info" id="info">
+    Pick a cell and press <span class="hl">update</span> to watch the nested upward walk touch
+    O(log&nbsp;n · log&nbsp;m) BIT cells. Then press <span class="ie">rectSum</span> to watch the four
+    inclusion-exclusion prefix rectangles add and subtract to isolate the target rectangle.
+  </div>
+</div>
+
+<div class="log" id="log"></div>
+
+<p class="footer">
+  The left grid is the conceptual matrix A. The right grid is the BIT array T, where T[i][j] stores the sum of the
+  responsibility rectangle rows [i−lowbit(i)+1, i] × cols [j−lowbit(j)+1, j]. Update walks UP (i+=lowbit, j+=lowbit);
+  prefix walks DOWN (i−=lowbit, j−=lowbit). Only invertible aggregates (sum, XOR, count) work — for rectangle min/max use a 2D segment tree.
+</p>
+
+<script>
+// ===== STATE =====
+const N = 8, M = 8;
+let A = [];      // 1-indexed matrix, A[1..N][1..M]
+let T = [];      // 1-indexed BIT,    T[1..N][1..M]
+let touched = new Set();   // "i,j" cells touched by update walk
+let accum   = new Set();   // "i,j" cells accumulated by prefix walk
+let target  = null;        // "r,c"
+let rectInfo = null;       // {r1,c1,r2,c2}
+let plusCells = new Set(); // grid A cells in + slabs
+let minusCells = new Set();// grid A cells in - slabs
+let touchCount = 0;
+let busy = false;
+
+function lowbit(i){ return i & -i; }
+function key(i,j){ return i+","+j; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function delay(){ return parseInt(document.getElementById('speed').value); }
+
+// ===== INIT =====
+function initGrids(){
+  A = Array.from({length:N+1}, ()=>new Array(M+1).fill(0));
+  T = Array.from({length:N+1}, ()=>new Array(M+1).fill(0));
+}
+function rawUpdate(r,c,d){
+  for(let i=r;i<=N;i+=lowbit(i))
+    for(let j=c;j<=M;j+=lowbit(j))
+      T[i][j]+=d;
+}
+function prefix(r,c){
+  let s=0;
+  for(let i=r;i>0;i-=lowbit(i))
+    for(let j=c;j>0;j-=lowbit(j))
+      s+=T[i][j];
+  return s;
+}
+
+// seed a few initial values for a less-empty starting view
+function seed(){
+  initGrids();
+  const seeds=[[1,1,2],[2,3,5],[3,5,1],[4,4,3],[5,2,4],[6,6,2],[7,7,6],[8,8,1]];
+  for(const [r,c,v] of seeds){ A[r][c]+=v; rawUpdate(r,c,v); }
+}
+
+// ===== RENDER =====
+function buildGridDOM(elId){
+  const el=document.getElementById(elId);
+  el.style.gridTemplateColumns = `26px repeat(${M}, 42px)`;
+  let html='<div class="colhdr"></div>';
+  for(let c=1;c<=M;c++) html+=`<div class="colhdr">${c}</div>`;
+  for(let i=1;i<=N;i++){
+    html+=`<div class="rowhdr">${i}</div>`;
+    for(let j=1;j<=M;j++){
+      html+=`<div class="cell" id="${elId}_${i}_${j}"></div>`;
+    }
+  }
+  el.innerHTML=html;
+}
+function render(){
+  for(let i=1;i<=N;i++){
+    for(let j=1;j<=M;j++){
+      // grid A
+      const ca=document.getElementById(`gridA_${i}_${j}`);
+      ca.className='cell';
+      ca.textContent = A[i][j]!==0 ? A[i][j] : '';
+      if(plusCells.has(key(i,j))) ca.classList.add('plus');
+      if(minusCells.has(key(i,j))) ca.classList.add('minus');
+      if(rectInfo && i>=rectInfo.r1 && i<=rectInfo.r2 && j>=rectInfo.c1 && j<=rectInfo.c2)
+        ca.classList.add('inrect');
+      if(target===key(i,j)) ca.classList.add('target');
+      // grid T
+      const ct=document.getElementById(`gridT_${i}_${j}`);
+      ct.className='cell';
+      ct.textContent = T[i][j]!==0 ? T[i][j] : '';
+      if(touched.has(key(i,j))) ct.classList.add('touched');
+      if(accum.has(key(i,j))) ct.classList.add('accum');
+      if(target===key(i,j)) ct.classList.add('target');
+    }
+  }
+  document.getElementById('touchCnt').textContent=touchCount;
+}
+function clearHighlights(){
+  touched=new Set(); accum=new Set(); target=null; rectInfo=null;
+  plusCells=new Set(); minusCells=new Set(); touchCount=0;
+  document.getElementById('result').textContent='-';
+  document.getElementById('lastOp').textContent='-';
+  render();
+}
+function addLog(html){
+  const l=document.getElementById('log');
+  const d=document.createElement('div');
+  d.className='entry'; d.innerHTML=html;
+  l.insertBefore(d,l.firstChild);
+}
+function setInfo(html){ document.getElementById('info').innerHTML=html; }
+function setBusy(b){
+  busy=b;
+  document.querySelectorAll('button').forEach(x=>x.disabled=b);
+}
+
+// ===== UPDATE (animated nested upward walk) =====
+async function doUpdate(){
+  if(busy) return;
+  const r=parseInt(document.getElementById('uR').value);
+  const c=parseInt(document.getElementById('uC').value);
+  const d=parseInt(document.getElementById('uD').value);
+  if(isNaN(r)||isNaN(c)||isNaN(d)||r<1||r>N||c<1||c>M){
+    setInfo('<span style="color:var(--red)">Invalid r/c/Δ — must be 1..'+N+' and a number.</span>'); return;
+  }
+  setBusy(true);
+  clearHighlights();
+  target=key(r,c);
+  A[r][c]+=d;
+  document.getElementById('lastOp').textContent=`update(${r},${c},+${d})`;
+  setInfo(`Updating <span class="hl">A[${r}][${c}] += ${d}</span>. Walking UP: outer rows via <code>i += lowbit(i)</code>, inner cols via <code>j += lowbit(j)</code>.`);
+  render();
+  await sleep(delay());
+
+  let steps=0;
+  for(let i=r;i<=N;i+=lowbit(i)){
+    for(let j=c;j<=M;j+=lowbit(j)){
+      T[i][j]+=d;
+      touched.add(key(i,j));
+      touchCount++; steps++;
+      setInfo(`Touch <span class="hl">T[${i}][${j}]</span> (resp. rect rows [${i-lowbit(i)+1}..${i}] × cols [${j-lowbit(j)+1}..${j}]). i=${i} (lowbit ${lowbit(i)}), j=${j} (lowbit ${lowbit(j)}).`);
+      render();
+      await sleep(delay());
+    }
+  }
+  document.getElementById('result').textContent=`A[${r}][${c}]=${A[r][c]}`;
+  setInfo(`<span class="ok">Done.</span> Touched <span class="hl">${steps}</span> BIT cells — that is (row steps)·(col steps) ≤ log₂${N} · log₂${M}.`);
+  addLog(`<b>update(${r},${c},+${d})</b> → ${steps} cells touched`);
+  setBusy(false);
+}
+
+// ===== PREFIX (animated nested downward walk), returns sum =====
+async function animatePrefix(r,c,sign){
+  // sign: +1 (green plus rectangle) or -1 (red minus rectangle) for grid-A shading
+  let s=0;
+  if(r<=0||c<=0){ return 0; }
+  // shade the prefix rectangle [1..r]x[1..c] on grid A
+  for(let i=1;i<=r;i++) for(let j=1;j<=c;j++){
+    if(sign>0) plusCells.add(key(i,j)); else minusCells.add(key(i,j));
+  }
+  render();
+  await sleep(delay());
+  for(let i=r;i>0;i-=lowbit(i)){
+    for(let j=c;j>0;j-=lowbit(j)){
+      s+=T[i][j];
+      accum.add(key(i,j));
+      touchCount++;
+      render();
+      await sleep(delay()*0.7);
+    }
+  }
+  // un-shade after reading (keep target rect outline though)
+  plusCells=new Set(); minusCells=new Set();
+  return s;
+}
+
+// ===== RECT SUM (inclusion-exclusion of 4 prefixes) =====
+async function doRect(){
+  if(busy) return;
+  const r1=parseInt(document.getElementById('r1').value);
+  const c1=parseInt(document.getElementById('c1').value);
+  const r2=parseInt(document.getElementById('r2').value);
+  const c2=parseInt(document.getElementById('c2').value);
+  if([r1,c1,r2,c2].some(x=>isNaN(x))||r1<1||c1<1||r2>N||c2>M||r1>r2||c1>c2){
+    setInfo('<span style="color:var(--red)">Invalid rectangle — need 1 ≤ r1 ≤ r2 ≤ '+N+' and 1 ≤ c1 ≤ c2 ≤ '+M+'.</span>'); return;
+  }
+  setBusy(true);
+  clearHighlights();
+  rectInfo={r1,c1,r2,c2};
+  document.getElementById('lastOp').textContent=`rect(${r1},${c1},${r2},${c2})`;
+  render();
+
+  setInfo(`<span class="ie">Term 1 (+):</span> prefix(${r2},${c2}) — big slab containing the whole rectangle.`);
+  await sleep(delay());
+  const p1=await animatePrefix(r2,c2,+1);
+  accum=new Set();
+
+  setInfo(`<span class="ie">Term 2 (−):</span> prefix(${r1-1},${c2}) — subtract the top slab above the rectangle.`);
+  await sleep(delay());
+  const p2=await animatePrefix(r1-1,c2,-1);
+  accum=new Set();
+
+  setInfo(`<span class="ie">Term 3 (−):</span> prefix(${r2},${c1-1}) — subtract the left slab beside the rectangle.`);
+  await sleep(delay());
+  const p3=await animatePrefix(r2,c1-1,-1);
+  accum=new Set();
+
+  setInfo(`<span class="ie">Term 4 (+):</span> prefix(${r1-1},${c1-1}) — add back the corner subtracted twice.`);
+  await sleep(delay());
+  const p4=await animatePrefix(r1-1,c1-1,+1);
+
+  const res=p1-p2-p3+p4;
+  document.getElementById('result').textContent=res;
+  setInfo(`<span class="ok">rectSum(${r1},${c1},${r2},${c2}) = ${p1} − ${p2} − ${p3} + ${p4} = ${res}.</span> The +/−/−/+ inclusion-exclusion isolates exactly the orange rectangle.`);
+  addLog(`<b>rect(${r1},${c1},${r2},${c2})</b> = ${p1}−${p2}−${p3}+${p4} = <b>${res}</b>`);
+  // keep target rectangle outline visible
+  render();
+  setBusy(false);
+}
+
+function resetGrid(){
+  if(busy) return;
+  seed();
+  clearHighlights();
+  addLog('<b>reset</b> grid re-seeded');
+}
+
+// ===== BOOT =====
+buildGridDOM('gridA');
+buildGridDOM('gridT');
+document.getElementById('dim').textContent=`${N} × ${M}`;
+document.getElementById('logp').textContent=Math.ceil(Math.log2(N))*Math.ceil(Math.log2(M));
+seed();
+render();
+addLog('Grid seeded. Try update(2,3,+5) then rectSum(2,2,4,4).');
+</script>
+</body>
+</html>
