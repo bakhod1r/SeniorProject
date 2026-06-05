@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yen's Algorithm (K Shortest Loopless Paths) — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+  }
+  h1{font-size:1.7rem; color:var(--blue); text-align:center; margin-bottom:4px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:16px; font-size:.95rem;}
+  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;}
+  .badge{padding:4px 10px; border-radius:14px; font-size:.78rem; border:1px solid var(--border); background:var(--surface);}
+  .badge.t{color:var(--yellow);} .badge.s{color:var(--purple);} .badge.k{color:var(--green);}
+  .wrap{max-width:1180px; margin:0 auto; display:grid; grid-template-columns:1.3fr 1fr; gap:14px;}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr;}}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px;}
+  .card h3{color:var(--blue); font-size:1rem; margin-bottom:8px;}
+  svg{width:100%; height:360px; background:#0a0e14; border-radius:8px; border:1px solid var(--border);}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:14px 0;}
+  button{
+    padding:8px 16px; border:2px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.9rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .speed{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:10px; color:var(--muted); font-size:.85rem;}
+  .speed input{accent-color:var(--blue); width:140px;}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0; font-size:.8rem;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .sw{width:14px; height:14px; border-radius:3px; display:inline-block;}
+  .panel{font-family:'Courier New',monospace; font-size:.86rem; line-height:1.7; min-height:90px;}
+  .panel .hl{color:var(--yellow);}
+  table{width:100%; border-collapse:collapse; font-size:.82rem; margin-top:4px;}
+  th,td{border:1px solid var(--border); padding:5px 8px; text-align:left;}
+  th{color:var(--muted);}
+  .pathlist{font-family:'Courier New',monospace; font-size:.84rem; line-height:1.6;}
+  .accepted{color:var(--green);} .cand{color:var(--orange);}
+  .log{font-family:'Courier New',monospace; font-size:.78rem; max-height:160px; overflow-y:auto; line-height:1.5; color:var(--muted);}
+  .log div{padding:1px 0; border-bottom:1px solid #1d2430;}
+  .stat{display:inline-block; margin-right:14px; color:var(--muted); font-size:.82rem;}
+  .stat b{color:var(--text);}
+</style>
+</head>
+<body>
+  <h1>Yen's Algorithm — K Shortest Loopless Paths</h1>
+  <p class="subtitle">Seed with Dijkstra, then derive candidates via spur nodes, edge/node removal, and a candidate heap B.</p>
+  <div class="badges">
+    <span class="badge t">Time: O(K · V · (E + V log V))</span>
+    <span class="badge s">Space: O(K · V + E)</span>
+    <span class="badge k">Loopless (simple) paths</span>
+  </div>
+
+  <div class="speed">
+    <label>Speed</label><span>Slow</span>
+    <input type="range" id="speed" min="1" max="10" value="5"><span>Fast</span>
+    <span class="stat" style="margin-left:18px;">K = <b id="kval">3</b></span>
+  </div>
+  <div class="controls">
+    <button id="startBtn" onclick="start()">Start</button>
+    <button id="stepBtn" onclick="stepFwd()">Step</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--blue)"></i>Default edge/node</span>
+    <span><i class="sw" style="background:var(--green)"></i>Accepted path</span>
+    <span><i class="sw" style="background:var(--orange)"></i>Spur path / candidate</span>
+    <span><i class="sw" style="background:var(--red)"></i>Removed edge/node</span>
+    <span><i class="sw" style="background:var(--purple)"></i>Spur node</span>
+    <span><i class="sw" style="background:var(--yellow)"></i>Root path</span>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <h3>Graph (source C → target H)</h3>
+      <svg id="svg" viewBox="0 0 600 360"></svg>
+      <div style="margin-top:8px;">
+        <span class="stat">Step <b id="stepN">0</b>/<b id="stepT">0</b></span>
+        <span class="stat">Spur Dijkstras: <b id="spurN">0</b></span>
+        <span class="stat">|A|: <b id="aN">0</b></span>
+        <span class="stat">|B|: <b id="bN">0</b></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>What's happening</h3>
+      <div class="panel" id="panel">Press <span class="hl">Start</span> to run Yen's algorithm, or <span class="hl">Step</span> to advance one step at a time.</div>
+
+      <h3 style="margin-top:14px;">Accepted set A &nbsp;/&nbsp; Candidate heap B</h3>
+      <div class="pathlist" id="sets">A = [ ]<br>B = [ ]</div>
+
+      <h3 style="margin-top:14px;">Big-O</h3>
+      <table>
+        <tr><th>Operation</th><th>Cost</th></tr>
+        <tr><td>One Dijkstra (spur path)</td><td>O(E + V log V)</td></tr>
+        <tr><td>Spur nodes per path</td><td>O(V)</td></tr>
+        <tr><td>Total (K paths)</td><td>O(K · V · (E + V log V))</td></tr>
+        <tr><td>Heap push / pop</td><td>O(log(K·V))</td></tr>
+      </table>
+
+      <h3 style="margin-top:14px;">Operation log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+// ===== GRAPH DEFINITION (matches the worked example in the docs) =====
+const NODES = {
+  C:{x: 60,y:180}, D:{x:190,y: 70}, E:{x:190,y:290},
+  F:{x:360,y:120}, G:{x:360,y:280}, H:{x:540,y:180}
+};
+const EDGES = [
+  ["C","D",3],["C","E",2],["D","F",4],["E","D",1],
+  ["E","F",2],["E","G",3],["F","G",2],["F","H",1],["G","H",2]
+];
+const SRC="C", DST="H", K=3;
+document.getElementById('kval').textContent=K;
+document.getElementById('stepT').textContent='—';
+
+// adjacency
+function buildAdj(){
+  const g={};
+  for(const n in NODES) g[n]={};
+  for(const [u,v,w] of EDGES) g[u][v]=w;
+  return g;
+}
+const G = buildAdj();
+
+// ===== DIJKSTRA with removed edges/nodes =====
+function dijkstra(s,t,remE,remN){
+  remE=remE||new Set(); remN=remN||new Set();
+  const dist={[s]:0}, prev={}, done=new Set();
+  const pq=[[0,s]];
+  while(pq.length){
+    pq.sort((a,b)=>a[0]-b[0]);
+    const [d,u]=pq.shift();
+    if(done.has(u)) continue;
+    done.add(u);
+    if(u===t) break;
+    for(const v in G[u]){
+      if(remN.has(v)||remE.has(u+">"+v)) continue;
+      const nd=d+G[u][v];
+      if(dist[v]===undefined||nd<dist[v]){dist[v]=nd; prev[v]=u; pq.push([nd,v]);}
+    }
+  }
+  if(dist[t]===undefined) return null;
+  const path=[t];
+  while(path[path.length-1]!==s) path.push(prev[path[path.length-1]]);
+  path.reverse();
+  return {nodes:path, cost:dist[t]};
+}
+function pcost(p){let c=0; for(let i=0;i+1<p.length;i++)c+=G[p[i]][p[i+1]]; return c;}
+function pkey(p){return p.join(",");}
+
+// ===== PRECOMPUTE ANIMATION STEPS =====
+// Each step: {desc, accepted:[paths], candidates:[{nodes,cost}],
+//   highlightPath:[], removedEdges:Set, removedNodes:Set, spurNode, rootPath:[], spurCount}
+let steps=[];
+function genSteps(){
+  steps=[];
+  let spurCount=0;
+  const first=dijkstra(SRC,DST,null,null);
+  const A=[first];
+  const B=[]; // {nodes,cost}
+  const seen=new Set([pkey(first.nodes)]);
+
+  steps.push({
+    desc:`Seed: run Dijkstra C→H. Shortest path <b>${first.nodes.join("→")}</b> (cost ${first.cost}) enters <b>A</b>.`,
+    accepted:A.map(p=>({...p})), candidates:[], highlightPath:first.nodes.slice(),
+    removedEdges:new Set(), removedNodes:new Set(), spurNode:null, rootPath:[], spurCount
+  });
+
+  while(A.length<K){
+    const last=A[A.length-1].nodes;
+    for(let i=0;i<last.length-1;i++){
+      const spur=last[i];
+      const root=last.slice(0,i+1);
+      const remE=new Set();
+      for(const p of A){
+        if(p.nodes.length>i && pkey(p.nodes.slice(0,i+1))===pkey(root))
+          remE.add(p.nodes[i]+">"+p.nodes[i+1]);
+      }
+      const remN=new Set(root.slice(0,root.length-1));
+
+      // show the removal + spur selection
+      steps.push({
+        desc:`Spur node <b>${spur}</b> (root ${root.join("→")}). Remove edges {${[...remE].map(e=>e.replace(">","→")).join(", ")||"—"}} and root nodes {${[...remN].join(", ")||"—"}}.`,
+        accepted:A.map(p=>({...p})), candidates:B.map(c=>({...c})),
+        highlightPath:[], removedEdges:new Set(remE), removedNodes:new Set(remN),
+        spurNode:spur, rootPath:root.slice(), spurCount
+      });
+
+      spurCount++;
+      const sp=dijkstra(spur,DST,remE,remN);
+      if(!sp){
+        steps.push({
+          desc:`Spur Dijkstra from <b>${spur}</b> found <b>no path</b> after removal — dead end, skip.`,
+          accepted:A.map(p=>({...p})), candidates:B.map(c=>({...c})),
+          highlightPath:[], removedEdges:new Set(remE), removedNodes:new Set(remN),
+          spurNode:spur, rootPath:root.slice(), spurCount
+        });
+        continue;
+      }
+      const total=root.slice(0,root.length-1).concat(sp.nodes);
+      const tc=pcost(root)+sp.cost;
+      const dup=seen.has(pkey(total));
+      steps.push({
+        desc:`Spur path <b>${sp.nodes.join("→")}</b>. Candidate <b>${total.join("→")}</b> (cost ${tc})` +
+             (dup?` is a <b>duplicate</b> — skip.`:` pushed to <b>B</b>.`),
+        accepted:A.map(p=>({...p})), candidates:(dup?B:B.concat([{nodes:total,cost:tc}])).map(c=>({...c})),
+        highlightPath:total.slice(), removedEdges:new Set(remE), removedNodes:new Set(remN),
+        spurNode:spur, rootPath:root.slice(), spurCount
+      });
+      if(!dup){ seen.add(pkey(total)); B.push({nodes:total,cost:tc}); }
+    }
+    if(B.length===0) break;
+    B.sort((a,b)=>a.cost-b.cost || pkey(a.nodes).localeCompare(pkey(b.nodes)));
+    const next=B.shift();
+    A.push(next);
+    steps.push({
+      desc:`Pop cheapest candidate from <b>B</b>: <b>${next.nodes.join("→")}</b> (cost ${next.cost}) → accepted as A[${A.length-1}].`,
+      accepted:A.map(p=>({...p})), candidates:B.map(c=>({...c})),
+      highlightPath:next.nodes.slice(), removedEdges:new Set(), removedNodes:new Set(),
+      spurNode:null, rootPath:[], spurCount
+    });
+  }
+  steps.push({
+    desc:`<b>Done.</b> Found ${A.length} shortest loopless paths: ${A.map(p=>p.cost).join(", ")}.`,
+    accepted:A.map(p=>({...p})), candidates:B.map(c=>({...c})),
+    highlightPath:[], removedEdges:new Set(), removedNodes:new Set(),
+    spurNode:null, rootPath:[], spurCount, done:true
+  });
+  document.getElementById('stepT').textContent=steps.length;
+}
+
+// ===== RENDERING =====
+const svg=document.getElementById('svg');
+function edgeIn(step,u,v){
+  // returns class for edge u->v
+  if(step.removedEdges.has(u+">"+v)) return "rem";
+  // highlight path edge
+  const hp=step.highlightPath;
+  for(let i=0;i+1<hp.length;i++) if(hp[i]===u&&hp[i+1]===v){
+    return step.done? "acc" : (step.spurNode? "spur":"acc");
+  }
+  // root path edge
+  const rp=step.rootPath;
+  for(let i=0;i+1<rp.length;i++) if(rp[i]===u&&rp[i+1]===v) return "root";
+  // accepted edges
+  for(const p of step.accepted){
+    for(let i=0;i+1<p.nodes.length;i++) if(p.nodes[i]===u&&p.nodes[i+1]===v) return "accfaint";
+  }
+  return "def";
+}
+const EC={def:"#3a4250",acc:"#3fb950",spur:"#ffa657",root:"#d29922",rem:"#f85149",accfaint:"#274b30"};
+function render(step){
+  if(!step){renderBlank(); return;}
+  let s="";
+  // edges
+  for(const [u,v,w] of EDGES){
+    const a=NODES[u], b=NODES[v];
+    const cls=edgeIn(step,u,v);
+    const col=EC[cls];
+    const dash=(cls==="rem")?'stroke-dasharray="6 4"':'';
+    const wdt=(cls==="acc"||cls==="spur"||cls==="root")?3.2:1.6;
+    // shorten to node radius
+    const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy), ux=dx/len, uy=dy/len, r=20;
+    const x1=a.x+ux*r, y1=a.y+uy*r, x2=b.x-ux*r, y2=b.y-uy*r;
+    s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${wdt}" ${dash} marker-end="url(#arr-${cls})"/>`;
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    s+=`<circle cx="${mx}" cy="${my}" r="9" fill="#0a0e14"/><text x="${mx}" y="${my+4}" fill="${col}" font-size="11" text-anchor="middle">${w}</text>`;
+  }
+  // nodes
+  for(const n in NODES){
+    const p=NODES[n];
+    let fill="#1f2733", stroke="#58a6ff", tcol="#e6edf3";
+    if(step.removedNodes.has(n)){fill="#3a1518"; stroke="#f85149";}
+    if(n===step.spurNode){fill="#2a1d3d"; stroke="#bc8cff";}
+    if(n===SRC){stroke="#3fb950";}
+    if(n===DST){stroke="#ffa657";}
+    s+=`<circle cx="${p.x}" cy="${p.y}" r="20" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+    s+=`<text x="${p.x}" y="${p.y+5}" fill="${tcol}" font-size="15" font-weight="bold" text-anchor="middle">${n}</text>`;
+  }
+  svg.innerHTML=defs()+s;
+}
+function defs(){
+  let d='<defs>';
+  for(const k in EC){
+    d+=`<marker id="arr-${k}" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="${EC[k]}"/></marker>`;
+  }
+  return d+'</defs>';
+}
+function renderBlank(){
+  const blank={removedEdges:new Set(),removedNodes:new Set(),highlightPath:[],rootPath:[],accepted:[],spurNode:null};
+  render(blank);
+}
+function updateSidebar(step,idx){
+  document.getElementById('panel').innerHTML=step.desc;
+  document.getElementById('stepN').textContent=idx+1;
+  document.getElementById('spurN').textContent=step.spurCount;
+  document.getElementById('aN').textContent=step.accepted.length;
+  document.getElementById('bN').textContent=step.candidates.length;
+  let sets="A = [<br>";
+  step.accepted.forEach((p,i)=>{sets+=`&nbsp;&nbsp;<span class="accepted">${i}: ${p.nodes.join("→")} (${p.cost})</span><br>`;});
+  sets+="]<br>B = [<br>";
+  step.candidates.slice().sort((a,b)=>a.cost-b.cost).forEach(c=>{sets+=`&nbsp;&nbsp;<span class="cand">${c.nodes.join("→")} (${c.cost})</span><br>`;});
+  sets+="]";
+  document.getElementById('sets').innerHTML=sets;
+}
+function addLog(step,idx){
+  const log=document.getElementById('log');
+  const div=document.createElement('div');
+  div.innerHTML=`[${idx+1}] `+step.desc.replace(/<[^>]+>/g,'');
+  log.insertBefore(div, log.firstChild);
+}
+
+// ===== CONTROLS =====
+let idx=0, running=false, timer=null;
+function speed(){return 1300-document.getElementById('speed').value*110;}
+function start(){
+  if(steps.length===0) genSteps();
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  loop();
+}
+function loop(){
+  if(!running||idx>=steps.length){pause(); return;}
+  const s=steps[idx]; render(s); updateSidebar(s,idx); addLog(s,idx);
+  idx++;
+  timer=setTimeout(loop,speed());
+}
+function stepFwd(){
+  if(steps.length===0) genSteps();
+  if(idx<steps.length){const s=steps[idx]; render(s); updateSidebar(s,idx); addLog(s,idx); idx++;}
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); idx=0; steps=[];
+  document.getElementById('log').innerHTML='';
+  document.getElementById('stepN').textContent='0';
+  document.getElementById('stepT').textContent='—';
+  document.getElementById('spurN').textContent='0';
+  document.getElementById('aN').textContent='0';
+  document.getElementById('bN').textContent='0';
+  document.getElementById('sets').innerHTML='A = [ ]<br>B = [ ]';
+  document.getElementById('panel').innerHTML='Press <span class="hl">Start</span> to run Yen\'s algorithm, or <span class="hl">Step</span> to advance one step at a time.';
+  renderBlank();
+}
+
+// ===== INIT =====
+renderBlank();
+</script>
+</body>
+</html>
