@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Euler Tour Technique — Tree Flattening Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  }
+  .badge b { color: var(--blue); }
+
+  main {
+    display: grid; grid-template-columns: 300px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1040px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+
+  select, input[type="number"] {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  }
+  button {
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer;
+    transition: all 0.15s ease; flex: 1;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { border-color: var(--blue); color: var(--blue); }
+  button.success { border-color: var(--green); color: var(--green); }
+  button.warn    { border-color: var(--yellow); color: var(--yellow); }
+  button.danger  { border-color: var(--red); color: var(--red); }
+
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .speed-row input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; }
+  #vis { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .vis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .vis-grid { grid-template-columns: 1fr; } }
+
+  svg { width: 100%; height: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+
+  .node circle { transition: all 0.25s ease; }
+  .node text { font-size: 13px; font-weight: 600; fill: var(--text); }
+  .node .stamp { font-size: 9px; fill: var(--muted); }
+
+  /* node states */
+  .n-default { fill: #21262d; stroke: var(--border); stroke-width: 2; }
+  .n-current { fill: rgba(88,166,255,0.25); stroke: var(--blue); stroke-width: 3; }
+  .n-done    { fill: rgba(63,185,80,0.18); stroke: var(--green); stroke-width: 2; }
+  .n-subtree { fill: rgba(188,140,255,0.30); stroke: var(--purple); stroke-width: 3; }
+  .edge { stroke: var(--border); stroke-width: 2; }
+  .edge.tree-walk { stroke: var(--yellow); stroke-width: 3; }
+
+  /* flattened array */
+  .array-wrap { display: flex; flex-direction: column; gap: 14px; }
+  .arr-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 6px; }
+  .arr-row { display: flex; flex-wrap: wrap; gap: 3px; }
+  .cell {
+    min-width: 34px; height: 42px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; transition: all 0.2s ease; position: relative;
+  }
+  .cell .idx { font-size: 9px; color: var(--muted); position: absolute; top: 2px; }
+  .cell .val { margin-top: 6px; }
+  .cell.filled { border-color: var(--green); color: var(--green); background: rgba(63,185,80,0.10); }
+  .cell.in-range { border-color: var(--purple); background: rgba(188,140,255,0.22); color: var(--purple); }
+  .cell.range-edge { box-shadow: 0 0 0 2px var(--purple); }
+  .cell.bit-touch { border-color: var(--orange); color: var(--orange); background: rgba(255,166,87,0.16); }
+
+  .info-bar {
+    margin-top: 14px; padding: 12px 14px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.5;
+    min-height: 44px;
+  }
+  .info-bar code { color: var(--yellow); }
+
+  .stats-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .stat {
+    font-size: 12px; color: var(--muted); padding: 4px 10px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border);
+  }
+  .stat b { color: var(--text); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 11px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; border: 2px solid; }
+  .dot.d-cur { background: rgba(88,166,255,0.25); border-color: var(--blue); }
+  .dot.d-done { background: rgba(63,185,80,0.18); border-color: var(--green); }
+  .dot.d-sub { background: rgba(188,140,255,0.30); border-color: var(--purple); }
+  .dot.d-bit { background: rgba(255,166,87,0.16); border-color: var(--orange); }
+
+  #bigo { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td code { color: var(--blue); font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log { max-height: 200px; overflow-y: auto; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12px; }
+  #log div { padding: 3px 0; border-bottom: 1px solid rgba(48,54,61,0.5); color: var(--muted); }
+  #log div b { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Euler Tour Technique — Tree Flattening (tin / tout)</h1>
+  <div class="badges">
+    <span class="badge">Build <b>O(n)</b></span>
+    <span class="badge">Subtree query <b>O(log n)</b></span>
+    <span class="badge">Ancestor test <b>O(1)</b></span>
+    <span class="badge">Space <b>O(n)</b></span>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel">
+    <div class="control-group">
+      <h2>Tree</h2>
+      <div class="control-row">
+        <select id="treeSelect">
+          <option value="sample">Sample (7 nodes)</option>
+          <option value="chain">Chain (6 nodes)</option>
+          <option value="star">Star (7 nodes)</option>
+          <option value="binary">Binary (7 nodes)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Flatten (DFS)</h2>
+      <div class="control-row">
+        <button class="primary" id="btnRun">Run DFS</button>
+        <button id="btnStep">Step</button>
+      </div>
+      <div class="control-row">
+        <button class="warn" id="btnPause" disabled>Pause</button>
+        <button class="danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="120" max="1400" value="620" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Subtree Query</h2>
+      <div class="control-row">
+        <input type="number" id="subtreeNode" value="1" min="0" max="6" />
+        <button class="success" id="btnSubtree">Highlight</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.6;">
+        Maps subtree of <code style="color:var(--purple)">v</code> to the
+        contiguous range <code style="color:var(--purple)">[tin[v], tout[v]]</code>
+        and runs a Fenwick subtree-sum query over it.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Point Update</h2>
+      <div class="control-row">
+        <input type="number" id="updNode" value="4" min="0" max="6" />
+        <input type="number" id="updVal" value="99" />
+      </div>
+      <div class="control-row">
+        <button id="btnUpdate">Fenwick update</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>The Idea</h2>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+        <code style="color:var(--blue)">tin[v]</code> stamped on enter,
+        <code style="color:var(--green)">tout[v]</code> on leave.<br>
+        Subtree of v = <code style="color:var(--purple)">order[tin[v]..tout[v]]</code><br>
+        Ancestor: <code style="color:var(--yellow)">tin[u]&le;tin[w] &amp; tout[w]&le;tout[u]</code>
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT -->
+  <div class="right-col">
+    <section id="vis">
+      <div class="vis-grid">
+        <div>
+          <div class="arr-title">Tree (DFS visit order)</div>
+          <svg id="tree" viewBox="0 0 460 360" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="array-wrap">
+          <div>
+            <div class="arr-title">Flattened array — order[t] (node entered at time t)</div>
+            <div class="arr-row" id="orderRow"></div>
+          </div>
+          <div>
+            <div class="arr-title">flat[t] = value of order[t] (Fenwick is built over this)</div>
+            <div class="arr-row" id="valRow"></div>
+          </div>
+          <div>
+            <div class="arr-title">tin / tout per node</div>
+            <div class="arr-row" id="stampRow"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-bar" id="info">
+        Pick a tree, then <code>Run DFS</code> or <code>Step</code> to flatten it. Watch
+        <code>tin</code>/<code>tout</code> fill in and each subtree become a contiguous range.
+      </div>
+
+      <div class="stats-row">
+        <div class="stat">timer: <b id="statTimer">0</b></div>
+        <div class="stat">current: <b id="statCur">-</b></div>
+        <div class="stat">nodes done: <b id="statDone">0</b></div>
+        <div class="stat">subtree sum: <b id="statSum">-</b></div>
+        <div class="stat">Fenwick ops: <b id="statBit">0</b></div>
+      </div>
+
+      <div class="legend">
+        <span><span class="dot d-cur"></span>current node / tin</span>
+        <span><span class="dot d-done"></span>finished (tout set)</span>
+        <span><span class="dot d-sub"></span>selected subtree range</span>
+        <span><span class="dot d-bit"></span>Fenwick cell touched</span>
+      </div>
+    </section>
+
+    <section id="bigo">
+      <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 12px 0;font-weight:600;">Complexity</h2>
+      <table>
+        <thead><tr><th>Operation</th><th>Cost</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td>Build flatten (DFS)</td><td><code>O(n)</code></td><td>one traversal, tin/tout</td></tr>
+          <tr><td>Subtree &rarr; range</td><td><code>O(1)</code></td><td>read [tin[v], tout[v]]</td></tr>
+          <tr><td>Subtree size</td><td><code>O(1)</code></td><td>tout[v] - tin[v] + 1</td></tr>
+          <tr><td>Ancestor test</td><td><code>O(1)</code></td><td>interval containment</td></tr>
+          <tr><td>Subtree sum</td><td><code>O(log n)</code></td><td>Fenwick range query</td></tr>
+          <tr><td>Point update</td><td><code>O(log n)</code></td><td>Fenwick add at tin[v]</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// ===================== TREES =====================
+const TREES = {
+  sample: { n: 7, edges: [[0,1],[0,2],[0,3],[1,4],[1,5],[3,6]], root: 0 },
+  chain:  { n: 6, edges: [[0,1],[1,2],[2,3],[3,4],[4,5]], root: 0 },
+  star:   { n: 7, edges: [[0,1],[0,2],[0,3],[0,4],[0,5],[0,6]], root: 0 },
+  binary: { n: 7, edges: [[0,1],[0,2],[1,3],[1,4],[2,5],[2,6]], root: 0 },
+};
+
+const VALUES = [10, 20, 30, 40, 50, 60, 70]; // by node id (extra ignored)
+
+// ===================== STATE =====================
+let tree, adj, n, root;
+let tin, tout, order, depthArr, flat;
+let positions;     // svg coords per node
+let steps;         // precomputed DFS steps
+let stepIdx;
+let running = false, timer = null;
+let bit;           // Fenwick over flat (length n+1)
+let bitOps = 0;
+let nodeState;     // per-node: 'default' | 'current' | 'done'
+let walkEdges;     // set of "a-b" highlighted edges
+let curTimer;      // live DFS timer during stepping
+
+// ===================== DOM =====================
+const $ = id => document.getElementById(id);
+const svg = $("tree");
+
+function setInfo(html) { $("info").innerHTML = html; }
+function addLog(html) {
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  $("log").prepend(d);
+}
+
+// ===================== LAYOUT (compute node positions) =====================
+function computeLayout() {
+  // BFS to get depth + an x-slot per node via in-order-ish placement
+  const children = Array.from({length: n}, () => []);
+  const par = new Array(n).fill(-1);
+  const seen = new Array(n).fill(false);
+  const stack = [root]; seen[root] = true;
+  const ord = [];
+  // build rooted children using DFS over adj (consistent order)
+  (function build(v, p) {
+    par[v] = p; ord.push(v);
+    for (const c of adj[v]) if (c !== p) { children[v].push(c); build(c, v); }
+  })(root, -1);
+
+  const depth = new Array(n).fill(0);
+  for (const v of ord) if (par[v] !== -1) depth[v] = depth[par[v]] + 1;
+  const maxDepth = Math.max(...depth);
+
+  // assign x by leaf order (a simple tidy-ish layout)
+  let leafX = 0;
+  const x = new Array(n).fill(0);
+  (function assign(v) {
+    if (children[v].length === 0) { x[v] = leafX++; return; }
+    let sum = 0;
+    for (const c of children[v]) { assign(c); sum += x[c]; }
+    x[v] = sum / children[v].length;
+  })(root);
+
+  const maxX = Math.max(...x, 1);
+  const W = 460, H = 360, padX = 40, padY = 40;
+  positions = new Array(n);
+  for (let v = 0; v < n; v++) {
+    const px = padX + (maxX === 0 ? W/2 - padX : (x[v] / maxX) * (W - 2*padX));
+    const py = padY + (maxDepth === 0 ? 0 : (depth[v] / maxDepth) * (H - 2*padY));
+    positions[v] = { x: px, y: py, parent: par[v] };
+  }
+}
+
+// ===================== DFS STEP GENERATION =====================
+// Each step: { type:'enter'|'leave', v, timer, tinSnapshot, toutSnapshot, desc }
+function generateSteps() {
+  steps = [];
+  const tinS = new Array(n).fill(null);
+  const toutS = new Array(n).fill(null);
+  let t = 0;
+  (function dfs(v, p) {
+    tinS[v] = t;
+    steps.push({
+      type: "enter", v, timer: t,
+      tin: tinS.slice(), tout: toutS.slice(),
+      edge: p === -1 ? null : [p, v],
+      desc: `<b>Enter</b> node ${v}: set <code>tin[${v}] = ${t}</code> (timer &rarr; ${t+1})`
+    });
+    t++;
+    for (const c of adj[v]) if (c !== p) dfs(c, v);
+    toutS[v] = t - 1;
+    steps.push({
+      type: "leave", v, timer: t,
+      tin: tinS.slice(), tout: toutS.slice(),
+      edge: null,
+      desc: `<b>Leave</b> node ${v}: set <code>tout[${v}] = ${t-1}</code>. Subtree of ${v} = <code>[${tinS[v]}, ${t-1}]</code>`
+    });
+  })(root, -1);
+}
+
+// ===================== APPLY A STEP =====================
+function applyStep(s) {
+  tin = s.tin.slice();
+  tout = s.tout.slice();
+  curTimer = s.timer;
+  // node states
+  nodeState = new Array(n).fill("default");
+  for (let v = 0; v < n; v++) {
+    if (tout[v] !== null) nodeState[v] = "done";
+    else if (tin[v] !== null) nodeState[v] = "current-path";
+  }
+  nodeState[s.v] = "current";
+  walkEdges = new Set();
+  if (s.edge) walkEdges.add(s.edge[0] + "-" + s.edge[1]);
+
+  setInfo(s.desc);
+  $("statTimer").textContent = s.timer;
+  $("statCur").textContent = s.v;
+  $("statDone").textContent = tout.filter(x => x !== null).length;
+  render();
+}
+
+// ===================== FINALIZE (after last step) =====================
+function finalizeFlatten() {
+  // build order[], flat[], depth[], Fenwick
+  order = new Array(n);
+  flat = new Array(n).fill(0);
+  for (let v = 0; v < n; v++) {
+    order[tin[v]] = v;
+    flat[tin[v]] = (VALUES[v] !== undefined ? VALUES[v] : v + 1);
+  }
+  bit = new Array(n + 1).fill(0);
+  bitOps = 0;
+  for (let v = 0; v < n; v++) bitAdd(tin[v], flat[tin[v]]);
+  $("statBit").textContent = bitOps;
+}
+
+// ===================== FENWICK =====================
+function bitAdd(i, delta) {
+  for (i++; i < bit.length; i += i & (-i)) { bit[i] += delta; bitOps++; }
+}
+function bitPrefix(i) {
+  let s = 0;
+  for (i++; i > 0; i -= i & (-i)) { s += bit[i]; bitOps++; }
+  return s;
+}
+function bitRange(l, r) { return bitPrefix(r) - bitPrefix(l - 1); }
+
+// ===================== RENDER =====================
+let rangeHi = null;   // {l, r}
+let bitTouch = new Set();
+
+function render() {
+  renderTree();
+  renderArrays();
+}
+
+function renderTree() {
+  let html = "";
+  // edges first
+  for (let v = 0; v < n; v++) {
+    const p = positions[v].parent;
+    if (p === -1) continue;
+    const a = positions[p], b = positions[v];
+    const walk = walkEdges && (walkEdges.has(p + "-" + v) || walkEdges.has(v + "-" + p));
+    html += `<line class="edge ${walk ? "tree-walk" : ""}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" />`;
+  }
+  // nodes
+  for (let v = 0; v < n; v++) {
+    const pos = positions[v];
+    let cls = "n-default";
+    const st = nodeState ? nodeState[v] : "default";
+    if (rangeHi && tin && tin[v] !== null && tin[v] >= rangeHi.l && tin[v] <= rangeHi.r) cls = "n-subtree";
+    else if (st === "current") cls = "n-current";
+    else if (st === "done" || st === "current-path") cls = "n-done";
+
+    const tinTxt = (tin && tin[v] !== null) ? tin[v] : "";
+    const toutTxt = (tout && tout[v] !== null) ? tout[v] : "";
+    const stamp = (tinTxt !== "" || toutTxt !== "") ? `${tinTxt}/${toutTxt}` : "";
+    html += `<g class="node">
+      <circle class="${cls}" cx="${pos.x}" cy="${pos.y}" r="18" />
+      <text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle">${v}</text>
+      <text class="stamp" x="${pos.x}" y="${pos.y + 30}" text-anchor="middle">${stamp}</text>
+    </g>`;
+  }
+  svg.innerHTML = html;
+}
+
+function renderArrays() {
+  // order row
+  const orderRow = $("orderRow");
+  const valRow = $("valRow");
+  orderRow.innerHTML = "";
+  valRow.innerHTML = "";
+  for (let t = 0; t < n; t++) {
+    const filled = order && order[t] !== undefined;
+    const inRange = rangeHi && t >= rangeHi.l && t <= rangeHi.r;
+    const edge = rangeHi && (t === rangeHi.l || t === rangeHi.r);
+    const touch = bitTouch.has(t);
+
+    const c1 = document.createElement("div");
+    c1.className = "cell" + (filled ? " filled" : "") + (inRange ? " in-range" : "") + (edge ? " range-edge" : "");
+    c1.innerHTML = `<span class="idx">${t}</span><span class="val">${filled ? order[t] : "·"}</span>`;
+    orderRow.appendChild(c1);
+
+    const c2 = document.createElement("div");
+    c2.className = "cell" + (filled ? " filled" : "") + (inRange ? " in-range" : "") + (touch ? " bit-touch" : "");
+    c2.innerHTML = `<span class="idx">${t}</span><span class="val">${filled ? flat[t] : "·"}</span>`;
+    valRow.appendChild(c2);
+  }
+  // stamp row: tin/tout per node
+  const stampRow = $("stampRow");
+  stampRow.innerHTML = "";
+  for (let v = 0; v < n; v++) {
+    const c = document.createElement("div");
+    c.className = "cell" + ((tin && tin[v] !== null) ? " filled" : "");
+    c.style.minWidth = "50px";
+    const ti = (tin && tin[v] !== null) ? tin[v] : "·";
+    const to = (tout && tout[v] !== null) ? tout[v] : "·";
+    c.innerHTML = `<span class="idx">n${v}</span><span class="val">${ti},${to}</span>`;
+    stampRow.appendChild(c);
+  }
+}
+
+// ===================== CONTROLS =====================
+function loadTree(key) {
+  tree = TREES[key];
+  n = tree.n; root = tree.root;
+  adj = Array.from({length: n}, () => []);
+  for (const [a, b] of tree.edges) { adj[a].push(b); adj[b].push(a); }
+  // sort neighbors for deterministic DFS order
+  for (let v = 0; v < n; v++) adj[v].sort((x, y) => x - y);
+  computeLayout();
+  generateSteps();
+  reset();
+  $("subtreeNode").max = n - 1;
+  $("updNode").max = n - 1;
+}
+
+function reset() {
+  pause();
+  stepIdx = 0;
+  tin = new Array(n).fill(null);
+  tout = new Array(n).fill(null);
+  order = undefined; flat = undefined; bit = undefined;
+  nodeState = new Array(n).fill("default");
+  walkEdges = new Set();
+  rangeHi = null; bitTouch = new Set();
+  curTimer = 0; bitOps = 0;
+  $("statTimer").textContent = "0";
+  $("statCur").textContent = "-";
+  $("statDone").textContent = "0";
+  $("statSum").textContent = "-";
+  $("statBit").textContent = "0";
+  setInfo("Pick a tree, then <code>Run DFS</code> or <code>Step</code> to flatten it. Watch <code>tin</code>/<code>tout</code> fill in and each subtree become a contiguous range.");
+  render();
+}
+
+function stepForward() {
+  if (stepIdx >= steps.length) {
+    if (!order) { finalizeFlatten(); render(); addLog("Flatten <b>complete</b> &mdash; Fenwick built over flat[]."); }
+    return false;
+  }
+  const s = steps[stepIdx++];
+  applyStep(s);
+  addLog(s.desc);
+  if (stepIdx >= steps.length) {
+    finalizeFlatten();
+    render();
+    addLog("Flatten <b>complete</b> &mdash; Fenwick built over flat[].");
+  }
+  return true;
+}
+
+function runLoop() {
+  if (!running) return;
+  if (!stepForward()) { pause(); return; }
+  timer = setTimeout(runLoop, +$("speed").value);
+}
+
+function run() {
+  if (stepIdx >= steps.length) reset();
+  running = true;
+  $("btnRun").disabled = true;
+  $("btnPause").disabled = false;
+  runLoop();
+}
+
+function pause() {
+  running = false;
+  if (timer) clearTimeout(timer);
+  $("btnRun").disabled = false;
+  $("btnPause").disabled = true;
+}
+
+// ===================== SUBTREE QUERY =====================
+function highlightSubtree() {
+  if (!order) {
+    // finish the flatten first
+    while (stepIdx < steps.length) stepForward();
+    if (!order) finalizeFlatten();
+  }
+  const v = Math.max(0, Math.min(n - 1, +$("subtreeNode").value));
+  const l = tin[v], r = tout[v];
+  rangeHi = { l, r };
+  // run Fenwick subtree-sum query, marking touched cells
+  bitTouch = new Set();
+  const before = bitOps;
+  markBitTouch(r);
+  if (l - 1 >= 0) markBitTouch(l - 1);
+  const sum = bitRange(l, r);
+  $("statSum").textContent = sum;
+  $("statBit").textContent = bitOps;
+  const size = r - l + 1;
+  setInfo(`Subtree of <code>${v}</code> = range <code>[${l}, ${r}]</code> (size ${size}). ` +
+          `Fenwick subtree-sum = <code>prefix(${r}) - prefix(${l-1})</code> = <b>${sum}</b> in O(log n).`);
+  addLog(`Subtree query node <b>${v}</b>: range [${l},${r}], sum = <b>${sum}</b> (${bitOps - before} BIT steps)`);
+  render();
+}
+
+// record which flat[] cells a Fenwick prefix(i) touches (for visualization)
+function markBitTouch(i) {
+  // The prefix walk touches BIT internal nodes; we approximate the *covered*
+  // flat range by marking [0..i], but to keep it readable we mark the endpoints.
+  for (let j = i + 1; j > 0; j -= j & (-j)) {
+    // BIT node j covers flat indices (j - lowbit(j) .. j-1) in 1-based -> 0-based
+    const cover = j - (j & (-j));
+    if (cover >= 0 && cover < n) bitTouch.add(cover);
+    if (j - 1 >= 0 && j - 1 < n) bitTouch.add(j - 1);
+  }
+}
+
+// ===================== POINT UPDATE =====================
+function pointUpdate() {
+  if (!order) {
+    while (stepIdx < steps.length) stepForward();
+    if (!order) finalizeFlatten();
+  }
+  const v = Math.max(0, Math.min(n - 1, +$("updNode").value));
+  const newVal = +$("updVal").value;
+  const oldVal = flat[tin[v]];
+  const delta = newVal - oldVal;
+  flat[tin[v]] = newVal;
+  bitTouch = new Set();
+  const before = bitOps;
+  // mark touched cells of the add walk
+  for (let j = tin[v] + 1; j < bit.length; j += j & (-j)) {
+    const cover = j - (j & (-j));
+    if (cover >= 0 && cover < n) bitTouch.add(cover);
+  }
+  bitAdd(tin[v], delta);
+  $("statBit").textContent = bitOps;
+  setInfo(`Update node <code>${v}</code> (at time tin=${tin[v]}): value ${oldVal} &rarr; <b>${newVal}</b>, ` +
+          `delta ${delta >= 0 ? "+" : ""}${delta}. Fenwick add at index ${tin[v]} in O(log n).`);
+  addLog(`Update node <b>${v}</b>: ${oldVal} &rarr; ${newVal} (delta ${delta}), ${bitOps - before} BIT steps`);
+  // refresh current subtree sum if a range is highlighted
+  if (rangeHi) {
+    const sum = bitRange(rangeHi.l, rangeHi.r);
+    $("statSum").textContent = sum;
+  }
+  render();
+}
+
+// ===================== WIRE UP =====================
+$("treeSelect").addEventListener("change", e => loadTree(e.target.value));
+$("btnRun").addEventListener("click", run);
+$("btnStep").addEventListener("click", () => { pause(); stepForward(); });
+$("btnPause").addEventListener("click", pause);
+$("btnReset").addEventListener("click", () => { reset(); $("log").innerHTML = ""; });
+$("btnSubtree").addEventListener("click", highlightSubtree);
+$("btnUpdate").addEventListener("click", pointUpdate);
+
+// ===================== INIT =====================
+loadTree("sample");
+</script>
+</body>
+</html>
