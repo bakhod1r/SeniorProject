@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Merge Sort Tree — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.8rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:14px;text-align:center;max-width:900px;font-size:.9rem;line-height:1.5}
+.badges{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.time{color:var(--yellow);border-color:var(--yellow)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.warn{color:var(--red);border-color:var(--red)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.9rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+input[type=text],input[type=number]{padding:7px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.9rem}
+input[type=text]{width:300px}
+input[type=number]{width:64px}
+label{color:var(--muted);font-size:.85rem}
+.speed{display:flex;align-items:center;gap:8px}
+.speed input[type=range]{accent-color:var(--blue)}
+.panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1180px;margin-bottom:14px}
+.panel h3{color:var(--blue);font-size:.92rem;margin-bottom:10px;font-family:monospace}
+.arr-row{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+.acell{min-width:46px;height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--border);border-radius:6px;font-family:monospace;transition:all .25s;position:relative}
+.acell .av{font-size:1rem;font-weight:700}
+.acell .ai{font-size:.58rem;color:var(--muted);position:absolute;top:1px;left:3px}
+.acell.inrange{border-color:var(--purple)}
+.acell.counted{border-color:var(--green);background:rgba(63,185,80,.16)}
+.acell.counted .av{color:var(--green)}
+#treeWrap{width:100%;max-width:1180px;overflow-x:auto;background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+.level{display:flex;justify-content:center;gap:10px;margin-bottom:14px;flex-wrap:nowrap}
+.node{min-width:64px;border:2px solid var(--border);border-radius:8px;background:var(--bg);padding:5px 7px;display:flex;flex-direction:column;align-items:center;transition:all .25s;position:relative}
+.node .rng{font-size:.6rem;color:var(--muted);font-family:monospace;margin-bottom:3px}
+.node .list{display:flex;gap:3px;flex-wrap:wrap;justify-content:center}
+.node .e{font-size:.72rem;font-family:monospace;padding:1px 4px;border-radius:3px;background:var(--surface);color:var(--text);transition:all .2s}
+.node.disjoint{opacity:.32}
+.node.partial{border-color:var(--yellow);background:rgba(210,153,34,.10)}
+.node.canonical{border-color:var(--green);background:rgba(63,185,80,.12);box-shadow:0 0 0 2px rgba(63,185,80,.25)}
+.node.canonical .rng{color:var(--green)}
+.node .e.le{background:var(--green);color:var(--bg);font-weight:700}
+.node .e.cut{outline:2px solid var(--purple)}
+.stats{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:11px 18px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+.info{font-family:monospace;font-size:.88rem;line-height:1.65}
+.info .hl{color:var(--yellow);font-weight:600}
+.info .ok{color:var(--green);font-weight:600}
+.info .pp{color:var(--purple);font-weight:600}
+table.bigo{width:100%;border-collapse:collapse;font-size:.84rem}
+table.bigo th,table.bigo td{border:1px solid var(--border);padding:6px 10px;text-align:left}
+table.bigo th{color:var(--blue);background:var(--bg)}
+table.bigo td.c{font-family:monospace}
+.cgreen{color:var(--green)}.cyellow{color:var(--yellow)}.cred{color:var(--red)}
+#log{font-family:monospace;font-size:.8rem;max-height:150px;overflow-y:auto;line-height:1.55}
+#log div{padding:2px 0;border-bottom:1px solid rgba(48,54,61,.5)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:6px;text-align:center;max-width:880px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>Merge Sort Tree</h1>
+<p class="subtitle">A segment tree whose every node stores the <b>sorted list</b> of its range (built like merge sort). A range query <code>countLE(l, r, k)</code> decomposes <code>[l,r]</code> into O(log n) canonical nodes and <b>binary-searches "count ≤ k"</b> in each, summing the results — O(log² n).</p>
+
+<div class="badges">
+  <span class="badge time">Query: O(log² n)</span>
+  <span class="badge time">Build: O(n log n)</span>
+  <span class="badge space">Space: O(n log n)</span>
+  <span class="badge warn">Static (no updates)</span>
+</div>
+
+<div class="input-control">
+  <input type="text" id="arrIn" value="2,6,4,1,9,3,7,5" placeholder="Array, e.g. 2,6,4,1,9,3">
+  <button onclick="loadArr()">Load &amp; Build</button>
+  <button onclick="randomArr()" class="secondary">Random</button>
+</div>
+
+<div class="input-control">
+  <label>l</label><input type="number" id="qL" value="1">
+  <label>r</label><input type="number" id="qR" value="6">
+  <label>k</label><input type="number" id="qK" value="5">
+  <button onclick="startQuery()">Run countLE(l, r, k)</button>
+  <button onclick="stepQuery()" class="secondary">Step</button>
+  <button onclick="resetQuery()" class="secondary">↺ Reset</button>
+  <span class="speed"><label>Speed</label><input type="range" id="speed" min="1" max="10" value="6"></span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color"></div>Idle node</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.18);border-color:var(--yellow)"></div>Partial (recurse)</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.18);border-color:var(--green)"></div>Canonical (binary-search here)</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Element ≤ k (counted)</div>
+  <div class="legend-item"><div class="legend-color" style="opacity:.32"></div>Disjoint (skipped)</div>
+</div>
+
+<div class="panel stats">
+  <div><div class="stat-label">n</div><div class="stat-value" id="sN">0</div></div>
+  <div><div class="stat-label">levels</div><div class="stat-value" id="sLevels">0</div></div>
+  <div><div class="stat-label">canonical nodes</div><div class="stat-value" id="sCanon">0</div></div>
+  <div><div class="stat-label">binary searches</div><div class="stat-value" id="sBin">0</div></div>
+  <div><div class="stat-label">running answer</div><div class="stat-value" id="sAns">-</div></div>
+</div>
+
+<div class="panel">
+  <h3>A (0-indexed array)</h3>
+  <div class="arr-row" id="arrRow"></div>
+</div>
+
+<div id="treeWrap"></div>
+
+<div class="panel">
+  <h3>Trace</h3>
+  <div class="info" id="info">Press <span class="hl">Run countLE</span> to decompose [l,r] into canonical nodes and binary-search each node's sorted list for the count of elements ≤ k. Use <span class="hl">Step</span> to advance one canonical node at a time.</div>
+</div>
+
+<div class="panel">
+  <h3>Big-O</h3>
+  <table class="bigo">
+    <tr><th>Operation</th><th>Time</th><th>Space</th><th>Notes</th></tr>
+    <tr><td>Build</td><td class="c cyellow">O(n log n)</td><td class="c cyellow">O(n log n)</td><td>each element once per level</td></tr>
+    <tr><td>countLE(l,r,k)</td><td class="c cyellow">O(log² n)</td><td class="c cgreen">O(1)</td><td>log n nodes × log n binary search</td></tr>
+    <tr><td>countInBand(l,r,a,b)</td><td class="c cyellow">O(log² n)</td><td class="c cgreen">O(1)</td><td>countLE(b) − countLE(a−1)</td></tr>
+    <tr><td>k-th smallest (naive)</td><td class="c cyellow">O(log³ n)</td><td class="c cgreen">O(1)</td><td>binary search on answer value</td></tr>
+    <tr><td>k-th (frac. cascading)</td><td class="c cgreen">O(log n)</td><td class="c cyellow">O(n log n)</td><td>one search + O(1) bridge hops</td></tr>
+    <tr><td>point update</td><td class="c cred">unsupported</td><td class="c cred">—</td><td>static array</td></tr>
+  </table>
+</div>
+
+<div class="panel">
+  <h3>Operation log</h3>
+  <div id="log"></div>
+</div>
+
+<p class="footer-note">Merge sort tree answers invertible-and-order range queries (count ≤ k, count in band, k-th smallest). Range band = countLE(r,b) − countLE(l−1...,a−1). It is static: one update would re-sort O(log n) lists touching O(n) elements. For updates use sqrt decomposition; for tight memory use a wavelet tree; for O(log n) k-th smallest use a persistent segment tree.</p>
+
+<script>
+// ---------- model ----------
+let A=[2,6,4,1,9,3,7,5];
+let nodes=[];        // nodes[v] = {lo,hi,list,level,leftV,rightV}
+let n=0, maxLevel=0;
+let queryL=1, queryR=6, queryK=5;
+let plan=[];         // ordered list of canonical node ids to process in Step mode
+let planIdx=0, runningAns=0, binCount=0;
+let nodeState={};    // v -> 'disjoint'|'partial'|'canonical'
+let countedArr=new Set();
+let timer=null, autoRunning=false;
+
+function lowbitLevels(){ return Math.ceil(Math.log2(Math.max(1,n)))+1; }
+
+// build flat tree with 1-based numbering
+function build(){
+  n=A.length;
+  nodes=new Array(4*Math.max(1,n));
+  if(n>0) buildRec(1,0,n-1,0);
+  maxLevel=0;
+  for(let v=1;v<nodes.length;v++){ if(nodes[v]) maxLevel=Math.max(maxLevel,nodes[v].level); }
+}
+function buildRec(v,lo,hi,level){
+  if(lo===hi){ nodes[v]={lo,hi,list:[A[lo]],level,leftV:-1,rightV:-1}; return; }
+  const mid=(lo+hi)>>1;
+  buildRec(2*v,lo,mid,level+1);
+  buildRec(2*v+1,mid+1,hi,level+1);
+  nodes[v]={lo,hi,list:mergeSorted(nodes[2*v].list,nodes[2*v+1].list),level,leftV:2*v,rightV:2*v+1};
+}
+function mergeSorted(x,y){
+  const out=[];let i=0,j=0;
+  while(i<x.length&&j<y.length){ if(x[i]<=y[j])out.push(x[i++]);else out.push(y[j++]); }
+  while(i<x.length)out.push(x[i++]); while(j<y.length)out.push(y[j++]); return out;
+}
+function upperBound(s,k){ let lo=0,hi=s.length; while(lo<hi){const m=(lo+hi)>>1; if(s[m]<=k)lo=m+1;else hi=m;} return lo; }
+
+// compute canonical-node plan for [l,r]
+function planQuery(l,r){
+  plan=[]; nodeState={};
+  function rec(v,lo,hi){
+    if(r<lo||hi<l){ nodeState[v]='disjoint'; markSubtreeDisjoint(v); return; }
+    if(l<=lo&&hi<=r){ nodeState[v]='canonical'; plan.push(v); return; }
+    nodeState[v]='partial';
+    const mid=(lo+hi)>>1;
+    rec(2*v,lo,mid); rec(2*v+1,mid+1,hi);
+  }
+  if(n>0) rec(1,0,n-1);
+}
+function markSubtreeDisjoint(v){
+  if(!nodes[v])return;
+  nodeState[v]='disjoint';
+  if(nodes[v].leftV>0){ markSubtreeDisjoint(nodes[v].leftV); markSubtreeDisjoint(nodes[v].rightV); }
+}
+
+// ---------- rendering ----------
+function renderArr(){
+  const row=document.getElementById('arrRow');
+  row.innerHTML=A.map((v,i)=>{
+    let cls='';
+    if(i>=queryL&&i<=queryR) cls+=' inrange';
+    if(countedArr.has(i)) cls+=' counted';
+    return `<div class="acell${cls}"><span class="ai">${i}</span><span class="av">${v}</span></div>`;
+  }).join('');
+}
+function renderTree(highlightV){
+  const wrap=document.getElementById('treeWrap');
+  // group nodes by level
+  const byLevel={};
+  for(let v=1;v<nodes.length;v++){
+    if(!nodes[v])continue;
+    (byLevel[nodes[v].level]=byLevel[nodes[v].level]||[]).push(v);
+  }
+  let html='';
+  for(let lvl=0;lvl<=maxLevel;lvl++){
+    const vs=(byLevel[lvl]||[]).sort((a,b)=>nodes[a].lo-nodes[b].lo);
+    html+='<div class="level">';
+    for(const v of vs){
+      const nd=nodes[v];
+      const st=nodeState[v]||'';
+      const isCanon=(st==='canonical');
+      const cutShow=(isCanon&&v===highlightV);
+      let listHtml=nd.list.map(e=>{
+        let ec='e';
+        if(isCanon){ if(e<=queryK) ec+=' le'; }
+        return `<span class="${ec}">${e}</span>`;
+      }).join('');
+      html+=`<div class="node ${st}"><div class="rng">[${nd.lo}..${nd.hi}]</div><div class="list">${listHtml}</div></div>`;
+    }
+    html+='</div>';
+  }
+  wrap.innerHTML=html;
+}
+function setInfo(h){ document.getElementById('info').innerHTML=h; }
+function addLog(s){ const l=document.getElementById('log'); const d=document.createElement('div'); d.innerHTML=s; l.insertBefore(d,l.firstChild); }
+function refreshStats(){
+  document.getElementById('sN').textContent=n;
+  document.getElementById('sLevels').textContent=lowbitLevels();
+  document.getElementById('sCanon').textContent=plan.length;
+  document.getElementById('sBin').textContent=binCount;
+  document.getElementById('sAns').textContent=(planIdx>0||binCount>0)?runningAns:'-';
+}
+
+// ---------- query control ----------
+function readQueryInputs(){
+  queryL=parseInt(document.getElementById('qL').value);
+  queryR=parseInt(document.getElementById('qR').value);
+  queryK=parseInt(document.getElementById('qK').value);
+}
+function validQuery(){
+  if(isNaN(queryL)||isNaN(queryR)||isNaN(queryK)) return false;
+  if(queryL<0||queryR>n-1||queryL>queryR) return false;
+  return true;
+}
+function prepQuery(){
+  readQueryInputs();
+  if(!validQuery()){ setInfo('<span style="color:var(--red)">Invalid query. Need 0 ≤ l ≤ r ≤ n−1.</span>'); return false; }
+  planQuery(queryL,queryR);
+  planIdx=0; runningAns=0; binCount=0; countedArr=new Set();
+  renderArr(); renderTree(-1); refreshStats();
+  return true;
+}
+function processCanonical(stepMode){
+  if(planIdx>=plan.length){
+    setInfo(`<span class="ok">Done. countLE(${queryL}, ${queryR}, ${queryK}) = ${runningAns}.</span> Summed ${plan.length} canonical node(s) via ${binCount} binary search(es) — O(log² n).`);
+    addLog(`<span class="ok">= ${runningAns}</span> for countLE(${queryL},${queryR},${queryK})`);
+    renderTree(-1);
+    return false;
+  }
+  const v=plan[planIdx];
+  const nd=nodes[v];
+  const c=upperBound(nd.list,queryK);
+  binCount++;
+  runningAns+=c;
+  // mark counted array cells in this node's range whose value ≤ k
+  for(let i=nd.lo;i<=nd.hi;i++){ if(A[i]<=queryK) countedArr.add(i); }
+  renderArr();
+  renderTree(v);
+  refreshStats();
+  setInfo(`Canonical node <span class="pp">[${nd.lo}..${nd.hi}]</span> sorted = [${nd.list.join(', ')}]. Binary-search upperBound(k=${queryK}) → <span class="ok">${c}</span> element(s) ≤ k. Running answer = <span class="hl">${runningAns}</span>.`);
+  addLog(`node [${nd.lo}..${nd.hi}]: +${c} → ${runningAns}`);
+  planIdx++;
+  return true;
+}
+function startQuery(){
+  if(autoRunning) return;
+  if(!prepQuery()) return;
+  addLog(`<span class="pp">countLE(${queryL},${queryR},${queryK})</span>: ${plan.length} canonical node(s)`);
+  autoRunning=true;
+  const tick=()=>{
+    const more=processCanonical(false);
+    if(more){ timer=setTimeout(tick, 1150-document.getElementById('speed').value*100); }
+    else{ autoRunning=false; }
+  };
+  tick();
+}
+function stepQuery(){
+  if(autoRunning) return;
+  if(plan.length===0||planIdx===0){ if(!prepQuery()) return; addLog(`<span class="pp">countLE(${queryL},${queryR},${queryK})</span>: ${plan.length} canonical node(s)`); }
+  processCanonical(true);
+}
+function resetQuery(){
+  if(timer) clearTimeout(timer);
+  autoRunning=false; plan=[]; planIdx=0; runningAns=0; binCount=0; nodeState={}; countedArr=new Set();
+  readQueryInputs();
+  renderArr(); renderTree(-1); refreshStats();
+  setInfo('Reset. Press <span class="hl">Run countLE</span> or <span class="hl">Step</span>.');
+}
+
+// ---------- input ----------
+function loadArr(){
+  const nums=document.getElementById('arrIn').value.split(/[ ,]+/).map(x=>parseInt(x)).filter(x=>!isNaN(x));
+  if(nums.length>0&&nums.length<=16){ A=nums; rebuild(); }
+  else setInfo('<span style="color:var(--red)">Enter 1–16 integers.</span>');
+}
+function randomArr(){
+  const size=Math.floor(Math.random()*5)+6;
+  A=Array.from({length:size},()=>Math.floor(Math.random()*20)+1);
+  document.getElementById('arrIn').value=A.join(',');
+  rebuild();
+}
+function rebuild(){
+  build();
+  document.getElementById('qR').value=Math.min(parseInt(document.getElementById('qR').value)||n-1,n-1);
+  document.getElementById('log').innerHTML='';
+  resetQuery();
+  addLog(`Built merge sort tree: n=${n}, levels=${lowbitLevels()}, root=[${nodes[1]?nodes[1].list.join(', '):''}]`);
+}
+
+// ---------- init ----------
+rebuild();
+</script>
+</body>
+</html>
