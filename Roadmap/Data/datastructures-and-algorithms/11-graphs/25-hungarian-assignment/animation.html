@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hungarian Algorithm (Kuhn-Munkres) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface); display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+
+  main {
+    display: grid; grid-template-columns: 320px 1fr; gap: 16px;
+    padding: 16px; max-width: 1640px; margin: 0 auto;
+  }
+  @media (max-width: 1040px) { main { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+  input[type="number"] {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; min-width: 0;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); }
+
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger { border-color: var(--red); color: var(--red); }
+  button.btn.warn { border-color: var(--yellow); color: var(--yellow); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .step-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .code-note { font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .code-note code {
+    background: rgba(88,166,255,0.15); color: var(--blue); padding: 1px 5px; border-radius: 3px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 11px;
+  }
+  .bigO-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .bigO-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .bigO-table td.v { text-align: right; font-family: "SF Mono", Menlo, monospace; }
+  .bigO-table td.cubic { color: var(--yellow); }
+  .bigO-table td.quad  { color: var(--orange); }
+  .bigO-table td.good  { color: var(--green); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  #vis { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-height: 440px; overflow-x: auto; }
+  .vis-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 1280px) { .vis-grid { grid-template-columns: 1fr; } }
+
+  svg#bip { width: 100%; height: 380px; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+  .edge { stroke: var(--border); stroke-width: 1.5; fill: none; }
+  .edge.tight { stroke: var(--purple); stroke-width: 2; }
+  .edge.matched { stroke: var(--green); stroke-width: 3.5; }
+  .edge.augment { stroke: var(--orange); stroke-width: 3.5; stroke-dasharray: 6 4; }
+  .edge-label { font-family: "SF Mono", Menlo, monospace; font-size: 10px; fill: var(--muted); pointer-events: none; }
+
+  .bnode circle { stroke-width: 2; fill: rgba(88,166,255,0.15); stroke: var(--blue); transition: all 0.25s ease; }
+  .bnode.reached circle { fill: rgba(210,153,34,0.3); stroke: var(--yellow); }
+  .bnode.root circle { fill: rgba(248,81,73,0.25); stroke: var(--red); }
+  .bnode text { font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600; fill: var(--text); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .pot-label { font-family: "SF Mono", Menlo, monospace; font-size: 11px; fill: var(--orange); }
+
+  /* matrix */
+  .matrix-wrap { overflow-x: auto; }
+  table.matrix { border-collapse: collapse; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+  table.matrix th, table.matrix td { width: 42px; height: 36px; text-align: center; border: 1px solid var(--border); transition: all 0.2s ease; }
+  table.matrix th { color: var(--muted); font-weight: 600; background: var(--bg); }
+  table.matrix th.pot { color: var(--orange); }
+  table.matrix td { background: rgba(88,166,255,0.06); color: var(--text); }
+  table.matrix td.tight { background: rgba(188,140,255,0.22); color: var(--purple); }
+  table.matrix td.matched { background: rgba(63,185,80,0.3); color: var(--green); border-color: var(--green); font-weight: 700; }
+  table.matrix td.delta { background: rgba(255,166,87,0.28); color: var(--orange); border-color: var(--orange); }
+  table.matrix td.row-reached { box-shadow: inset 0 0 0 2px rgba(210,153,34,0.5); }
+
+  .info-bar { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.5; min-height: 44px; color: var(--text); margin-top: 14px; }
+  .info-bar code { background: rgba(88,166,255,0.15); color: var(--blue); padding: 1px 6px; border-radius: 4px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+
+  .stats-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .stats-row .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-family: "SF Mono", Menlo, monospace; }
+  .stats-row .stat b { color: var(--text); }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; max-height: 180px; overflow-y: auto; font-family: "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.55; }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.upd { color: var(--green); }
+  #log .entry.delta { color: var(--orange); }
+  #log .entry.ok { color: var(--blue); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+  .legend .dot { width: 10px; height: 10px; border-radius: 3px; border: 2px solid; }
+  .dot.d-tight { background: rgba(188,140,255,0.22); border-color: var(--purple); }
+  .dot.d-matched { background: rgba(63,185,80,0.3); border-color: var(--green); }
+  .dot.d-delta { background: rgba(255,166,87,0.28); border-color: var(--orange); }
+  .dot.d-reached { background: rgba(210,153,34,0.3); border-color: var(--yellow); }
+
+  .toast { position: fixed; bottom: 18px; right: 18px; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100; }
+  .toast.show { opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hungarian Algorithm (Kuhn-Munkres) — Min-Cost Assignment</h1>
+  <span class="sub">cost matrix · row/column potentials · tight-edge equality subgraph · augmenting paths · the δ relaxation</span>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Cost Matrix</h2>
+      <div class="control-row">
+        <input type="number" id="sizeInput" value="4" min="2" max="6" />
+        <button class="btn success" id="btnRandom" style="flex:1">Random</button>
+      </div>
+      <div class="control-row">
+        <button class="btn" id="btnSample" style="flex:1">Sample (3×3)</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Run</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnRun">Run</button>
+        <button class="btn" id="btnStep">Step</button>
+        <button class="btn warn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="40" max="1200" value="520" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>The Idea</h2>
+      <div class="code-note">
+        Reduced cost:
+        <code>c[i][j] - u[i] - v[j]</code><br>
+        A <span style="color:var(--purple)">tight edge</span> has reduced cost <code>0</code>.<br><br>
+        Match on tight edges. When stuck, raise reached rows' <code>u</code> and lower reached columns' <code>v</code> by the slack
+        <code>δ</code> — exposing a new tight edge without breaking <code>reduced ≥ 0</code>.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Optimality Certificate</h2>
+      <div class="code-note">
+        When a perfect tight matching exists:<br>
+        <code>total cost = Σu + Σv</code><br>
+        — the dual value <i>proves</i> the optimum.
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Complexity</h2>
+      <table class="bigO-table">
+        <tr><td>Time (solve)</td><td class="v cubic">O(n³)</td></tr>
+        <tr><td>Space</td><td class="v quad">O(n²)</td></tr>
+        <tr><td>Query result</td><td class="v good">O(n)</td></tr>
+        <tr><td>Brute force</td><td class="v cubic">O(n·n!)</td></tr>
+      </table>
+    </div>
+  </aside>
+
+  <!-- RIGHT: vis + log -->
+  <div class="right-col">
+    <section id="vis">
+      <div class="vis-grid">
+        <div>
+          <svg id="bip" viewBox="0 0 460 380" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="matrix-wrap" id="matrixWrap"></div>
+      </div>
+      <div class="info-bar" id="info">Click <code>Sample</code> or <code>Random</code>, then <code>Run</code> or <code>Step</code>.</div>
+      <div class="stats-row">
+        <div class="stat">n: <b id="statN">0</b></div>
+        <div class="stat">matched: <b id="statM">0</b></div>
+        <div class="stat">phase: <b id="statPhase">-</b></div>
+        <div class="stat">δ updates: <b id="statDelta">0</b></div>
+        <div class="stat">Σu+Σv: <b id="statDual">0</b></div>
+        <div class="stat">cost: <b id="statCost">-</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot d-tight"></span>tight edge (reduced = 0)</span>
+        <span><span class="dot d-matched"></span>matched pair</span>
+        <span><span class="dot d-reached"></span>reached row (alternating tree)</span>
+        <span><span class="dot d-delta"></span>δ slack / new tight edge</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Hungarian (Kuhn-Munkres) visualizer
+//  Animates the O(n^3) potentials / augmenting-path algorithm.
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const INF = Infinity;
+
+const state = {
+  n: 0,
+  cost: [],          // n x n
+  u: [], v: [],      // potentials (0-indexed for display; algorithm uses them directly)
+  matchRow: [],      // matchRow[j] = worker assigned to job j, or -1
+  reachedRows: new Set(),
+  reachedCols: new Set(),
+  rootRow: -1,
+  tight: new Set(),  // "i,j" tight edges
+  deltaCells: [],    // [[i,j], ...] cells highlighted as new tight / slack
+  busy: false, paused: false, stepRequested: false, stopped: false,
+  speedMs: 520,
+  matched: 0, deltaUpdates: 0, finalCost: null,
+};
+
+const els = {
+  bip: document.getElementById("bip"),
+  matrixWrap: document.getElementById("matrixWrap"),
+  info: document.getElementById("info"),
+  log: document.getElementById("log"),
+  sizeInput: document.getElementById("sizeInput"),
+  speed: document.getElementById("speed"),
+  statN: document.getElementById("statN"),
+  statM: document.getElementById("statM"),
+  statPhase: document.getElementById("statPhase"),
+  statDelta: document.getElementById("statDelta"),
+  statDual: document.getElementById("statDual"),
+  statCost: document.getElementById("statCost"),
+  toast: document.getElementById("toast"),
+};
+
+// ---------------- helpers ----------------
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function pauseGate() {
+  while (state.paused && !state.stopped) {
+    if (state.stepRequested) { state.stepRequested = false; return; }
+    await sleep(50);
+  }
+}
+async function wait() {
+  await pauseGate();
+  if (state.stopped) throw new Error("__stopped__");
+  await sleep(state.speedMs);
+}
+function showToast(msg, isErr = false) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("error", isErr);
+  els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1700);
+}
+function log(msg, klass = "") {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const ss = String(t.getSeconds()).padStart(2, "0");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${hh}:${mm}:${ss}]</span>${msg}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function info(html) { els.info.innerHTML = html; }
+function reduced(i, j) { return state.cost[i][j] - state.u[i] - state.v[j]; }
+
+// ---------------- model ----------------
+function loadSample() {
+  state.n = 3;
+  state.cost = [
+    [9, 11, 14],
+    [6, 15, 13],
+    [12, 13, 6],
+  ];
+  els.sizeInput.value = 3;
+  initState();
+  render();
+  info("Loaded the 3×3 sample. Optimal cost is <code>23</code>. Click <code>Run</code> or <code>Step</code>.");
+  log("loaded sample (3x3), optimum = 23", "op");
+}
+function randomMatrix() {
+  let n = parseInt(els.sizeInput.value, 10);
+  if (!Number.isFinite(n) || n < 2) n = 4;
+  n = Math.min(6, Math.max(2, n));
+  state.n = n;
+  state.cost = [];
+  for (let i = 0; i < n; i++) {
+    const row = [];
+    for (let j = 0; j < n; j++) row.push(1 + Math.floor(Math.random() * 20));
+    state.cost.push(row);
+  }
+  initState();
+  render();
+  info(`Random <code>${n}×${n}</code> cost matrix. Click <code>Run</code> or <code>Step</code>.`);
+  log(`random matrix: ${n}x${n}`, "op");
+}
+function initState() {
+  const n = state.n;
+  state.u = new Array(n).fill(0);
+  state.v = new Array(n).fill(0);
+  state.matchRow = new Array(n).fill(-1);
+  state.reachedRows = new Set();
+  state.reachedCols = new Set();
+  state.rootRow = -1;
+  state.tight = new Set();
+  state.deltaCells = [];
+  state.matched = 0;
+  state.deltaUpdates = 0;
+  state.finalCost = null;
+}
+
+// ---------------- drawing ----------------
+function nodePositions(n) {
+  const left = 120, right = 340, top = 50, gap = (380 - 2 * top) / Math.max(1, n - 1);
+  const L = [], R = [];
+  for (let i = 0; i < n; i++) {
+    const y = n === 1 ? 190 : top + gap * i;
+    L.push({ x: left, y });
+    R.push({ x: right, y });
+  }
+  return { L, R };
+}
+function recomputeTight() {
+  state.tight = new Set();
+  for (let i = 0; i < state.n; i++)
+    for (let j = 0; j < state.n; j++)
+      if (reduced(i, j) === 0) state.tight.add(i + "," + j);
+}
+function drawGraph(augmentEdges = []) {
+  const svg = els.bip;
+  svg.innerHTML = "";
+  const n = state.n;
+  if (n === 0) return;
+  const { L, R } = nodePositions(n);
+  const augSet = new Set(augmentEdges.map(([i, j]) => i + "," + j));
+
+  // edges
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const a = L[i], b = R[j];
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", a.x + 16); line.setAttribute("y1", a.y);
+      line.setAttribute("x2", b.x - 16); line.setAttribute("y2", b.y);
+      let cls = "edge";
+      const key = i + "," + j;
+      if (state.tight.has(key)) cls = "edge tight";
+      if (state.matchRow[j] === i) cls = "edge matched";
+      if (augSet.has(key)) cls = "edge augment";
+      line.setAttribute("class", cls);
+      svg.appendChild(line);
+      // labels only for small n to avoid clutter
+      if (n <= 4) {
+        const lbl = document.createElementNS(SVG_NS, "text");
+        lbl.setAttribute("x", (a.x + b.x) / 2);
+        lbl.setAttribute("y", (a.y + b.y) / 2 - 3 + (j - i) * 0.5);
+        lbl.setAttribute("class", "edge-label");
+        lbl.textContent = state.cost[i][j];
+        svg.appendChild(lbl);
+      }
+    }
+  }
+  // worker nodes (left)
+  for (let i = 0; i < n; i++) {
+    const g = document.createElementNS(SVG_NS, "g");
+    let cls = "bnode";
+    if (i === state.rootRow) cls += " root";
+    else if (state.reachedRows.has(i)) cls += " reached";
+    g.setAttribute("class", cls);
+    g.setAttribute("transform", `translate(${L[i].x},${L[i].y})`);
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 15); g.appendChild(c);
+    const t = document.createElementNS(SVG_NS, "text"); t.textContent = "w" + i; g.appendChild(t);
+    svg.appendChild(g);
+    // potential u
+    const p = document.createElementNS(SVG_NS, "text");
+    p.setAttribute("x", L[i].x - 46); p.setAttribute("y", L[i].y + 4);
+    p.setAttribute("class", "pot-label"); p.textContent = "u=" + state.u[i];
+    svg.appendChild(p);
+  }
+  // job nodes (right)
+  for (let j = 0; j < n; j++) {
+    const g = document.createElementNS(SVG_NS, "g");
+    let cls = "bnode";
+    if (state.reachedCols.has(j)) cls += " reached";
+    g.setAttribute("class", cls);
+    g.setAttribute("transform", `translate(${R[j].x},${R[j].y})`);
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("r", 15); g.appendChild(c);
+    const t = document.createElementNS(SVG_NS, "text"); t.textContent = "j" + j; g.appendChild(t);
+    svg.appendChild(g);
+    const p = document.createElementNS(SVG_NS, "text");
+    p.setAttribute("x", R[j].x + 22); p.setAttribute("y", R[j].y + 4);
+    p.setAttribute("class", "pot-label"); p.textContent = "v=" + state.v[j];
+    svg.appendChild(p);
+  }
+}
+
+function buildMatrixTable() {
+  const n = state.n;
+  const tbl = document.createElement("table");
+  tbl.className = "matrix";
+  const thead = document.createElement("tr");
+  const corner = document.createElement("th"); corner.textContent = "c−u−v"; thead.appendChild(corner);
+  for (let j = 0; j < n; j++) {
+    const th = document.createElement("th"); th.textContent = "j" + j; thead.appendChild(th);
+  }
+  const vh = document.createElement("th"); vh.className = "pot"; vh.textContent = "v"; thead.appendChild(vh);
+  tbl.appendChild(thead);
+  for (let i = 0; i < n; i++) {
+    const tr = document.createElement("tr");
+    const rh = document.createElement("th"); rh.textContent = "w" + i; tr.appendChild(rh);
+    for (let j = 0; j < n; j++) {
+      const td = document.createElement("td");
+      td.dataset.i = i; td.dataset.j = j;
+      tr.appendChild(td);
+    }
+    const uh = document.createElement("th"); uh.className = "pot"; uh.dataset.u = i; tr.appendChild(uh);
+    tbl.appendChild(tr);
+  }
+  // bottom u/v row
+  const foot = document.createElement("tr");
+  const fl = document.createElement("th"); fl.className = "pot"; fl.textContent = "u"; foot.appendChild(fl);
+  for (let j = 0; j < n; j++) { const td = document.createElement("th"); td.className = "pot"; td.dataset.v = j; foot.appendChild(td); }
+  foot.appendChild(document.createElement("th"));
+  tbl.appendChild(foot);
+  els.matrixWrap.innerHTML = "";
+  els.matrixWrap.appendChild(tbl);
+}
+
+function refreshMatrix() {
+  const n = state.n;
+  const deltaSet = new Set(state.deltaCells.map(([i, j]) => i + "," + j));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const td = els.matrixWrap.querySelector(`td[data-i="${i}"][data-j="${j}"]`);
+      if (!td) continue;
+      td.textContent = reduced(i, j);
+      let cls = "";
+      if (reduced(i, j) === 0) cls += " tight";
+      if (state.matchRow[j] === i) cls += " matched";
+      if (deltaSet.has(i + "," + j)) cls += " delta";
+      if (state.reachedRows.has(i)) cls += " row-reached";
+      td.className = cls.trim();
+    }
+    const uh = els.matrixWrap.querySelector(`th[data-u="${i}"]`);
+    if (uh) uh.textContent = state.u[i];
+  }
+  for (let j = 0; j < n; j++) {
+    const vh = els.matrixWrap.querySelector(`th[data-v="${j}"]`);
+    if (vh) vh.textContent = state.v[j];
+  }
+}
+
+function dualValue() {
+  let s = 0;
+  for (let i = 0; i < state.n; i++) s += state.u[i] + state.v[i];
+  return s;
+}
+
+function render(augmentEdges = []) {
+  recomputeTight();
+  buildMatrixTable();
+  refreshMatrix();
+  drawGraph(augmentEdges);
+  els.statN.textContent = state.n;
+  els.statM.textContent = state.matched;
+  els.statDelta.textContent = state.deltaUpdates;
+  els.statDual.textContent = dualValue();
+  els.statCost.textContent = state.finalCost === null ? "-" : state.finalCost;
+}
+
+// ---------------- algorithm (animated) ----------------
+// We run a clear, didactic version: for each worker, grow an alternating
+// tree on tight edges; on stall, compute slack delta and relax potentials.
+async function runHungarian() {
+  if (state.n === 0) { showToast("Load a matrix first", true); return; }
+  initState();
+  render();
+  log("run Hungarian (Kuhn-Munkres)", "op");
+  const n = state.n;
+  // initial row reduction so potentials start meaningfully
+  for (let i = 0; i < n; i++) state.u[i] = Math.min(...state.cost[i]);
+  for (let j = 0; j < n; j++) {
+    let m = INF;
+    for (let i = 0; i < n; i++) m = Math.min(m, state.cost[i][j] - state.u[i]);
+    state.v[j] = m;
+  }
+  render();
+  info("Initialized potentials by row/column reduction. <span style='color:var(--purple)'>Tight edges</span> have reduced cost 0.");
+  log("row + column reduction applied", "ok");
+  await wait();
+
+  for (let w = 0; w < n; w++) {
+    els.statPhase.textContent = "match w" + w;
+    state.rootRow = w;
+    state.reachedRows = new Set([w]);
+    state.reachedCols = new Set();
+    state.deltaCells = [];
+    render();
+    info(`Phase: find a job for worker <code>w${w}</code> along tight edges.`);
+    log(`phase: augment from w${w}`, "ok");
+    await wait();
+
+    // augment: grow alternating tree until we reach an unmatched column
+    let parentCol = {};   // col -> row that reached it
+    let success = false;
+    while (!success) {
+      // try to extend the tree with tight edges from reached rows
+      let extended = false;
+      for (const i of state.reachedRows) {
+        for (let j = 0; j < n; j++) {
+          if (state.reachedCols.has(j)) continue;
+          if (reduced(i, j) === 0) {
+            state.reachedCols.add(j);
+            parentCol[j] = i;
+            extended = true;
+            if (state.matchRow[j] === -1) {
+              // augmenting path found: walk back
+              info(`Reached free job <code>j${j}</code> via a tight edge — augment!`);
+              log(`  augment: free job j${j} found`, "upd");
+              render([[i, j]]);
+              await wait();
+              let cj = j;
+              while (cj !== -1) {
+                const ri = parentCol[cj];
+                const oldJob = -1; // find the job ri currently holds
+                let held = -1;
+                for (let jj = 0; jj < n; jj++) if (state.matchRow[jj] === ri) held = jj;
+                state.matchRow[cj] = ri;
+                cj = held;
+              }
+              state.matched++;
+              success = true;
+              break;
+            } else {
+              state.reachedRows.add(state.matchRow[j]);
+              info(`Job <code>j${j}</code> is taken by <code>w${state.matchRow[j]}</code> — add that worker to the tree.`);
+              render();
+              await wait();
+            }
+          }
+        }
+        if (success) break;
+      }
+      if (success) break;
+
+      if (!extended) {
+        // stall: compute slack delta over reached rows -> unreached cols
+        let delta = INF, deltaCells = [];
+        for (const i of state.reachedRows) {
+          for (let j = 0; j < n; j++) {
+            if (state.reachedCols.has(j)) continue;
+            const r = reduced(i, j);
+            if (r < delta) { delta = r; deltaCells = [[i, j]]; }
+            else if (r === delta) deltaCells.push([i, j]);
+          }
+        }
+        if (delta === INF) { break; } // safety
+        state.deltaCells = deltaCells;
+        info(`Stuck. Smallest slack <code>δ = ${delta}</code> over reached rows → unreached jobs. Relax potentials by δ.`);
+        log(`  δ = ${delta}: raise reached u, lower reached v`, "delta");
+        render();
+        await wait();
+        // relax: u[i]+=delta for reached rows, v[j]-=delta for reached cols
+        for (const i of state.reachedRows) state.u[i] += delta;
+        for (const j of state.reachedCols) state.v[j] -= delta;
+        state.deltaUpdates++;
+        state.deltaCells = deltaCells; // these became tight
+        render();
+        info(`Potentials relaxed: <code>Σu+Σv = ${dualValue()}</code>. A new <span style='color:var(--purple)'>tight edge</span> appeared.`);
+        log(`  relaxed; dual now ${dualValue()}`, "delta");
+        await wait();
+        state.deltaCells = [];
+      }
+    }
+    render();
+    els.statM.textContent = state.matched;
+  }
+
+  // done
+  let cost = 0;
+  for (let j = 0; j < n; j++) cost += state.cost[state.matchRow[j]][j];
+  state.finalCost = cost;
+  state.rootRow = -1;
+  state.reachedRows = new Set();
+  state.reachedCols = new Set();
+  els.statPhase.textContent = "done";
+  render();
+  const dual = dualValue();
+  info(`Done. Minimum cost <code>${cost}</code>, certified by <code>Σu+Σv = ${dual}</code>${cost === dual ? " ✓" : ""}.`);
+  log(`finished: cost ${cost}, dual ${dual}, ${state.deltaUpdates} delta-updates`, "op");
+}
+
+// ---------------- driver ----------------
+async function withBusy(fn) {
+  if (state.busy) { showToast("Running…", true); return; }
+  state.busy = true; state.stopped = false; state.paused = false;
+  try { await fn(); }
+  catch (e) {
+    if (e.message !== "__stopped__") { console.error(e); showToast("Error: " + e.message, true); }
+    else { log("  stopped by user", "delta"); info("Run stopped."); }
+  } finally { state.busy = false; state.paused = false; state.stepRequested = false; }
+}
+
+// ---------------- events ----------------
+document.getElementById("btnSample").addEventListener("click", () => { if (state.busy) state.stopped = true; loadSample(); });
+document.getElementById("btnRandom").addEventListener("click", () => { if (state.busy) state.stopped = true; randomMatrix(); });
+document.getElementById("btnRun").addEventListener("click", () => { state.paused = false; withBusy(() => runHungarian()); });
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (!state.busy) { state.paused = true; withBusy(() => runHungarian()); state.stepRequested = true; }
+  else { state.paused = true; state.stepRequested = true; }
+});
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.busy) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Use Step to advance." : "Resumed.");
+});
+document.getElementById("btnReset").addEventListener("click", () => {
+  state.stopped = true; state.paused = false;
+  setTimeout(() => {
+    initState(); els.statPhase.textContent = "-"; render();
+    info("Reset. Potentials and matching cleared.");
+    log("reset", "op");
+  }, 60);
+});
+els.speed.addEventListener("input", (e) => { state.speedMs = 1240 - Number(e.target.value); });
+
+// ---------------- init ----------------
+function init() {
+  state.speedMs = 1240 - Number(els.speed.value);
+  loadSample();
+  log("Hungarian visualizer ready.", "op");
+}
+init();
+</script>
+</body>
+</html>
