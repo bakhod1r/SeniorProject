@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SMAWK &amp; Monge Matrices — Row Minima via REDUCE + INTERPOLATE</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --hi-min: rgba(63, 185, 80, 0.50);     /* row minimum / staircase */
+    --hi-even: rgba(88, 166, 255, 0.28);   /* even rows being recursed */
+    --hi-odd: rgba(210, 153, 34, 0.22);    /* odd row scan window */
+    --hi-dead: rgba(248, 81, 73, 0.18);    /* eliminated column */
+    --hi-scan: rgba(188, 140, 255, 0.30);  /* current scan cell */
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="range"] { accent-color: var(--accent); }
+  .controls select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-size: 13px;
+  }
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 18px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 14px; color: #fff; font-weight: 600; }
+  /* matrix grid */
+  table.matrix { border-collapse: collapse; margin: 0 auto; font-family: var(--mono); }
+  table.matrix th { color: var(--muted); font-size: 12px; font-weight: 600; padding: 4px 8px; }
+  table.matrix td {
+    width: 46px; height: 40px; text-align: center; vertical-align: middle;
+    border: 1px solid var(--border); font-size: 14px; position: relative;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  td.dead { background: var(--hi-dead); color: var(--bad); text-decoration: line-through; }
+  td.even-row { background: var(--hi-even); }
+  td.odd-win { background: var(--hi-odd); }
+  td.scan { outline: 2px solid var(--purple); outline-offset: -2px; background: var(--hi-scan); }
+  td.rowmin { background: var(--hi-min); color: #fff; font-weight: 700; }
+  td.inf { color: #4b5563; }
+  th.deadcol { color: var(--bad); text-decoration: line-through; }
+  .info {
+    font-family: var(--mono); font-size: 13px; line-height: 1.7;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; min-height: 120px;
+  }
+  .info .k { color: var(--accent); }
+  .info .g { color: var(--good); }
+  .info .b { color: var(--bad); }
+  .info .o { color: var(--accent-2); }
+  table.bigo { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.bigo td, table.bigo th {
+    border: 1px solid var(--border); padding: 6px 8px; text-align: left;
+  }
+  table.bigo th { color: var(--muted); font-weight: 600; }
+  table.bigo .c { font-family: var(--mono); color: var(--good); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 2px; font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--border); }
+  .log {
+    font-family: var(--mono); font-size: 12px; line-height: 1.6;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; height: 200px; overflow-y: auto;
+  }
+  .log div { padding: 1px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .stat { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .stat .v { font-family: var(--mono); color: var(--accent); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-family:var(--mono); }
+  .pill.reduce { background: rgba(248,81,73,0.18); color: var(--bad); }
+  .pill.interp { background: rgba(88,166,255,0.18); color: var(--accent); }
+  .pill.done { background: rgba(63,185,80,0.18); color: var(--good); }
+</style>
+</head>
+<body>
+<header>
+  <h1>SMAWK &amp; Monge Matrices — All Row Minima in O(n + m)</h1>
+  <p>A totally monotone matrix has a non-decreasing <b>staircase</b> of row minima. SMAWK finds them all via REDUCE (drop dead columns) + INTERPOLATE (recurse even rows, fill odd).</p>
+</header>
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step ▶</button>
+    <button id="btnRun">Run ⏩</button>
+    <button id="btnPause" disabled>Pause ⏸</button>
+    <button id="btnReset">Reset ↺</button>
+    <label>Matrix:</label>
+    <select id="selMatrix">
+      <option value="0">5×5 Monge (default)</option>
+      <option value="1">6×6 Monge</option>
+      <option value="2">4×4 Monge (small)</option>
+    </select>
+    <label>Speed</label>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+    <span id="phasePill" class="pill done">idle</span>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>Totally Monotone Matrix — rows = i, columns = j</h2>
+        <div id="grid"></div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--hi-min)"></i> row minimum (staircase)</span>
+          <span><i class="sw" style="background:var(--hi-even)"></i> even rows (recurse)</span>
+          <span><i class="sw" style="background:var(--hi-odd)"></i> odd-row scan window</span>
+          <span><i class="sw" style="background:var(--hi-dead)"></i> eliminated column</span>
+          <span><i class="sw" style="background:var(--hi-scan)"></i> current scan cell</span>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px;">
+        <h2>What just happened</h2>
+        <div class="info" id="info">Press <span class="k">Step ▶</span> or <span class="k">Run ⏩</span> to watch SMAWK find every row minimum.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Stats</h2>
+        <div class="stat"><span>Phase</span><span class="v" id="stPhase">—</span></div>
+        <div class="stat"><span>Matrix size n×m</span><span class="v" id="stSize">—</span></div>
+        <div class="stat"><span>Cells touched (SMAWK)</span><span class="v" id="stTouched">0</span></div>
+        <div class="stat"><span>Naive scan would touch</span><span class="v" id="stNaive">0</span></div>
+        <div class="stat"><span>Rows resolved</span><span class="v" id="stResolved">0</span></div>
+      </div>
+      <div class="card" style="margin-top:18px;">
+        <h2>Complexity</h2>
+        <table class="bigo">
+          <tr><th>Method</th><th>Time</th></tr>
+          <tr><td>Brute force (all cells)</td><td class="c">O(n·m)</td></tr>
+          <tr><td>Divide &amp; conquer (sib. 12)</td><td class="c">O((n+m) log n)</td></tr>
+          <tr><td><b>SMAWK (this)</b></td><td class="c">O(n + m)</td></tr>
+          <tr><td>One DP layer (SMAWK)</td><td class="c">O(n)</td></tr>
+          <tr><td>K-layer DP (SMAWK)</td><td class="c">O(K·n)</td></tr>
+        </table>
+        <p style="font-size:11px;color:var(--muted);margin:10px 0 0;">Precondition: matrix is <b>totally monotone</b> (Monge ⟹ TM). Otherwise the answer is silently wrong.</p>
+      </div>
+      <div class="card" style="margin-top:18px;">
+        <h2>Operation Log</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Totally monotone matrices (each row's min column is non-decreasing).
+// Built so that argmin(i) <= argmin(i+1).
+// ============================================================
+const MATRICES = [
+  // 5x5 — argmin staircase 0,1,2,3,4 roughly
+  [
+    [ 2,  5,  9, 14, 20],
+    [ 4,  3,  7, 12, 18],
+    [ 9,  6,  4,  8, 13],
+    [15, 11,  8,  5,  9],
+    [22, 18, 14,  9,  6],
+  ],
+  // 6x6
+  [
+    [ 1,  4,  8, 13, 19, 26],
+    [ 3,  2,  6, 11, 17, 24],
+    [ 7,  5,  3,  7, 13, 20],
+    [12,  9,  6,  4,  9, 15],
+    [18, 14, 11,  8,  5, 10],
+    [25, 20, 16, 12,  8,  6],
+  ],
+  // 4x4 small
+  [
+    [ 5,  3,  9, 12],
+    [ 6,  4,  7, 10],
+    [ 8,  7,  5,  6],
+    [11, 10,  8,  6],
+  ],
+];
+
+let A = [];        // current matrix
+let n = 0, m = 0;
+let steps = [];    // precomputed animation steps
+let idx = 0;
+let timer = null;
+let running = false;
+let touched = 0;
+let resolved = 0;
+const rowmin = {}; // final argmin per row (for rendering staircase incrementally)
+
+// ---- step format ----
+// { type, cls:{ "i,j": className }, deadCols:Set, info, phase }
+
+function buildSteps() {
+  steps = [];
+  const argmin = {};        // result row -> col
+  let cellTouches = 0;
+
+  function touch() { cellTouches++; }
+
+  function snap(highlights, deadCols, info, phase, resolvedSet) {
+    steps.push({
+      cls: Object.assign({}, highlights),
+      dead: new Set(deadCols),
+      info, phase,
+      touched: cellTouches,
+      resolved: resolvedSet ? new Set(resolvedSet) : new Set(Object.keys(argmin).map(Number)),
+      argmin: Object.assign({}, argmin),
+    });
+  }
+
+  // recursive SMAWK that emits steps
+  function smawk(rows, cols, depth) {
+    if (rows.length === 0) return;
+
+    // ---------- REDUCE ----------
+    snap({}, [], `<span class="o">REDUCE</span> on ${rows.length} rows, ${cols.length} cols. `
+      + `Drop every column that can't be any surviving row's minimum.`, 'reduce');
+    const stack = [];
+    for (const c of cols) {
+      while (stack.length > 0) {
+        const h = stack.length - 1;
+        const top = stack[h];
+        touch(); touch();
+        // highlight comparison
+        const hi = {};
+        hi[`${rows[h]},${top}`] = 'scan';
+        hi[`${rows[h]},${c}`] = 'scan';
+        if (A[rows[h]][top] <= A[rows[h]][c]) {
+          snap(hi, deadSet(cols, stack), `Column <span class="k">${top}</span> still wins at row ${rows[h]} `
+            + `(A=${A[rows[h]][top]} ≤ ${A[rows[h]][c]}) → keep it.`, 'reduce');
+          break;
+        }
+        snap(hi, deadSet(cols, stack), `Column <span class="b">${top}</span> loses to ${c} at row ${rows[h]} `
+          + `(${A[rows[h]][top]} &gt; ${A[rows[h]][c]}) → <b>dead</b>, pop it.`, 'reduce');
+        stack.pop();
+      }
+      if (stack.length < rows.length) stack.push(c);
+    }
+    const survivors = stack.slice();
+    snap({}, deadSet(cols, survivors), `REDUCE kept <span class="g">${survivors.length}</span> columns `
+      + `[${survivors.join(', ')}] (≤ #rows = ${rows.length}).`, 'reduce');
+
+    // ---------- base case ----------
+    if (rows.length === 1) {
+      const r = rows[0];
+      let best = Infinity, bc = survivors[0];
+      const hi = {};
+      for (const c of survivors) { touch(); if (A[r][c] < best) { best = A[r][c]; bc = c; } }
+      argmin[r] = bc;
+      hi[`${r},${bc}`] = 'rowmin';
+      snap(hi, deadSet(cols, survivors), `Single row ${r}: scan survivors → min at column `
+        + `<span class="g">${bc}</span> (=${best}).`, 'interp');
+      return;
+    }
+
+    // ---------- INTERPOLATE: recurse on even rows ----------
+    const even = [];
+    for (let i = 0; i < rows.length; i += 2) even.push(rows[i]);
+    const hiEven = {};
+    for (const r of even) for (const c of survivors) hiEven[`${r},${c}`] = 'even-row';
+    snap(hiEven, deadSet(cols, survivors), `<span class="k">INTERPOLATE</span>: recurse on the `
+      + `<b>even rows</b> [${even.join(', ')}] (half the rows).`, 'interp');
+
+    smawk(even, survivors, depth + 1);
+
+    // ---------- fill odd rows ----------
+    const pos = {}; survivors.forEach((c, i2) => pos[c] = i2);
+    for (let i = 1; i < rows.length; i += 2) {
+      const r = rows[i];
+      const lo = pos[argmin[rows[i - 1]]];
+      const hiBound = (i + 1 < rows.length) ? pos[argmin[rows[i + 1]]] : survivors.length - 1;
+      const win = {};
+      for (let t = lo; t <= hiBound; t++) win[`${r},${survivors[t]}`] = 'odd-win';
+      snap(win, deadSet(cols, survivors), `Odd row ${r}: minimum lies in window `
+        + `[col ${survivors[lo]}, col ${survivors[hiBound]}] (between even neighbors' minima).`, 'interp');
+      let best = Infinity, bc = survivors[lo];
+      for (let t = lo; t <= hiBound; t++) {
+        touch();
+        const c = survivors[t];
+        const sc = Object.assign({}, win);
+        sc[`${r},${c}`] = 'scan';
+        snap(sc, deadSet(cols, survivors), `  scan A[${r}][${c}] = ${A[r][c]}`, 'interp');
+        if (A[r][c] < best) { best = A[r][c]; bc = c; }
+      }
+      argmin[r] = bc;
+      const fin = {};
+      fin[`${r},${bc}`] = 'rowmin';
+      snap(fin, deadSet(cols, survivors), `Odd row ${r}: min at column <span class="g">${bc}</span> (=${best}).`, 'interp');
+    }
+  }
+
+  function deadSet(allCols, alive) {
+    const aliveSet = new Set(alive);
+    return allCols.filter(c => !aliveSet.has(c));
+  }
+
+  const allRows = Array.from({ length: n }, (_, i) => i);
+  const allCols = Array.from({ length: m }, (_, j) => j);
+  smawk(allRows, allCols, 0);
+
+  // final: show full staircase
+  const fin = {};
+  const argList = [];
+  for (let i = 0; i < n; i++) { fin[`${i},${argmin[i]}`] = 'rowmin'; argList.push(argmin[i]); }
+  steps.push({
+    cls: fin, dead: new Set(), info: `<span class="g">Done.</span> Row-minima columns form the `
+      + `non-decreasing staircase [${argList.join(', ')}]. `
+      + `SMAWK touched <b>${cellTouches}</b> cells vs naive <b>${n * m}</b>.`,
+    phase: 'done', touched: cellTouches,
+    resolved: new Set(allRows), argmin: Object.assign({}, argmin),
+  });
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function renderGrid(step) {
+  const dead = step ? step.dead : new Set();
+  const cls = step ? step.cls : {};
+  let html = '<table class="matrix"><tr><th></th>';
+  for (let j = 0; j < m; j++) {
+    html += `<th class="${dead.has(j) ? 'deadcol' : ''}">c${j}</th>`;
+  }
+  html += '</tr>';
+  for (let i = 0; i < n; i++) {
+    html += `<tr><th>r${i}</th>`;
+    for (let j = 0; j < m; j++) {
+      let c = cls[`${i},${j}`] || '';
+      if (dead.has(j) && !c) c = 'dead';
+      html += `<td class="${c}">${A[i][j]}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  document.getElementById('grid').innerHTML = html;
+}
+
+function renderStep() {
+  const step = steps[idx];
+  if (!step) return;
+  renderGrid(step);
+  document.getElementById('info').innerHTML = step.info;
+  const phase = step.phase;
+  const pill = document.getElementById('phasePill');
+  pill.className = 'pill ' + (phase === 'reduce' ? 'reduce' : phase === 'done' ? 'done' : 'interp');
+  pill.textContent = phase;
+  document.getElementById('stPhase').textContent = phase;
+  document.getElementById('stSize').textContent = `${n}×${m}`;
+  document.getElementById('stTouched').textContent = step.touched;
+  document.getElementById('stNaive').textContent = n * m;
+  document.getElementById('stResolved').textContent = step.resolved.size + ' / ' + n;
+  addLog(step);
+}
+
+let lastLogged = -1;
+function addLog(step) {
+  if (idx === lastLogged) return;
+  lastLogged = idx;
+  const log = document.getElementById('log');
+  const plain = step.info.replace(/<[^>]+>/g, '');
+  const div = document.createElement('div');
+  div.innerHTML = `<span style="color:var(--muted)">${String(idx + 1).padStart(3, '0')}</span> ${plain}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ============================================================
+// Controls
+// ============================================================
+function loadMatrix() {
+  const sel = parseInt(document.getElementById('selMatrix').value, 10);
+  A = MATRICES[sel].map(r => r.slice());
+  n = A.length; m = A[0].length;
+  buildSteps();
+}
+
+function reset() {
+  pause();
+  loadMatrix();
+  idx = 0; lastLogged = -1;
+  document.getElementById('log').innerHTML = '';
+  renderGrid(null);
+  document.getElementById('info').innerHTML =
+    'Press <span class="k">Step ▶</span> or <span class="k">Run ⏩</span> to watch SMAWK find every row minimum.';
+  document.getElementById('stPhase').textContent = '—';
+  document.getElementById('stSize').textContent = `${n}×${m}`;
+  document.getElementById('stTouched').textContent = '0';
+  document.getElementById('stNaive').textContent = n * m;
+  document.getElementById('stResolved').textContent = '0 / ' + n;
+  const pill = document.getElementById('phasePill');
+  pill.className = 'pill done'; pill.textContent = 'idle';
+}
+
+function stepForward() {
+  if (idx >= steps.length) { pause(); return; }
+  renderStep();
+  idx++;
+  if (idx >= steps.length) pause();
+}
+
+function speedMs() {
+  const v = parseInt(document.getElementById('speed').value, 10);
+  return 1200 - v * 110; // 1090ms (slow) .. 100ms (fast)
+}
+
+function run() {
+  if (running) return;
+  running = true;
+  document.getElementById('btnRun').disabled = true;
+  document.getElementById('btnStep').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  tick();
+}
+function tick() {
+  if (!running) return;
+  if (idx >= steps.length) { pause(); return; }
+  stepForward();
+  timer = setTimeout(tick, speedMs());
+}
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('btnRun').disabled = false;
+  document.getElementById('btnStep').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+}
+
+document.getElementById('btnStep').addEventListener('click', () => { pause(); stepForward(); });
+document.getElementById('btnRun').addEventListener('click', run);
+document.getElementById('btnPause').addEventListener('click', pause);
+document.getElementById('btnReset').addEventListener('click', reset);
+document.getElementById('selMatrix').addEventListener('change', reset);
+
+// init
+reset();
+</script>
+</body>
+</html>
