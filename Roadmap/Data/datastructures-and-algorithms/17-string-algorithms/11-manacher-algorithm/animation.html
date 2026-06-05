@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Manacher's Algorithm — All Palindromic Substrings in O(n)</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-box: rgba(88, 166, 255, 0.18);
+    --hi-center: rgba(63, 185, 80, 0.45);
+    --hi-mirror: rgba(210, 153, 34, 0.40);
+    --hi-edge: rgba(248, 81, 73, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 220px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tape { overflow-x: auto; padding-bottom: 6px; }
+  table.tlayout { border-collapse: collapse; font-family: var(--mono); }
+  table.tlayout td {
+    border: 1px solid var(--border);
+    width: 34px;
+    height: 34px;
+    text-align: center;
+    font-size: 15px;
+    color: var(--text);
+    transition: background 0.2s ease, color 0.2s ease;
+    position: relative;
+  }
+  table.tlayout td.idx { color: var(--muted); font-size: 11px; height: 20px; border: none; }
+  table.tlayout td.sep { color: var(--muted); }
+  table.tlayout td.real { color: #fff; font-weight: 700; }
+  table.tlayout td.inbox { background: var(--hi-box); }
+  table.tlayout td.center { background: var(--hi-center); color: #fff; font-weight: 800; }
+  table.tlayout td.mirror { background: var(--hi-mirror); color: #fff; font-weight: 800; }
+  table.tlayout td.edge { box-shadow: inset 0 0 0 2px var(--bad); }
+  table.tlayout td.pcell { color: var(--good); font-weight: 700; font-size: 14px; height: 28px; }
+  table.tlayout td.pcell.set { background: rgba(63,185,80,0.14); }
+  .ptr-row td { height: 22px; border: none; color: var(--accent); font-size: 12px; font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .stats {
+    display: flex; gap: 22px; flex-wrap: wrap;
+    margin-top: 12px; font-family: var(--mono); font-size: 13px;
+  }
+  .stats .k { color: var(--muted); }
+  .stats .v { color: var(--good); font-weight: 700; }
+  .stats b { color: var(--accent); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 6px 0 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .code-block .line { display: block; padding: 0 6px; border-radius: 4px; color: var(--muted); white-space: pre; }
+  .code-block .line.active { background: rgba(88,166,255,0.18); color: #fff; }
+  .code-block .kw { color: var(--accent); }
+  table.tlayout td.origreal { color: #fff; font-weight: 700; }
+  table.tlayout td.origpal { background: var(--hi-center); color: #fff; font-weight: 800; }
+  table.tlayout td.origctr { box-shadow: inset 0 0 0 2px var(--good); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Manacher's Algorithm — Radius Array in O(n)</h1>
+  <p>The <b>#</b>-transform makes every palindrome odd. Watch the box <b>[l, r]</b>, the mirror reuse <code>p[i] = min(r&minus;i, p[i'])</code>, and the expansion fill the radius array.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>String:
+      <input type="text" id="strInput" value="abacaba" maxlength="24" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Transformed string t and radius array p[]</h2>
+      <div class="tape">
+        <table class="tlayout" id="tape"></table>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-box)"></span> box [l, r]</span>
+        <span><span class="swatch" style="background:var(--hi-center)"></span> center i</span>
+        <span><span class="swatch" style="background:var(--hi-mirror)"></span> mirror i'</span>
+        <span><span class="swatch" style="box-shadow:inset 0 0 0 2px var(--bad)"></span> expansion probe</span>
+      </div>
+      <div class="interp" id="interpBox">
+        Press <b>Step</b> to begin. We scan left to right computing p[i] = radius of the longest palindrome centered at i in t.
+      </div>
+      <div class="stats">
+        <span class="k">center i = <b id="stCenter">&mdash;</b></span>
+        <span class="k">mirror i' = <b id="stMirror">&mdash;</b></span>
+        <span class="k">box (c,l,r) = <b id="stBox">&mdash;</b></span>
+        <span class="k">p[i] = <span class="v" id="stP">&mdash;</span></span>
+        <span class="k">longest = <span class="v" id="stLongest">&mdash;</span></span>
+        <span class="k">count = <span class="v" id="stCount">0</span></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Original string s and current palindrome</h2>
+      <div class="tape">
+        <table class="tlayout" id="origTape"></table>
+      </div>
+      <div class="interp" id="origInterp">
+        The green span shows the current center's palindrome mapped back to <b>s</b> via start = (i &minus; p[i]) / 2, length = p[i].
+      </div>
+      <h2 style="margin-top:16px;">Algorithm (active line highlighted)</h2>
+      <pre class="code-block" id="pseudocode"></pre>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">We compute the radius array of t in one linear pass. Inside the current box we copy from the mirror; otherwise we expand from scratch. The right edge r only moves forward, which is why the whole scan is O(n).</div>
+
+  <div class="footnote">
+    Self-contained visualization. Real characters sit at odd indices of <code>t</code>; <code>#</code> separators sit at even indices.
+    Radius p[i] in t equals the palindrome length in the original string; longest palindrome length = max p[i], and the count of all palindromic substrings = &Sigma; &lceil;p[i]/2&rceil;.
+    See <code>junior.md</code> and <code>professional.md</code> for the mirror-initialization correctness and the O(n) proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the step plan for Manacher ----------
+// We replay the algorithm and record a snapshot before/after each meaningful event:
+// init (mirror copy), each expansion probe (success/fail), and box update.
+function buildPlan(s) {
+  const t = "#" + s.split("").join("#") + "#";
+  const n = t.length;
+  const p = new Array(n).fill(0);
+  const steps = [];
+  let c = 0, r = 0;
+  let longest = 0, count = 0;
+
+  steps.push({
+    type: "start", i: -1, mirror: -1, c, l: 0, r, p: p.slice(),
+    longest, count, edge: -1,
+    desc: "t = \"" + t + "\" (length " + n + "). Every palindrome in t is odd-length. We compute p[i] for each center i."
+  });
+
+  for (let i = 0; i < n; i++) {
+    let mirror = 2 * c - i;
+    if (i < r) {
+      p[i] = Math.min(r - i, p[mirror]);
+      steps.push({
+        type: "mirror", i, mirror, c, l: 2 * c - r, r, p: p.slice(),
+        longest, count, edge: -1,
+        desc: "i=" + i + " is inside the box [" + (2 * c - r) + ", " + r + "]. Mirror i'=" + mirror +
+              " has p[i']=" + p[mirror] + ". Copy capped: p[" + i + "] = min(r-i=" + (r - i) +
+              ", p[i']=" + p[mirror] + ") = " + p[i] + "."
+      });
+    } else {
+      steps.push({
+        type: "fresh", i, mirror: -1, c, l: 2 * c - r, r, p: p.slice(),
+        longest, count, edge: -1,
+        desc: "i=" + i + " is at or past the box edge r=" + r + ". No mirror to copy — start p[" + i + "]=0 and expand from scratch."
+      });
+    }
+    // expansion
+    while (i - p[i] - 1 >= 0 && i + p[i] + 1 < n && t[i - p[i] - 1] === t[i + p[i] + 1]) {
+      p[i]++;
+      steps.push({
+        type: "expand", i, mirror: (i < r ? mirror : -1), c, l: 2 * c - r, r, p: p.slice(),
+        longest, count, edge: i + p[i],
+        desc: "Expand: t[" + (i - p[i]) + "]='" + t[i - p[i]] + "' matches t[" + (i + p[i]) +
+              "]='" + t[i + p[i]] + "' → p[" + i + "] = " + p[i] + "."
+      });
+    }
+    // record a fail/stop snapshot
+    steps.push({
+      type: "stop", i, mirror: (i < r ? mirror : -1), c, l: 2 * c - r, r, p: p.slice(),
+      longest, count, edge: -1,
+      desc: "Expansion at i=" + i + " stops. Final p[" + i + "] = " + p[i] + "."
+    });
+    // box update
+    if (i + p[i] > r) {
+      c = i; r = i + p[i];
+      steps.push({
+        type: "box", i, mirror: -1, c, l: 2 * c - r, r, p: p.slice(),
+        longest, count, edge: -1,
+        desc: "i+p[i]=" + (i + p[i]) + " > old r → advance the box: c=" + c + ", r=" + r +
+              ". The right edge r only ever moves forward."
+      });
+    }
+    // accumulate stats
+    if (p[i] > longest) longest = p[i];
+    count += Math.ceil(p[i] / 2);
+    steps[steps.length - 1].longest = longest;
+    steps[steps.length - 1].count = count;
+  }
+
+  steps.push({
+    type: "done", i: -1, mirror: -1, c, l: 0, r, p: p.slice(),
+    longest, count, edge: -1,
+    desc: "Done. Longest palindrome length = " + longest + ". Count of all palindromic substrings = " + count +
+          " (= Σ ⌈p[i]/2⌉). All in O(n)."
+  });
+  return { steps, t, n };
+}
+
+// ---------- Render ----------
+function renderTape(step) {
+  const t = state.t;
+  const n = state.n;
+  const tape = document.getElementById("tape");
+  const p = step.p;
+  const l = step.l, r = step.r, i = step.i, mirror = step.mirror;
+
+  let idxRow = "<tr>";
+  let charRow = "<tr>";
+  let pRow = "<tr>";
+  for (let k = 0; k < n; k++) {
+    idxRow += "<td class='idx'>" + k + "</td>";
+    let cls = (t[k] === "#") ? "sep" : "real";
+    if (step.type !== "start" && step.type !== "done") {
+      if (k >= l && k <= r && l <= r) cls += " inbox";
+    }
+    if (k === i) cls += " center";
+    else if (k === mirror && mirror >= 0) cls += " mirror";
+    if (step.edge >= 0 && (k === step.edge || k === 2 * i - step.edge)) cls += " edge";
+    charRow += "<td class='" + cls + "'>" + (t[k] === "#" ? "#" : t[k]) + "</td>";
+    let pcls = "pcell";
+    if (p[k] > 0) pcls += " set";
+    pRow += "<td class='" + pcls + "'>" + p[k] + "</td>";
+  }
+  idxRow += "</tr>";
+  charRow += "</tr>";
+  pRow += "</tr>";
+
+  // pointer row showing l, c, r, i
+  let ptrRow = "<tr class='ptr-row'>";
+  for (let k = 0; k < n; k++) {
+    let marks = [];
+    if (k === step.l && step.l <= step.r && step.type !== "start" && step.type !== "done") marks.push("l");
+    if (k === step.c && step.type !== "start" && step.type !== "done") marks.push("c");
+    if (k === step.r && step.type !== "start" && step.type !== "done") marks.push("r");
+    ptrRow += "<td>" + (marks.length ? marks.join("/") : "") + "</td>";
+  }
+  ptrRow += "</tr>";
+
+  tape.innerHTML = idxRow + charRow + ptrRow + pRow;
+}
+
+// Render the original string s with the current palindrome highlighted.
+function renderOrigTape(step) {
+  const s = state.s;
+  const m = s.length;
+  const tbl = document.getElementById("origTape");
+  let len = 0, start = -1, ctr = -1;
+  if (step.i >= 0) {
+    len = step.p[step.i];
+    const st = (step.i - len) / 2;
+    if (Number.isInteger(st) && len > 0) {
+      start = st;
+      // center character index in s (for odd palindromes)
+      if (step.i % 2 === 1) ctr = (step.i - 1) / 2;
+    }
+  }
+  let idxRow = "<tr>", charRow = "<tr>";
+  for (let k = 0; k < m; k++) {
+    idxRow += "<td class='idx'>" + k + "</td>";
+    let cls = "origreal";
+    if (start >= 0 && k >= start && k < start + len) cls += " origpal";
+    if (k === ctr) cls += " origctr";
+    charRow += "<td class='" + cls + "'>" + s[k] + "</td>";
+  }
+  idxRow += "</tr>";
+  charRow += "</tr>";
+  tbl.innerHTML = idxRow + charRow;
+
+  const interp = document.getElementById("origInterp");
+  if (start >= 0) {
+    interp.innerHTML = "Current palindrome in <b>s</b>: <span style='color:var(--good);font-weight:700'>\"" +
+      s.substring(start, start + len) + "\"</span> at start " + start + ", length " + len + ".";
+  } else {
+    interp.innerHTML = "No palindrome at the current center yet (radius 0).";
+  }
+}
+
+// Pseudocode with the active line highlighted by step type.
+const PSEUDO = [
+  { id: "for",    text: "for i = 0 .. N-1:" },
+  { id: "mirror", text: "  if i < r:  p[i] = min(r - i, p[2c - i])   # mirror copy" },
+  { id: "expand", text: "  while t[i-p[i]-1] == t[i+p[i]+1]:  p[i]++   # expand" },
+  { id: "box",    text: "  if i + p[i] > r:  c, r = i, i + p[i]        # advance box" }
+];
+function renderPseudocode(step) {
+  let active = "for";
+  if (step.type === "mirror" || step.type === "fresh") active = "mirror";
+  else if (step.type === "expand") active = "expand";
+  else if (step.type === "box") active = "box";
+  else if (step.type === "stop") active = "expand";
+  let html = "";
+  for (const ln of PSEUDO) {
+    html += "<span class='line" + (ln.id === active ? " active" : "") + "'>" + ln.text + "</span>";
+  }
+  document.getElementById("pseudocode").innerHTML = html;
+}
+
+function applyStep(step) {
+  renderTape(step);
+  renderOrigTape(step);
+  renderPseudocode(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stCenter").textContent = step.i >= 0 ? step.i : "—";
+  document.getElementById("stMirror").textContent = step.mirror >= 0 ? step.mirror : "—";
+  document.getElementById("stBox").textContent =
+    (step.type === "start" || step.type === "done") ? "—" :
+    "(" + step.c + ", " + step.l + ", " + step.r + ")";
+  document.getElementById("stP").textContent = step.i >= 0 ? step.p[step.i] : "—";
+  document.getElementById("stLongest").textContent = step.longest;
+  document.getElementById("stCount").textContent = step.count;
+
+  // interpretation box
+  if (step.i >= 0) {
+    const len = step.p[step.i];
+    const start = (step.i - len) / 2;
+    const orig = (Number.isInteger(start) && len > 0)
+      ? state.s.substring(start, start + len)
+      : "";
+    document.getElementById("interpBox").innerHTML =
+      "Center <b>i=" + step.i + "</b> → radius <span class='val'>" + len +
+      "</span> = palindrome length in s. Start in s = (i&minus;p[i])/2 = <b>" +
+      (Number.isInteger(start) ? start : "—") + "</b>" +
+      (orig ? ", substring = <span class='val'>\"" + orig + "\"</span>" : " (empty)") + ".";
+  } else {
+    document.getElementById("interpBox").innerHTML = step.desc;
+  }
+}
+
+// ---------- Animation state ----------
+const state = {
+  s: "abacaba",
+  t: "",
+  n: 0,
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load(s) {
+  state.s = s;
+  const plan = buildPlan(s);
+  state.plan = plan;
+  state.t = plan.t;
+  state.n = plan.n;
+  state.stepIdx = 0;
+  applyStep(plan.steps[0]);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (plan.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.plan.steps[idx]);
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    gotoStep(state.stepIdx + 1);
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    rebuild();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+function rebuild() {
+  let s = document.getElementById("strInput").value;
+  // keep it short and clean; strip '#' so the separator never collides
+  s = s.replace(/#/g, "").slice(0, 24);
+  if (s.length === 0) s = "a";
+  document.getElementById("strInput").value = s;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  load(s);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("strInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
