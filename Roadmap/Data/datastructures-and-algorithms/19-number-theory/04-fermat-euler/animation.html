@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fermat & Euler — Cycle of Powers and the Totient</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --hi-cur: rgba(88, 166, 255, 0.30);
+    --hi-cop: rgba(210, 153, 34, 0.22);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 80px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+  .facts {
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .facts .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .facts .k { color: var(--muted); }
+  .facts .v { color: var(--good); font-weight: 700; }
+  .facts .v.warn { color: var(--accent-2); }
+  .facts .v.bad { color: var(--bad); }
+  .residues { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .res {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    background: var(--panel-2);
+  }
+  .res.coprime { color: var(--accent-2); border-color: var(--accent-2); background: var(--hi-cop); font-weight: 700; }
+  .powtable { border-collapse: collapse; font-family: var(--mono); font-size: 13px; margin-top: 6px; }
+  .powtable td, .powtable th {
+    border: 1px solid var(--border);
+    padding: 4px 8px; text-align: center; min-width: 38px;
+  }
+  .powtable th { color: var(--muted); background: var(--panel-2); }
+  .powtable td.cur { background: var(--hi-cur); color: #fff; font-weight: 700; }
+  .powtable td.one { background: var(--hi-cell); color: #fff; font-weight: 700; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  circle.node { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.5; }
+  circle.node.one { stroke: var(--good); stroke-width: 2.5; fill: rgba(63,185,80,0.15); }
+  circle.node.cur { stroke: var(--accent); stroke-width: 3; fill: rgba(88,166,255,0.18); }
+  circle.node.visited { stroke: var(--accent-2); }
+  text.nlabel { fill: var(--text); font-size: 12px; font-weight: 600; font-family: var(--mono); }
+  text.nlabel.one { fill: var(--good); }
+  path.hop { stroke: var(--accent); stroke-width: 2.5; fill: none; marker-end: url(#arrow); opacity: 0.9; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fermat &amp; Euler — The Cycle of Powers a<sup>1</sup>, a<sup>2</sup>, &hellip; mod m</h1>
+  <p>The powers of <b>a</b> mod <b>m</b> loop back to <b>1</b> after exactly <b>ord(a)</b> steps &mdash; and ord(a) always <b>divides</b> &phi;(m). The totient &phi;(m) counts the residues coprime to m.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>a = <input type="number" id="aInput" value="3" min="1" max="60" /></label>
+    <label>m = <input type="number" id="mInput" value="7" min="2" max="60" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Power cycle of a mod m</h2>
+      <svg id="cycleSvg" width="360" height="300" viewBox="0 0 360 300">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#58a6ff"/>
+          </marker>
+        </defs>
+        <g id="hopLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="step-counter" id="cycleCaption" style="margin-top:8px;"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:rgba(63,185,80,0.15);border-color:var(--good)"></span> residue 1 (target)</span>
+        <span><span class="swatch" style="background:rgba(88,166,255,0.18);border-color:var(--accent)"></span> current a<sup>k</sup></span>
+        <span><span class="swatch" style="border-color:var(--accent-2)"></span> visited</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Facts &amp; totient</h2>
+      <div class="facts" id="facts"></div>
+      <div class="step-counter" style="margin:12px 0 4px;">Residues 1..m &mdash; <span style="color:var(--accent-2)">coprime to m</span> are counted by &phi;(m):</div>
+      <div class="residues" id="residues"></div>
+      <div class="step-counter" style="margin:12px 0 4px;">Power sequence a<sup>k</sup> mod m:</div>
+      <table class="powtable" id="powTable"></table>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to begin. We multiply by <b>a</b> each step, watching a<sup>k</sup> mod m walk around until it returns to <b>1</b> &mdash; that return happens at k = ord(a), a divisor of &phi;(m).</div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>What to try</h2>
+    <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.7;">
+      <li><b>a = 3, m = 7</b> (default): prime modulus, a is a primitive root &mdash; the cycle visits all 6 nonzero residues before returning to 1 (Fermat: 3<sup>6</sup> &equiv; 1).</li>
+      <li><b>a = 2, m = 7</b>: order 3 &mdash; a shorter cycle 2 &rarr; 4 &rarr; 1, and 3 divides &phi;(7) = 6.</li>
+      <li><b>a = 3, m = 10</b>: composite modulus; &phi;(10) = 4, ord(3) = 4 &mdash; a primitive root mod 10 (Euler: 3<sup>4</sup> &equiv; 1).</li>
+      <li><b>a = 2, m = 10</b>: <b>not</b> coprime (gcd = 2) &mdash; the powers never reach 1, no inverse exists. The panel flags this in red.</li>
+      <li><b>a = 6, m = 12</b>: another non-coprime case; watch the facts panel report that Euler's theorem does not apply.</li>
+    </ul>
+    <p style="margin:10px 0 0;font-size:13px;color:var(--muted);">The yellow tiles are the residues coprime to m; their count is &phi;(m). The cycle length (ord of a) always divides that count whenever a is coprime to m &mdash; this is exactly why a<sup>&phi;(m)</sup> &equiv; 1.</p>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>How the theorems show up</h2>
+    <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.7;">
+      <li><b>Fermat's little theorem</b> appears when m is prime: then &phi;(m) = m &minus; 1, and the facts panel shows a<sup>m-1</sup> &equiv; 1 plus the inverse a<sup>m-2</sup>.</li>
+      <li><b>Euler's theorem</b> is the general statement a<sup>&phi;(m)</sup> &equiv; 1 for any coprime base &mdash; visible whenever the green "1" node is reached at step k = ord(a), a divisor of &phi;(m).</li>
+      <li><b>The order ord(a)</b> is the number of Steps to return to 1 &mdash; the length of the blue arrow path around the circle.</li>
+      <li><b>Exponent reduction</b> is the practical payoff: to compute a<sup>e</sup> mod m you only need e mod ord(a) (or e mod &phi;(m)) &mdash; your position within the cycle shown here.</li>
+    </ul>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Fermat's little theorem is the case m = prime (then &phi;(m) = m&minus;1); Euler's theorem a<sup>&phi;(m)</sup> &equiv; 1 holds for every a coprime to m because ord(a) divides &phi;(m).
+    See <code>junior.md</code> and <code>professional.md</code> for the proofs. When gcd(a, m) &gt; 1 the powers never reach 1 (no cycle through 1) &mdash; the animation flags this.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- number theory helpers ----------
+function gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
+
+function totient(m) {
+  let res = m, n = m;
+  for (let p = 2; p * p <= n; p++) {
+    if (n % p === 0) {
+      while (n % p === 0) n = Math.floor(n / p);
+      res -= Math.floor(res / p);
+    }
+  }
+  if (n > 1) res -= Math.floor(res / n);
+  return res;
+}
+
+function coprimes(m) {
+  const list = [];
+  for (let a = 1; a <= m; a++) if (gcd(a, m) === 1) list.push(a);
+  return list;
+}
+
+// Build the sequence a^1, a^2, ... until it returns to 1 (or detects a
+// non-coprime base whose powers never reach 1). Cap length to avoid runaway.
+function buildPowerSequence(a, m) {
+  const seq = [];          // values a^1, a^2, ...
+  let cur = ((a % m) + m) % m;
+  const cap = m + 2;       // the order divides φ(m) < m, so this is plenty
+  let reachedOne = false;
+  for (let k = 1; k <= cap; k++) {
+    seq.push(cur);
+    if (cur === 1 % m) { reachedOne = true; break; }
+    cur = (cur * (a % m)) % m;
+  }
+  return { seq, reachedOne };
+}
+
+// ---------- animation state ----------
+const state = {
+  a: 3,
+  m: 7,
+  seq: [],
+  reachedOne: false,
+  order: 0,
+  phi: 0,
+  stepIdx: 0,        // how many powers revealed (0..seq.length)
+  running: false,
+  timer: null
+};
+
+// ---------- layout the residues 0..m-1 around a circle ----------
+function nodePositions(m) {
+  const cx = 180, cy = 150, R = 110;
+  const pos = [];
+  for (let v = 0; v < m; v++) {
+    // place residue v at angle; put 1 at the top for clarity
+    const ang = -Math.PI / 2 + (2 * Math.PI * v) / m;
+    pos.push([cx + R * Math.cos(ang), cy + R * Math.sin(ang)]);
+  }
+  return pos;
+}
+
+function renderCycle() {
+  const nodeLayer = document.getElementById("nodeLayer");
+  const hopLayer = document.getElementById("hopLayer");
+  nodeLayer.innerHTML = "";
+  hopLayer.innerHTML = "";
+  const m = state.m;
+  const pos = nodePositions(m);
+  const revealed = state.seq.slice(0, state.stepIdx);
+  const curVal = state.stepIdx > 0 ? state.seq[state.stepIdx - 1] : null;
+  const visited = new Set(revealed);
+
+  // draw hops between consecutive revealed powers
+  for (let i = 1; i < revealed.length; i++) {
+    const [x1, y1] = pos[revealed[i - 1]];
+    const [x2, y2] = pos[revealed[i]];
+    if (revealed[i - 1] === revealed[i]) continue;
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    // curve the arrow a bit for readability
+    const dx = x2 - x1, dy = y2 - y1;
+    const nx = -dy, ny = dx;
+    const norm = Math.hypot(nx, ny) || 1;
+    const bend = 18;
+    const cxp = mx + (nx / norm) * bend, cyp = my + (ny / norm) * bend;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M${x1},${y1} Q${cxp},${cyp} ${x2},${y2}`);
+    path.setAttribute("class", "hop");
+    path.setAttribute("opacity", String(0.25 + 0.65 * (i / revealed.length)));
+    hopLayer.appendChild(path);
+  }
+
+  for (let v = 0; v < m; v++) {
+    const [x, y] = pos[v];
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 15);
+    let cls = "node";
+    if (v === 1 % m) cls += " one";
+    if (visited.has(v)) cls += " visited";
+    if (curVal !== null && v === curVal) cls += " cur";
+    c.setAttribute("class", cls);
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", v === 1 % m ? "nlabel one" : "nlabel");
+    t.textContent = v;
+    nodeLayer.appendChild(t);
+  }
+}
+
+function renderResidues() {
+  const box = document.getElementById("residues");
+  box.innerHTML = "";
+  const cop = new Set(coprimes(state.m));
+  for (let v = 1; v <= state.m; v++) {
+    const d = document.createElement("div");
+    d.className = "res" + (cop.has(v % state.m === 0 ? state.m : v) || cop.has(v) ? " coprime" : "");
+    // simpler: coprime if gcd(v, m) == 1 (v == m is gcd(m,m)=m, not coprime unless m==1)
+    d.className = "res" + (gcd(v, state.m) === 1 ? " coprime" : "");
+    d.textContent = v;
+    box.appendChild(d);
+  }
+}
+
+function renderPowTable() {
+  const tbl = document.getElementById("powTable");
+  const seq = state.seq;
+  let head = "<tr><th>k</th>";
+  let body = "<tr><th>a<sup>k</sup></th>";
+  for (let i = 0; i < seq.length; i++) {
+    head += "<th>" + (i + 1) + "</th>";
+    let cls = "";
+    if (i === state.stepIdx - 1) cls = "cur";
+    else if (seq[i] === 1 % state.m && i === seq.length - 1 && state.reachedOne) cls = "one";
+    body += "<td class='" + cls + "'>" + (i < state.stepIdx ? seq[i] : "&middot;") + "</td>";
+  }
+  head += "</tr>";
+  body += "</tr>";
+  tbl.innerHTML = head + body;
+}
+
+function renderFacts() {
+  const f = document.getElementById("facts");
+  const m = state.m, a = state.a;
+  const g = gcd(a, m);
+  const coprime = g === 1;
+  const isPrime = m >= 2 && totient(m) === m - 1;
+  let rows = "";
+  rows += `<div class="row"><span class="k">a, m</span><span class="v">${a}, ${m}</span></div>`;
+  rows += `<div class="row"><span class="k">gcd(a, m)</span><span class="v ${coprime ? "" : "bad"}">${g}${coprime ? " (coprime)" : " (NOT coprime)"}</span></div>`;
+  rows += `<div class="row"><span class="k">m is prime?</span><span class="v ${isPrime ? "" : "warn"}">${isPrime ? "yes" : "no"}</span></div>`;
+  rows += `<div class="row"><span class="k">&phi;(m)</span><span class="v">${state.phi}</span></div>`;
+  if (coprime) {
+    rows += `<div class="row"><span class="k">ord(a) (cycle length)</span><span class="v">${state.order}</span></div>`;
+    rows += `<div class="row"><span class="k">ord(a) divides &phi;(m)?</span><span class="v ${state.phi % state.order === 0 ? "" : "bad"}">${state.phi % state.order === 0 ? "yes — " + state.phi + " / " + state.order + " = " + (state.phi / state.order) : "no?!"}</span></div>`;
+    rows += `<div class="row"><span class="k">a<sup>&phi;(m)</sup> mod m (Euler)</span><span class="v">${modpow(a, state.phi, m)} &equiv; 1</span></div>`;
+    if (isPrime) {
+      rows += `<div class="row"><span class="k">a<sup>p-1</sup> mod p (Fermat)</span><span class="v">${modpow(a, m - 1, m)} &equiv; 1</span></div>`;
+      rows += `<div class="row"><span class="k">a<sup>-1</sup> = a<sup>p-2</sup> mod p</span><span class="v">${modpow(a, m - 2, m)}</span></div>`;
+    }
+  } else {
+    rows += `<div class="row"><span class="k">powers reach 1?</span><span class="v bad">never (gcd &gt; 1)</span></div>`;
+    rows += `<div class="row"><span class="k">inverse exists?</span><span class="v bad">no</span></div>`;
+  }
+  f.innerHTML = rows;
+}
+
+function modpow(a, e, m) {
+  a = ((a % m) + m) % m;
+  let r = 1 % m;
+  while (e > 0) {
+    if (e & 1) r = (r * a) % m;
+    a = (a * a) % m;
+    e = Math.floor(e / 2);
+  }
+  return r;
+}
+
+function renderAll() {
+  renderCycle();
+  renderResidues();
+  renderPowTable();
+  renderFacts();
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + state.seq.length;
+  const cap = document.getElementById("cycleCaption");
+  if (state.stepIdx === 0) {
+    cap.innerHTML = "Start at a<sup>1</sup> = " + (((state.a % state.m) + state.m) % state.m) + ". Each Step multiplies by a.";
+  } else {
+    const val = state.seq[state.stepIdx - 1];
+    cap.innerHTML = "a<sup>" + state.stepIdx + "</sup> mod " + state.m + " = <b>" + val + "</b>"
+      + (val === 1 % state.m && state.stepIdx > 1 ? " &mdash; back to 1! cycle closed at ord(a) = " + state.order : "");
+  }
+}
+
+function updateNarrate() {
+  const n = document.getElementById("narrate");
+  const m = state.m, a = state.a;
+  if (gcd(a, m) !== 1) {
+    n.innerHTML = "gcd(" + a + ", " + m + ") = " + gcd(a, m) + " &ne; 1, so a is <b>not</b> a unit. Its powers never return to 1, no inverse exists, and Euler's theorem does not apply. Pick a coprime base.";
+    return;
+  }
+  if (state.stepIdx === 0) {
+    n.innerHTML = "We multiply by <b>a = " + a + "</b> each Step. Watch a<sup>k</sup> mod " + m + " hop around the residues until it lands on <b>1</b>.";
+  } else if (state.stepIdx >= state.seq.length && state.reachedOne) {
+    const phi = state.phi, ord = state.order;
+    n.innerHTML = "Cycle closed: a<sup>" + ord + "</sup> &equiv; 1 (mod " + m + "). ord(a) = " + ord
+      + " <b>divides</b> &phi;(" + m + ") = " + phi + " (since " + phi + " / " + ord + " = " + (phi / ord)
+      + "). That is exactly why a<sup>&phi;(m)</sup> &equiv; 1 &mdash; Euler's theorem.";
+  } else {
+    const val = state.seq[state.stepIdx - 1];
+    n.innerHTML = "a<sup>" + state.stepIdx + "</sup> &equiv; " + val + " (mod " + m + "). Keep stepping until we return to 1.";
+  }
+}
+
+// ---------- step control ----------
+function stepForward() {
+  if (state.stepIdx < state.seq.length) {
+    state.stepIdx++;
+    renderAll();
+    updateNarrate();
+    updateButtons();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.seq.length;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.seq.length) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.seq.length) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 900);
+}
+
+function rebuild() {
+  let a = parseInt(document.getElementById("aInput").value, 10);
+  let m = parseInt(document.getElementById("mInput").value, 10);
+  if (isNaN(m) || m < 2) m = 2;
+  if (m > 60) m = 60;
+  if (isNaN(a) || a < 1) a = 1;
+  if (a > 60) a = 60;
+  document.getElementById("aInput").value = a;
+  document.getElementById("mInput").value = m;
+
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  state.a = a;
+  state.m = m;
+  state.phi = totient(m);
+  const { seq, reachedOne } = buildPowerSequence(a, m);
+  state.seq = seq;
+  state.reachedOne = reachedOne;
+  state.order = reachedOne ? seq.length : 0;
+  state.stepIdx = 0;
+  renderAll();
+  updateNarrate();
+  updateButtons();
+}
+
+// ---------- wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("aInput").addEventListener("change", rebuild);
+document.getElementById("mInput").addEventListener("change", rebuild);
+
+// ---------- initial ----------
+rebuild();
+</script>
+</body>
+</html>
