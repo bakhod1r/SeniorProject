@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Modular Arithmetic — Number Wheel and Modular Exponentiation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-a: rgba(88, 166, 255, 0.30);
+    --hi-b: rgba(210, 153, 34, 0.30);
+    --hi-res: rgba(63, 185, 80, 0.45);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 80px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; }
+  circle.slot { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.5; }
+  circle.slot.a { fill: var(--hi-a); stroke: var(--accent); stroke-width: 2.5; }
+  circle.slot.b { fill: var(--hi-b); stroke: var(--accent-2); stroke-width: 2.5; }
+  circle.slot.res { fill: var(--hi-res); stroke: var(--good); stroke-width: 3; }
+  text.slabel { fill: var(--text); font-size: 12px; font-family: var(--mono); }
+  text.slabel.reslab { fill: #fff; font-weight: 700; }
+  path.hand { stroke: var(--good); stroke-width: 2.5; fill: none; marker-end: url(#harrow); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    min-height: 40px;
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .bitstr {
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 3px;
+    margin: 6px 0;
+  }
+  .bitstr .on { color: var(--good); font-weight: 700; }
+  .bitstr .off { color: var(--muted); }
+  .ladder {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 8px;
+  }
+  .rung {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .rung.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .rung.used { border-color: var(--good); }
+  .rung .pow { color: var(--accent-2); font-weight: 700; min-width: 70px; }
+  .rung .bit.set { color: var(--good); font-weight: 700; }
+  .rung .res { color: var(--good); margin-left: auto; }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .modebtns { display: inline-flex; gap: 4px; }
+  .modebtns button.sel { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Modular Arithmetic — The Number Wheel &amp; Fast Exponentiation</h1>
+  <p>Reduce every value mod m onto a wheel of m slots. Watch a+b and a&times;b wrap past 0, see negatives count backward, and trace a<sup>b</sup> mod m by square-and-multiply.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <span class="modebtns">
+      <button id="modeAdd" class="sel">a + b</button>
+      <button id="modeMul">a &times; b</button>
+      <button id="modeNeg">&minus;a</button>
+      <button id="modePow">a<sup>b</sup></button>
+    </span>
+    <label>a = <input type="number" id="aIn" value="9" /></label>
+    <label>b = <input type="number" id="bIn" value="13" /></label>
+    <label>m = <input type="number" id="mIn" value="12" min="2" max="36" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Number wheel (mod m)</h2>
+      <svg id="wheel" width="300" height="300" viewBox="0 0 300 300">
+        <defs>
+          <marker id="harrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#3fb950"/>
+          </marker>
+        </defs>
+        <g id="handLayer"></g>
+        <g id="slotLayer"></g>
+      </svg>
+      <div class="interp" id="interpBox">Press <b>Step</b> to begin.</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-a)"></span> a</span>
+        <span><span class="swatch" style="background:var(--hi-b)"></span> b</span>
+        <span><span class="swatch" style="background:var(--hi-res)"></span> result</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Modular exponentiation trace (a<sup>b</sup> mod m)</h2>
+      <div class="bitstr" id="bitStr"></div>
+      <div class="step-counter" id="kBinInfo"></div>
+      <div class="ladder" id="ladder"></div>
+      <div class="step-counter" id="resultInfo" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Modular arithmetic keeps every number in [0, m). Choose a mode above and step through it. Negative results normalize with ((x % m) + m) % m.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The wheel has m slots 0..m&minus;1; addition and multiplication wrap past 0, and &minus;a counts
+    backward to land in [0, m). The right panel runs square-and-multiply for a<sup>b</sup> mod m. See <code>junior.md</code> and
+    <code>middle.md</code> for the safe patterns and <code>professional.md</code> for why Z/mZ is a ring (and a field when m is prime).
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- math helpers ----------
+function mod(x, m) { return ((x % m) + m) % m; }
+
+// ---------- state ----------
+const state = {
+  mode: "add",      // add | mul | neg | pow
+  a: 9, b: 13, m: 12,
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null,
+  powBits: [],
+  powLadder: []
+};
+
+// ---------- build step plans per mode ----------
+function buildAdd(a, b, m) {
+  const steps = [];
+  const ra = mod(a, m), rb = mod(b, m);
+  steps.push({ a: ra, b: rb, res: null,
+    desc: "Reduce inputs: a mod m = " + ra + ", b mod m = " + rb + "." });
+  const raw = ra + rb;
+  steps.push({ a: ra, b: rb, res: raw, wrap: raw >= m, rawVal: raw,
+    desc: "Add: " + ra + " + " + rb + " = " + raw + (raw >= m ? " (≥ m, will wrap)" : "") + "." });
+  const res = mod(raw, m);
+  steps.push({ a: ra, b: rb, res: res, final: true, rawVal: raw,
+    desc: "Wrap past m: (" + raw + ") mod " + m + " = " + res + ". The hand lands on slot " + res + "." });
+  return steps;
+}
+
+function buildMul(a, b, m) {
+  const steps = [];
+  const ra = mod(a, m), rb = mod(b, m);
+  steps.push({ a: ra, b: rb, res: null,
+    desc: "Reduce inputs: a mod m = " + ra + ", b mod m = " + rb + "." });
+  const raw = ra * rb;
+  steps.push({ a: ra, b: rb, res: raw % m, rawVal: raw,
+    desc: "Multiply: " + ra + " × " + rb + " = " + raw + ". A product can be far past m." });
+  const res = mod(raw, m);
+  steps.push({ a: ra, b: rb, res: res, final: true, rawVal: raw,
+    desc: "Reduce: (" + raw + ") mod " + m + " = " + res + ". Reduce-as-you-go keeps it small." });
+  return steps;
+}
+
+function buildNeg(a, b, m) {
+  const steps = [];
+  const ra = mod(a, m);
+  steps.push({ a: ra, b: null, res: null,
+    desc: "Start at a mod m = " + ra + " on the wheel." });
+  steps.push({ a: ra, b: null, res: -ra, rawVal: -ra,
+    desc: "Negate: −a = −" + ra + ". In Go/Java/C this raw % can be NEGATIVE." });
+  const res = mod(-ra, m);
+  steps.push({ a: ra, b: null, res: res, final: true, rawVal: -ra,
+    desc: "Fix: ((−" + ra + ") % " + m + " + " + m + ") % " + m + " = " + res + ". Count backward to land in [0, m)." });
+  return steps;
+}
+
+// modpow square-and-multiply, recorded step by step
+function buildPow(a, b, m) {
+  const steps = [];
+  const ra = mod(a, m);
+  let result = 1 % m;
+  let base = ra;
+  let exp = b < 0 ? 0 : b;
+  const bits = [];
+  let tmp = exp;
+  if (tmp === 0) bits.push(0);
+  while (tmp > 0) { bits.push(tmp & 1); tmp = Math.floor(tmp / 2); }
+  state.powBits = bits;
+
+  // ladder rungs: A^(2^i) values
+  const ladder = [];
+  let p = ra, e = 1;
+  for (let i = 0; i < bits.length; i++) {
+    ladder.push({ exp: e, val: p, bit: bits[i], used: false });
+    p = mod(p * p, m);
+    e *= 2;
+  }
+  state.powLadder = ladder;
+
+  steps.push({ pow: true, result: result, baseExp: 1, bitIdx: -1, res: result,
+    desc: "Start: result = 1, base = a mod m = " + ra + ". Read bits of b low→high." });
+
+  let curBase = ra, curExp = 1, idx = 0, working = exp;
+  while (working > 0) {
+    const bit = working & 1;
+    if (bit === 1) {
+      result = mod(result * curBase, m);
+      ladder[idx].used = true;
+      steps.push({ pow: true, result: result, baseExp: curExp, bitIdx: idx, mult: true, res: result,
+        desc: "Bit " + idx + " = 1 → result × a^" + curExp + " = " + result + " (mod " + m + ")." });
+    } else {
+      steps.push({ pow: true, result: result, baseExp: curExp, bitIdx: idx, mult: false, res: result,
+        desc: "Bit " + idx + " = 0 → skip the multiply; result stays " + result + "." });
+    }
+    working = Math.floor(working / 2);
+    if (working > 0) {
+      curBase = mod(curBase * curBase, m);
+      curExp *= 2;
+      idx++;
+      steps.push({ pow: true, result: result, baseExp: curExp, bitIdx: idx, square: true, res: result,
+        desc: "Square the base: a^" + (curExp / 2) + " × a^" + (curExp / 2) + " = a^" + curExp + " = " + curBase + "." });
+    }
+  }
+  steps.push({ pow: true, result: result, baseExp: curExp, bitIdx: -1, done: true, res: result,
+    desc: "Done. a^" + exp + " mod " + m + " = " + result + "." });
+  return steps;
+}
+
+// ---------- rendering ----------
+function renderWheel(step) {
+  const slotLayer = document.getElementById("slotLayer");
+  const handLayer = document.getElementById("handLayer");
+  slotLayer.innerHTML = "";
+  handLayer.innerHTML = "";
+  const m = state.m;
+  const cx = 150, cy = 150, R = 110;
+  const a = step ? step.a : null;
+  const b = step ? step.b : null;
+  const res = step ? (step.res === null ? null : mod(step.res, m)) : null;
+
+  for (let i = 0; i < m; i++) {
+    const ang = (-Math.PI / 2) + (2 * Math.PI * i) / m;
+    const x = cx + R * Math.cos(ang);
+    const y = cy + R * Math.sin(ang);
+    let cls = "slot";
+    if (res !== null && i === res) cls = "slot res";
+    else if (a !== null && i === a) cls = "slot a";
+    else if (b !== null && i === b) cls = "slot b";
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 14);
+    c.setAttribute("class", cls);
+    slotLayer.appendChild(c);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", (res !== null && i === res) ? "slabel reslab" : "slabel");
+    t.textContent = i;
+    slotLayer.appendChild(t);
+  }
+  // draw a hand from center to the result slot
+  if (res !== null) {
+    const ang = (-Math.PI / 2) + (2 * Math.PI * res) / m;
+    const x = cx + (R - 18) * Math.cos(ang);
+    const y = cy + (R - 18) * Math.sin(ang);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M" + cx + "," + cy + " L" + x + "," + y);
+    path.setAttribute("class", "hand");
+    handLayer.appendChild(path);
+  }
+}
+
+function renderPowPanel(step) {
+  const bitEl = document.getElementById("bitStr");
+  const bits = state.powBits;
+  let html = "";
+  const active = (step && step.pow) ? step.bitIdx : -1;
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const cls = bits[i] ? "on" : "off";
+    const mark = (i === active) ? " style='text-decoration:underline'" : "";
+    html += "<span class='" + cls + "'" + mark + ">" + bits[i] + "</span>";
+  }
+  bitEl.innerHTML = html;
+  const exp = state.b < 0 ? 0 : state.b;
+  document.getElementById("kBinInfo").textContent =
+    "b = " + exp + " = " + bits.slice().reverse().join("") + "₂  (bits low→high drive square-and-multiply)";
+
+  const ladderEl = document.getElementById("ladder");
+  ladderEl.innerHTML = "";
+  const ladder = state.powLadder;
+  const activeExp = (step && step.pow) ? step.baseExp : 1;
+  for (let i = 0; i < ladder.length; i++) {
+    const r = ladder[i];
+    const div = document.createElement("div");
+    div.className = "rung";
+    if (r.exp === activeExp) div.classList.add("active");
+    if (r.used) div.classList.add("used");
+    const bitTxt = r.bit === 1
+      ? "<span class='bit set'>bit " + i + " = 1 → multiply in</span>"
+      : "<span class='bit'>bit " + i + " = 0 → skip</span>";
+    div.innerHTML = "<span class='pow'>a^" + r.exp + "=" + r.val + "</span>" + bitTxt;
+    ladderEl.appendChild(div);
+  }
+  if (step && step.pow) {
+    document.getElementById("resultInfo").innerHTML =
+      "result = <span style='color:var(--good);font-weight:700'>" + step.result + "</span>" +
+      (step.done ? " (final = a^" + exp + " mod " + state.m + ")" : " (accumulated so far)");
+  }
+}
+
+function renderInterp(step) {
+  const box = document.getElementById("interpBox");
+  if (!step) { box.innerHTML = "Press <b>Step</b> to begin."; return; }
+  if (step.pow) {
+    box.innerHTML = "Modpow: every squaring builds the next a^(2^i); a set bit multiplies it into <span class='val'>result = " +
+      step.result + "</span>.";
+  } else {
+    const res = step.res === null ? "—" : mod(step.res, state.m);
+    box.innerHTML = "Wheel state: a=<b>" + (step.a === null ? "—" : step.a) + "</b>, b=<b>" +
+      (step.b === null ? "—" : step.b) + "</b>, result=<span class='val'>" + res + "</span>.";
+  }
+}
+
+// ---------- step engine ----------
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  const step = state.steps[idx];
+  if (state.mode === "pow") {
+    renderWheel({ a: null, b: null, res: step.res });
+    renderPowPanel(step);
+  } else {
+    renderWheel(step);
+    // keep pow panel inert when not in pow mode
+  }
+  renderInterp(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent = "step " + idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 1100);
+}
+
+// ---------- build / reset ----------
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  let a = parseInt(document.getElementById("aIn").value, 10);
+  let b = parseInt(document.getElementById("bIn").value, 10);
+  let m = parseInt(document.getElementById("mIn").value, 10);
+  if (isNaN(a)) a = 0;
+  if (isNaN(b)) b = 0;
+  if (isNaN(m) || m < 2) m = 2;
+  if (m > 36) m = 36;
+  document.getElementById("mIn").value = m;
+  state.a = a; state.b = b; state.m = m;
+
+  // reset ladder/bits so pow panel is clean
+  state.powBits = [];
+  state.powLadder = [];
+
+  if (state.mode === "add") state.steps = buildAdd(a, b, m);
+  else if (state.mode === "mul") state.steps = buildMul(a, b, m);
+  else if (state.mode === "neg") state.steps = buildNeg(a, b, m);
+  else state.steps = buildPow(a, b, m);
+
+  // always (re)compute the pow panel data so the right card shows something sensible
+  if (state.mode !== "pow") {
+    buildPow(a, b, m); // populates state.powBits / state.powLadder for display
+  }
+
+  state.stepIdx = 0;
+  // render initial
+  if (state.mode === "pow") {
+    renderWheel({ a: null, b: null, res: state.steps[0].res });
+    renderPowPanel(state.steps[0]);
+  } else {
+    renderWheel(state.steps[0]);
+    renderPowPanel({ pow: true, baseExp: 1, bitIdx: -1, result: 1 % m, done: false });
+  }
+  renderInterp(state.steps[0]);
+  document.getElementById("narrate").innerHTML = state.steps[0].desc;
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  for (const id of ["modeAdd", "modeMul", "modeNeg", "modePow"]) {
+    document.getElementById(id).classList.remove("sel");
+  }
+  const map = { add: "modeAdd", mul: "modeMul", neg: "modeNeg", pow: "modePow" };
+  document.getElementById(map[mode]).classList.add("sel");
+  rebuild();
+}
+
+// ---------- wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("modeAdd").addEventListener("click", () => setMode("add"));
+document.getElementById("modeMul").addEventListener("click", () => setMode("mul"));
+document.getElementById("modeNeg").addEventListener("click", () => setMode("neg"));
+document.getElementById("modePow").addEventListener("click", () => setMode("pow"));
+document.getElementById("aIn").addEventListener("change", rebuild);
+document.getElementById("bIn").addEventListener("change", rebuild);
+document.getElementById("mIn").addEventListener("change", rebuild);
+
+// ---------- initial ----------
+rebuild();
+</script>
+</body>
+</html>
