@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Palindromic Tree (eertree) — Online Construction</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-row: rgba(88, 166, 255, 0.22);
+    --hi-col: rgba(210, 153, 34, 0.22);
+    --hi-cell: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 150px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  svg { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; width: 100%; }
+  .strbar {
+    font-family: var(--mono);
+    font-size: 20px;
+    letter-spacing: 4px;
+    margin: 4px 0 10px;
+  }
+  .strbar .done { color: var(--good); }
+  .strbar .cur { color: #fff; background: rgba(88,166,255,0.3); border-radius: 4px; padding: 0 3px; }
+  .strbar .future { color: var(--muted); }
+  .nodelist {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    max-height: 270px;
+    overflow-y: auto;
+  }
+  .nrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .nrow.active { border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
+  .nrow.newnode { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+  .nrow .id { color: var(--accent-2); font-weight: 700; min-width: 26px; }
+  .nrow .pal { color: var(--good); font-weight: 700; min-width: 70px; }
+  .nrow .meta { color: var(--muted); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .interp {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .interp b { color: var(--accent); }
+  .interp .val { color: var(--good); font-weight: 700; }
+  circle.node { fill: var(--panel-2); stroke: var(--accent); stroke-width: 2; }
+  circle.node.root { stroke: var(--accent-2); stroke-dasharray: 4 3; }
+  circle.node.active { stroke: var(--good); stroke-width: 3; }
+  circle.node.fresh { fill: rgba(210,153,34,0.25); stroke: var(--accent-2); stroke-width: 3; }
+  text.nlabel { fill: #fff; font-size: 12px; font-weight: 700; font-family: var(--mono); }
+  path.childedge { stroke: var(--muted); stroke-width: 2; fill: none; marker-end: url(#arrow); }
+  path.suflink { stroke: var(--accent); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#arrowb); opacity: 0.85; }
+  text.edgelbl { fill: var(--accent-2); font-size: 11px; font-family: var(--mono); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Palindromic Tree (eertree) — Online Construction</h1>
+  <p>Each appended character creates <b>at most one</b> new distinct palindrome. Watch the two roots, the suffix-link walk from <code>last</code>, and new palindrome nodes appear.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>string: <input type="text" id="strInput" value="ababa" maxlength="22" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>eertree (nodes, child edges &amp; suffix links)</h2>
+      <div class="strbar" id="strBar"></div>
+      <svg id="treeSvg" height="320" viewBox="0 0 560 320">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#8b949e"/>
+          </marker>
+          <marker id="arrowb" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#58a6ff"/>
+          </marker>
+        </defs>
+        <g id="sufLayer"></g>
+        <g id="childLayer"></g>
+        <g id="nodeLayer"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent-2)"></span> root (len -1, len 0)</span>
+        <span><span class="swatch" style="background:rgba(63,185,80,0.4)"></span> last (longest pal. suffix)</span>
+        <span><span class="swatch" style="background:rgba(210,153,34,0.25)"></span> new node</span>
+        <span><span class="swatch" style="background:var(--accent)"></span> suffix link</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Nodes &amp; current step</h2>
+      <div class="interp" id="interpBox">
+        distinct palindromes = nodes &minus; 2. Press <b>Step</b> to append the first character.
+      </div>
+      <div class="nodelist" id="nodeList"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Two roots are created first: the <b>imaginary root</b> (len &minus;1, parent of odd palindromes) and the <b>empty root</b> (len 0, parent of even palindromes). <code>last</code> starts at the empty root.</div>
+
+  <div class="footnote">
+    Self-contained visualization. The eertree stores every distinct palindromic substring as one node; <b>each character adds at most one new node</b>, so there are at most n+2 nodes.
+    Solid grey arrows are child edges (<code>U &xrarr;c&xrarr; cUc</code>); dashed blue arrows are suffix links (to the longest proper palindromic suffix). See <code>junior.md</code> and <code>professional.md</code> for the proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- eertree model that records a step-by-step plan ----------
+// Node fields: len, link, parent (child-edge source), edgeChar, str (palindrome string)
+function buildPlan(s) {
+  const steps = [];
+  const len = [-1, 0];
+  const link = [0, 0];
+  const str = ["", ""];           // root palindromes (imaginary has none, empty = "")
+  const next = [{}, {}];          // children maps
+  const parent = [-1, -1];
+  const edgeChar = ["", ""];
+  let last = 1;
+  const buf = [];
+
+  function snapshot(desc, opts) {
+    opts = opts || {};
+    steps.push({
+      len: len.slice(),
+      link: link.slice(),
+      str: str.slice(),
+      parent: parent.slice(),
+      edgeChar: edgeChar.slice(),
+      last: last,
+      processed: buf.length,
+      desc: desc,
+      active: opts.active != null ? opts.active : last,
+      fresh: opts.fresh != null ? opts.fresh : -1,
+      walkNode: opts.walkNode != null ? opts.walkNode : -1
+    });
+  }
+
+  // initial roots snapshot
+  snapshot("Start: imaginary root (node 0, len -1) and empty root (node 1, len 0). last = empty root.",
+           { active: 1, fresh: -1 });
+
+  function getLinkSteps(x, i, c, label) {
+    // walk suffix links; emit a snapshot per probe for visualization of the walk
+    while (i - len[x] - 1 < 0 || buf[i - len[x] - 1] !== c) {
+      snapshot(label + " walk: node " + x + " (len " + len[x] + ") fails the wrap test for '" +
+               c + "'; follow its suffix link.", { active: last, walkNode: x });
+      x = link[x];
+    }
+    snapshot(label + " walk: node " + x + " (len " + len[x] + ") works — '" + c + "' " +
+             (len[x] >= 0 ? "wraps " + (str[x] || "ε") + " into " : "gives ") +
+             "'" + c + (str[x] || "") + c + "'.", { active: last, walkNode: x });
+    return x;
+  }
+
+  for (let k = 0; k < s.length; k++) {
+    const c = s[k];
+    const i = buf.length;
+    buf.push(c);
+    snapshot("Append '" + c + "' at position " + i + ". Walk suffix links from last (node " +
+             last + ") to find where 'c X c' can be formed.", { active: last });
+    const cur = getLinkSteps(last, i, c, "getLink");
+    if (next[cur][c] !== undefined) {
+      last = next[cur][c];
+      snapshot("Edge node " + cur + " --'" + c + "'--> already exists → palindrome '" +
+               str[last] + "' was seen before. No new node. last = node " + last + ".",
+               { active: last });
+      continue;
+    }
+    // create a new node
+    const now = len.length;
+    len.push(len[cur] + 2);
+    next.push({});
+    parent.push(cur);
+    edgeChar.push(c);
+    str.push(c + (str[cur] || "") + c);
+    let lnk;
+    if (len[now] === 1) {
+      lnk = 1;
+    } else {
+      const w = getLinkSteps(link[cur], i, c, "suffix-link");
+      lnk = next[w][c];
+    }
+    link.push(lnk);
+    next[cur][c] = now;
+    last = now;
+    snapshot("NEW palindrome '" + str[now] + "' (node " + now + ", len " + len[now] +
+             "). Its suffix link → node " + lnk + " ('" + (str[lnk] || "ε") +
+             "'). last = node " + now + ".", { active: now, fresh: now });
+  }
+  snapshot("Done. Distinct palindromes = nodes − 2 = " + (len.length - 2) + ".",
+           { active: last });
+  return steps;
+}
+
+// ---------- layout: place nodes by (len parity column, depth) ----------
+function layoutNodes(step) {
+  // imaginary root left, empty root right at top; odd palindromes under imaginary, even under empty
+  const n = step.len.length;
+  const pos = new Array(n);
+  // group nodes by len; assign x by a simple BFS over child edges
+  // roots:
+  pos[0] = { x: 150, y: 40 };  // imaginary
+  pos[1] = { x: 410, y: 40 };  // empty
+  // assign others by depth from their parent (child-edge source)
+  const childrenByLen = {};
+  for (let v = 2; v < n; v++) {
+    const L = step.len[v];
+    (childrenByLen[L] = childrenByLen[L] || []).push(v);
+  }
+  const lens = Object.keys(childrenByLen).map(Number).sort((a, b) => a - b);
+  let row = 1;
+  for (const L of lens) {
+    const arr = childrenByLen[L];
+    const odd = (L % 2 === 1);
+    const baseX = odd ? 150 : 410;
+    const spread = 120;
+    const cnt = arr.length;
+    arr.forEach((v, idx) => {
+      const offset = (idx - (cnt - 1) / 2) * (spread / Math.max(1, cnt));
+      pos[v] = { x: baseX + offset + (odd ? -10 : 10), y: 40 + row * 64 };
+    });
+    row++;
+  }
+  return pos;
+}
+
+function curve(x1, y1, x2, y2, bend) {
+  const mx = (x1 + x2) / 2 + bend;
+  const my = (y1 + y2) / 2;
+  return "M" + x1 + "," + y1 + " Q" + mx + "," + my + " " + x2 + "," + y2;
+}
+
+function renderTree(step) {
+  const sufLayer = document.getElementById("sufLayer");
+  const childLayer = document.getElementById("childLayer");
+  const nodeLayer = document.getElementById("nodeLayer");
+  sufLayer.innerHTML = ""; childLayer.innerHTML = ""; nodeLayer.innerHTML = "";
+  const pos = layoutNodes(step);
+  const n = step.len.length;
+  const SVGNS = "http://www.w3.org/2000/svg";
+
+  // child edges
+  for (let v = 2; v < n; v++) {
+    const p = step.parent[v];
+    if (p < 0 || !pos[p] || !pos[v]) continue;
+    const path = document.createElementNS(SVGNS, "path");
+    path.setAttribute("d", curve(pos[p].x, pos[p].y + 14, pos[v].x, pos[v].y - 14, 0));
+    path.setAttribute("class", "childedge");
+    childLayer.appendChild(path);
+    const lbl = document.createElementNS(SVGNS, "text");
+    lbl.setAttribute("x", (pos[p].x + pos[v].x) / 2 + 6);
+    lbl.setAttribute("y", (pos[p].y + pos[v].y) / 2);
+    lbl.setAttribute("class", "edgelbl");
+    lbl.textContent = step.edgeChar[v];
+    childLayer.appendChild(lbl);
+  }
+  // suffix links (skip roots' self-links)
+  for (let v = 2; v < n; v++) {
+    const t = step.link[v];
+    if (!pos[v] || !pos[t]) continue;
+    const path = document.createElementNS(SVGNS, "path");
+    path.setAttribute("d", curve(pos[v].x - 12, pos[v].y, pos[t].x - 12, pos[t].y, -28));
+    path.setAttribute("class", "suflink");
+    sufLayer.appendChild(path);
+  }
+  // nodes
+  for (let v = 0; v < n; v++) {
+    if (!pos[v]) continue;
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("cx", pos[v].x); c.setAttribute("cy", pos[v].y);
+    c.setAttribute("r", 16);
+    let cls = "node";
+    if (v < 2) cls += " root";
+    if (v === step.active) cls += " active";
+    if (v === step.fresh) cls += " fresh";
+    c.setAttribute("class", cls);
+    nodeLayer.appendChild(c);
+    const t = document.createElementNS(SVGNS, "text");
+    t.setAttribute("x", pos[v].x); t.setAttribute("y", pos[v].y + 4);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("class", "nlabel");
+    t.textContent = (v < 2) ? (v === 0 ? "-1" : "ε") : (step.str[v].length > 4 ? step.str[v].slice(0, 3) + "…" : step.str[v]);
+    nodeLayer.appendChild(t);
+  }
+}
+
+function renderStrBar(step) {
+  const el = document.getElementById("strBar");
+  const s = state.str;
+  let html = "";
+  for (let i = 0; i < s.length; i++) {
+    let cls = "future";
+    if (i < step.processed - 1) cls = "done";
+    else if (i === step.processed - 1) cls = "cur";
+    html += "<span class='" + cls + "'>" + s[i] + "</span>";
+  }
+  el.innerHTML = html || "<span class='future'>(empty)</span>";
+}
+
+function renderNodeList(step) {
+  const el = document.getElementById("nodeList");
+  let html = "";
+  for (let v = 0; v < step.len.length; v++) {
+    let cls = "nrow";
+    if (v === step.active) cls += " active";
+    if (v === step.fresh) cls += " newnode";
+    let palTxt;
+    if (v === 0) palTxt = "(imaginary)";
+    else if (v === 1) palTxt = "ε";
+    else palTxt = "\"" + step.str[v] + "\"";
+    html += "<div class='" + cls + "'>" +
+      "<span class='id'>#" + v + "</span>" +
+      "<span class='pal'>" + palTxt + "</span>" +
+      "<span class='meta'>len " + step.len[v] + ", link→#" + step.link[v] + "</span>" +
+      "</div>";
+  }
+  el.innerHTML = html;
+}
+
+function applyStep(step) {
+  renderTree(step);
+  renderStrBar(step);
+  renderNodeList(step);
+  document.getElementById("interpBox").innerHTML =
+    "distinct palindromes = nodes − 2 = <span class='val'>" + (step.len.length - 2) +
+    "</span>. last = node <b>#" + step.active + "</b> (longest palindromic suffix so far).";
+  document.getElementById("narrate").innerHTML = step.desc;
+}
+
+// ---------- animation state ----------
+const state = {
+  str: "ababa",
+  steps: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function load(str) {
+  state.str = str;
+  state.steps = buildPlan(str);
+  state.stepIdx = 0;
+  applyStep(state.steps[0]);
+  document.getElementById("stepInfo").textContent = "step 0 / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.steps.length) return;
+  state.stepIdx = idx;
+  applyStep(state.steps[idx]);
+  document.getElementById("stepInfo").textContent = "step " + idx + " / " + (state.steps.length - 1);
+  updateButtons();
+}
+
+function stepForward() {
+  if (state.stepIdx < state.steps.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.steps.length - 1) rebuild();
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 950);
+}
+
+function rebuild() {
+  let str = document.getElementById("strInput").value.toLowerCase().replace(/[^a-z]/g, "");
+  if (str.length === 0) str = "a";
+  if (str.length > 22) str = str.slice(0, 22);
+  document.getElementById("strInput").value = str;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+  load(str);
+}
+
+// ---------- wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("strInput").addEventListener("change", rebuild);
+
+// ---------- initial load ----------
+rebuild();
+</script>
+</body>
+</html>
