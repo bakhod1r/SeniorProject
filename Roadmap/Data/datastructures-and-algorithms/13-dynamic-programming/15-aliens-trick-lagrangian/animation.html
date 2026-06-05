@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aliens Trick (Lagrangian Relaxation) — Tangent to the Convex opt(k) Curve</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 16px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono);
+  }
+  .controls input[type="range"] { accent-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .card h3 { margin: 0 0 10px; font-size: 14px; color: var(--accent); }
+  svg { width: 100%; height: auto; display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.mono, .info code { font-family: var(--mono); }
+  .info { font-family: var(--mono); font-size: 13px; line-height: 1.7; }
+  .info .k { color: var(--accent); }
+  .info .l { color: var(--accent-2); }
+  .info .g { color: var(--good); }
+  .info .b { color: var(--bad); }
+  .log {
+    font-family: var(--mono); font-size: 12px; max-height: 220px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px dashed #222; }
+  .bigo td.c1 { color: var(--good); }
+  .bigo td.c2 { color: var(--accent-2); }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; font-family: var(--mono);
+  }
+  .pill.lo { background: rgba(248,81,73,0.15); color: var(--bad); }
+  .pill.hi { background: rgba(63,185,80,0.15); color: var(--good); }
+  .pill.mid { background: rgba(88,166,255,0.18); color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Aliens Trick — Lowering a Slope-(−λ) Line to Tangency on the Convex opt(k) Curve</h1>
+  <p>Binary-search the per-item penalty λ until the tangent point's k equals the target k, then recover opt(k) = f(λ) − λ·k.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button class="primary" id="runBtn" onclick="run()">Run binary search</button>
+    <button id="stepBtn" onclick="step()">Step</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+    <label>Target k:</label>
+    <input type="number" id="targetK" min="1" value="3" />
+    <label>λ (manual):</label>
+    <input type="range" id="lamSlider" min="0" max="100" value="50" oninput="manualLambda(this.value)" />
+    <span class="info"><code id="lamShow" class="l">λ=50</code></span>
+    <label>Speed:</label>
+    <input type="range" id="speed" min="1" max="10" value="6" />
+    <button onclick="newCurve()">New convex curve</button>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h3>Convex opt(k) curve &nbsp;·&nbsp; tangent line of slope −λ</h3>
+        <svg id="plot" viewBox="0 0 600 380" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--accent)"></span> opt(k) point</span>
+          <span><span class="dot" style="background:var(--good)"></span> tangent point (cnt(λ))</span>
+          <span><span class="dot" style="background:var(--orange)"></span> target k</span>
+          <span><span class="swatch" style="background:var(--accent-2)"></span> line slope −λ</span>
+          <span><span class="swatch" style="background:var(--purple)"></span> lower hull</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>Binary search on λ</h3>
+        <div class="info" id="searchInfo">
+          lo = <span class="pill lo" id="loPill">0</span>
+          hi = <span class="pill hi" id="hiPill">100</span>
+          mid = <span class="pill mid" id="midPill">–</span><br/>
+          λ = <span class="l" id="lamInfo">–</span>,
+          cnt(λ) = <span class="g" id="cntInfo">–</span>,
+          target k = <span style="color:var(--orange)" id="kInfo">3</span><br/>
+          f(λ) = <span id="fInfo">–</span><br/>
+          decision: <span id="decInfo">press Run or Step</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recovery</h3>
+        <div class="info" id="recInfo">
+          opt(k) = f(λ) − λ·k = <span class="g" id="ansInfo">–</span><br/>
+          <span class="muted" style="color:var(--muted)">true opt(k) = <span id="trueInfo">–</span></span>
+        </div>
+      </div>
+
+      <div class="card bigo">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Step</th><th>Cost</th></tr>
+          <tr><td>One penalized DP f(λ)</td><td class="c1 mono">O(DP_cost)</td></tr>
+          <tr><td>Binary search on λ</td><td class="c2 mono">O(log range)</td></tr>
+          <tr><td>Aliens total</td><td class="c1 mono">O(log range · DP_cost)</td></tr>
+          <tr><td>Naive (count dimension)</td><td class="c2 mono">O(k · DP_cost)</td></tr>
+          <tr><td>Recovery f(λ) − λ·k</td><td class="c1 mono">O(1)</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Probe log</h3>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+// ===== MODEL =====
+// We synthesize a CONVEX opt(k) for k = 1..N (strictly convex by construction),
+// so cnt(λ) is monotone and the Aliens search is valid.
+let N = 8;            // number of counts (k = 1..N)
+let opt = [];         // opt[k] for k=1..N (opt[0] unused)
+let target = 3;
+let lo = 0, hi = 100, mid = 0;
+let state = "idle";   // idle | searching | done
+let lastLambda = null, lastCnt = null, lastF = null, answer = null;
+let bestLambda = 0;
+let timer = null;
+
+function genConvex() {
+  // strictly convex: opt[k] = opt[1] - cumulative decreasing-then-increasing diffs.
+  // Use opt[k] = a*(k - c)^2 + b with integer rounding → guaranteed convex bowl.
+  opt = new Array(N + 1).fill(0);
+  const c = 1 + Math.random() * (N - 1);       // bowl center (continuous)
+  const a = 6 + Math.random() * 10;
+  const b = 20 + Math.random() * 40;
+  for (let k = 1; k <= N; k++) {
+    opt[k] = Math.round(a * (k - c) * (k - c) + b);
+  }
+  // ensure strict convexity of the integer sequence (fix any rounding ties)
+  for (let k = 2; k < N; k++) {
+    const d1 = opt[k] - opt[k - 1];
+    const d2 = opt[k + 1] - opt[k];
+    if (d2 <= d1) opt[k + 1] = opt[k] + d1 + 1;
+  }
+  // pick a slope range that safely covers all marginal differences
+  let maxAbs = 0;
+  for (let k = 2; k <= N; k++) maxAbs = Math.max(maxAbs, Math.abs(opt[k] - opt[k - 1]));
+  hi = maxAbs + 2;
+  lo = 0;
+}
+
+// penalized "DP": here opt[] is known, so f(λ) = min_c (opt[c] + λ·c),
+// cnt(λ) = smallest minimizing c (ties → FEWER items).
+function solve(lambda) {
+  let best = Infinity, bestC = 0;
+  for (let c = 1; c <= N; c++) {
+    const v = opt[c] + lambda * c;
+    if (v < best - 1e-9 || (Math.abs(v - best) < 1e-9 && c < bestC)) {
+      best = v; bestC = c;
+    }
+  }
+  return { f: best, cnt: bestC };
+}
+
+// ===== RENDERING =====
+const PAD = { l: 46, r: 18, t: 18, b: 34 };
+function plotDims() {
+  const W = 600, H = 380;
+  return { W, H, x0: PAD.l, x1: W - PAD.r, y0: H - PAD.b, y1: PAD.t };
+}
+function kToX(k) {
+  const { x0, x1 } = plotDims();
+  return x0 + (k - 1) / (N - 1) * (x1 - x0);
+}
+function valToY(v) {
+  const { y0, y1 } = plotDims();
+  let lo2 = Infinity, hi2 = -Infinity;
+  for (let k = 1; k <= N; k++) { lo2 = Math.min(lo2, opt[k]); hi2 = Math.max(hi2, opt[k]); }
+  const pad = (hi2 - lo2) * 0.18 + 1;
+  lo2 -= pad; hi2 += pad;
+  return y0 + (v - lo2) / (hi2 - lo2) * (y1 - y0);
+}
+
+function render() {
+  const { W, H, x0, x1, y0, y1 } = plotDims();
+  const svg = document.getElementById("plot");
+  let s = "";
+  // axes
+  s += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" stroke="#30363d"/>`;
+  s += `<line x1="${x0}" y1="${y0}" x2="${x0}" y2="${y1}" stroke="#30363d"/>`;
+  s += `<text x="${(x0 + x1) / 2}" y="${H - 8}" fill="#8b949e" font-size="12" text-anchor="middle">k (number of items)</text>`;
+  s += `<text x="14" y="${(y0 + y1) / 2}" fill="#8b949e" font-size="12" text-anchor="middle" transform="rotate(-90 14 ${(y0 + y1) / 2})">opt(k)</text>`;
+  // k ticks
+  for (let k = 1; k <= N; k++) {
+    s += `<text x="${kToX(k)}" y="${y0 + 16}" fill="#8b949e" font-size="11" text-anchor="middle">${k}</text>`;
+  }
+
+  // lower hull (since strictly convex, all points are hull vertices)
+  let hull = `M ${kToX(1)} ${valToY(opt[1])}`;
+  for (let k = 2; k <= N; k++) hull += ` L ${kToX(k)} ${valToY(opt[k])}`;
+  s += `<path d="${hull}" fill="none" stroke="#bc8cff" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.7"/>`;
+
+  // tangent line of slope -λ at current lambda (if any)
+  const lam = lastLambda != null ? lastLambda : Number(document.getElementById("lamSlider").value);
+  if (lam != null) {
+    // line: y = opt[cnt] - λ (x - cnt)  ... slope in (k,value) space is -λ
+    const sol = solve(lam);
+    const cx = sol.cnt;
+    // draw the supporting line across the whole k-range
+    const xa = 1, xb = N;
+    const ya = opt[cx] - lam * (xa - cx);
+    const yb = opt[cx] - lam * (xb - cx);
+    s += `<line x1="${kToX(xa)}" y1="${valToY(ya)}" x2="${kToX(xb)}" y2="${valToY(yb)}" stroke="#d29922" stroke-width="2"/>`;
+    // tangent point
+    s += `<circle cx="${kToX(cx)}" cy="${valToY(opt[cx])}" r="8" fill="none" stroke="#3fb950" stroke-width="2.5"/>`;
+  }
+
+  // target k vertical guide
+  s += `<line x1="${kToX(target)}" y1="${y0}" x2="${kToX(target)}" y2="${y1}" stroke="#ffa657" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>`;
+  s += `<circle cx="${kToX(target)}" cy="${valToY(opt[target])}" r="6" fill="#ffa657"/>`;
+
+  // opt points
+  for (let k = 1; k <= N; k++) {
+    s += `<circle cx="${kToX(k)}" cy="${valToY(opt[k])}" r="4" fill="#58a6ff"/>`;
+  }
+
+  svg.innerHTML = s;
+}
+
+function updatePanels(decision) {
+  document.getElementById("loPill").textContent = lo;
+  document.getElementById("hiPill").textContent = hi;
+  document.getElementById("midPill").textContent = (mid || mid === 0) && state !== "idle" ? mid : "–";
+  document.getElementById("lamInfo").textContent = lastLambda != null ? lastLambda : "–";
+  document.getElementById("cntInfo").textContent = lastCnt != null ? lastCnt : "–";
+  document.getElementById("kInfo").textContent = target;
+  document.getElementById("fInfo").textContent = lastF != null ? lastF : "–";
+  document.getElementById("decInfo").innerHTML = decision || "–";
+  document.getElementById("ansInfo").textContent = answer != null ? answer : "–";
+  document.getElementById("trueInfo").textContent = opt[target];
+  document.getElementById("lamShow").textContent = "λ=" + document.getElementById("lamSlider").value;
+}
+
+function logLine(html) {
+  const el = document.getElementById("log");
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  el.prepend(d);
+}
+
+// ===== SEARCH STEPS =====
+function beginSearch() {
+  target = Math.max(1, Math.min(N, Number(document.getElementById("targetK").value) || 3));
+  lo = 0;
+  let maxAbs = 0;
+  for (let k = 2; k <= N; k++) maxAbs = Math.max(maxAbs, Math.abs(opt[k] - opt[k - 1]));
+  hi = maxAbs + 2;
+  state = "searching";
+  document.getElementById("log").innerHTML = "";
+  logLine(`<span style="color:#58a6ff">start</span> target k=${target}, λ∈[${lo}, ${hi}]`);
+}
+
+function step() {
+  if (state === "idle" || state === "done") beginSearch();
+  if (lo >= hi) { finish(); return; }
+  mid = Math.floor((lo + hi) / 2);
+  const sol = solve(mid);
+  lastLambda = mid; lastCnt = sol.cnt; lastF = sol.f;
+  let decision;
+  if (sol.cnt <= target) {
+    // few/equal items → λ may be too big → shrink hi
+    hi = mid;
+    decision = `cnt(${mid})=${sol.cnt} ≤ k=${target} → <span class="g">λ too big, hi←${mid}</span>`;
+  } else {
+    lo = mid + 1;
+    decision = `cnt(${mid})=${sol.cnt} > k=${target} → <span class="b">λ too small, lo←${mid + 1}</span>`;
+  }
+  logLine(`probe λ=<span style="color:#d29922">${mid}</span>: cnt=${sol.cnt}, f=${sol.f} → ${decision.replace(/<[^>]+>/g, "")}`);
+  updatePanels(decision);
+  render();
+  if (lo >= hi) finish();
+}
+
+function finish() {
+  bestLambda = lo;
+  const sol = solve(bestLambda);
+  lastLambda = bestLambda; lastCnt = sol.cnt; lastF = sol.f;
+  answer = sol.f - bestLambda * target;           // recover with TARGET k
+  state = "done";
+  const ok = answer === opt[target];
+  logLine(`<span style="color:#3fb950">done</span> λ*=${bestLambda}, f=${sol.f} ⇒ opt(${target}) = ${sol.f} − ${bestLambda}·${target} = <b>${answer}</b> ${ok ? "✓" : "✗"}`);
+  updatePanels(`<span class="g">converged at λ*=${bestLambda}; recover opt(${target})=${answer}</span>`);
+  render();
+}
+
+function run() {
+  if (state === "idle" || state === "done") beginSearch();
+  const delay = 1100 - Number(document.getElementById("speed").value) * 100;
+  clearInterval(timer);
+  timer = setInterval(() => {
+    if (state === "done") { clearInterval(timer); return; }
+    step();
+    if (state === "done") clearInterval(timer);
+  }, delay);
+}
+
+function reset() {
+  clearInterval(timer);
+  state = "idle";
+  lo = 0; hi = hi; mid = 0;
+  lastLambda = null; lastCnt = null; lastF = null; answer = null;
+  document.getElementById("log").innerHTML = "";
+  updatePanels("press Run or Step");
+  render();
+}
+
+function newCurve() {
+  clearInterval(timer);
+  genConvex();
+  state = "idle";
+  document.getElementById("lamSlider").max = hi;
+  document.getElementById("lamSlider").value = Math.floor(hi / 2);
+  lastLambda = null; lastCnt = null; lastF = null; answer = null; mid = 0;
+  document.getElementById("log").innerHTML = "";
+  updatePanels("press Run or Step");
+  render();
+}
+
+function manualLambda(v) {
+  lastLambda = Number(v);
+  const sol = solve(lastLambda);
+  lastCnt = sol.cnt; lastF = sol.f;
+  document.getElementById("lamShow").textContent = "λ=" + v;
+  updatePanels(`manual λ=${v}: cnt=${sol.cnt}, f=${sol.f} (tangent at k=${sol.cnt})`);
+  render();
+}
+
+// ===== INIT =====
+genConvex();
+document.getElementById("lamSlider").max = hi;
+document.getElementById("lamSlider").value = Math.floor(hi / 2);
+document.getElementById("targetK").max = N;
+reset();
+render();
+</script>
+</body>
+</html>
