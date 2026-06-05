@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Segment Tree Beats — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;max-width:900px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.warn{color:var(--yellow);border-color:var(--yellow)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.92rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text],input[type=number]{padding:8px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.92rem}
+input[type=text]{width:320px}
+input[type=number]{width:64px}
+.speed-control{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--muted)}
+.speed-control input[type=range]{width:140px;accent-color:var(--blue)}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:1200px;min-height:420px;overflow:auto;margin-bottom:14px}
+svg{display:block;margin:0 auto}
+.node rect{fill:var(--bg);stroke:var(--border);stroke-width:2;transition:all .25s}
+.node.break rect{fill:rgba(63,185,80,.18);stroke:var(--green)}
+.node.tag rect{fill:rgba(210,153,34,.22);stroke:var(--yellow);stroke-width:3}
+.node.recurse rect{fill:rgba(248,81,73,.16);stroke:var(--red)}
+.node.changed rect{stroke:var(--purple);stroke-width:3}
+.node text{fill:var(--text);text-anchor:middle;font-family:monospace}
+.node .rng{font-size:.62rem;fill:var(--muted)}
+.node .sum{font-size:.72rem;fill:var(--blue);font-weight:700}
+.node .trio{font-size:.64rem;fill:var(--text)}
+.edge{stroke:var(--border);stroke-width:1.5;fill:none}
+.info-panel,.stats,.bigo{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1200px;margin-bottom:14px}
+.info-panel h3,.bigo h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6}
+.step-info .hl{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.stats{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:12px 18px}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.array-strip{display:flex;gap:4px;justify-content:center;margin-bottom:18px;flex-wrap:wrap}
+.cell{min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;font-family:monospace;font-size:.85rem;position:relative}
+.cell.in-q{border-color:var(--yellow);background:rgba(210,153,34,.15)}
+.cell .idx{position:absolute;bottom:-15px;font-size:.58rem;color:var(--muted)}
+.bigo table{width:100%;border-collapse:collapse;font-size:.85rem}
+.bigo td,.bigo th{border:1px solid var(--border);padding:5px 9px;text-align:left}
+.bigo th{color:var(--muted)}
+.bigo .g{color:var(--green)} .bigo .y{color:var(--yellow)}
+.log-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;max-height:160px;overflow:auto;font-family:monospace;font-size:.8rem;line-height:1.5}
+.log-box .e-break{color:var(--green)} .log-box .e-tag{color:var(--yellow)} .log-box .e-rec{color:var(--red)} .log-box .e-q{color:var(--blue)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:6px;text-align:center;max-width:820px}
+</style>
+</head>
+<body>
+<h1>Segment Tree Beats</h1>
+<p class="subtitle">Range chmin (a<sub>i</sub> = min(a<sub>i</sub>, x)) with range sum / max. Each node shows max1 / max2 / cnt. The three-way rule: <b>break</b> when x ≥ max1, <b>tag</b> (O(1)) when max2 &lt; x &lt; max1, <b>recurse</b> when x ≤ max2.</p>
+
+<div class="badges">
+<span class="badge best">Build: O(n)</span>
+<span class="badge best">Query: O(log n)</span>
+<span class="badge warn">chmin: amortized O(log² n)</span>
+<span class="badge space">Node: sum,max1,max2,cnt</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="arrIn" placeholder="Array: 5,2,5,1,5,4,5,3" value="5,2,5,1,5,4,5,3">
+<button onclick="loadArr()">Load &amp; Build</button>
+</div>
+
+<div class="input-control">
+<span style="color:var(--muted);font-size:.85rem">chmin:</span>
+<span style="color:var(--muted);font-size:.78rem">l</span><input type="number" id="cL" value="0">
+<span style="color:var(--muted);font-size:.78rem">r</span><input type="number" id="cR" value="7">
+<span style="color:var(--muted);font-size:.78rem">x</span><input type="number" id="cX" value="4">
+<button onclick="doChmin()">Apply chmin</button>
+<span style="color:var(--muted);font-size:.85rem;margin-left:12px">query:</span>
+<input type="number" id="qL" value="0"><input type="number" id="qR" value="7">
+<button onclick="doSum()">Sum</button>
+<button onclick="doMax()">Max</button>
+<button onclick="resetVis()" class="secondary">↺ Clear colors</button>
+</div>
+
+<div class="speed-control">
+<span>Slow</span><input type="range" id="speed" min="1" max="10" value="5"><span>Fast</span>
+<span style="margin-left:12px">Animate steps:</span>
+<button id="animBtn" onclick="toggleAnim()" class="secondary">Auto-step: ON</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg)"></div>Idle</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.5);border-color:var(--green)"></div>Break (x ≥ max1, no-op)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.6);border-color:var(--yellow)"></div>Tag (max2 &lt; x &lt; max1, O(1))</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.5);border-color:var(--red)"></div>Recurse (x ≤ max2)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--bg);border-color:var(--purple)"></div>Changed</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">n</div><div class="stat-value" id="nVal">0</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="lastOp">-</div></div>
+<div><div class="stat-label">Nodes visited</div><div class="stat-value" id="nVisited">0</div></div>
+<div><div class="stat-label">Tag applies</div><div class="stat-value" id="nTag">0</div></div>
+<div><div class="stat-label">Recursions</div><div class="stat-value" id="nRec">0</div></div>
+<div><div class="stat-label">Result</div><div class="stat-value" id="resultVal">-</div></div>
+</div>
+
+<div class="array-strip" id="strip"></div>
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Load an array, then apply a chmin. Watch where it <span class="ok">breaks</span>, <span class="hl">tags</span>, or <span class="bad">recurses</span>.</div>
+<div class="log-box" id="logBox" style="margin-top:10px"></div>
+</div>
+
+<div class="bigo">
+<h3>Complexity</h3>
+<table>
+<tr><th>Operation</th><th>Cost</th><th>Note</th></tr>
+<tr><td>Build</td><td class="g">O(n)</td><td>same as any segment tree</td></tr>
+<tr><td>Range max / sum query</td><td class="g">O(log n)</td><td>plain query on max1 / sum</td></tr>
+<tr><td>chmin (chmin + max)</td><td class="y">amortized O(log n)</td><td>per-op unbounded; total O((n+q)log n)</td></tr>
+<tr><td>chmin (chmin + sum)</td><td class="y">amortized O(log² n)</td><td>sum maintenance adds a log</td></tr>
+<tr><td>Space</td><td class="g">O(n)</td><td>4n nodes, 4 fields each</td></tr>
+</table>
+</div>
+
+<p class="footer-note">A plain lazy segment tree cannot do chmin because a single tag cannot capture "lower the big ones, leave the small ones". Storing max1/max2/cnt makes the tag case O(1): exactly cnt elements equal to max1 drop to x, so sum -= cnt*(max1-x).</p>
+
+<script>
+let arr=[5,2,5,1,5,4,5,3];
+let n=0, NEG=-(2**52);
+let sum=[],max1=[],max2=[],cnt=[];
+let nodeCls=new Map(), changed=new Set(), qLow=-1,qHigh=-1;
+let visited=0,tagApplies=0,recursions=0;
+let animOn=true, steps=[], stepIdx=0, timer=null;
+
+function getSpeed(){ return 1050 - document.getElementById('speed').value*100; }
+
+function merge(v){
+  const L=2*v,R=2*v+1;
+  sum[v]=sum[L]+sum[R];
+  if(max1[L]===max1[R]){ max1[v]=max1[L]; cnt[v]=cnt[L]+cnt[R]; max2[v]=Math.max(max2[L],max2[R]); }
+  else if(max1[L]>max1[R]){ max1[v]=max1[L]; cnt[v]=cnt[L]; max2[v]=Math.max(max2[L],max1[R]); }
+  else { max1[v]=max1[R]; cnt[v]=cnt[R]; max2[v]=Math.max(max2[R],max1[L]); }
+}
+function build(v,lo,hi){
+  if(lo===hi){ sum[v]=arr[lo]; max1[v]=arr[lo]; max2[v]=NEG; cnt[v]=1; return; }
+  const mid=(lo+hi)>>1;
+  build(2*v,lo,mid); build(2*v+1,mid+1,hi); merge(v);
+}
+function applyChmin(v,x){
+  if(x>=max1[v]) return;
+  sum[v]-=(max1[v]-x)*cnt[v];
+  max1[v]=x;
+}
+function pushDown(v){ applyChmin(2*v,max1[v]); applyChmin(2*v+1,max1[v]); }
+
+// chmin that records steps for animation
+function chmin(v,lo,hi,l,r,x){
+  visited++;
+  if(r<lo||hi<l){ return; }
+  if(x>=max1[v]){
+    nodeCls.set(v,'break');
+    steps.push({cls:'break',v,msg:`node [${lo},${hi}] max1=${max1[v]}: x=${x} ≥ max1 → BREAK (no change)`});
+    return;
+  }
+  if(l<=lo&&hi<=r&&x>max2[v]){
+    nodeCls.set(v,'tag'); changed.add(v); tagApplies++;
+    const before=sum[v];
+    applyChmin(v,x);
+    steps.push({cls:'tag',v,msg:`node [${lo},${hi}] max2=${m2s(max2[v])} < x=${x} < max1(old): TAG → ${cnt[v]} elems drop to ${x}, sum ${before}→${sum[v]}`});
+    return;
+  }
+  nodeCls.set(v,'recurse'); recursions++;
+  steps.push({cls:'recurse',v,msg:`node [${lo},${hi}] x=${x} ≤ max2=${m2s(max2[v])}: RECURSE (non-max elements also affected)`});
+  pushDown(v);
+  const mid=(lo+hi)>>1;
+  chmin(2*v,lo,mid,l,r,x);
+  chmin(2*v+1,mid+1,hi,l,r,x);
+  merge(v);
+}
+function qsum(v,lo,hi,l,r){
+  if(r<lo||hi<l) return 0;
+  if(l<=lo&&hi<=r){ nodeCls.set(v,'tag'); return sum[v]; }
+  nodeCls.set(v,'recurse');
+  pushDown(v);
+  const mid=(lo+hi)>>1;
+  return qsum(2*v,lo,mid,l,r)+qsum(2*v+1,mid+1,hi,l,r);
+}
+function qmax(v,lo,hi,l,r){
+  if(r<lo||hi<l) return NEG;
+  if(l<=lo&&hi<=r){ nodeCls.set(v,'tag'); return max1[v]; }
+  nodeCls.set(v,'recurse');
+  pushDown(v);
+  const mid=(lo+hi)>>1;
+  return Math.max(qmax(2*v,lo,mid,l,r),qmax(2*v+1,mid+1,hi,l,r));
+}
+function m2s(x){ return x<=NEG/2 ? '-∞' : x; }
+
+function rebuild(){
+  n=arr.length;
+  const m=4*Math.max(n,1);
+  sum=new Array(m).fill(0); max1=new Array(m).fill(0); max2=new Array(m).fill(NEG); cnt=new Array(m).fill(0);
+  if(n>0) build(1,0,n-1);
+  document.getElementById('nVal').textContent=n;
+  clearStats(); render();
+}
+function clearStats(){
+  nodeCls=new Map(); changed=new Set(); qLow=-1; qHigh=-1;
+  visited=0; tagApplies=0; recursions=0; steps=[]; stepIdx=0;
+  if(timer){ clearTimeout(timer); timer=null; }
+  document.getElementById('nVisited').textContent='0';
+  document.getElementById('nTag').textContent='0';
+  document.getElementById('nRec').textContent='0';
+  document.getElementById('resultVal').textContent='-';
+}
+function loadArr(){
+  const s=document.getElementById('arrIn').value;
+  const nums=s.split(/[, ]+/).map(x=>parseInt(x)).filter(x=>!isNaN(x));
+  if(nums.length>0){ arr=nums; document.getElementById('logBox').innerHTML=''; rebuild(); }
+}
+
+function ranges(v,lo,hi,out){
+  if(lo>hi) return;
+  out.set(v,{lo,hi});
+  if(lo===hi) return;
+  const mid=(lo+hi)>>1;
+  ranges(2*v,lo,mid,out); ranges(2*v+1,mid+1,hi,out);
+}
+function maxDepth(v,lo,hi,d){
+  if(lo===hi) return d;
+  const mid=(lo+hi)>>1;
+  return Math.max(maxDepth(2*v,lo,mid,d+1),maxDepth(2*v+1,mid+1,hi,d+1));
+}
+
+function render(){
+  const c=document.getElementById('canvas'), strip=document.getElementById('strip');
+  if(n===0){ c.innerHTML='<p style="color:var(--muted);text-align:center;padding-top:120px">Empty.</p>'; strip.innerHTML=''; return; }
+  strip.innerHTML=arr.map((v,i)=>{
+    const inQ=(qLow!==-1&&i>=qLow&&i<=qHigh);
+    return `<div class="cell ${inQ?'in-q':''}">${v}<span class="idx">${i}</span></div>`;
+  }).join('');
+  const rg=new Map(); ranges(1,0,n-1,rg);
+  const depth=maxDepth(1,0,n-1,0);
+  const xMap=new Map(); let col=0;
+  (function walk(v,d){
+    if(!rg.has(v)) return;
+    const r=rg.get(v);
+    if(r.lo===r.hi){ xMap.set(v,{x:col,d}); col++; return; }
+    walk(2*v,d+1); walk(2*v+1,d+1);
+    const lx=xMap.get(2*v).x, rx=xMap.get(2*v+1).x;
+    xMap.set(v,{x:(lx+rx)/2,d});
+  })(1,0);
+  const cols=col;
+  const W=Math.max(820,cols*96), H=Math.max(380,(depth+1)*100);
+  const sx=i=>56+i*(W-112)/Math.max(1,cols-1);
+  const sy=d=>40+d*(H-80)/Math.max(1,depth);
+  let edges='',nodes='';
+  for(const [v,p] of xMap){
+    const r=rg.get(v);
+    if(r.lo!==r.hi){
+      const lp=xMap.get(2*v), rp=xMap.get(2*v+1);
+      if(lp) edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)+22}" x2="${sx(lp.x)}" y2="${sy(lp.d)-22}"/>`;
+      if(rp) edges+=`<line class="edge" x1="${sx(p.x)}" y1="${sy(p.d)+22}" x2="${sx(rp.x)}" y2="${sy(rp.d)-22}"/>`;
+    }
+  }
+  for(const [v,p] of xMap){
+    const r=rg.get(v);
+    let cls=nodeCls.get(v)||'';
+    if(changed.has(v)) cls+=' changed';
+    nodes+=`<g class="node ${cls}">
+      <rect x="${sx(p.x)-42}" y="${sy(p.d)-24}" width="84" height="48" rx="5"/>
+      <text class="rng" x="${sx(p.x)}" y="${sy(p.d)-12}">[${r.lo},${r.hi}]</text>
+      <text class="sum" x="${sx(p.x)}" y="${sy(p.d)+1}">Σ=${sum[v]}</text>
+      <text class="trio" x="${sx(p.x)}" y="${sy(p.d)+15}">m1=${max1[v]} m2=${m2s(max2[v])} c=${cnt[v]}</text>
+    </g>`;
+  }
+  c.innerHTML=`<svg width="${W}" height="${H+20}">${edges}${nodes}</svg>`;
+}
+
+function setStats(op,res){
+  document.getElementById('lastOp').textContent=op;
+  document.getElementById('nVisited').textContent=visited;
+  document.getElementById('nTag').textContent=tagApplies;
+  document.getElementById('nRec').textContent=recursions;
+  document.getElementById('resultVal').textContent=res;
+}
+function pushLog(cls,msg){
+  const box=document.getElementById('logBox');
+  const cmap={break:'e-break',tag:'e-tag',recurse:'e-rec',q:'e-q'};
+  box.innerHTML+=`<div class="${cmap[cls]||''}">• ${msg}</div>`;
+  box.scrollTop=box.scrollHeight;
+}
+
+function playSteps(finalMsg){
+  // reset coloring, replay step-by-step
+  nodeCls=new Map();
+  if(!animOn){
+    for(const s of steps){ nodeCls.set(s.v,s.cls); pushLog(s.cls,s.msg); }
+    render();
+    document.getElementById('info').innerHTML=finalMsg;
+    return;
+  }
+  stepIdx=0;
+  nodeCls=new Map();
+  function tick(){
+    if(stepIdx>=steps.length){
+      document.getElementById('info').innerHTML=finalMsg;
+      return;
+    }
+    const s=steps[stepIdx++];
+    nodeCls.set(s.v,s.cls);
+    pushLog(s.cls,s.msg);
+    document.getElementById('info').innerHTML=`<span class="${s.cls==='break'?'ok':s.cls==='tag'?'hl':'bad'}">${s.msg}</span>`;
+    render();
+    timer=setTimeout(tick,getSpeed());
+  }
+  tick();
+}
+
+function doChmin(){
+  const l=+document.getElementById('cL').value, r=+document.getElementById('cR').value, x=+document.getElementById('cX').value;
+  if([l,r,x].some(isNaN)||l<0||r>=n||l>r){ document.getElementById('info').innerHTML='<span class="bad">Invalid chmin range.</span>'; return; }
+  if(timer){ clearTimeout(timer); timer=null; }
+  nodeCls=new Map(); changed=new Set(); visited=0; tagApplies=0; recursions=0; steps=[]; qLow=l; qHigh=r;
+  pushLog('q',`chmin([${l},${r}], x=${x})`);
+  chmin(1,0,n-1,l,r,x);
+  setStats(`chmin [${l},${r}]→${x}`,'-');
+  const fin=`<span class="ok">chmin done.</span> Visited ${visited} nodes — ${tagApplies} O(1) tag(s), ${recursions} recursion(s). Sum over [${l},${r}] is now ${sum[1]>=0?'(see Σ at root)':''} <span class="hl">${(function(){nodeCls=new Map();return qsum(1,0,n-1,l,r);})()}</span>.`;
+  playSteps(fin);
+}
+function doSum(){
+  const l=+document.getElementById('qL').value, r=+document.getElementById('qR').value;
+  if([l,r].some(isNaN)||l<0||r>=n||l>r){ document.getElementById('info').innerHTML='<span class="bad">Invalid query.</span>'; return; }
+  if(timer){ clearTimeout(timer); timer=null; }
+  nodeCls=new Map(); changed=new Set(); visited=0; qLow=l; qHigh=r;
+  const res=qsum(1,0,n-1,l,r);
+  setStats(`sum [${l},${r}]`,res);
+  pushLog('q',`querySum([${l},${r}]) = ${res}`);
+  document.getElementById('info').innerHTML=`<span class="ok">Sum over [${l},${r}] = ${res}</span>.`;
+  render();
+}
+function doMax(){
+  const l=+document.getElementById('qL').value, r=+document.getElementById('qR').value;
+  if([l,r].some(isNaN)||l<0||r>=n||l>r){ document.getElementById('info').innerHTML='<span class="bad">Invalid query.</span>'; return; }
+  if(timer){ clearTimeout(timer); timer=null; }
+  nodeCls=new Map(); changed=new Set(); visited=0; qLow=l; qHigh=r;
+  const res=qmax(1,0,n-1,l,r);
+  setStats(`max [${l},${r}]`,res);
+  pushLog('q',`queryMax([${l},${r}]) = ${res}`);
+  document.getElementById('info').innerHTML=`<span class="ok">Max over [${l},${r}] = ${res}</span>.`;
+  render();
+}
+function resetVis(){
+  if(timer){ clearTimeout(timer); timer=null; }
+  nodeCls=new Map(); changed=new Set(); qLow=-1; qHigh=-1;
+  document.getElementById('info').innerHTML='Colors cleared.';
+  render();
+}
+function toggleAnim(){
+  animOn=!animOn;
+  document.getElementById('animBtn').textContent='Auto-step: '+(animOn?'ON':'OFF');
+}
+rebuild();
+</script>
+</body>
+</html>
