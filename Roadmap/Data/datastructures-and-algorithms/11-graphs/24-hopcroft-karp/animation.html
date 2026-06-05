@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hopcroft-Karp — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header h1 { font-size: 20px; color: var(--blue); }
+  header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg);
+  }
+  .badge.t { color: var(--green); }
+  .badge.s { color: var(--blue); }
+  .badge.p { color: var(--purple); }
+  main {
+    max-width: 1100px; margin: 0 auto; padding: 20px;
+    display: grid; grid-template-columns: 1fr 320px; gap: 16px;
+  }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  button {
+    padding: 8px 16px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 6px; cursor: pointer; font-size: 14px;
+    transition: all .2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .speed { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+  .speed input { accent-color: var(--blue); }
+  select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px;
+  }
+  svg { width: 100%; height: 440px; display: block; background: var(--bg); border-radius: 8px; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0; font-size: 13px; }
+  .stat b { color: var(--blue); font-size: 18px; display: block; }
+  .stat span { color: var(--muted); }
+  .info { font-family: "SF Mono", Consolas, monospace; font-size: 13px; line-height: 1.7; min-height: 72px; }
+  .info .hl { color: var(--yellow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  code { color: var(--green); }
+  .log {
+    height: 200px; overflow-y: auto; font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px; line-height: 1.6;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px solid #1c222b; color: var(--muted); }
+  .log .aug { color: var(--green); }
+  .log .phase { color: var(--purple); }
+  .log .bfs { color: var(--blue); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; font-size: 12px; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+  h3 { color: var(--blue); font-size: 14px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hopcroft-Karp — Maximum Bipartite Matching</h1>
+  <p>BFS builds distance layers, then DFS augments along a maximal set of vertex-disjoint <em>shortest</em> augmenting paths each phase.</p>
+  <div class="badges">
+    <span class="badge t">Time O(E·√V)</span>
+    <span class="badge s">Space O(V+E)</span>
+    <span class="badge p">Phases O(√V)</span>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="panel">
+      <div class="controls">
+        <select id="example">
+          <option value="0">Example: 4×4 chain</option>
+          <option value="1">Example: K(3,3) complete</option>
+          <option value="2">Example: long augmenting path</option>
+        </select>
+        <button id="stepBtn" onclick="step()">Step</button>
+        <button id="runBtn" onclick="run()">Run</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+      <div class="speed">
+        <label>Speed</label><span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5"><span>Fast</span>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--blue)"></i>Unmatched edge</span>
+        <span><i style="background:var(--green)"></i>Matched edge</span>
+        <span><i style="background:var(--yellow)"></i>BFS layer / explore</span>
+        <span><i style="background:var(--orange)"></i>Augmenting path</span>
+        <span><i style="background:var(--purple)"></i>Free vertex</span>
+      </div>
+      <svg id="svg" viewBox="0 0 560 440" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <div class="stats">
+        <div class="stat"><b id="sMatch">0</b><span>matching</span></div>
+        <div class="stat"><b id="sPhase">0</b><span>phase</span></div>
+        <div class="stat"><b id="sLen">–</b><span>shortest path len</span></div>
+      </div>
+      <h3>What's happening</h3>
+      <div class="info" id="info">Press <span class="hl">Step</span> or <span class="hl">Run</span> to begin. The algorithm alternates a BFS (build layers) and a DFS (augment) until no augmenting path remains.</div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <h3>Complexity</h3>
+      <table>
+        <tr><th>Aspect</th><th>Cost</th></tr>
+        <tr><td>Time</td><td><code>O(E·√V)</code></td></tr>
+        <tr><td>Phases</td><td><code>O(√V)</code></td></tr>
+        <tr><td>Per phase</td><td><code>O(E)</code></td></tr>
+        <tr><td>Space</td><td><code>O(V+E)</code></td></tr>
+        <tr><td>vs. Kuhn</td><td><code>O(V·E)</code></td></tr>
+      </table>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+// ===================== EXAMPLES =====================
+// Each example: nL, nR, edges [u,v] with 1-based indices.
+const EXAMPLES = [
+  { nL: 4, nR: 4, edges: [[1,1],[1,2],[2,1],[3,2],[3,3],[4,3],[4,4]] },
+  { nL: 3, nR: 3, edges: [[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,1],[3,2],[3,3]] },
+  { nL: 3, nR: 3, edges: [[1,1],[1,2],[2,1],[3,2],[3,3]] },
+];
+
+const INF = 1e9;
+let G, steps, idx, timer, running;
+
+// ===================== STEP GENERATION (precompute the whole run) =====================
+function generateSteps(ex) {
+  const nL = ex.nL, nR = ex.nR;
+  const adj = Array.from({length: nL + 1}, () => []);
+  ex.edges.forEach(([u, v]) => adj[u].push(v));
+  const pairU = new Array(nL + 1).fill(0);
+  const pairV = new Array(nR + 1).fill(0);
+  let dist = new Array(nL + 1).fill(0);
+  const out = [];
+  let matching = 0, phase = 0;
+
+  function snapshot(extra) {
+    return Object.assign({
+      pairU: pairU.slice(), pairV: pairV.slice(),
+      dist: dist.slice(), matching, phase,
+    }, extra);
+  }
+
+  // BFS: returns shortest augmenting path length, or INF if none.
+  function bfs() {
+    const q = [];
+    for (let u = 1; u <= nL; u++) {
+      if (pairU[u] === 0) { dist[u] = 0; q.push(u); }
+      else dist[u] = INF;
+    }
+    dist[0] = INF;
+    while (q.length) {
+      const u = q.shift();
+      if (dist[u] < dist[0]) {
+        for (const v of adj[u]) {
+          const w = pairV[v];
+          if (dist[w] === INF) { dist[w] = dist[u] + 1; q.push(w); }
+        }
+      }
+    }
+    return dist[0];
+  }
+
+  function dfs(u, pathEdges) {
+    if (u === 0) return true;
+    for (const v of adj[u]) {
+      const w = pairV[v];
+      if (dist[w] === dist[u] + 1 && dfs(w, pathEdges)) {
+        pairV[v] = u; pairU[u] = v;
+        pathEdges.push([u, v]);
+        return true;
+      }
+    }
+    dist[u] = INF;
+    return false;
+  }
+
+  // main loop, emitting steps
+  while (true) {
+    const len = bfs();
+    phase++;
+    if (len >= INF) {
+      out.push(snapshot({ kind: 'done', desc:
+        `BFS in phase ${phase}: NIL unreachable — <span class="hl">no augmenting path</span>. Matching is maximum (size ${matching}).`,
+        shortest: '–', logCls: 'phase', log: `Phase ${phase}: no augmenting path → STOP. Maximum matching = ${matching}.` }));
+      break;
+    }
+    out.push(snapshot({ kind: 'bfs', desc:
+      `<span class="hl">Phase ${phase} — BFS.</span> Built distance layers. Shortest augmenting path length = <span class="hl">${len}</span>. (Strictly longer than previous phases.)`,
+      shortest: len, logCls: 'bfs', log: `Phase ${phase}: BFS layered graph, shortest augmenting length = ${len}.` }));
+
+    // DFS sweep: collect a maximal set of disjoint shortest augmenting paths
+    let foundThisPhase = 0;
+    for (let u = 1; u <= nL; u++) {
+      if (pairU[u] === 0) {
+        const pathEdges = [];
+        if (dfs(u, pathEdges)) {
+          matching++;
+          foundThisPhase++;
+          out.push(snapshot({ kind: 'aug', augPath: pathEdges.slice(), shortest: len,
+            desc: `<span class="hl">DFS augment.</span> Flipped a shortest augmenting path from free left vertex L${u}. Matching grows to <span class="hl">${matching}</span>.`,
+            logCls: 'aug', log: `Phase ${phase}: augmented from L${u} (+1). Matching = ${matching}.` }));
+        }
+      }
+    }
+    out.push(snapshot({ kind: 'phaseEnd', shortest: len,
+      desc: `Phase ${phase} done: <span class="hl">${foundThisPhase}</span> vertex-disjoint shortest path(s) augmented this phase. Restart BFS.`,
+      logCls: 'phase', log: `Phase ${phase}: +${foundThisPhase} disjoint paths. Total = ${matching}.` }));
+  }
+  return out;
+}
+
+// ===================== LAYOUT =====================
+function layout() {
+  const nL = G.nL, nR = G.nR;
+  const W = 560, H = 440, pad = 50;
+  const lx = 150, rx = 410;
+  const gapL = (H - 2 * pad) / Math.max(1, nL - 1 || 1);
+  const gapR = (H - 2 * pad) / Math.max(1, nR - 1 || 1);
+  const lpos = {}, rpos = {};
+  for (let u = 1; u <= nL; u++) lpos[u] = { x: lx, y: nL === 1 ? H/2 : pad + (u - 1) * gapL };
+  for (let v = 1; v <= nR; v++) rpos[v] = { x: rx, y: nR === 1 ? H/2 : pad + (v - 1) * gapR };
+  return { lpos, rpos };
+}
+
+// ===================== RENDER =====================
+function render(s) {
+  const { lpos, rpos } = layout();
+  const adj = Array.from({length: G.nL + 1}, () => []);
+  G.edges.forEach(([u, v]) => adj[u].push(v));
+  let svg = '';
+
+  // edges
+  const augSet = new Set((s.augPath || []).map(([u, v]) => u + '-' + v));
+  for (const [u, v] of G.edges) {
+    const matched = s.pairU[u] === v;
+    let color = matched ? 'var(--green)' : 'var(--border)';
+    let w = matched ? 3 : 1.5;
+    if (augSet.has(u + '-' + v)) { color = 'var(--orange)'; w = 4; }
+    const a = lpos[u], b = rpos[v];
+    svg += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${color}" stroke-width="${w}" ${matched ? '' : 'stroke-dasharray="4 4"'} />`;
+  }
+
+  // left vertices
+  for (let u = 1; u <= G.nL; u++) {
+    const p = lpos[u];
+    const free = s.pairU[u] === 0;
+    const layer = s.dist && s.dist[u];
+    let fill = free ? 'var(--purple)' : 'var(--surface)';
+    let stroke = 'var(--blue)';
+    if (s.kind === 'bfs' && layer !== INF && layer !== undefined) stroke = 'var(--yellow)';
+    svg += circle(p.x, p.y, 'L' + u, fill, stroke);
+    if (s.kind === 'bfs' && layer !== undefined && layer !== INF)
+      svg += `<text x="${p.x - 32}" y="${p.y + 4}" fill="var(--yellow)" font-size="11" text-anchor="middle">d=${layer}</text>`;
+  }
+  // right vertices
+  for (let v = 1; v <= G.nR; v++) {
+    const p = rpos[v];
+    const free = s.pairV[v] === 0;
+    const fill = free ? 'var(--purple)' : 'var(--surface)';
+    svg += circle(p.x, p.y, 'R' + v, fill, 'var(--blue)');
+  }
+
+  // labels
+  svg += `<text x="150" y="24" fill="var(--muted)" font-size="13" text-anchor="middle">LEFT</text>`;
+  svg += `<text x="410" y="24" fill="var(--muted)" font-size="13" text-anchor="middle">RIGHT</text>`;
+
+  document.getElementById('svg').innerHTML = svg;
+  document.getElementById('sMatch').textContent = s.matching;
+  document.getElementById('sPhase').textContent = s.phase;
+  document.getElementById('sLen').textContent = s.shortest;
+  document.getElementById('info').innerHTML = s.desc;
+}
+
+function circle(x, y, label, fill, stroke) {
+  return `<circle cx="${x}" cy="${y}" r="18" fill="${fill}" stroke="${stroke}" stroke-width="2.5" />` +
+    `<text x="${x}" y="${y + 4}" fill="var(--text)" font-size="12" text-anchor="middle">${label}</text>`;
+}
+
+// ===================== LOG =====================
+function addLog(s) {
+  if (!s.log) return;
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = s.logCls || '';
+  d.textContent = s.log;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ===================== CONTROLS =====================
+function speedMs() { return 1200 - document.getElementById('speed').value * 110; }
+
+function step() {
+  if (!steps) build();
+  if (idx >= steps.length) return;
+  const s = steps[idx];
+  render(s);
+  addLog(s);
+  idx++;
+  if (idx >= steps.length) { document.getElementById('stepBtn').disabled = true; pause(); }
+}
+
+function run() {
+  if (!steps) build();
+  running = true;
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  loop();
+}
+function loop() {
+  if (!running || idx >= steps.length) { pause(); return; }
+  step();
+  timer = setTimeout(loop, speedMs());
+}
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+
+function build() {
+  const ex = EXAMPLES[+document.getElementById('example').value];
+  G = ex;
+  steps = generateSteps(ex);
+  idx = 0;
+}
+
+function reset() {
+  pause();
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('stepBtn').disabled = false;
+  build();
+  // render the initial empty-matching state
+  render({
+    pairU: new Array(G.nL + 1).fill(0),
+    pairV: new Array(G.nR + 1).fill(0),
+    dist: [], matching: 0, phase: 0, shortest: '–', kind: 'init',
+    desc: 'Initial state: empty matching. All vertices are <span class="hl">free</span> (purple). Press <span class="hl">Step</span> or <span class="hl">Run</span>.'
+  });
+}
+
+document.getElementById('example').addEventListener('change', reset);
+
+// init
+reset();
+</script>
+</body>
+</html>
