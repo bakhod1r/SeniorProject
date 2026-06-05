@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lyndon Words & Duval's Algorithm — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --hi-i: rgba(88, 166, 255, 0.30);
+    --hi-j: rgba(210, 153, 34, 0.34);
+    --hi-k: rgba(248, 81, 73, 0.30);
+    --hi-cand: rgba(63, 185, 80, 0.22);
+    --hi-done: rgba(63, 185, 80, 0.40);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 18px 24px 60px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 200px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+  .controls select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .strip { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; }
+  .cell {
+    position: relative;
+    width: 36px;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    background: var(--panel-2);
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .cell.cand { background: var(--hi-cand); }
+  .cell.done { background: var(--hi-done); color: #fff; }
+  .cell.midline { border-left: 2px dashed var(--accent-2); }
+  .cell .idx {
+    position: absolute;
+    bottom: -16px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .ptrrow { display: flex; flex-wrap: wrap; gap: 4px; height: 22px; margin-bottom: 18px; }
+  .ptr {
+    width: 36px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .ptr.i { color: var(--accent); }
+  .ptr.j { color: var(--accent-2); }
+  .ptr.k { color: var(--bad); }
+  .factors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+    min-height: 40px;
+  }
+  .factor {
+    padding: 6px 12px;
+    border: 1px solid var(--good);
+    border-radius: 7px;
+    background: rgba(63, 185, 80, 0.14);
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .factor .meta { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 6px; }
+  .vars {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+  .vars .v { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  .vars .v b { color: var(--accent); }
+  .narrate {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 16px 0 0;
+    font-size: 14px;
+    min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .result-line {
+    margin-top: 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+  }
+  .result-line b { color: var(--accent); }
+  .result-line .val { color: var(--good); font-weight: 700; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lyndon Words &amp; Duval's Algorithm — Three-Pointer Factorization</h1>
+  <p>A <b>Lyndon word</b> is strictly smaller than all its rotations. Watch Duval's <span style="color:var(--accent)">i</span>/<span style="color:var(--accent-2)">j</span>/<span style="color:var(--bad)">k</span> pointers scan the string and emit the non-increasing Lyndon factors. Switch to <b>rotation</b> mode to see the smallest cyclic rotation via s+s.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>Mode:
+      <select id="modeSel">
+        <option value="factor">Lyndon factorization of s</option>
+        <option value="rotation">Smallest rotation (Duval on s+s)</option>
+      </select>
+    </label>
+    <label>s = <input type="text" id="sInput" value="bbababaa" maxlength="24" /></label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2 id="scanTitle">Scanning string</h2>
+      <div class="ptrrow" id="ptrRow"></div>
+      <div class="strip" id="strip"></div>
+      <div class="vars" id="vars"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-i)"></span> i — factor start</span>
+        <span><span class="swatch" style="background:var(--hi-j)"></span> j — look-ahead</span>
+        <span><span class="swatch" style="background:var(--hi-k)"></span> k — trailing (period)</span>
+        <span><span class="swatch" style="background:var(--hi-cand)"></span> current candidate</span>
+        <span><span class="swatch" style="background:var(--hi-done)"></span> emitted factor</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Running decomposition &nbsp; w&#8321; &ge; w&#8322; &ge; &hellip;</h2>
+      <div class="factors" id="factors"></div>
+      <div class="result-line" id="resultLine">Press <b>Step</b> to begin.</div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Duval scans once with three pointers. <code>s[k] &lt;= s[j]</code> drives the loop: equal &rarr; advance k (period continues); <code>s[k] &lt; s[j]</code> &rarr; reset k=i (candidate extends); <code>s[k] &gt; s[j]</code> &rarr; emit Lyndon factors of length (j&minus;k).</div>
+
+  <div class="footnote">
+    Self-contained visualization. The factorization is the unique Chen-Fox-Lyndon decomposition (non-increasing Lyndon words), computed in O(n) time and O(1) extra space.
+    In <b>rotation</b> mode we run the same scan on <code>s + s</code>; the start of the last factor before the dashed midline marks the smallest cyclic rotation.
+    See <code>junior.md</code> and <code>professional.md</code> for the proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Build the step plan for Duval on a given string ----------
+// Each step is a snapshot of (i, j, k, phase, emittedFactors, desc).
+// phase: "init" | "compare" | "advance-k" | "reset-k" | "emit" | "done"
+function buildPlan(s, midline) {
+  const n = s.length;
+  const steps = [];
+  const factors = []; // {start,len,text}
+  let i = 0;
+
+  steps.push({
+    i: 0, j: 1, k: 0, cmp: null,
+    factors: factors.map(f => ({ ...f })),
+    desc: "Start. i = 0 marks the beginning of the part still to factor. We set j = i+1 (look-ahead) and k = i (trailing pointer); the period length is j − k = 1.",
+    phase: "init"
+  });
+
+  while (i < n) {
+    let j = i + 1;
+    let k = i;
+    while (j < n && s[k] <= s[j]) {
+      if (s[k] < s[j]) {
+        // reset
+        steps.push({
+          i, j, k, cmp: "lt",
+          factors: factors.map(f => ({ ...f })),
+          desc: "Compare s[k]='" + s[k] + "' with s[j]='" + s[j] + "': s[k] < s[j]. The candidate can extend into a longer Lyndon word, so reset k = i (the period becomes j − i + 1).",
+          phase: "reset-k"
+        });
+        k = i;
+      } else {
+        steps.push({
+          i, j, k, cmp: "eq",
+          factors: factors.map(f => ({ ...f })),
+          desc: "Compare s[k]='" + s[k] + "' with s[j]='" + s[j] + "': equal. The current period continues, so advance k (and j). Period length stays j − k.",
+          phase: "advance-k"
+        });
+        k = k + 1;
+      }
+      j = j + 1;
+      // snapshot after the pointers move, before next compare
+      steps.push({
+        i, j, k, cmp: null,
+        factors: factors.map(f => ({ ...f })),
+        desc: "Advance j to " + j + ". Period length is now j − k = " + (j - k) + ". Read the next character (or stop if the period breaks / string ends).",
+        phase: "compare"
+      });
+    }
+    // loop ended: emit factors of length p = j - k
+    const p = j - k;
+    if (j < n) {
+      steps.push({
+        i, j, k, cmp: "gt",
+        factors: factors.map(f => ({ ...f })),
+        desc: "Compare s[k]='" + s[k] + "' with s[j]='" + s[j] + "': s[k] > s[j]. The run of equal Lyndon words is finished — emit factors of length p = j − k = " + p + ".",
+        phase: "emit"
+      });
+    } else {
+      steps.push({
+        i, j, k, cmp: "end",
+        factors: factors.map(f => ({ ...f })),
+        desc: "Reached the end of the string. Emit the remaining Lyndon factors of length p = j − k = " + p + ".",
+        phase: "emit"
+      });
+    }
+    while (i <= k) {
+      const f = { start: i, len: p, text: s.substring(i, i + p) };
+      factors.push(f);
+      i += p;
+      steps.push({
+        i, j, k, cmp: null,
+        factors: factors.map(f2 => ({ ...f2 })),
+        emitted: { ...f },
+        desc: "Emit Lyndon factor \"" + f.text + "\" (length " + p + ") at position " + f.start + ". Advance i by " + p + " to i = " + i + ".",
+        phase: "emit"
+      });
+    }
+  }
+
+  // compute the smallest-rotation answer index (last factor start < midline)
+  let rotIdx = 0;
+  if (midline != null) {
+    for (const f of factors) {
+      if (f.start < midline) rotIdx = f.start;
+    }
+  }
+
+  steps.push({
+    i, j: n, k: n, cmp: null,
+    factors: factors.map(f => ({ ...f })),
+    desc: "Done. The Chen-Fox-Lyndon factorization is complete: a unique non-increasing sequence of Lyndon words." +
+      (midline != null ? " The last factor starting before the midline begins the smallest rotation." : ""),
+    phase: "done",
+    rotIdx
+  });
+
+  return { steps, factors, rotIdx, n };
+}
+
+// ---------- Animation state ----------
+const state = {
+  s: "bbababaa",
+  mode: "factor",
+  scanStr: "bbababaa",   // s (factor) or s+s (rotation)
+  midline: null,         // n in rotation mode, else null
+  plan: null,
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+function rebuild() {
+  let s = document.getElementById("sInput").value;
+  s = s.replace(/[^ -~]/g, "");           // keep printable ASCII
+  if (s.length === 0) s = "a";
+  if (s.length > 24) s = s.slice(0, 24);
+  document.getElementById("sInput").value = s;
+  state.s = s;
+  state.mode = document.getElementById("modeSel").value;
+
+  if (state.mode === "rotation") {
+    state.scanStr = s + s;
+    state.midline = s.length;
+  } else {
+    state.scanStr = s;
+    state.midline = null;
+  }
+  state.plan = buildPlan(state.scanStr, state.midline);
+  state.stepIdx = 0;
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+
+  document.getElementById("scanTitle").textContent =
+    state.mode === "rotation" ? "Scanning s + s" : "Scanning string s";
+  renderStep();
+  updateButtons();
+}
+
+function renderStrip(step) {
+  const strip = document.getElementById("strip");
+  const ptrRow = document.getElementById("ptrRow");
+  const ss = state.scanStr;
+  const n = ss.length;
+  let cellsHtml = "";
+  let ptrHtml = "";
+  for (let idx = 0; idx < n; idx++) {
+    let cls = "cell";
+    // candidate region: [i, j)
+    if (idx >= step.i && idx < step.j) cls += " cand";
+    // emitted factors
+    for (const f of step.factors) {
+      if (idx >= f.start && idx < f.start + f.len) cls += " done";
+    }
+    if (state.midline != null && idx === state.midline) cls += " midline";
+    cellsHtml += "<div class='" + cls + "'>" + escapeChar(ss[idx]) +
+      "<span class='idx'>" + idx + "</span></div>";
+
+    // pointer markers
+    let p = "";
+    if (idx === step.i) p += "i";
+    if (idx === step.j) p += (p ? "/" : "") + "j";
+    if (idx === step.k) p += (p ? "/" : "") + "k";
+    let pcls = "ptr";
+    if (idx === step.i) pcls = "ptr i";
+    if (idx === step.k) pcls = "ptr k";
+    if (idx === step.j) pcls = "ptr j";
+    ptrHtml += "<div class='" + pcls + "'>" + (p || "&nbsp;") + "</div>";
+  }
+  // j may sit at index n (past the end)
+  if (step.j >= n) {
+    ptrHtml += "<div class='ptr j'>j&#8594;end</div>";
+  }
+  strip.innerHTML = cellsHtml;
+  ptrRow.innerHTML = ptrHtml;
+}
+
+function escapeChar(c) {
+  if (c === "<") return "&lt;";
+  if (c === ">") return "&gt;";
+  if (c === "&") return "&amp;";
+  if (c === " ") return "&middot;";
+  return c;
+}
+
+function renderVars(step) {
+  const ss = state.scanStr;
+  const p = (step.j - step.k);
+  const sk = (step.k < ss.length) ? ss[step.k] : "—";
+  const sj = (step.j < ss.length) ? ss[step.j] : "—";
+  let cmpTxt = "—";
+  if (step.cmp === "lt") cmpTxt = "s[k] &lt; s[j]";
+  else if (step.cmp === "gt") cmpTxt = "s[k] &gt; s[j]";
+  else if (step.cmp === "eq") cmpTxt = "s[k] == s[j]";
+  else if (step.cmp === "end") cmpTxt = "end of string";
+  document.getElementById("vars").innerHTML =
+    "<span class='v'><b>i</b> = " + step.i + "</span>" +
+    "<span class='v'><b>j</b> = " + step.j + "</span>" +
+    "<span class='v'><b>k</b> = " + step.k + "</span>" +
+    "<span class='v'><b>period</b> j&minus;k = " + p + "</span>" +
+    "<span class='v'>s[k] = '" + escapeChar(sk) + "', s[j] = '" + escapeChar(sj) + "'</span>" +
+    "<span class='v'>cmp: " + cmpTxt + "</span>";
+}
+
+function renderFactors(step) {
+  const fc = document.getElementById("factors");
+  if (step.factors.length === 0) {
+    fc.innerHTML = "<span class='step-counter'>(no factors emitted yet)</span>";
+  } else {
+    fc.innerHTML = step.factors.map(f =>
+      "<div class='factor'>" + escapeStr(f.text) +
+      "<span class='meta'>@" + f.start + " len " + f.len + "</span></div>"
+    ).join("");
+  }
+}
+
+function escapeStr(s) {
+  return s.split("").map(escapeChar).join("");
+}
+
+function renderResult(step) {
+  const rl = document.getElementById("resultLine");
+  if (step.phase === "done") {
+    if (state.mode === "rotation") {
+      const idx = step.rotIdx;
+      const rot = state.s.slice(idx) + state.s.slice(0, idx);
+      rl.innerHTML = "Smallest rotation starts at index <b>" + idx + "</b> &rarr; " +
+        "<span class='val'>" + escapeStr(rot) + "</span> &nbsp;(brute check: " +
+        escapeStr(bruteLeast(state.s)) + ")";
+    } else {
+      const txt = step.factors.map(f => f.text).join(" · ");
+      rl.innerHTML = "Factorization: <span class='val'>" + escapeStr(txt) + "</span>" +
+        " &nbsp;(" + step.factors.length + " Lyndon factors, non-increasing)";
+    }
+  } else {
+    const consumed = step.factors.reduce((a, f) => a + f.len, 0);
+    rl.innerHTML = "Progress: <b>" + consumed + "</b> / " + state.scanStr.length +
+      " characters factored. Candidate s[i..j) currently spans " + (step.j - step.i) + " chars.";
+  }
+}
+
+function bruteLeast(s) {
+  let best = s;
+  for (let r = 1; r < s.length; r++) {
+    const rot = s.slice(r) + s.slice(0, r);
+    if (rot < best) best = rot;
+  }
+  return best;
+}
+
+function renderStep() {
+  const step = state.plan.steps[state.stepIdx];
+  renderStrip(step);
+  renderVars(step);
+  renderFactors(step);
+  renderResult(step);
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + state.stepIdx + " / " + (state.plan.steps.length - 1);
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.steps.length - 1) {
+    state.stepIdx++;
+    renderStep();
+    updateButtons();
+  }
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.steps.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer);
+    state.running = false;
+    updateButtons();
+    return;
+  }
+  if (state.stepIdx >= state.plan.steps.length - 1) {
+    state.stepIdx = 0;
+    renderStep();
+  }
+  state.running = true;
+  updateButtons();
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.steps.length - 1) {
+      clearInterval(state.timer);
+      state.running = false;
+      updateButtons();
+      return;
+    }
+    stepForward();
+  }, 850);
+}
+
+// ---------- Wire up controls ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("modeSel").addEventListener("change", rebuild);
+document.getElementById("sInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
