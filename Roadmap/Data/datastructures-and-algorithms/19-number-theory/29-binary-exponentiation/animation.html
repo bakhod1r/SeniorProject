@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Binary Exponentiation — Square and Multiply</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; max-width: 900px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 120px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { accent-color: var(--accent); width: 130px; }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 13px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  /* bit row */
+  .bits { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .bit {
+    width: 42px; height: 52px; border: 1px solid var(--border);
+    border-radius: 7px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: var(--mono); background: var(--panel-2);
+    transition: all 0.2s ease; position: relative;
+  }
+  .bit .b { font-size: 18px; font-weight: 700; }
+  .bit .idx { font-size: 10px; color: var(--muted); }
+  .bit.one .b { color: var(--good); }
+  .bit.zero .b { color: var(--muted); }
+  .bit.current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .bit.done { opacity: 0.5; }
+  /* registers */
+  .regs { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+  .reg {
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; background: var(--panel-2);
+    font-family: var(--mono);
+  }
+  .reg .name { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .reg .value { font-size: 22px; font-weight: 700; word-break: break-all; }
+  .reg.result .value { color: var(--good); }
+  .reg.base .value { color: var(--orange); }
+  .reg.flash { box-shadow: 0 0 0 2px currentColor inset; }
+  .reg.result.flash { color: var(--good); }
+  .reg.base.flash { color: var(--orange); }
+  .reg .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .narrate {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 10px 14px; margin: 14px 0 0; font-size: 14px; min-height: 44px;
+  }
+  .narrate b { color: var(--accent); }
+  .narrate .mul { color: var(--good); font-weight: 700; }
+  .narrate .sq { color: var(--orange); font-weight: 700; }
+  .stat-row { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 12px; }
+  .stat { font-family: var(--mono); font-size: 13px; }
+  .stat .k { color: var(--muted); }
+  .stat .v { color: var(--accent); font-weight: 700; }
+  /* big-O table */
+  table.bigo { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 4px; }
+  table.bigo th, table.bigo td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+  }
+  table.bigo th { background: var(--panel-2); color: var(--muted); font-weight: 600; }
+  table.bigo td.c { font-family: var(--mono); }
+  .ok { color: var(--good); font-weight: 700; }
+  .warn { color: var(--accent-2); font-weight: 700; }
+  .bad { color: var(--bad); font-weight: 700; }
+  /* log */
+  .log {
+    margin-top: 4px; max-height: 220px; overflow-y: auto;
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 10px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px dashed #21262d; }
+  .log .lmul { color: var(--good); }
+  .log .lsq { color: var(--orange); }
+  .log .lskip { color: var(--muted); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .formula {
+    font-family: var(--mono); font-size: 13px; color: var(--accent-2);
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; margin-bottom: 12px;
+  }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+  .full { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Binary Exponentiation — Square and Multiply</h1>
+  <p>Compute a<sup>n</sup> mod m in O(log n). Read the bits of n from the right: every step <b>squares the base</b>; when the current bit is 1 the base is <b>multiplied into the result</b>. Watch the invariant result &middot; base<sup>n</sup> = a<sup>N</sup> hold throughout.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <label>a = <input type="number" id="inA" value="3" min="0" /></label>
+    <label>n = <input type="number" id="inN" value="13" min="0" /></label>
+    <label>mod m = <input type="number" id="inM" value="1000000007" min="1" /></label>
+    <button id="btnLoad">Load</button>
+    <span class="spacer"></span>
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <label>Speed <input type="range" id="speed" min="1" max="10" value="5" /></label>
+  </div>
+
+  <div class="full card" style="margin-bottom:18px;">
+    <h2>Exponent n in binary (read right &rarr; left, lowest bit first)</h2>
+    <div class="formula" id="formula">n = 13 = 1101&#8322; = 8 + 4 + 1 &nbsp;&rArr;&nbsp; a<sup>13</sup> = a<sup>8</sup> &middot; a<sup>4</sup> &middot; a<sup>1</sup></div>
+    <div class="bits" id="bits"></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--good)"></span> bit = 1 (multiply this rung in)</span>
+      <span><span class="swatch" style="background:var(--muted)"></span> bit = 0 (skip)</span>
+      <span><span class="swatch" style="background:transparent;border-color:var(--accent)"></span> current bit</span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Running registers</h2>
+      <div class="regs">
+        <div class="reg result" id="regResult">
+          <div class="name">result &nbsp;(starts at identity 1)</div>
+          <div class="value" id="resultVal">1</div>
+          <div class="sub" id="resultSub">a<sup>0</sup> = 1</div>
+        </div>
+        <div class="reg base" id="regBase">
+          <div class="name">base &nbsp;(starts at a, squared each step)</div>
+          <div class="value" id="baseVal">3</div>
+          <div class="sub" id="baseSub">a<sup>1</sup></div>
+        </div>
+      </div>
+      <div class="narrate" id="narrate">Press <b>Step</b> to process the lowest remaining bit, or <b>Run</b> to animate.</div>
+      <div class="stat-row">
+        <div class="stat"><span class="k">step</span> <span class="v" id="stStep">0</span> / <span class="v" id="stTotal">0</span></div>
+        <div class="stat"><span class="k">squarings</span> <span class="v" id="stSq">0</span></div>
+        <div class="stat"><span class="k">multiplies</span> <span class="v" id="stMul">0</span></div>
+        <div class="stat"><span class="k">remaining n</span> <span class="v" id="stN">13</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Complexity</h2>
+      <table class="bigo">
+        <tr><th>Approach</th><th>Multiplications</th><th>Note</th></tr>
+        <tr><td>Naive loop</td><td class="c bad">O(n)</td><td>one multiply per unit of n</td></tr>
+        <tr><td>Binary exponentiation</td><td class="c ok">O(log n)</td><td>square-and-multiply</td></tr>
+        <tr><td>&nbsp;&nbsp;squarings</td><td class="c warn" id="boSq">&#8970;log&#8322; n&#8971;</td><td>one per bit</td></tr>
+        <tr><td>&nbsp;&nbsp;multiplies</td><td class="c warn" id="boMul">popcount(n)</td><td>one per set bit</td></tr>
+        <tr><td>Space</td><td class="c ok">O(1)</td><td>two registers</td></tr>
+      </table>
+      <h2 style="margin-top:16px;">Operation log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <p class="footnote">
+    Invariant maintained at the top of every step: <code>result &middot; base^(remaining n) = a^N</code>.
+    When remaining n reaches 0, <code>result = a^N mod m</code>. The same loop, with matrix multiply instead of
+    scalar multiply, powers a matrix for fast Fibonacci (see <code>11-matrix-exponentiation</code>).
+  </p>
+</div>
+
+<script>
+  // ===== STATE =====
+  let a = 3n, n = 13n, m = 1000000007n;
+  let steps = [];          // precomputed animation steps
+  let idx = 0;             // current step index
+  let running = false;
+  let timer = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function getSpeed() { return 1150 - $("speed").value * 110; } // ms
+
+  // ===== STEP GENERATION =====
+  // Each step: { phase, bitPos, bitVal, result, base, remN, sq, mul, narr, logCls, logTxt }
+  function buildSteps() {
+    steps = [];
+    let result = 1n % m;
+    let base = a % m;
+    if (base < 0n) base += m;
+    let rem = n;
+    let bitPos = 0;
+    let sq = 0, mul = 0;
+    const N = n;
+
+    // initial snapshot
+    steps.push({
+      bitPos: 0, current: 0, result, base, remN: rem, sq, mul,
+      narr: `Start: <b>result = 1</b> (the identity a<sup>0</sup>), <b>base = a = ${(a % m + m) % m}</b>. Reading bits of n from the lowest.`,
+      logCls: "lskip", logTxt: `init  result=${result}  base=${base}`
+    });
+
+    while (rem > 0n) {
+      const bit = rem & 1n;
+      // multiply phase (only if bit set)
+      if (bit === 1n) {
+        result = (result * base) % m;
+        mul++;
+        steps.push({
+          bitPos, current: bitPos, result, base, remN: rem, sq, mul,
+          phase: "mul",
+          narr: `Bit ${bitPos} = <span class="mul">1</span> &rarr; <span class="mul">multiply</span>: result = result &middot; base = <b>${result}</b> &nbsp;(folded in a<sup>${1 << bitPos}</sup>)`,
+          logCls: "lmul", logTxt: `bit ${bitPos}=1  MUL  result=${result}`
+        });
+      } else {
+        steps.push({
+          bitPos, current: bitPos, result, base, remN: rem, sq, mul,
+          phase: "skip",
+          narr: `Bit ${bitPos} = <span style="color:var(--muted)">0</span> &rarr; skip the multiply; result unchanged at <b>${result}</b>.`,
+          logCls: "lskip", logTxt: `bit ${bitPos}=0  skip`
+        });
+      }
+      // square phase
+      const before = base;
+      base = (base * base) % m;
+      sq++;
+      const nextRem = rem >> 1n;
+      steps.push({
+        bitPos, current: bitPos, result, base, remN: nextRem, sq, mul,
+        phase: "sq",
+        narr: `<span class="sq">Square</span> the base: base = base&sup2; = ${before}&sup2; mod m = <b>${base}</b> &nbsp;(now a<sup>${1 << (bitPos + 1)}</sup>). Shift n right.`,
+        logCls: "lsq", logTxt: `      SQ   base=${base}  n=${nextRem}`
+      });
+      rem = nextRem;
+      bitPos++;
+    }
+
+    steps.push({
+      bitPos, current: -1, result, base, remN: 0n, sq, mul, done: true,
+      narr: `Remaining n = 0 &rarr; <b>done</b>. result = <b>${result}</b> = a<sup>${n}</sup> mod m.`,
+      logCls: "lmul", logTxt: `DONE  a^n mod m = ${result}`
+    });
+
+    $("stTotal").textContent = steps.length - 1;
+  }
+
+  // ===== RENDER =====
+  function bitArray() {
+    if (n === 0n) return [0];
+    let arr = [];
+    let x = n;
+    while (x > 0n) { arr.push(Number(x & 1n)); x >>= 1n; }
+    return arr; // arr[i] is bit i (lowest first)
+  }
+
+  function renderBits(step) {
+    const arr = bitArray();
+    const wrap = $("bits");
+    wrap.innerHTML = "";
+    // show high-to-low for human reading, but mark by true index
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const d = document.createElement("div");
+      d.className = "bit " + (arr[i] ? "one" : "zero");
+      if (step) {
+        if (step.current === i && !step.done) d.classList.add("current");
+        if (i < step.bitPos && !(step.current === i)) d.classList.add("done");
+        if (step.done) d.classList.add("done");
+      }
+      d.innerHTML = `<div class="b">${arr[i]}</div><div class="idx">2<sup>${i}</sup></div>`;
+      wrap.appendChild(d);
+    }
+  }
+
+  function renderFormula() {
+    const arr = bitArray();
+    const setBits = [];
+    for (let i = arr.length - 1; i >= 0; i--) if (arr[i]) setBits.push(1 << i);
+    const binStr = arr.slice().reverse().join("");
+    const sumStr = setBits.length ? setBits.join(" + ") : "0";
+    const prodStr = setBits.length
+      ? setBits.map(p => `a<sup>${p}</sup>`).join(" &middot; ")
+      : "1";
+    $("formula").innerHTML =
+      `n = ${n} = ${binStr}&#8322; = ${sumStr} &nbsp;&rArr;&nbsp; a<sup>${n}</sup> = ${prodStr}`;
+  }
+
+  function render(step) {
+    renderBits(step);
+    $("resultVal").textContent = step.result.toString();
+    $("baseVal").textContent = step.base.toString();
+    $("stStep").textContent = Math.min(idx, steps.length - 1);
+    $("stSq").textContent = step.sq;
+    $("stMul").textContent = step.mul;
+    $("stN").textContent = step.remN.toString();
+    $("narrate").innerHTML = step.narr;
+
+    // exponent hints
+    $("resultSub").innerHTML = idx === 0 ? "a<sup>0</sup> = 1" : "partial product of folded rungs";
+    $("baseSub").innerHTML = `a<sup>${1 << step.bitPos}</sup> (mod m)`;
+
+    // flash
+    const rg = $("regResult"), bg = $("regBase");
+    rg.classList.remove("flash"); bg.classList.remove("flash");
+    if (step.phase === "mul") rg.classList.add("flash");
+    if (step.phase === "sq") bg.classList.add("flash");
+
+    // big-O concrete values
+    const arr = bitArray();
+    const pop = arr.reduce((s, x) => s + x, 0);
+    const logn = n > 0n ? (arr.length - 1) : 0;
+    $("boSq").textContent = `${logn} (= ⌊log₂ n⌋)`;
+    $("boMul").textContent = `${pop} (popcount)`;
+  }
+
+  function pushLog(step) {
+    const log = $("log");
+    const d = document.createElement("div");
+    d.className = step.logCls;
+    d.textContent = step.logTxt;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ===== CONTROLS =====
+  function stepForward() {
+    if (idx >= steps.length - 1) {
+      render(steps[steps.length - 1]);
+      pause();
+      return;
+    }
+    idx++;
+    render(steps[idx]);
+    pushLog(steps[idx]);
+    if (idx >= steps.length - 1) pause();
+  }
+
+  function run() {
+    if (running) return;
+    running = true;
+    $("btnRun").textContent = "Pause ⏸";
+    const tick = () => {
+      if (!running) return;
+      if (idx >= steps.length - 1) { pause(); return; }
+      stepForward();
+      timer = setTimeout(tick, getSpeed());
+    };
+    tick();
+  }
+
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    $("btnRun").textContent = "Run ▶▶";
+  }
+
+  function reset() {
+    pause();
+    idx = 0;
+    $("log").innerHTML = "";
+    buildSteps();
+    renderFormula();
+    render(steps[0]);
+    pushLog(steps[0]);
+  }
+
+  function load() {
+    pause();
+    try {
+      const av = BigInt($("inA").value || "0");
+      const nv = BigInt($("inN").value || "0");
+      let mv = BigInt($("inM").value || "1");
+      if (mv < 1n) mv = 1n;
+      if (nv < 0n) { alert("n must be >= 0"); return; }
+      a = av; n = nv; m = mv;
+    } catch (e) {
+      alert("Enter valid integers."); return;
+    }
+    reset();
+  }
+
+  // wire up
+  $("btnStep").onclick = () => { pause(); stepForward(); };
+  $("btnRun").onclick = () => { running ? pause() : run(); };
+  $("btnReset").onclick = reset;
+  $("btnLoad").onclick = load;
+
+  // init
+  reset();
+</script>
+</body>
+</html>
