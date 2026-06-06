@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Factorial mod p — Tables &amp; Legendre's Formula</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --surface2:#1c2330;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  header sup { font-size: 0.7em; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 16px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  button {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 78px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { width: 120px; accent-color: var(--blue); }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    font-size: 13px; color: var(--blue); text-transform: uppercase;
+    letter-spacing: .5px; margin-bottom: 10px;
+  }
+  table.tbl { border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
+  table.tbl td, table.tbl th {
+    border: 1px solid var(--border); padding: 4px 7px; text-align: center; min-width: 30px;
+  }
+  table.tbl th { color: var(--muted); background: var(--surface2); }
+  td.idx { color: var(--muted); background: var(--surface2); }
+  td.cell { background: var(--bg); transition: background .2s; }
+  td.cell.filling   { background: rgba(63,185,80,.45); color: #fff; font-weight: 700; }  /* forward fact */
+  td.cell.inverse   { background: rgba(88,166,255,.45); color: #fff; font-weight: 700; } /* backward invfact */
+  td.cell.oneinv    { background: rgba(188,140,255,.55); color: #fff; font-weight: 700; }/* the single inverse */
+  td.cell.done      { background: rgba(63,185,80,.15); }
+  td.cell.donei     { background: rgba(88,166,255,.15); }
+  td.cell.empty     { color: var(--muted); }
+  .tbl-scroll { overflow-x: auto; max-width: 100%; }
+  .legendre {
+    font-family: var(--mono); font-size: 13px; margin-top: 6px;
+  }
+  .leg-row {
+    display: flex; align-items: center; gap: 10px; padding: 4px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .leg-row .term { color: var(--muted); min-width: 120px; }
+  .leg-row .val { color: var(--yellow); font-weight: 700; min-width: 40px; text-align: right; }
+  .leg-row.active { background: rgba(210,153,34,.12); border-radius: 4px; }
+  .leg-total {
+    margin-top: 8px; font-family: var(--mono); font-size: 14px; color: var(--green); font-weight: 700;
+  }
+  .facts { font-family: var(--mono); font-size: 13px; margin-top: 4px; }
+  .facts .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .facts .k { color: var(--muted); }
+  .facts .v { color: var(--green); font-weight: 700; }
+  .facts .v.warn { color: var(--yellow); }
+  .facts .v.bad { color: var(--red); }
+  .narrate {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-left: 3px solid var(--blue); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 46px;
+  }
+  .narrate b { color: #fff; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .bigo { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  .bigo td, .bigo th { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  .bigo th { color: var(--muted); background: var(--surface2); }
+  .bigo .c { font-family: var(--mono); font-weight: 700; }
+  .c-green  { color: var(--green); }
+  .c-blue   { color: var(--blue); }
+  .c-yellow { color: var(--yellow); }
+  .log {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; height: 130px; overflow-y: auto; margin-top: 4px; white-space: pre-wrap;
+  }
+  .log .ln { padding: 1px 0; }
+  .log .hi { color: var(--green); }
+  .log .hb { color: var(--blue); }
+  .log .hy { color: var(--yellow); }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--orange); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  .full { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Factorial mod p &mdash; Building <code>fact[]</code> / <code>invfact[]</code> and Legendre's Formula</h1>
+  <p>Watch the factorial table fill <b>forward</b>, the single inverse appear, the inverse-factorial table fill <b>backward</b>, then count the factors of p in n! via <b>Legendre's formula</b>.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnPause" disabled>Pause &#10073;&#10073;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>N = <input type="number" id="nInput" value="8" min="1" max="16" /></label>
+    <label>p = <input type="number" id="pInput" value="11" min="2" max="97" /></label>
+    <label>Legendre n = <input type="number" id="legInput" value="100" min="0" max="1000000" /></label>
+    <label>Speed <input type="range" id="speed" min="1" max="10" value="6" /></label>
+    <span class="step-counter" id="stepInfo">step 0 / 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card full">
+      <h2>Phase 1 &amp; 2 &mdash; fact[i] = i! mod p (forward), invfact[i] = (i!)<sup>-1</sup> mod p (backward)</h2>
+      <div class="tbl-scroll">
+        <table class="tbl" id="factTable"></table>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:rgba(63,185,80,.45)"></span> fact[i] filling (forward)</span>
+        <span><span class="swatch" style="background:rgba(188,140,255,.55)"></span> the single inverse (Fermat)</span>
+        <span><span class="swatch" style="background:rgba(88,166,255,.45)"></span> invfact[i] filling (backward)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Phase 3 &mdash; Legendre: v<sub>p</sub>(n!) = &Sigma; &lfloor;n / p<sup>i</sup>&rfloor;</h2>
+      <div class="legendre" id="legendre"></div>
+      <div class="leg-total" id="legTotal"></div>
+      <div class="step-counter" style="margin-top:8px;color:var(--muted)">
+        This is the exponent of p in n!. If it is &ge; 1 (i.e. n &ge; p), then n! &equiv; 0 (mod p).
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Facts</h2>
+      <div class="facts" id="facts"></div>
+    </div>
+
+    <div class="card full">
+      <h2>Big-O</h2>
+      <table class="bigo">
+        <tr><th>Operation</th><th>Time</th><th>Space</th><th>Note</th></tr>
+        <tr><td>Build fact[0..N]</td><td class="c c-green">O(N)</td><td class="c">O(N)</td><td>one forward loop</td></tr>
+        <tr><td>Build invfact[0..N]</td><td class="c c-blue">O(N + log p)</td><td class="c">O(N)</td><td>one inverse + backward loop</td></tr>
+        <tr><td>C(n, k) after precompute</td><td class="c c-green">O(1)</td><td class="c">O(1)</td><td>three multiplies</td></tr>
+        <tr><td>Single inverse (Fermat)</td><td class="c c-blue">O(log p)</td><td class="c">O(1)</td><td>a<sup>p-2</sup> mod p</td></tr>
+        <tr><td>Legendre v<sub>p</sub>(n!)</td><td class="c c-yellow">O(log<sub>p</sub> n)</td><td class="c">O(1)</td><td>sum of floor divisions</td></tr>
+      </table>
+    </div>
+
+    <div class="card full">
+      <h2>Operation Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    Press <b>Step</b> to fill the factorial table one cell at a time, or <b>Run</b> to animate the whole precompute and Legendre count.
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>The three phases</h2>
+    <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.7;">
+      <li><b style="color:var(--green)">Phase 1 &mdash; forward factorial.</b> Starting from <code>fact[0] = 1</code>, each cell is the previous times its index: <code>fact[i] = fact[i-1]&middot;i mod p</code>. One pass, O(N).</li>
+      <li><b style="color:var(--purple)">Phase 2a &mdash; the single inverse.</b> Compute <code>invfact[N] = fact[N]<sup>p-2</sup> mod p</code> by Fermat's little theorem. This is the <em>only</em> modular inverse in the whole precompute, O(log p).</li>
+      <li><b style="color:var(--blue)">Phase 2b &mdash; backward inverse factorial.</b> Walk right-to-left: <code>invfact[i-1] = invfact[i]&middot;i mod p</code>, valid because (i-1)! = i!/i so ((i-1)!)<sup>-1</sup> = (i!)<sup>-1</sup>&middot;i. One pass, O(N).</li>
+      <li><b style="color:var(--yellow)">Phase 3 &mdash; Legendre's formula.</b> The exponent of p in n! is the sum &lfloor;n/p&rfloor; + &lfloor;n/p&sup2;&rfloor; + &hellip;. If it is &ge; 1 then n! &equiv; 0 (mod p).</li>
+    </ul>
+    <p style="margin:10px 0 0;font-size:13px;color:var(--muted);">The third row of the table, <code>fact&middot;invfact</code>, shows the self-check: it must be <span style="color:var(--green)">1</span> in every column (this verifies the inverse table).</p>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Method selector (which algorithm for C(n,k) mod m)</h2>
+    <table class="bigo">
+      <tr><th>Situation</th><th>Method</th><th>Per query</th></tr>
+      <tr><td>m prime, n &lt; m</td><td class="c c-green">fact[]/invfact[] tables</td><td class="c c-green">O(1)</td></tr>
+      <tr><td>m prime, n &ge; m</td><td class="c c-blue">Lucas' theorem</td><td class="c c-blue">O(log<sub>m</sub> n)</td></tr>
+      <tr><td>m = p<sup>e</sup> (prime power)</td><td class="c c-yellow">Granville (gen. Wilson)</td><td class="c c-yellow">O(e&middot;log<sub>p</sub> n)</td></tr>
+      <tr><td>m composite</td><td class="c">per prime power + CRT</td><td class="c">&Sigma; + O(r)</td></tr>
+    </table>
+    <p style="margin:10px 0 0;font-size:13px;color:var(--muted);">This visualization animates the <span style="color:var(--green)">first row</span> (the common large-prime case) plus Legendre's formula, which is the gate that decides when you must leave it for Lucas or Granville.</p>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>The core routine (pseudocode)</h2>
+    <div class="log" style="height:auto;color:var(--text)">precompute(N, p):
+    fact[0] = 1
+    for i in 1..N:  fact[i] = fact[i-1] * i % p        <span style="color:var(--green)"># Phase 1: forward</span>
+    invfact[N] = pow(fact[N], p-2, p)                  <span style="color:var(--purple)"># Phase 2a: ONE inverse</span>
+    for i in N..1:  invfact[i-1] = invfact[i] * i % p  <span style="color:var(--blue)"># Phase 2b: backward</span>
+
+binom(n, k):                                           <span style="color:var(--muted)"># O(1) after precompute</span>
+    if k &lt; 0 or k &gt; n: return 0
+    return fact[n] * invfact[k] % p * invfact[n-k] % p
+
+legendre(n, p):                                        <span style="color:var(--yellow)"># Phase 3: exponent of p in n!</span>
+    e = 0
+    while n &gt; 0:  n //= p;  e += n
+    return e</div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>What to try</h2>
+    <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.7;">
+      <li><b>N = 8, p = 11</b> (default): watch fact[] fill forward, the single purple inverse of fact[N], then invfact[] fill backward. Note <code>fact[p-1] = p-1</code> (Wilson) if you set N = p-1.</li>
+      <li><b>N = 4, p = 5</b>: small case &mdash; verify <code>fact[4] = 24 &equiv; 4 &equiv; -1 (mod 5)</code> (Wilson's theorem).</li>
+      <li><b>Legendre n = 100, p = 5</b>: the sum &lfloor;100/5&rfloor;+&lfloor;100/25&rfloor; = 20+4 = 24 &mdash; so 100! ends in 24 trailing zeros in base 10.</li>
+      <li><b>Legendre n = 10, p = 2</b>: 5+2+1 = 8, so 2<sup>8</sup> divides 10! exactly.</li>
+      <li>Set <b>Legendre n &ge; p</b> and watch the total become &ge; 1 &mdash; that is exactly why <code>n! &equiv; 0 (mod p)</code> for n &ge; p.</li>
+    </ul>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Worked Legendre examples</h2>
+    <table class="bigo">
+      <tr><th>n</th><th>p</th><th>terms</th><th>v<sub>p</sub>(n!)</th><th>meaning</th></tr>
+      <tr><td>10</td><td>2</td><td class="c">5 + 2 + 1</td><td class="c c-yellow">8</td><td>2<sup>8</sup> divides 10!</td></tr>
+      <tr><td>100</td><td>5</td><td class="c">20 + 4</td><td class="c c-yellow">24</td><td>100! ends in 24 zeros</td></tr>
+      <tr><td>100</td><td>3</td><td class="c">33 + 11 + 3 + 1</td><td class="c c-yellow">48</td><td>3<sup>48</sup> divides 100!</td></tr>
+      <tr><td>6</td><td>7</td><td class="c">(none, p &gt; n)</td><td class="c c-green">0</td><td>6! is coprime to 7</td></tr>
+    </table>
+    <p style="margin:10px 0 0;font-size:13px;color:var(--muted);">Set <b>Legendre n</b> and <b>p</b> above to reproduce any of these in Phase 3. Whenever the total is 0, n! is invertible mod p (the table method applies); whenever it is &ge; 1, n! &equiv; 0 (mod p).</p>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Kummer's carry view (why some C(n,k) vanish)</h2>
+    <p style="margin:0 0 8px;font-size:13px;color:var(--muted);line-height:1.7;">
+      The exponent of p in C(n,k) equals the number of <b>carries</b> when you add k and (n&minus;k) in base p. Example with p = 2:
+    </p>
+    <div class="log" style="height:auto;color:var(--text)">C(5, 2) mod 2:  k = 2 = 10b,  n-k = 3 = 11b
+    10
+  + 11
+  ----
+   101   <span style="color:var(--yellow)"># one carry  =>  v_2(C(5,2)) = 1  =>  C(5,2) = 10 is even</span>
+
+C(7, 1) mod 2:  k = 1 = 001b,  n-k = 6 = 110b
+   001
+  +110
+  ----
+   111   <span style="color:var(--green)"># no carry   =>  v_2(C(7,1)) = 0  =>  C(7,1) = 7 is odd</span></div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Why the supporting theorems matter</h2>
+    <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.7;">
+      <li><b>Wilson's theorem</b> (<code>(p-1)! &equiv; -1 mod p</code>) gives a free correctness check: if you build the table to <code>p-1</code>, the last factorial cell must read <code>p-1</code>. Set N = p&minus;1 to see it.</li>
+      <li><b>Legendre's formula</b> tells you the exact power of p dividing n!, and therefore <em>whether</em> the table method is even valid (it needs n &lt; p, i.e. exponent 0).</li>
+      <li><b>Kummer's theorem</b> turns the exponent of p in C(n,k) into a count of base-p carries &mdash; an O(log n) way to know if C(n,k) &equiv; 0 (mod p) without computing it.</li>
+      <li><b>The single inverse</b> is the performance heart: building <code>invfact[]</code> with one inverse plus a backward pass is O(N + log p), versus O(N log p) if you inverted every factorial separately &mdash; roughly a 30&times; difference at p &asymp; 10<sup>9</sup>.</li>
+    </ul>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization &mdash; no external dependencies. The forward loop computes <code>fact[i] = fact[i-1]&middot;i</code>; one Fermat inverse gives <code>invfact[N]</code>; the backward loop computes <code>invfact[i-1] = invfact[i]&middot;i</code> (because (i-1)! = i!/i). Legendre's formula counts the factors of p in n!. See <code>junior.md</code> and <code>professional.md</code> for proofs.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- number theory helpers ----------
+function powMod(a, e, m) {
+  a %= m; if (a < 0) a += m;
+  let r = 1 % m;
+  while (e > 0) {
+    if (e & 1) r = Number((BigInt(r) * BigInt(a)) % BigInt(m));
+    a = Number((BigInt(a) * BigInt(a)) % BigInt(m));
+    e = Math.floor(e / 2);
+  }
+  return r;
+}
+function mulmod(a, b, m) { return Number((BigInt(a) * BigInt(b)) % BigInt(m)); }
+
+// ---------- state ----------
+let N = 8, P = 11, legN = 100;
+let fact = [], invfact = [];
+let steps = [];            // precomputed animation steps
+let cur = 0;
+let timer = null;
+let running = false;
+
+// step kinds: {kind:'fact', i, val} | {kind:'oneinv', i, val} | {kind:'invfact', i, val} | {kind:'legendre', term, floor, running}
+function buildSteps() {
+  steps = [];
+  fact = new Array(N + 1).fill(null);
+  invfact = new Array(N + 1).fill(null);
+
+  // Phase 1: forward factorial
+  let f = 1 % P;
+  fact[0] = f;
+  steps.push({ kind: 'fact', i: 0, val: f, expr: `fact[0] = 1` });
+  for (let i = 1; i <= N; i++) {
+    f = mulmod(f, i, P);
+    fact[i] = f;
+    steps.push({ kind: 'fact', i, val: f, expr: `fact[${i}] = fact[${i-1}]&middot;${i} mod ${P} = ${f}` });
+  }
+
+  // Phase 2a: the single inverse
+  const invN = powMod(fact[N], P - 2, P);
+  invfact[N] = invN;
+  steps.push({ kind: 'oneinv', i: N, val: invN, expr: `invfact[${N}] = fact[${N}]<sup>${P}-2</sup> mod ${P} = ${invN}  (the ONE inverse)` });
+
+  // Phase 2b: backward inverse factorial
+  for (let i = N; i >= 1; i--) {
+    const v = mulmod(invfact[i], i, P);
+    invfact[i - 1] = v;
+    steps.push({ kind: 'invfact', i: i - 1, val: v, expr: `invfact[${i-1}] = invfact[${i}]&middot;${i} mod ${P} = ${v}` });
+  }
+
+  // Phase 3: Legendre on legN
+  let n = legN, total = 0, pk = P, idx = 1;
+  const legTerms = [];
+  while (pk <= n) {
+    const fl = Math.floor(n / pk);
+    total += fl;
+    legTerms.push({ i: idx, pk, fl, running: total });
+    steps.push({ kind: 'legendre', term: idx, pk, floor: fl, running: total, expr: `&lfloor;${legN} / ${P}<sup>${idx}</sup>&rfloor; = &lfloor;${legN}/${pk}&rfloor; = ${fl}  (running total ${total})` });
+    idx++;
+    pk *= P;
+    if (idx > 40) break;
+  }
+  steps.push({ kind: 'legdone', total, expr: `v<sub>${P}</sub>(${legN}!) = ${total}` });
+
+  cur = 0;
+  renderAll();
+  document.getElementById('stepInfo').textContent = `step 0 / ${steps.length}`;
+}
+
+// ---------- rendering ----------
+function renderTable(highlight) {
+  const t = document.getElementById('factTable');
+  let head = '<tr><th>i</th>';
+  for (let i = 0; i <= N; i++) head += `<td class="idx">${i}</td>`;
+  head += '</tr>';
+
+  let rowF = '<tr><th>fact[i]</th>';
+  for (let i = 0; i <= N; i++) {
+    const v = fact[i];
+    let cls = 'cell empty';
+    if (v !== null) cls = 'cell done';
+    if (highlight && highlight.kind === 'fact' && highlight.i === i) cls = 'cell filling';
+    rowF += `<td class="${cls}">${v === null ? '·' : v}</td>`;
+  }
+  rowF += '</tr>';
+
+  let rowI = '<tr><th>invfact[i]</th>';
+  for (let i = 0; i <= N; i++) {
+    const v = invfact[i];
+    let cls = 'cell empty';
+    if (v !== null) cls = 'cell donei';
+    if (highlight && highlight.kind === 'invfact' && highlight.i === i) cls = 'cell inverse';
+    if (highlight && highlight.kind === 'oneinv' && highlight.i === i) cls = 'cell oneinv';
+    rowI += `<td class="${cls}">${v === null ? '·' : v}</td>`;
+  }
+  rowI += '</tr>';
+
+  let rowC = '<tr><th>fact&middot;invfact</th>';
+  for (let i = 0; i <= N; i++) {
+    if (fact[i] !== null && invfact[i] !== null) {
+      const chk = mulmod(fact[i], invfact[i], P);
+      rowC += `<td class="cell ${chk === 1 % P ? 'done' : ''}" style="color:${chk === 1 % P ? 'var(--green)' : 'var(--red)'}">${chk}</td>`;
+    } else {
+      rowC += '<td class="cell empty">·</td>';
+    }
+  }
+  rowC += '</tr>';
+
+  t.innerHTML = head + rowF + rowI + rowC;
+}
+
+function renderLegendre(activeTerm, showAll) {
+  const box = document.getElementById('legendre');
+  let n = legN, pk = P, idx = 1, total = 0;
+  let html = '';
+  let reached = 0;
+  while (pk <= n && idx <= 40) {
+    const fl = Math.floor(n / pk);
+    total += fl;
+    const isActive = activeTerm === idx;
+    const visible = showAll || (activeTerm !== null && idx <= activeTerm);
+    html += `<div class="leg-row ${isActive ? 'active' : ''}" style="${visible ? '' : 'opacity:.3'}">
+      <span class="term">&lfloor;${legN} / ${P}<sup>${idx}</sup>&rfloor;</span>
+      <span style="color:var(--muted)">=</span>
+      <span class="val">${visible ? fl : '?'}</span></div>`;
+    if (visible) reached = total;
+    idx++; pk *= P;
+  }
+  if (html === '') {
+    html = `<div class="leg-row"><span class="term">no term (p<sup>1</sup> &gt; n)</span><span class="val">0</span></div>`;
+  }
+  box.innerHTML = html;
+  document.getElementById('legTotal').textContent =
+    (showAll || activeTerm !== null) ? `Sum so far: v_${P}(${legN}!) = ${reached}` : '';
+}
+
+function renderFacts() {
+  const box = document.getElementById('facts');
+  const wilson = (N >= P - 1 && fact[P - 1] !== null) ? fact[P - 1] : null;
+  let legTotal = 0, pk = P;
+  while (pk <= legN) { legTotal += Math.floor(legN / pk); pk *= P; }
+  // count distinct invfact cells filled
+  let invFilled = 0, factFilled = 0;
+  for (let i = 0; i <= N; i++) { if (fact[i] !== null) factFilled++; if (invfact[i] !== null) invFilled++; }
+  // self-check: all fact*invfact == 1 so far?
+  let selfOk = true;
+  for (let i = 0; i <= N; i++) {
+    if (fact[i] !== null && invfact[i] !== null && mulmod(fact[i], invfact[i], P) !== 1 % P) selfOk = false;
+  }
+  const rows = [
+    ['p prime (assumed)', String(P), ''],
+    ['table valid for', `n &lt; ${P}`, ''],
+    ['fact[] cells filled', `${factFilled} / ${N+1}`, ''],
+    ['invfact[] cells filled', `${invFilled} / ${N+1}`, ''],
+    ['inverses computed', '1 (Fermat)', ''],
+    ['self-check fact·invfact', selfOk ? 'all ≡ 1' : 'MISMATCH', selfOk ? '' : 'bad'],
+    ['fact[N] = N! mod p', fact[N] === null ? '·' : String(fact[N]), ''],
+    ['Wilson: (p-1)! ≡ -1', wilson === null ? `set N = ${P-1}` : `${wilson} (= p-1 = ${P-1})`, wilson === null ? 'warn' : ''],
+    [`v_${P}(${legN}!)`, String(legTotal), legTotal >= 1 ? 'warn' : ''],
+    [`${legN}! mod ${P}`, legTotal >= 1 ? '0  (n ≥ p)' : 'nonzero', legTotal >= 1 ? 'bad' : ''],
+  ];
+  box.innerHTML = rows.map(r =>
+    `<div class="row"><span class="k">${r[0]}</span><span class="v ${r[2]}">${r[1]}</span></div>`
+  ).join('');
+}
+
+function renderAll(highlight) {
+  renderTable(highlight);
+  if (highlight && (highlight.kind === 'legendre')) {
+    renderLegendre(highlight.term, false);
+  } else if (highlight && highlight.kind === 'legdone') {
+    renderLegendre(null, true);
+  } else {
+    renderLegendre(null, false);
+  }
+  renderFacts();
+}
+
+function addLog(s, cls) {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'ln';
+  div.innerHTML = (cls ? `<span class="${cls}">` : '') + s + (cls ? '</span>' : '');
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function applyStep(s) {
+  if (s.kind === 'fact') { fact[s.i] = s.val; addLog('fact[' + s.i + '] = ' + s.val, 'hi'); }
+  else if (s.kind === 'oneinv') { invfact[s.i] = s.val; addLog('one inverse: invfact[' + s.i + '] = ' + s.val, ''); }
+  else if (s.kind === 'invfact') { invfact[s.i] = s.val; addLog('invfact[' + s.i + '] = ' + s.val, 'hb'); }
+  else if (s.kind === 'legendre') { addLog('Legendre term ' + s.term + ': floor(' + legN + '/' + s.pk + ') = ' + s.floor + ' (total ' + s.running + ')', 'hy'); }
+  else if (s.kind === 'legdone') { addLog('v_p(' + legN + '!) = ' + s.total + (s.total >= 1 ? '  =>  ' + legN + '! ≡ 0 (mod p)' : ''), 'hy'); }
+  document.getElementById('narrate').innerHTML = s.expr;
+  renderAll(s);
+  document.getElementById('stepInfo').textContent = `step ${cur + 1} / ${steps.length}`;
+}
+
+// ---------- controls ----------
+function stepForward() {
+  if (cur >= steps.length) return;
+  applyStep(steps[cur]);
+  cur++;
+  if (cur >= steps.length) pause();
+}
+function getDelay() { return 1100 - document.getElementById('speed').value * 100; }
+function run() {
+  if (cur >= steps.length) return;
+  running = true;
+  document.getElementById('btnRun').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  document.getElementById('btnStep').disabled = true;
+  const tick = () => {
+    if (!running || cur >= steps.length) { pause(); return; }
+    stepForward();
+    timer = setTimeout(tick, getDelay());
+  };
+  tick();
+}
+function pause() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('btnRun').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnStep').disabled = false;
+}
+function reset() {
+  pause();
+  readInputs();
+  document.getElementById('log').innerHTML = '';
+  buildSteps();
+  document.getElementById('narrate').innerHTML =
+    'Press <b>Step</b> to fill the factorial table one cell at a time, or <b>Run</b> to animate the whole precompute and Legendre count.';
+}
+function readInputs() {
+  N = Math.max(1, Math.min(16, parseInt(document.getElementById('nInput').value) || 8));
+  P = Math.max(2, Math.min(97, parseInt(document.getElementById('pInput').value) || 11));
+  legN = Math.max(0, Math.min(1000000, parseInt(document.getElementById('legInput').value) || 0));
+  // keep N < p for table validity (clamp visually)
+  if (N >= P) { N = P - 1; document.getElementById('nInput').value = N; }
+}
+
+document.getElementById('btnStep').onclick = stepForward;
+document.getElementById('btnRun').onclick = run;
+document.getElementById('btnPause').onclick = pause;
+document.getElementById('btnReset').onclick = reset;
+['nInput', 'pInput', 'legInput'].forEach(id =>
+  document.getElementById(id).addEventListener('change', reset));
+
+// init
+reset();
+</script>
+</body>
+</html>
