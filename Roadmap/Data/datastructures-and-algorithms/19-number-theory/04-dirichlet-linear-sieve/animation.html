@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Linear Sieve & Multiplicative Functions — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    font-family: var(--mono);
+  }
+  .badge.time { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid var(--green); }
+  .badge.space { background: rgba(88,166,255,0.15); color: var(--blue); border: 1px solid var(--blue); }
+  .badge.mark { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid var(--purple); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 18px 24px 60px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  button {
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 80px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    font-family: var(--mono);
+  }
+  .controls input[type="range"] { accent-color: var(--blue); width: 130px; }
+
+  .layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .panel h3 { font-size: 13px; color: var(--blue); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* number grid */
+  .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cell {
+    width: 64px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-2); padding: 5px 4px 4px; text-align: center;
+    transition: all 0.25s ease; position: relative;
+  }
+  .cell .num { font-weight: 700; font-size: 15px; font-family: var(--mono); }
+  .cell .fns { font-size: 9.5px; color: var(--muted); font-family: var(--mono); margin-top: 2px; line-height: 1.35; }
+  .cell .fns b { color: var(--text); font-weight: 600; }
+  .cell.prime { border-color: var(--green); background: rgba(63,185,80,0.12); }
+  .cell.prime .num { color: var(--green); }
+  .cell.current { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(88,166,255,0.4); }
+  .cell.current .num { color: var(--blue); }
+  .cell.marking-coprime { border-color: var(--orange); background: rgba(255,166,87,0.18); }
+  .cell.marking-square { border-color: var(--purple); background: rgba(188,140,255,0.18); }
+  .cell.justmarked { animation: flash 0.6s ease; }
+  @keyframes flash {
+    0% { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+  .cell.untouched { opacity: 0.55; }
+
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .v { font-family: var(--mono); color: var(--text); font-weight: 700; }
+  .stat-row .v.good { color: var(--green); }
+  .stat-row .v.warn { color: var(--yellow); }
+
+  .info { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; min-height: 70px; }
+  .info .hl { color: var(--yellow); }
+  .info .pp { color: var(--purple); }
+  .info .oo { color: var(--orange); }
+  .info .gg { color: var(--green); }
+
+  table.bigo { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.bigo th, table.bigo td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  table.bigo th { background: var(--surface-2); color: var(--muted); }
+  table.bigo td.c { font-family: var(--mono); color: var(--green); font-weight: 700; }
+  table.bigo td.c.warn { color: var(--yellow); }
+
+  .log { font-family: var(--mono); font-size: 11.5px; max-height: 220px; overflow-y: auto; }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.5); color: var(--muted); }
+  .log div .t { color: var(--blue); }
+  .log div.sq .t { color: var(--purple); }
+  .log div.cp .t { color: var(--orange); }
+  .log div.pr .t { color: var(--green); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Linear Sieve (Euler's Sieve) &amp; Multiplicative Functions</h1>
+  <p>Each composite is marked <b>exactly once</b> by its smallest prime factor — filling spf, &phi;, and &mu; in O(n).</p>
+  <div class="badges">
+    <span class="badge time">Time O(n)</span>
+    <span class="badge space">Space O(n)</span>
+    <span class="badge mark">Each composite marked once</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="startBtn" class="primary" onclick="start()">Start</button>
+    <button id="stepBtn" onclick="stepForward()">Step</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+    <label>n: <input type="number" id="nInput" min="6" max="60" value="30" /></label>
+    <button onclick="applyN()">Apply</button>
+    <label>Speed</label>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-swatch" style="background:rgba(63,185,80,0.4);border-color:var(--green)"></span> prime</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:rgba(88,166,255,0.4);border-color:var(--blue)"></span> current i</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,166,87,0.5);border-color:var(--orange)"></span> marking (coprime: p &nmid; i)</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:rgba(188,140,255,0.5);border-color:var(--purple)"></span> marking (square: p | i, then break)</div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <h3>Number grid — spf / &phi; / &mu;</h3>
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="panel">
+        <h3>What's happening</h3>
+        <div class="info" id="info">Press <span class="hl">Start</span> to run the linear sieve, or <span class="hl">Step</span> for one operation at a time.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h3>Live stats</h3>
+        <div class="stat-row"><span>current i</span><span class="v" id="sCur">-</span></div>
+        <div class="stat-row"><span>primes found</span><span class="v good" id="sPrimes">0</span></div>
+        <div class="stat-row"><span>composites marked</span><span class="v" id="sMarks">0</span></div>
+        <div class="stat-row"><span>expected n - &pi;(n)</span><span class="v" id="sExpect">-</span></div>
+        <div class="stat-row"><span>coprime marks</span><span class="v" id="sCoprime">0</span></div>
+        <div class="stat-row"><span>square marks</span><span class="v" id="sSquare">0</span></div>
+        <div class="stat-row"><span>step</span><span class="v" id="sStep">0 / 0</span></div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table class="bigo">
+          <tr><th>Operation</th><th>Cost</th></tr>
+          <tr><td>Build spf, &phi;, &mu;</td><td class="c">O(n)</td></tr>
+          <tr><td>Factor x &le; n</td><td class="c">O(log x)</td></tr>
+          <tr><td>Query &phi;(x) / &mu;(x)</td><td class="c">O(1)</td></tr>
+          <tr><td>Eratosthenes (compare)</td><td class="c warn">O(n log log n)</td></tr>
+          <tr><td>Space (int tables)</td><td class="c warn">O(n)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== State =====
+  let n = 30;
+  let steps = [];
+  let idx = 0;
+  let running = false;
+  let timer = null;
+
+  // ===== Build the full step list by simulating the linear sieve =====
+  function buildSteps(N) {
+    steps = [];
+    const spf = new Array(N + 1).fill(0);
+    const phi = new Array(N + 1).fill(0);
+    const mu = new Array(N + 1).fill(0);
+    if (N >= 1) { phi[1] = 1; mu[1] = 1; }
+    const primes = [];
+    let marks = 0, coprime = 0, square = 0;
+
+    const snapshot = (extra) => {
+      return Object.assign({
+        spf: spf.slice(), phi: phi.slice(), mu: mu.slice(),
+        primes: primes.slice(), marks, coprime, square,
+        cur: extra.cur ?? null, mark: extra.mark ?? null,
+        markType: extra.markType ?? null, desc: extra.desc, logType: extra.logType
+      }, {});
+    };
+
+    for (let i = 2; i <= N; i++) {
+      if (spf[i] === 0) { // prime
+        spf[i] = i; phi[i] = i - 1; mu[i] = -1;
+        primes.push(i);
+        steps.push(snapshot({
+          cur: i,
+          desc: `i = <span class="gg">${i}</span> is <span class="gg">prime</span> (nothing marked it). Set spf[${i}]=${i}, &phi;[${i}]=${i - 1}, &mu;[${i}]=-1.`,
+          logType: 'pr'
+        }));
+      } else {
+        steps.push(snapshot({
+          cur: i,
+          desc: `i = <span class="hl">${i}</span> is composite (spf[${i}]=${spf[i]}). Now produce its multiples i&middot;p.`,
+          logType: ''
+        }));
+      }
+      for (const p of primes) {
+        if (p > spf[i] || i * p > N) break;
+        const ip = i * p;
+        spf[ip] = p;
+        marks++;
+        if (i % p === 0) { // square factor
+          phi[ip] = phi[i] * p;
+          mu[ip] = 0;
+          square++;
+          steps.push(snapshot({
+            cur: i, mark: ip, markType: 'square',
+            desc: `<span class="pp">SQUARE</span>: p=${p} divides i=${i}. Mark spf[${ip}]=${p}, &phi;[${ip}]=&phi;[${i}]&middot;${p}=${phi[ip]}, &mu;[${ip}]=<span class="pp">0</span>. Then <b>break</b>.`,
+            logType: 'sq'
+          }));
+          break; // critical: stop after smallest prime factor
+        } else { // coprime
+          phi[ip] = phi[i] * (p - 1);
+          mu[ip] = -mu[i];
+          coprime++;
+          steps.push(snapshot({
+            cur: i, mark: ip, markType: 'coprime',
+            desc: `<span class="oo">COPRIME</span>: p=${p} does not divide i=${i}. Mark spf[${ip}]=${p}, &phi;[${ip}]=&phi;[${i}]&middot;(${p}-1)=${phi[ip]}, &mu;[${ip}]=-&mu;[${i}]=${mu[ip]}.`,
+            logType: 'cp'
+          }));
+        }
+      }
+    }
+    // final
+    steps.push(snapshot({
+      desc: `Done. <span class="gg">${primes.length}</span> primes, <span class="oo">${marks}</span> composites — each marked <b>exactly once</b>. Expected n-&pi;(n) = ${N - 1 - primes.length}.`,
+      logType: 'pr'
+    }));
+    document.getElementById('sExpect').textContent = (N - 1 - primes.length);
+  }
+
+  // ===== Rendering =====
+  function render() {
+    const s = steps[idx];
+    if (!s) return;
+    const grid = document.getElementById('grid');
+    let html = '';
+    for (let x = 1; x <= n; x++) {
+      let cls = 'cell';
+      const isPrime = s.primes.includes(x);
+      if (s.spf[x] === 0 && x !== 1) cls += ' untouched';
+      if (isPrime) cls += ' prime';
+      if (s.cur === x) cls += ' current';
+      if (s.mark === x) cls += s.markType === 'square' ? ' marking-square justmarked' : ' marking-coprime justmarked';
+      const spfv = x === 1 ? '-' : (s.spf[x] || '?');
+      const phiv = s.phi[x] !== 0 || x === 1 ? s.phi[x] : '·';
+      const muv = (s.spf[x] !== 0 || x === 1) ? s.mu[x] : '·';
+      html += `<div class="${cls}">
+        <div class="num">${x}</div>
+        <div class="fns">spf <b>${spfv}</b><br>&phi; <b>${phiv}</b> &mu; <b>${muv}</b></div>
+      </div>`;
+    }
+    grid.innerHTML = html;
+
+    document.getElementById('sCur').textContent = s.cur ?? '-';
+    document.getElementById('sPrimes').textContent = s.primes.length;
+    const marksEl = document.getElementById('sMarks');
+    marksEl.textContent = s.marks;
+    document.getElementById('sCoprime').textContent = s.coprime;
+    document.getElementById('sSquare').textContent = s.square;
+    document.getElementById('sStep').textContent = `${idx + 1} / ${steps.length}`;
+    document.getElementById('info').innerHTML = s.desc;
+
+    // log (rebuild compactly: show last ~30)
+    const log = document.getElementById('log');
+    const start = Math.max(0, idx - 29);
+    let lh = '';
+    for (let k = idx; k >= start; k--) {
+      const t = steps[k];
+      const tag = t.logType ? `<span class="t">[${t.logType.toUpperCase()}]</span> ` : '';
+      lh += `<div class="${t.logType}">${tag}${stripTags(t.desc)}</div>`;
+    }
+    log.innerHTML = lh;
+  }
+
+  function stripTags(s) {
+    return s.replace(/<[^>]+>/g, '').replace(/&middot;/g, '·').replace(/&phi;/g, 'φ').replace(/&mu;/g, 'μ').replace(/&pi;/g, 'π').replace(/&nmid;/g, '∤');
+  }
+
+  // ===== Controls =====
+  function speedMs() { return 1100 - document.getElementById('speed').value * 95; }
+
+  function start() {
+    if (steps.length === 0) buildSteps(n);
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    loop();
+  }
+  function loop() {
+    if (!running || idx >= steps.length - 1) { render(); pause(); return; }
+    render();
+    idx++;
+    timer = setTimeout(loop, speedMs());
+  }
+  function stepForward() {
+    if (steps.length === 0) buildSteps(n);
+    if (idx < steps.length - 1) idx++;
+    render();
+  }
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+  }
+  function reset() {
+    pause();
+    idx = 0;
+    buildSteps(n);
+    render();
+  }
+  function applyN() {
+    const v = parseInt(document.getElementById('nInput').value, 10);
+    if (!isNaN(v) && v >= 6 && v <= 60) {
+      n = v;
+      reset();
+    }
+  }
+
+  // ===== Init =====
+  buildSteps(n);
+  render();
+</script>
+</body>
+</html>
