@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fibonacci Numbers — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; font-size: .95rem; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+  .badge { padding: 4px 12px; border-radius: 14px; font-size: .8rem; font-weight: 600; border: 1px solid var(--border); }
+  .badge.naive { color: var(--red); border-color: var(--red); }
+  .badge.dp    { color: var(--green); border-color: var(--green); }
+  .badge.log   { color: var(--purple); border-color: var(--purple); }
+
+  .wrap { width: 100%; max-width: 1000px; }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 1.05rem; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; margin-bottom: 14px; }
+  .mode-tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+  button {
+    padding: 9px 18px; border: 1px solid var(--blue); background: transparent; color: var(--blue);
+    border-radius: 8px; cursor: pointer; font-size: .92rem; transition: all .2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.active { background: var(--blue); color: var(--bg); font-weight: 600; }
+  input[type="number"] {
+    padding: 8px 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    border-radius: 8px; font-size: .92rem; width: 90px;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); }
+  label { color: var(--muted); font-size: .9rem; }
+  .speed { display: flex; align-items: center; gap: 8px; }
+  input[type="range"] { accent-color: var(--blue); width: 130px; }
+
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+  .stat { text-align: center; }
+  .stat .label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; }
+  .stat .value { color: var(--blue); font-size: 1.25rem; font-weight: 700; }
+
+  /* visualization area */
+  #viz { min-height: 320px; position: relative; overflow-x: auto; }
+
+  /* recursion tree (SVG) */
+  svg { width: 100%; display: block; }
+  .node-circle { transition: all .25s; }
+  .node-text { font-size: 11px; fill: var(--text); font-family: 'Courier New', monospace; }
+  .edge { stroke: var(--border); stroke-width: 1.5; }
+
+  /* DP bars */
+  .dp-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; justify-content: center; min-height: 280px; }
+  .cell {
+    display: flex; flex-direction: column; align-items: center; transition: all .3s;
+  }
+  .cell .bar {
+    width: 38px; border-radius: 5px 5px 0 0; background: var(--blue); transition: all .3s;
+    display: flex; align-items: flex-start; justify-content: center; color: var(--bg); font-size: .7rem; font-weight: 700; padding-top: 3px;
+  }
+  .cell.computing .bar { background: var(--yellow); }
+  .cell.done .bar { background: var(--green); }
+  .cell.window .bar { background: var(--orange); }
+  .cell .idx { margin-top: 6px; font-size: .72rem; color: var(--muted); }
+  .cell .val { font-size: .72rem; color: var(--text); margin-top: 2px; font-family: 'Courier New', monospace; }
+
+  /* fast doubling steps */
+  .fd-step {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;
+    font-family: 'Courier New', monospace; font-size: .85rem; background: var(--bg); transition: all .3s;
+  }
+  .fd-step.active { border-color: var(--purple); background: rgba(188,140,255,.08); }
+  .fd-step .bitmark { color: var(--orange); font-weight: 700; }
+  .fd-step .pair { color: var(--green); }
+
+  .info { font-family: 'Courier New', monospace; font-size: .92rem; line-height: 1.7; min-height: 60px; }
+  .info .hl { color: var(--yellow); }
+  .info .ok { color: var(--green); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.cplx { font-family: 'Courier New', monospace; font-weight: 700; }
+  .c-red { color: var(--red); } .c-yellow { color: var(--yellow); } .c-green { color: var(--green); } .c-purple { color: var(--purple); }
+
+  .log {
+    font-family: 'Courier New', monospace; font-size: .8rem; max-height: 160px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,.4); color: var(--muted); }
+  .log div:last-child { color: var(--text); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; font-size: .8rem; }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+  <h1>Fibonacci Numbers</h1>
+  <p class="subtitle">Naive recursion (exponential) vs DP loop (O(n)) vs Fast doubling (O(log n))</p>
+  <div class="badges">
+    <span class="badge naive">Naive: O(&phi;<sup>n</sup>)</span>
+    <span class="badge dp">DP loop: O(n)</span>
+    <span class="badge log">Fast doubling: O(log n)</span>
+  </div>
+
+  <div class="wrap">
+    <div class="mode-tabs">
+      <button id="tabNaive" class="active" onclick="setMode('naive')">Recursion Tree</button>
+      <button id="tabDP" onclick="setMode('dp')">DP Loop</button>
+      <button id="tabFD" onclick="setMode('fd')">Fast Doubling</button>
+    </div>
+
+    <div class="controls">
+      <label for="nInput">n =</label>
+      <input type="number" id="nInput" value="7" min="0" max="92">
+      <button id="startBtn" onclick="start()">Run</button>
+      <button id="stepBtn" onclick="stepOnce()">Step</button>
+      <button id="resetBtn" onclick="resetAll()">Reset</button>
+      <div class="speed">
+        <label>Speed</label>
+        <input type="range" id="speed" min="1" max="10" value="5">
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Result F(n)</div><div class="value" id="sResult">-</div></div>
+      <div class="stat"><div class="label">Operations</div><div class="value" id="sOps">0</div></div>
+      <div class="stat"><div class="label">Step</div><div class="value" id="sStep">0 / 0</div></div>
+      <div class="stat"><div class="label">Method cost</div><div class="value" id="sCost">-</div></div>
+    </div>
+
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--blue)"></i>pending / value</span>
+      <span><i class="swatch" style="background:var(--yellow)"></i>computing</span>
+      <span><i class="swatch" style="background:var(--green)"></i>done</span>
+      <span><i class="swatch" style="background:var(--orange)"></i>window / set bit</span>
+      <span><i class="swatch" style="background:var(--red)"></i>repeated work</span>
+    </div>
+
+    <div class="panel">
+      <h3 id="vizTitle">Recursion Tree</h3>
+      <div id="viz"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Explanation</h3>
+      <div class="info" id="info">Choose a method, set <span class="hl">n</span>, and press <span class="hl">Run</span> or <span class="hl">Step</span>.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Complexity Comparison</h3>
+      <table>
+        <thead><tr><th>Method</th><th>Time</th><th>Space</th><th>Mults / bit</th><th>Use when</th></tr></thead>
+        <tbody>
+          <tr><td>Naive recursion</td><td class="cplx c-red">O(&phi;<sup>n</sup>)</td><td>O(n)</td><td>&mdash;</td><td>never (teaching)</td></tr>
+          <tr><td>DP loop</td><td class="cplx c-green">O(n)</td><td>O(1)</td><td>&mdash;</td><td>n up to ~10<sup>6</sup></td></tr>
+          <tr><td>Matrix exponentiation</td><td class="cplx c-purple">O(log n)</td><td>O(1)</td><td>~8</td><td>any linear recurrence</td></tr>
+          <tr><td>Fast doubling</td><td class="cplx c-purple">O(log n)</td><td>O(log n)</td><td>~3</td><td>plain Fibonacci, huge n</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+  // ===== state =====
+  let mode = 'naive';
+  let steps = [];
+  let idx = 0;
+  let running = false;
+  let timer = null;
+  let ops = 0;
+
+  function speedMs() { return 1100 - document.getElementById('speed').value * 100; }
+  function getN() {
+    let n = parseInt(document.getElementById('nInput').value);
+    if (isNaN(n) || n < 0) n = 0;
+    if (n > 92) n = 92;
+    return n;
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('tabNaive').classList.toggle('active', m === 'naive');
+    document.getElementById('tabDP').classList.toggle('active', m === 'dp');
+    document.getElementById('tabFD').classList.toggle('active', m === 'fd');
+    document.getElementById('vizTitle').textContent =
+      m === 'naive' ? 'Recursion Tree' : m === 'dp' ? 'DP Loop (bottom-up)' : 'Fast Doubling (bit by bit)';
+    // cap naive n for visibility
+    const nIn = document.getElementById('nInput');
+    if (m === 'naive') nIn.max = 8; else if (m === 'dp') nIn.max = 30; else nIn.max = 92;
+    if (parseInt(nIn.value) > parseInt(nIn.max)) nIn.value = nIn.max;
+    resetAll();
+  }
+
+  function addLog(msg) {
+    const l = document.getElementById('log');
+    const d = document.createElement('div');
+    d.textContent = msg;
+    l.appendChild(d);
+    l.scrollTop = l.scrollHeight;
+  }
+
+  function setInfo(html) { document.getElementById('info').innerHTML = html; }
+
+  // ===== step builders =====
+  function buildNaive(n) {
+    // Build full recursion tree, counting calls; mark repeated subproblems.
+    steps = [];
+    ops = 0;
+    let nodes = [];
+    let seen = {}; // value -> times computed
+    let calls = 0;
+    let nextId = 0;
+
+    function rec(k, depth, x) {
+      const id = nextId++;
+      calls++;
+      seen[k] = (seen[k] || 0) + 1;
+      const node = { id, k, depth, x, children: [], val: null, repeat: seen[k] > 1 };
+      nodes.push(node);
+      steps.push({ type: 'call', id, k, repeat: node.repeat });
+      let val;
+      if (k < 2) { val = k; }
+      else {
+        const left = rec(k - 1, depth + 1, x - 0.5 / (depth + 1));
+        const right = rec(k + (-2) + 0 + 0 || (k - 2), depth + 1, x + 0.5 / (depth + 1));
+        node.children.push(left, right);
+        val = left.val + right.val;
+      }
+      node.val = val;
+      steps.push({ type: 'return', id, k, val });
+      return node;
+    }
+    rec(n, 0, 0.5);
+    return { nodes, calls };
+  }
+
+  let naiveData = null;
+
+  function layoutNaive(nodes) {
+    // assign x by in-order leaf spread, y by depth
+    let leafX = 0;
+    const maxDepth = Math.max(...nodes.map(n => n.depth));
+    function assign(node) {
+      if (node.children.length === 0) { node._x = leafX++; }
+      else { node.children.forEach(assign); node._x = (node.children[0]._x + node.children[node.children.length-1]._x) / 2; }
+    }
+    const root = nodes[0];
+    assign(root);
+    const totalLeaves = leafX;
+    return { totalLeaves, maxDepth };
+  }
+
+  function renderNaive(activeId, doneIds) {
+    const nodes = naiveData.nodes;
+    const { totalLeaves, maxDepth } = layoutNaive(nodes);
+    const W = Math.max(640, totalLeaves * 46);
+    const H = (maxDepth + 1) * 80 + 40;
+    const xs = i => 30 + (nodes[i]._x + 0.5) / totalLeaves * (W - 60);
+    const ys = d => 30 + d * 80;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMin meet" style="min-width:${W}px">`;
+    // edges
+    nodes.forEach((nd, i) => {
+      nd.children.forEach(ch => {
+        const ci = nodes.indexOf(ch);
+        svg += `<line class="edge" x1="${xs(i)}" y1="${ys(nd.depth)}" x2="${xs(ci)}" y2="${ys(ch.depth)}"/>`;
+      });
+    });
+    // nodes
+    nodes.forEach((nd, i) => {
+      let color = 'var(--blue)';
+      if (nd.repeat) color = 'var(--red)';
+      if (doneIds.has(nd.id)) color = 'var(--green)';
+      if (nd.id === activeId) color = 'var(--yellow)';
+      const label = (doneIds.has(nd.id) && nd.val !== null) ? `=${nd.val}` : `f${nd.k}`;
+      svg += `<circle class="node-circle" cx="${xs(i)}" cy="${ys(nd.depth)}" r="15" fill="${color}" opacity="0.9"/>`;
+      svg += `<text class="node-text" x="${xs(i)}" y="${ys(nd.depth)+4}" text-anchor="middle">${label}</text>`;
+    });
+    svg += `</svg>`;
+    document.getElementById('viz').innerHTML = svg;
+  }
+
+  function buildDP(n) {
+    steps = []; ops = 0;
+    let a = 0, b = 1;
+    let arr = [];
+    for (let i = 0; i <= n; i++) arr.push(null);
+    if (n >= 0) { arr[0] = 0; steps.push({ kind: 'set', i: 0, arr: arr.slice(), msg: 'Base case F(0) = 0' }); }
+    if (n >= 1) { arr[1] = 1; steps.push({ kind: 'set', i: 1, arr: arr.slice(), msg: 'Base case F(1) = 1' }); }
+    for (let i = 2; i <= n; i++) {
+      const v = a + b;
+      arr[i] = v; ops++;
+      steps.push({ kind: 'compute', i, arr: arr.slice(), prev: [i-2, i-1], msg: `F(${i}) = F(${i-1}) + F(${i-2}) = ${b} + ${a} = ${v}` });
+      a = b; b = v;
+    }
+    steps.push({ kind: 'final', arr: arr.slice(), result: n < 2 ? n : b, msg: `Done. F(${n}) = ${n < 2 ? n : b}` });
+  }
+
+  function renderDP(step) {
+    const arr = step.arr;
+    let html = '<div class="dp-row">';
+    const maxVal = Math.max(1, ...arr.filter(v => v !== null));
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      let cls = '';
+      if (v === null) cls = '';
+      else cls = 'done';
+      if (step.kind === 'compute' && i === step.i) cls = 'computing';
+      if (step.kind === 'compute' && step.prev && step.prev.includes(i)) cls = 'window';
+      const h = v === null ? 8 : Math.max(14, (v / maxVal) * 230);
+      html += `<div class="cell ${cls}"><div class="bar" style="height:${h}px">${v === null ? '' : (v < 100000 ? v : '')}</div><div class="idx">F${i}</div><div class="val">${v === null ? '·' : v}</div></div>`;
+    }
+    html += '</div>';
+    document.getElementById('viz').innerHTML = html;
+  }
+
+  function buildFD(n) {
+    steps = []; ops = 0;
+    if (n === 0) {
+      steps.push({ bits: '0', i: 0, a: 0, b: 1, msg: 'n = 0, base pair (F0,F1) = (0,1)', result: 0 });
+      return;
+    }
+    const bits = n.toString(2);
+    let a = 0, b = 1; // F(0), F(1)
+    steps.push({ bits, i: -1, a, b, msg: `Start at index 0: (F0, F1) = (0, 1). Read bits of n=${n} = ${bits}₂ from the top.`, k: 0 });
+    let k = 0;
+    for (let i = 0; i < bits.length; i++) {
+      const bit = bits[i];
+      // double: from (F(k),F(k+1)) to (F(2k),F(2k+1))
+      const c = a * (2 * b - a);   // F(2k)
+      const d = a * a + b * b;     // F(2k+1)
+      ops += 3;
+      let na, nb, nk;
+      if (bit === '1') { na = d; nb = c + d; nk = 2 * k + 1; }
+      else { na = c; nb = d; nk = 2 * k; }
+      steps.push({ bits, i, bit, a: na, b: nb, k: nk, double: { c, d }, prev: { a, b, k },
+        msg: `bit ${bit}: double index ${k}→${2*k} via F(${2*k})=${c}, F(${2*k+1})=${d}` + (bit==='1' ? `, then +1 → index ${nk}` : `, index ${nk}`) });
+      a = na; b = nb; k = nk;
+    }
+    steps[steps.length - 1].result = a;
+  }
+
+  function renderFD(upto) {
+    let html = '';
+    for (let s = 0; s <= upto && s < steps.length; s++) {
+      const st = steps[s];
+      const active = (s === upto);
+      const bitsHtml = st.bits.split('').map((c, ci) =>
+        (st.i === ci) ? `<span class="bitmark">${c}</span>` : c).join('');
+      html += `<div class="fd-step ${active ? 'active' : ''}">`;
+      html += `n = ${bitsHtml}₂ &nbsp; index k = ${st.k} &nbsp; <span class="pair">(F(${st.k}), F(${st.k+1})) = (${fmt(st.a)}, ${fmt(st.b)})</span>`;
+      html += `</div>`;
+    }
+    document.getElementById('viz').innerHTML = html || '<div class="fd-step">Press Run.</div>';
+  }
+
+  function fmt(x) {
+    if (typeof x === 'number' && x > 1e15) return x.toExponential(3);
+    return x;
+  }
+
+  // ===== driver =====
+  function prepare() {
+    const n = getN();
+    resetVizState();
+    if (mode === 'naive') { naiveData = buildNaive(n); }
+    else if (mode === 'dp') { buildDP(n); }
+    else { buildFD(n); }
+    idx = 0;
+    document.getElementById('sStep').textContent = `0 / ${steps.length}`;
+    document.getElementById('sCost').textContent =
+      mode === 'naive' ? 'O(φⁿ)' : mode === 'dp' ? 'O(n)' : 'O(log n)';
+    renderCurrent();
+  }
+
+  function resetVizState() {
+    steps = []; idx = 0; ops = 0; naiveData = null;
+    document.getElementById('sOps').textContent = '0';
+    document.getElementById('sResult').textContent = '-';
+  }
+
+  let naiveDone = new Set();
+
+  function renderCurrent() {
+    if (mode === 'naive') {
+      if (!naiveData) { document.getElementById('viz').innerHTML = ''; return; }
+      // recompute done set up to idx
+      naiveDone = new Set();
+      let active = null;
+      let callCount = 0;
+      for (let s = 0; s < idx && s < steps.length; s++) {
+        const st = steps[s];
+        if (st.type === 'call') { active = st.id; callCount++; }
+        if (st.type === 'return') { naiveDone.add(st.id); }
+      }
+      ops = callCount;
+      renderNaive(active, naiveDone);
+      document.getElementById('sOps').textContent = ops;
+      if (idx > 0 && idx <= steps.length) {
+        const st = steps[idx - 1];
+        if (st.type === 'call') setInfo(st.repeat
+          ? `Calling <span class="hl">fib(${st.k})</span> — <span style="color:var(--red)">already computed before!</span> Naive recursion redoes this work.`
+          : `Calling <span class="hl">fib(${st.k})</span>.`);
+        else setInfo(`Returning <span class="ok">fib(${st.k}) = ${st.val}</span>.`);
+      }
+      if (idx >= steps.length && naiveData) {
+        document.getElementById('sResult').textContent = naiveData.nodes[0].val;
+        setInfo(`Tree fully expanded. <span class="ok">F(${getN()}) = ${naiveData.nodes[0].val}</span> with <span class="hl">${naiveData.calls}</span> calls (= 2·F(n+1) − 1). Compare to just ${getN()} steps in the DP loop!`);
+      }
+    } else if (mode === 'dp') {
+      if (steps.length === 0) { document.getElementById('viz').innerHTML = ''; return; }
+      const st = steps[Math.min(idx, steps.length - 1)];
+      const shown = idx === 0 ? steps[0] : steps[Math.min(idx - 1, steps.length - 1)];
+      renderDP(shown);
+      let computed = 0;
+      for (let s = 0; s < idx; s++) if (steps[s].kind === 'compute') computed++;
+      ops = computed;
+      document.getElementById('sOps').textContent = ops;
+      setInfo(shown.msg.includes('Done') ? `<span class="ok">${shown.msg}</span>` : shown.msg);
+      if (shown.kind === 'final') document.getElementById('sResult').textContent = shown.result;
+    } else {
+      if (steps.length === 0) { document.getElementById('viz').innerHTML = ''; return; }
+      const cur = Math.min(idx, steps.length) - 1;
+      renderFD(cur < 0 ? 0 : cur);
+      let computed = 0;
+      for (let s = 0; s < idx; s++) computed += (steps[s].double ? 3 : 0);
+      ops = computed;
+      document.getElementById('sOps').textContent = ops;
+      if (cur >= 0) {
+        const st = steps[cur];
+        setInfo(st.result !== undefined
+          ? `<span class="ok">Done. F(${getN()}) = ${fmt(st.result)}</span> in ${steps.length - 1} doubling steps (~${ops} multiplications).`
+          : st.msg);
+        if (st.result !== undefined) document.getElementById('sResult').textContent = fmt(st.result);
+      }
+    }
+    document.getElementById('sStep').textContent = `${Math.min(idx, steps.length)} / ${steps.length}`;
+  }
+
+  function stepOnce() {
+    if (steps.length === 0) prepare();
+    if (idx < steps.length) {
+      idx++;
+      const st = steps[idx - 1];
+      if (mode === 'naive') addLog(`${st.type === 'call' ? 'call ' : 'ret  '} fib(${st.k})${st.type === 'return' ? ' = ' + st.val : (st.repeat ? '  [repeat]' : '')}`);
+      else if (mode === 'dp') addLog(st.msg);
+      else if (st.msg) addLog(st.msg);
+      renderCurrent();
+    }
+  }
+
+  function start() {
+    if (running) return;
+    if (steps.length === 0 || idx >= steps.length) prepare();
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    function loop() {
+      if (!running || idx >= steps.length) { stop(); renderCurrent(); return; }
+      stepOnce();
+      timer = setTimeout(loop, speedMs());
+    }
+    loop();
+  }
+
+  function stop() {
+    running = false;
+    clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+  }
+
+  function resetAll() {
+    stop();
+    document.getElementById('log').innerHTML = '';
+    prepare();
+    setInfo('Choose a method, set <span class="hl">n</span>, and press <span class="hl">Run</span> or <span class="hl">Step</span>.');
+  }
+
+  document.getElementById('nInput').addEventListener('change', resetAll);
+  // init
+  resetAll();
+</script>
+</body>
+</html>
