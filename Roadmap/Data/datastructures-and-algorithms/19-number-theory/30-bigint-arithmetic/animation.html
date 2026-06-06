@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Big Integer Arithmetic — Limb Addition &amp; Schoolbook vs Karatsuba</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  header code { color: var(--yellow); font-family: var(--mono); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab {
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 13px;
+  }
+  .tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"] {
+    width: 120px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { accent-color: var(--accent); }
+  .spacer { flex: 1; }
+
+  .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .card h3 { font-size: 14px; color: var(--accent); margin-bottom: 12px; }
+
+  /* limb cells */
+  .limb-row { display: flex; gap: 6px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+  .limb-row .rowlabel { width: 56px; color: var(--muted); font-size: 12px; font-family: var(--mono); }
+  .cell {
+    min-width: 54px; padding: 8px 6px; border: 1px solid var(--border);
+    border-radius: 6px; text-align: center; font-family: var(--mono); font-size: 13px;
+    background: var(--panel-2); transition: all 0.2s ease; position: relative;
+  }
+  .cell .idx { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .cell.active { border-color: var(--accent); background: rgba(88,166,255,0.18); color: #fff; }
+  .cell.carry { border-color: var(--yellow); background: rgba(210,153,34,0.20); color: #fff; }
+  .cell.result { border-color: var(--green); background: rgba(63,185,80,0.18); color: #fff; }
+  .cell.split-lo { border-color: var(--purple); background: rgba(188,140,255,0.15); }
+  .cell.split-hi { border-color: var(--orange); background: rgba(255,166,87,0.15); }
+  .carry-badge {
+    position: absolute; top: -10px; right: -6px; background: var(--yellow); color: #0d1117;
+    font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 4px; font-family: var(--mono);
+  }
+
+  .prodgrid { display: flex; flex-direction: column; gap: 6px; }
+  .subprod {
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+    font-family: var(--mono); font-size: 12px; background: var(--panel-2);
+  }
+  .subprod.lit { border-color: var(--accent); background: rgba(88,166,255,0.12); color: #fff; }
+  .subprod .tag { color: var(--purple); font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td code { font-family: var(--mono); }
+  .o-good { color: var(--green); } .o-warn { color: var(--yellow); } .o-bad { color: var(--red); }
+
+  .info { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; min-height: 60px; }
+  .info .hl { color: var(--yellow); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .stats b { color: var(--text); }
+  .log {
+    font-family: var(--mono); font-size: 11.5px; max-height: 200px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+  }
+  .log div { padding: 1px 0; color: var(--muted); }
+  .log div:last-child { color: var(--text); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Big Integer Arithmetic</h1>
+  <p>Limb-array <code>addition with carry</code> &middot; schoolbook <code>O(n²)</code> vs Karatsuba <code>O(n^1.585)</code> multiplication. Base shown small for clarity.</p>
+</header>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab active" id="tabAdd" onclick="switchMode('add')">Addition (carry)</button>
+    <button class="tab" id="tabMul" onclick="switchMode('mul')">Schoolbook vs Karatsuba</button>
+  </div>
+
+  <div class="controls">
+    <label>A</label><input type="text" id="inA" value="923456" />
+    <label>B</label><input type="text" id="inB" value="88999" />
+    <label>base</label>
+    <select id="baseSel" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;font-family:var(--mono);">
+      <option value="1000">1000</option>
+      <option value="10">10</option>
+      <option value="100">100</option>
+    </select>
+    <button onclick="loadInput()">Load</button>
+    <button onclick="randomize()">Random</button>
+    <span class="spacer"></span>
+    <button class="primary" id="playBtn" onclick="play()">Play</button>
+    <button id="stepBtn" onclick="step()">Step</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+    <label>Speed</label>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+  </div>
+
+  <div class="stats">
+    <span>Step: <b id="sCur">0</b> / <b id="sTot">0</b></span>
+    <span>Limb mults: <b id="sMul">0</b></span>
+    <span>Carries: <b id="sCarry">0</b></span>
+    <span>Mode: <b id="sMode">addition</b></span>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="card" id="visCard">
+        <h3 id="visTitle">Limb-Array Addition</h3>
+        <div id="vis"></div>
+        <div class="legend">
+          <span><i class="sw" style="background:rgba(88,166,255,0.5)"></i> active</span>
+          <span><i class="sw" style="background:rgba(210,153,34,0.6)"></i> carry</span>
+          <span><i class="sw" style="background:rgba(63,185,80,0.5)"></i> result</span>
+          <span><i class="sw" style="background:rgba(188,140,255,0.5)"></i> low half</span>
+          <span><i class="sw" style="background:rgba(255,166,87,0.5)"></i> high half</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Step Explanation</h3>
+        <div class="info" id="info">Press <span class="hl">Play</span> or <span class="hl">Step</span> to begin.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>Big-O</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>Add / Subtract</td><td class="o-good"><code>O(n)</code></td></tr>
+          <tr><td>Compare</td><td class="o-good"><code>O(n)</code></td></tr>
+          <tr><td>Schoolbook ×</td><td class="o-bad"><code>O(n²)</code></td></tr>
+          <tr><td>Karatsuba ×</td><td class="o-warn"><code>O(n^1.585)</code></td></tr>
+          <tr><td>Toom-3 ×</td><td class="o-warn"><code>O(n^1.465)</code></td></tr>
+          <tr><td>FFT / NTT ×</td><td class="o-good"><code>O(n log n)</code></td></tr>
+          <tr><td>Long division</td><td class="o-bad"><code>O(n·m)</code></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"><div>ready.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- state ----------
+let BASE = 1000;
+let mode = "add";
+let steps = [];
+let cur = 0;
+let timer = null;
+let mulCount = 0, carryCount = 0;
+
+function $(id){ return document.getElementById(id); }
+function sleepMs(){ return 1100 - $("speed").value * 100; }
+
+// parse a decimal string into little-endian limbs in the chosen base
+function toLimbs(s, base){
+  s = (s.replace(/[^0-9]/g,"") || "0").replace(/^0+(?=\d)/,"");
+  let x = 0n; for (const ch of s) x = x*10n + BigInt(ch);
+  const b = BigInt(base), limbs = [];
+  if (x === 0n) return [0];
+  while (x > 0n){ limbs.push(Number(x % b)); x /= b; }
+  return limbs;
+}
+function widthFor(base){ return base===10?1 : base===100?2 : 3; }
+function pad(v, base){ return base===10 ? String(v) : String(v).padStart(widthFor(base),"0"); }
+function limbsToStr(limbs, base){
+  let s = String(limbs[limbs.length-1]);
+  for (let i=limbs.length-2;i>=0;i--) s += pad(limbs[i], base);
+  return s;
+}
+
+// ---------- ADDITION step generation ----------
+function genAdd(A, B){
+  steps = []; mulCount = 0; carryCount = 0;
+  const n = Math.max(A.length, B.length);
+  const res = [];
+  let carry = 0;
+  steps.push({type:"add", a:A, b:B, res:[...res], i:-1, carry:0,
+    msg:`Add A and B limb by limb, base ${BASE}. Carry starts at 0.`});
+  for (let i=0;i<n;i++){
+    const ai = i<A.length?A[i]:0, bi = i<B.length?B[i]:0;
+    const s = ai + bi + carry;
+    const digit = s % BASE, newCarry = Math.floor(s / BASE);
+    res[i] = digit;
+    if (newCarry>0) carryCount++;
+    steps.push({type:"add", a:A, b:B, res:[...res], i, carry, sum:s, digit, newCarry,
+      msg:`pos ${i}: ${ai} + ${bi} + carry(${carry}) = ${s}  →  digit ${digit}, carry ${newCarry}`});
+    carry = newCarry;
+  }
+  if (carry>0){
+    res[n] = carry;
+    steps.push({type:"add", a:A, b:B, res:[...res], i:n, carry:0, finalCarry:true,
+      msg:`final carry ${carry} becomes a new top limb. Result grew by one limb.`});
+  }
+  steps.push({type:"add", a:A, b:B, res:[...res], i:-2, carry:0, done:true,
+    msg:`Done. A + B = ${limbsToStr(res.length?res:[0], BASE)}`});
+}
+
+// ---------- MULTIPLY step generation (schoolbook + karatsuba conceptual) ----------
+function genMul(A, B){
+  steps = []; mulCount = 0; carryCount = 0;
+  // schoolbook
+  const res = new Array(A.length+B.length).fill(0);
+  steps.push({type:"mul", phase:"sb", a:A, b:B, res:[...res], i:-1, j:-1,
+    msg:`SCHOOLBOOK: multiply every limb of A by every limb of B → position i+j. ${A.length}×${B.length} = ${A.length*B.length} limb products.`});
+  for (let i=0;i<A.length;i++){
+    let carry = 0;
+    for (let j=0;j<B.length;j++){
+      mulCount++;
+      const cur2 = res[i+j] + A[i]*B[j] + carry;
+      res[i+j] = cur2 % BASE; carry = Math.floor(cur2/BASE);
+      steps.push({type:"mul", phase:"sb", a:A, b:B, res:[...res], i, j, carry,
+        msg:`A[${i}]·B[${j}] = ${A[i]*B[j]} → add into pos ${i+j}. running carry ${carry}.`});
+    }
+    if (carry>0){ res[i+B.length]+=carry; }
+  }
+  while (res.length>1 && res[res.length-1]===0) res.pop();
+  const sbProduct = limbsToStr(res, BASE);
+  steps.push({type:"mul", phase:"sb", a:A, b:B, res:[...res], i:-2, j:-2, done:true,
+    msg:`Schoolbook done: A·B = ${sbProduct}  (${A.length*B.length} limb mults, O(n²)).`});
+
+  // karatsuba conceptual: show the 3-product split (only if at least 2 limbs)
+  if (A.length>=2 && B.length>=2){
+    const n = Math.max(A.length,B.length), h = Math.floor(n/2);
+    const aLo = A.slice(0,h), aHi = A.slice(h).length?A.slice(h):[0];
+    const bLo = B.slice(0,h), bHi = B.slice(h).length?B.slice(h):[0];
+    steps.push({type:"kara", a:A, b:B, h, aLo, aHi, bLo, bHi, lit:0,
+      msg:`KARATSUBA: split A = aHi·B^${h} + aLo, B = bHi·B^${h} + bLo. Need only 3 products, not 4.`});
+    steps.push({type:"kara", a:A, b:B, h, aLo, aHi, bLo, bHi, lit:1,
+      msg:`z0 = aLo · bLo  (low product, size ~n/2).`});
+    steps.push({type:"kara", a:A, b:B, h, aLo, aHi, bLo, bHi, lit:2,
+      msg:`z2 = aHi · bHi  (high product, size ~n/2).`});
+    steps.push({type:"kara", a:A, b:B, h, aLo, aHi, bLo, bHi, lit:3,
+      msg:`z1 = (aHi+aLo)(bHi+bLo) − z2 − z0  (the trick: one mul gives the middle term).`});
+    steps.push({type:"kara", a:A, b:B, h, aLo, aHi, bLo, bHi, lit:4,
+      msg:`combine: A·B = z2·B^${2*h} + z1·B^${h} + z0. 3 sub-products vs schoolbook's 4 → O(n^1.585).`});
+  }
+}
+
+// ---------- rendering ----------
+function cellHTML(val, cls, idx, base){
+  const badge = (cls==="carry") ? "" : "";
+  return `<div class="cell ${cls}">${val===undefined?"&middot;":val}${idx!==undefined?`<span class="idx">${idx}</span>`:""}${badge}</div>`;
+}
+
+function render(){
+  const st = steps[cur] || steps[0];
+  if (!st) return;
+  const base = BASE;
+  let html = "";
+
+  if (st.type === "add"){
+    $("visTitle").textContent = "Limb-Array Addition (carry propagation)";
+    const n = Math.max(st.a.length, st.b.length) + 1;
+    // A row
+    html += rowHTML("A", st.a, n, base, (k)=> k===st.i?"active":"");
+    // B row
+    html += rowHTML("B", st.b, n, base, (k)=> k===st.i?"active":"");
+    // result row
+    let resCells = `<div class="limb-row"><div class="rowlabel">A+B</div>`;
+    for (let k=n-1;k>=0;k--){
+      const v = st.res[k];
+      let cls = "";
+      if (k===st.i) cls = "result";
+      resCells += `<div class="cell ${v!==undefined?cls:''}">${v!==undefined?pad0(v,base,k,st.res.length):"&middot;"}<span class="idx">${k}</span>${ (k===st.i && st.newCarry>0)?`<span class="carry-badge">c${st.newCarry}</span>`:"" }</div>`;
+    }
+    resCells += `</div>`;
+    html += resCells;
+  } else if (st.type === "mul"){
+    $("visTitle").textContent = "Schoolbook Multiplication  (O(n²))";
+    const n = st.a.length + st.b.length;
+    html += rowHTML("A", st.a, st.a.length, base, (k)=> k===st.i?"active":"");
+    html += rowHTML("B", st.b, st.b.length, base, (k)=> k===st.j?"active":"");
+    let resCells = `<div class="limb-row"><div class="rowlabel">A·B</div>`;
+    for (let k=n-1;k>=0;k--){
+      const v = st.res[k];
+      const lit = (st.i>=0 && st.j>=0 && k===st.i+st.j);
+      resCells += `<div class="cell ${lit?"result":""}">${v!==undefined?pad0(v,base,k,st.res.length):0}<span class="idx">${k}</span></div>`;
+    }
+    resCells += `</div>`;
+    html += resCells;
+  } else if (st.type === "kara"){
+    $("visTitle").textContent = "Karatsuba Split  (3 products, O(n^1.585))";
+    // show hi/lo split of A and B
+    html += splitRow("A", st.aHi, st.aLo, base);
+    html += splitRow("B", st.bHi, st.bLo, base);
+    html += `<div class="prodgrid">`;
+    html += `<div class="subprod ${st.lit===1?"lit":""}"><span class="tag">z0</span> = aLo · bLo</div>`;
+    html += `<div class="subprod ${st.lit===2?"lit":""}"><span class="tag">z2</span> = aHi · bHi</div>`;
+    html += `<div class="subprod ${st.lit===3?"lit":""}"><span class="tag">z1</span> = (aHi+aLo)(bHi+bLo) − z2 − z0</div>`;
+    html += `<div class="subprod ${st.lit===4?"lit":""}"><span class="tag">A·B</span> = z2·B^${2*st.h} + z1·B^${st.h} + z0</div>`;
+    html += `</div>`;
+  }
+  $("vis").innerHTML = html;
+
+  $("info").innerHTML = st.msg;
+  $("sCur").textContent = cur;
+  $("sTot").textContent = steps.length-1;
+  $("sMul").textContent = mulCountUpTo();
+  $("sCarry").textContent = carryCountUpTo();
+}
+
+function pad0(v, base, k, len){ return (k===len-1) ? String(v) : pad(v, base); }
+
+function rowHTML(label, limbs, n, base, clsFn){
+  let s = `<div class="limb-row"><div class="rowlabel">${label}</div>`;
+  for (let k=n-1;k>=0;k--){
+    const v = k<limbs.length?limbs[k]:undefined;
+    s += `<div class="cell ${v!==undefined?clsFn(k):''}">${v!==undefined?(k===limbs.length-1?String(v):pad(v,base)):"&middot;"}<span class="idx">${k}</span></div>`;
+  }
+  s += `</div>`;
+  return s;
+}
+function splitRow(label, hi, lo, base){
+  let s = `<div class="limb-row"><div class="rowlabel">${label}</div>`;
+  for (let k=hi.length-1;k>=0;k--) s += `<div class="cell split-hi">${pad(hi[k],base)}<span class="idx">hi${k}</span></div>`;
+  for (let k=lo.length-1;k>=0;k--) s += `<div class="cell split-lo">${pad(lo[k],base)}<span class="idx">lo${k}</span></div>`;
+  s += `</div>`;
+  return s;
+}
+
+// counters reflecting progress
+function mulCountUpTo(){
+  let c=0; for (let i=0;i<=cur && i<steps.length;i++){ const s=steps[i]; if (s.type==="mul" && s.i>=0 && s.j>=0) c++; }
+  return c;
+}
+function carryCountUpTo(){
+  let c=0; for (let i=0;i<=cur && i<steps.length;i++){ const s=steps[i]; if (s.type==="add" && s.newCarry>0) c++; }
+  return c;
+}
+
+function addLog(msg){
+  const l = $("log");
+  const d = document.createElement("div");
+  d.textContent = `[${cur}] ${msg}`;
+  l.appendChild(d);
+  l.scrollTop = l.scrollHeight;
+}
+
+// ---------- controls ----------
+function build(){
+  BASE = parseInt($("baseSel").value);
+  const A = toLimbs($("inA").value, BASE);
+  const B = toLimbs($("inB").value, BASE);
+  if (mode==="add") genAdd(A, B); else genMul(A, B);
+  cur = 0;
+  $("sMode").textContent = mode==="add"?"addition":"multiplication";
+  $("log").innerHTML = "<div>built "+(mode==="add"?"addition":"multiplication")+" steps: "+(steps.length)+"</div>";
+  render();
+}
+function step(){
+  if (cur < steps.length-1){ cur++; render(); addLog(steps[cur].msg); }
+}
+function play(){
+  stop();
+  $("playBtn").disabled = true;
+  timer = setInterval(()=>{
+    if (cur >= steps.length-1){ stop(); return; }
+    step();
+  }, sleepMs());
+}
+function stop(){ if (timer){ clearInterval(timer); timer=null; } $("playBtn").disabled=false; }
+function reset(){ stop(); build(); }
+function loadInput(){ stop(); build(); }
+function randomize(){
+  const ra = ()=> String(Math.floor(Math.random()*9_000_000)+100000);
+  $("inA").value = ra(); $("inB").value = ra();
+  stop(); build();
+}
+function switchMode(m){
+  mode = m;
+  $("tabAdd").classList.toggle("active", m==="add");
+  $("tabMul").classList.toggle("active", m==="mul");
+  if (m==="mul"){ $("inA").value="1234"; $("inB").value="5678"; }
+  else { $("inA").value="923456"; $("inB").value="88999"; }
+  stop(); build();
+}
+
+// init
+build();
+</script>
+</body>
+</html>
