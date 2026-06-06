@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simpson's Rule &amp; Adaptive Numerical Integration — Visual Animation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 3px 9px;
+    border-radius: 20px; border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .badge.green { color: var(--green); border-color: #1d4427; }
+  .badge.yellow { color: var(--yellow); border-color: #4a3b13; }
+  .badge.blue { color: var(--blue); border-color: #1c3a5e; }
+  .badge.purple { color: var(--purple); border-color: #3a2d5c; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 18px 24px 60px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .panel h3 { color: var(--blue); font-size: 14px; margin-bottom: 10px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .ctrl-group {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px;
+  }
+  .ctrl-group label { color: var(--muted); font-size: 12px; }
+  select, input[type="text"], input[type="number"] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-family: var(--mono); font-size: 12px;
+  }
+  input[type="text"] { width: 200px; }
+  input[type="number"] { width: 64px; }
+  input[type="range"] { accent-color: var(--blue); width: 120px; }
+  button {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 7px 14px; cursor: pointer; font-size: 13px;
+    transition: all .15s;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { border-color: var(--green); color: var(--green); }
+  button.warn { border-color: var(--orange); color: var(--orange); }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  svg { width: 100%; height: 380px; display: block; background: #0a0e14; border-radius: 8px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 18px; font-family: var(--mono); font-size: 12px; }
+  .stat .k { color: var(--muted); font-size: 11px; }
+  .stat .v { color: var(--text); font-size: 15px; font-weight: 600; }
+  .stat .v.good { color: var(--green); }
+  .stat .v.warn { color: var(--orange); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.mono, th.mono { font-family: var(--mono); }
+  .c-green { color: var(--green); } .c-yellow { color: var(--yellow); }
+  .c-red { color: var(--red); } .c-blue { color: var(--blue); } .c-purple { color: var(--purple); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  #log {
+    font-family: var(--mono); font-size: 11.5px; height: 200px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  }
+  #log div { padding: 1px 0; border-bottom: 1px solid #1a2230; color: var(--muted); }
+  #log .hl { color: var(--text); }
+  #log .ok { color: var(--green); }
+  #log .sub { color: var(--orange); }
+  .info { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+  .info .em { color: var(--yellow); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Simpson's Rule &amp; Adaptive Numerical Integration</h1>
+  <p>Parabolas approximating the area under a curve, with adaptive subdivision refining where the local error is large.</p>
+  <div class="badges">
+    <span class="badge green">Simpson error O(h⁴)</span>
+    <span class="badge yellow">Trapezoid error O(h²)</span>
+    <span class="badge blue">Eval cost O(n)</span>
+    <span class="badge purple">Adaptive: |S2−S| &lt; 15ε</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- Controls -->
+  <div class="panel">
+    <h3>Controls</h3>
+    <div class="controls">
+      <div class="ctrl-group">
+        <label>f(x)</label>
+        <select id="fn">
+          <option value="gauss">e^(-x²)  (bell curve)</option>
+          <option value="sin">sin(x)</option>
+          <option value="spike">1/(x²+0.01)  (sharp spike)</option>
+          <option value="cubic">x³ − 2x² + x  (cubic — Simpson exact)</option>
+          <option value="osc">sin(6x)·e^(-x/3)  (oscillatory)</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>a</label><input type="number" id="aIn" value="0" step="0.5">
+        <label>b</label><input type="number" id="bIn" value="3" step="0.5">
+      </div>
+      <div class="ctrl-group">
+        <label>mode</label>
+        <select id="mode">
+          <option value="simpson">Composite Simpson</option>
+          <option value="trap">Trapezoid (compare)</option>
+          <option value="adaptive">Adaptive Simpson</option>
+        </select>
+      </div>
+      <div class="ctrl-group" id="nGroup">
+        <label>n (even)</label><input type="number" id="nIn" value="4" min="2" step="2">
+      </div>
+      <div class="ctrl-group" id="epsGroup" style="display:none;">
+        <label>ε (10^)</label><input type="number" id="epsIn" value="-4" min="-12" max="-1" step="1">
+      </div>
+      <div class="ctrl-group">
+        <label>speed</label>
+        <span style="color:var(--muted);font-size:11px;">slow</span>
+        <input type="range" id="speed" min="1" max="10" value="6">
+        <span style="color:var(--muted);font-size:11px;">fast</span>
+      </div>
+      <button id="runBtn" class="primary" onclick="run()">Run</button>
+      <button id="stepBtn" onclick="stepOnce()">Step</button>
+      <button id="resetBtn" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Visualization -->
+    <div class="panel">
+      <h3>Visualization</h3>
+      <svg id="plot" viewBox="0 0 720 380" preserveAspectRatio="none"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--blue)"></i> curve f(x)</span>
+        <span><i class="swatch" style="background:var(--green)"></i> Simpson parabola panel</span>
+        <span><i class="swatch" style="background:var(--yellow)"></i> trapezoid chord</span>
+        <span><i class="swatch" style="background:var(--orange)"></i> sample node</span>
+        <span><i class="swatch" style="background:var(--purple)"></i> adaptive split point</span>
+      </div>
+    </div>
+
+    <!-- Info + stats -->
+    <div>
+      <div class="panel">
+        <h3>Live Stats</h3>
+        <div class="stats">
+          <div class="stat"><div class="k">Estimate</div><div class="v" id="stEst">—</div></div>
+          <div class="stat"><div class="k">True value</div><div class="v" id="stTrue">—</div></div>
+          <div class="stat"><div class="k">Abs error</div><div class="v" id="stErr">—</div></div>
+          <div class="stat"><div class="k">f-evals</div><div class="v" id="stEval">0</div></div>
+          <div class="stat"><div class="k">panels</div><div class="v" id="stPanels">0</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>What's Happening</h3>
+        <div class="info" id="info">Pick a function, an interval, and a mode, then press
+          <span class="em">Run</span> (animated) or <span class="em">Step</span> (one panel at a time).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Complexity / error table -->
+  <div class="panel">
+    <h3>Big-O &amp; Error Table</h3>
+    <table>
+      <thead><tr>
+        <th>Rule</th><th class="mono">Shape</th><th class="mono">Per-panel error</th>
+        <th class="mono">Composite error</th><th>Degree of precision</th><th class="mono">Eval cost</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Midpoint</td><td class="mono">rectangle</td><td class="mono c-yellow">+(h³/24)f″</td><td class="mono c-yellow">O(h²)</td><td>1</td><td class="mono">O(n)</td></tr>
+        <tr><td>Trapezoid</td><td class="mono">line</td><td class="mono c-yellow">−(h³/12)f″</td><td class="mono c-yellow">O(h²)</td><td>1</td><td class="mono">O(n)</td></tr>
+        <tr><td>Simpson 1/3</td><td class="mono">parabola</td><td class="mono c-green">−(h⁵/90)f⁗</td><td class="mono c-green">O(h⁴)</td><td>3</td><td class="mono">O(n)</td></tr>
+        <tr><td>Boole</td><td class="mono">quartic</td><td class="mono c-blue">−(8h⁷/945)f⁽⁶⁾</td><td class="mono c-blue">O(h⁶)</td><td>5</td><td class="mono">O(n)</td></tr>
+        <tr><td>Gauss n-point</td><td class="mono">optimal</td><td class="mono c-purple">f⁽²ⁿ⁾ term</td><td class="mono c-purple">degree 2n−1 exact</td><td>2n−1</td><td class="mono">O(n)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+// ===================== integrand definitions =====================
+const FUNCS = {
+  gauss:  { f: x => Math.exp(-x*x),                       label: "e^(-x²)" },
+  sin:    { f: x => Math.sin(x),                          label: "sin(x)" },
+  spike:  { f: x => 1/(x*x + 0.01),                       label: "1/(x²+0.01)" },
+  cubic:  { f: x => x*x*x - 2*x*x + x,                    label: "x³−2x²+x" },
+  osc:    { f: x => Math.sin(6*x)*Math.exp(-x/3),         label: "sin(6x)·e^(-x/3)" },
+};
+
+// high-accuracy "truth" via dense adaptive Simpson (independent of the shown method)
+function truthValue(f, a, b) {
+  function simp(fa,fb,fm,a,b){ return (b-a)/6*(fa+4*fm+fb); }
+  function rec(a,b,eps,whole,fa,fb,fm,d){
+    const m=(a+b)/2, flm=f((a+m)/2), frm=f((m+b)/2);
+    const L=simp(fa,fm,flm,a,m), R=simp(fm,fb,frm,m,b);
+    if(d<=0 || Math.abs(L+R-whole)<=15*eps) return L+R+(L+R-whole)/15;
+    return rec(a,m,eps/2,L,fa,fm,flm,d-1)+rec(m,b,eps/2,R,fm,fb,frm,d-1);
+  }
+  const m=(a+b)/2, fa=f(a), fb=f(b), fm=f(m);
+  return rec(a,b,1e-13,simp(fa,fb,fm,a,b),fa,fb,fm,60);
+}
+
+// ===================== state =====================
+let state = null;        // { steps: [...], idx, evals, ... }
+let timer = null;
+let busy = false;
+
+// ===================== plotting helpers =====================
+const W = 720, H = 380, PAD = 36;
+let xmin, xmax, ymin, ymax;
+function sx(x){ return PAD + (x - xmin)/(xmax - xmin)*(W - 2*PAD); }
+function sy(y){ return H - PAD - (y - ymin)/(ymax - ymin)*(H - 2*PAD); }
+
+function computeBounds(f, a, b){
+  xmin = a; xmax = b;
+  let lo = Infinity, hi = -Infinity;
+  for(let i=0;i<=400;i++){
+    const x = a + (b-a)*i/400, y = f(x);
+    if(isFinite(y)){ lo = Math.min(lo,y); hi = Math.max(hi,y); }
+  }
+  if(lo>0) lo = 0; if(hi<0) hi = 0;
+  const pad = (hi-lo)*0.1 || 1;
+  ymin = lo - pad; ymax = hi + pad;
+}
+
+function svgEl(tag, attrs){
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+// draw the base curve + axes; returns the svg element (cleared)
+function drawBase(f){
+  const svg = document.getElementById("plot");
+  svg.innerHTML = "";
+  // zero axis
+  if(ymin < 0 && ymax > 0){
+    svg.appendChild(svgEl("line",{x1:PAD,y1:sy(0),x2:W-PAD,y2:sy(0),stroke:"#30363d","stroke-width":1}));
+  }
+  svg.appendChild(svgEl("line",{x1:PAD,y1:PAD,x2:PAD,y2:H-PAD,stroke:"#30363d","stroke-width":1}));
+  svg.appendChild(svgEl("line",{x1:PAD,y1:H-PAD,x2:W-PAD,y2:H-PAD,stroke:"#30363d","stroke-width":1}));
+  // curve
+  let d = "";
+  for(let i=0;i<=400;i++){
+    const x = xmin + (xmax-xmin)*i/400, y = f(x);
+    if(!isFinite(y)) continue;
+    d += (d===""?"M":"L") + sx(x).toFixed(1) + " " + sy(y).toFixed(1) + " ";
+  }
+  svg.appendChild(svgEl("path",{d, fill:"none", stroke:"var(--blue)","stroke-width":2}));
+  return svg;
+}
+
+// fill the area under a parabola through (x0,f0),(xm,fm),(x2,f2)
+function parabolaPath(f, x0, x2){
+  const xm = (x0+x2)/2, f0=f(x0), fm=f(xm), f2=f(x2);
+  // Lagrange parabola coefficients
+  // sample finely for a smooth filled region
+  let d = "M " + sx(x0) + " " + sy(0) + " ";
+  const N = 30;
+  for(let i=0;i<=N;i++){
+    const x = x0 + (x2-x0)*i/N;
+    // parabola value via Lagrange on the 3 nodes
+    const L0 = (x-xm)*(x-x2)/((x0-xm)*(x0-x2));
+    const L1 = (x-x0)*(x-x2)/((xm-x0)*(xm-x2));
+    const L2 = (x-x0)*(x-xm)/((x2-x0)*(x2-xm));
+    const y = f0*L0 + fm*L1 + f2*L2;
+    d += "L " + sx(x).toFixed(1) + " " + sy(y).toFixed(1) + " ";
+  }
+  d += "L " + sx(x2) + " " + sy(0) + " Z";
+  return d;
+}
+
+function trapPath(f, x0, x1){
+  const f0=f(x0), f1=f(x1);
+  return "M "+sx(x0)+" "+sy(0)+" L "+sx(x0)+" "+sy(f0)+" L "+sx(x1)+" "+sy(f1)+" L "+sx(x1)+" "+sy(0)+" Z";
+}
+
+function nodeDot(x, f, cls){
+  return svgEl("circle",{cx:sx(x), cy:sy(f(x)), r:3.5, fill:`var(--${cls})`});
+}
+
+// ===================== step generators =====================
+function genComposite(f, a, b, n, simpsonMode){
+  if(simpsonMode && n%2!==0) n++;
+  const h = (b-a)/n;
+  const steps = [];
+  let acc = 0, evals = 0, panels = 0;
+  if(simpsonMode){
+    for(let i=0;i<n;i+=2){
+      const x0=a+i*h, x2=a+(i+2)*h, xm=x0+h;
+      const contrib = h/3*(f(x0)+4*f(xm)+f(x2));
+      acc += contrib; evals += 3; panels++;
+      steps.push({type:"simpson", x0, x2, xm, contrib, acc, evals, panels,
+        msg:`Panel [${x0.toFixed(2)},${x2.toFixed(2)}]: (h/3)(f0+4f1+f2) = ${contrib.toFixed(5)}`});
+    }
+  } else {
+    for(let i=0;i<n;i++){
+      const x0=a+i*h, x1=a+(i+1)*h;
+      const contrib = h/2*(f(x0)+f(x1));
+      acc += contrib; evals += 2; panels++;
+      steps.push({type:"trap", x0, x1, contrib, acc, evals, panels,
+        msg:`Trapezoid [${x0.toFixed(2)},${x1.toFixed(2)}]: (h/2)(f0+f1) = ${contrib.toFixed(5)}`});
+    }
+  }
+  return steps;
+}
+
+function genAdaptive(f, a, b, eps){
+  const steps = [];
+  let evals = 0, panels = 0;
+  function simp(fa,fb,fm,a,b){ return (b-a)/6*(fa+4*fm+fb); }
+  function rec(a,b,eps,whole,fa,fb,fm,depth){
+    const m=(a+b)/2;
+    const flm=f((a+m)/2), frm=f((m+b)/2); evals += 2;
+    const L=simp(fa,fm,flm,a,m), R=simp(fm,fb,frm,m,b);
+    const diff = L+R-whole;
+    const converged = Math.abs(diff) <= 15*eps;
+    if(depth<=0 || converged){
+      panels += 2;
+      const val = L+R+diff/15;
+      steps.push({type:"accept", a, b, m, val, diff, panels, evals,
+        msg:`ACCEPT [${a.toFixed(2)},${b.toFixed(2)}]: |S2−S|=${Math.abs(diff).toExponential(2)} < 15ε ✓ → ${val.toFixed(6)}`});
+      return val;
+    }
+    steps.push({type:"split", a, b, m, diff, evals,
+      msg:`SPLIT  [${a.toFixed(2)},${b.toFixed(2)}] at ${m.toFixed(2)}: |S2−S|=${Math.abs(diff).toExponential(2)} ≥ 15ε`});
+    return rec(a,m,eps/2,L,fa,fm,flm,depth-1) + rec(m,b,eps/2,R,fm,fb,frm,depth-1);
+  }
+  const m=(a+b)/2, fa=f(a), fb=f(b), fm=f(m); evals += 3;
+  rec(a,b,eps,simp(fa,fb,fm,a,b),fa,fb,fm,40);
+  return steps;
+}
+
+// ===================== rendering a step =====================
+function renderUpTo(idx){
+  const { f, a, b, mode, steps, truth } = state;
+  const svg = drawBase(f);
+  let lastAcc = 0, evals = 0, panels = 0, info = "";
+
+  for(let i=0;i<=idx && i<steps.length;i++){
+    const s = steps[i];
+    const active = (i===idx);
+    if(s.type==="simpson"){
+      const p = svgEl("path",{d:parabolaPath(f,s.x0,s.x2),
+        fill: active? "rgba(63,185,80,0.35)":"rgba(63,185,80,0.16)",
+        stroke:"var(--green)","stroke-width":active?2:1});
+      svg.appendChild(p);
+      svg.appendChild(nodeDot(s.x0,f,"orange"));
+      svg.appendChild(nodeDot(s.xm,f,"orange"));
+      svg.appendChild(nodeDot(s.x2,f,"orange"));
+      lastAcc=s.acc; evals=s.evals; panels=s.panels;
+      if(active) info = `<span class="em">Simpson panel</span> over [${s.x0.toFixed(2)}, ${s.x2.toFixed(2)}].`
+        + ` A parabola is fit through 3 points; its exact area is (h/3)(f0+4f1+f2) = <span class="em">${s.contrib.toFixed(5)}</span>.`
+        + ` Running total = ${s.acc.toFixed(5)}.`;
+    } else if(s.type==="trap"){
+      const p = svgEl("path",{d:trapPath(f,s.x0,s.x1),
+        fill: active? "rgba(210,153,34,0.35)":"rgba(210,153,34,0.16)",
+        stroke:"var(--yellow)","stroke-width":active?2:1});
+      svg.appendChild(p);
+      svg.appendChild(nodeDot(s.x0,f,"orange"));
+      svg.appendChild(nodeDot(s.x1,f,"orange"));
+      lastAcc=s.acc; evals=s.evals; panels=s.panels;
+      if(active) info = `<span class="em">Trapezoid</span> over [${s.x0.toFixed(2)}, ${s.x1.toFixed(2)}].`
+        + ` A straight chord (not a parabola) gives area (h/2)(f0+f1) = <span class="em">${s.contrib.toFixed(5)}</span>.`
+        + ` Note how the line cuts the curve — that gap is the O(h²) error.`;
+    } else if(s.type==="split"){
+      // draw the whole-panel parabola (coarse) and a split marker
+      const p = svgEl("path",{d:parabolaPath(f,s.a,s.b),
+        fill:"rgba(248,81,73,0.10)", stroke:"var(--red)","stroke-width":active?1.6:0.8,"stroke-dasharray":"4 3"});
+      svg.appendChild(p);
+      svg.appendChild(svgEl("line",{x1:sx(s.m),y1:sy(ymin),x2:sx(s.m),y2:sy(ymax),
+        stroke:"var(--purple)","stroke-width":active?2:1,"stroke-dasharray":"3 3"}));
+      svg.appendChild(nodeDot(s.m,f,"purple"));
+      evals=s.evals;
+      if(active) info = `<span class="em">Subdivide.</span> On [${s.a.toFixed(2)}, ${s.b.toFixed(2)}] the coarse estimate S and the refined S2 disagree:`
+        + ` |S2−S| = ${Math.abs(s.diff).toExponential(2)} ≥ 15ε. The curve bends too much here, so we split at ${s.m.toFixed(2)} and recurse with ε/2.`;
+    } else if(s.type==="accept"){
+      const p = svgEl("path",{d:parabolaPath(f,s.a,s.b),
+        fill: active?"rgba(63,185,80,0.40)":"rgba(63,185,80,0.18)",
+        stroke:"var(--green)","stroke-width":active?2:1});
+      svg.appendChild(p);
+      svg.appendChild(nodeDot(s.a,f,"orange"));
+      svg.appendChild(nodeDot(s.m,f,"orange"));
+      svg.appendChild(nodeDot(s.b,f,"orange"));
+      lastAcc += s.val; evals=s.evals; panels=s.panels;
+      if(active) info = `<span class="em">Accept.</span> On [${s.a.toFixed(2)}, ${s.b.toFixed(2)}] the refined estimate converged:`
+        + ` |S2−S| = ${Math.abs(s.diff).toExponential(2)} < 15ε. We keep S2 + (S2−S)/15 = <span class="em">${s.val.toFixed(6)}</span> (Richardson-corrected).`;
+    }
+  }
+
+  // stats
+  document.getElementById("stEst").textContent = lastAcc.toFixed(6);
+  document.getElementById("stTrue").textContent = truth.toFixed(6);
+  const err = Math.abs(lastAcc - truth);
+  const errEl = document.getElementById("stErr");
+  errEl.textContent = err.toExponential(2);
+  errEl.className = "v " + (err < 1e-4 ? "good" : "warn");
+  document.getElementById("stEval").textContent = evals;
+  document.getElementById("stPanels").textContent = panels;
+  if(info) document.getElementById("info").innerHTML = info;
+}
+
+// ===================== orchestration =====================
+function buildState(){
+  const key = document.getElementById("fn").value;
+  const f = FUNCS[key].f;
+  let a = parseFloat(document.getElementById("aIn").value);
+  let b = parseFloat(document.getElementById("bIn").value);
+  if(b <= a){ b = a + 1; document.getElementById("bIn").value = b; }
+  const mode = document.getElementById("mode").value;
+  computeBounds(f, a, b);
+  const truth = truthValue(f, a, b);
+  let steps;
+  if(mode==="simpson"){
+    const n = Math.max(2, parseInt(document.getElementById("nIn").value)||4);
+    steps = genComposite(f, a, b, n, true);
+  } else if(mode==="trap"){
+    const n = Math.max(1, parseInt(document.getElementById("nIn").value)||4);
+    steps = genComposite(f, a, b, n, false);
+  } else {
+    const eps = Math.pow(10, parseInt(document.getElementById("epsIn").value)||-4);
+    steps = genAdaptive(f, a, b, eps);
+  }
+  state = { f, a, b, mode, steps, idx: -1, truth };
+}
+
+function log(s){
+  const el = document.getElementById("log");
+  const div = document.createElement("div");
+  let cls = "hl";
+  if(s.type==="accept") cls="ok";
+  else if(s.type==="split") cls="sub";
+  div.className = cls;
+  div.textContent = `#${String(state.idx+1).padStart(3," ")}  ${s.msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function speedMs(){ return 1100 - document.getElementById("speed").value*100; }
+
+function stepOnce(){
+  if(busy && timer) return;
+  if(!state) { buildState(); drawBase(state.f); }
+  if(state.idx+1 >= state.steps.length){ finish(); return; }
+  state.idx++;
+  renderUpTo(state.idx);
+  log(state.steps[state.idx]);
+}
+
+function run(){
+  if(busy) return;
+  if(!state || state.idx+1 >= state.steps.length){ resetAll(); buildState(); drawBase(state.f); }
+  busy = true;
+  setButtons(true);
+  function tick(){
+    if(state.idx+1 >= state.steps.length){ finish(); return; }
+    state.idx++;
+    renderUpTo(state.idx);
+    log(state.steps[state.idx]);
+    timer = setTimeout(tick, speedMs());
+  }
+  tick();
+}
+
+function finish(){
+  busy = false; clearTimeout(timer); timer = null;
+  setButtons(false);
+  const { mode, truth } = state;
+  const est = parseFloat(document.getElementById("stEst").textContent);
+  const err = Math.abs(est - truth);
+  const name = mode==="trap" ? "Trapezoid" : mode==="adaptive" ? "Adaptive Simpson" : "Composite Simpson";
+  document.getElementById("info").innerHTML =
+    `<span class="em">Done.</span> ${name} estimate = <span class="em">${est.toFixed(8)}</span>, `
+    + `true = ${truth.toFixed(8)}, abs error = <span class="em">${err.toExponential(2)}</span>. `
+    + (mode==="trap"
+        ? "Switch to Simpson to see the same node count give a much smaller (O(h⁴)) error."
+        : mode==="adaptive"
+          ? "Notice extra splits clustered where the curve bends sharply, and few panels on flat stretches."
+          : "Double n and re-run: Simpson's error should drop ~16× each time (until round-off).");
+  const div = document.createElement("div");
+  div.className = "ok";
+  div.textContent = `===  ${name}: estimate=${est.toFixed(8)}  error=${err.toExponential(2)}  ===`;
+  document.getElementById("log").appendChild(div);
+  document.getElementById("log").scrollTop = 1e9;
+}
+
+function setButtons(running){
+  document.getElementById("runBtn").disabled = running;
+  document.getElementById("stepBtn").disabled = running;
+}
+
+function resetAll(){
+  busy = false; clearTimeout(timer); timer = null;
+  state = null;
+  setButtons(false);
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("stEst").textContent = "—";
+  document.getElementById("stTrue").textContent = "—";
+  const e = document.getElementById("stErr"); e.textContent = "—"; e.className="v";
+  document.getElementById("stEval").textContent = "0";
+  document.getElementById("stPanels").textContent = "0";
+  document.getElementById("info").innerHTML =
+    'Pick a function, an interval, and a mode, then press <span class="em">Run</span> or <span class="em">Step</span>.';
+  buildState();
+  drawBase(state.f);
+  state.idx = -1;
+}
+
+// toggle n vs eps controls
+document.getElementById("mode").addEventListener("change", () => {
+  const adaptive = document.getElementById("mode").value === "adaptive";
+  document.getElementById("nGroup").style.display = adaptive ? "none" : "flex";
+  document.getElementById("epsGroup").style.display = adaptive ? "flex" : "none";
+  resetAll();
+});
+["fn","aIn","bIn","nIn","epsIn"].forEach(id =>
+  document.getElementById(id).addEventListener("change", resetAll));
+
+// init
+resetAll();
+</script>
+</body>
+</html>
