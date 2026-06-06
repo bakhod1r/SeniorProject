@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Binomial Coefficients C(n,k) — Pascal's Triangle & Modular Queries</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --hi-cell: rgba(63, 185, 80, 0.45);
+    --hi-parent: rgba(88, 166, 255, 0.35);
+    --hi-query: rgba(188, 140, 255, 0.40);
+    --hi-scan: rgba(210, 153, 34, 0.35);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; font-family: var(--mono);
+    padding: 3px 8px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--panel-2);
+  }
+  .badge.green { color: var(--green); border-color: rgba(63,185,80,.4); }
+  .badge.yellow { color: var(--yellow); border-color: rgba(210,153,34,.4); }
+  .badge.purple { color: var(--purple); border-color: rgba(188,140,255,.4); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 72px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { accent-color: var(--accent); width: 130px; }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 14px; color: #fff;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  /* Pascal triangle */
+  .triangle { display: flex; flex-direction: column; align-items: center; gap: 6px; overflow-x: auto; padding: 6px; }
+  .trow { display: flex; gap: 6px; }
+  .cell {
+    min-width: 44px; height: 36px; padding: 0 6px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--panel-2); font-family: var(--mono);
+    font-size: 13px; transition: all 0.25s ease; color: var(--muted);
+  }
+  .cell.filled { color: var(--text); background: #20262f; }
+  .cell.parent { background: var(--hi-parent); border-color: var(--accent); color: #fff; }
+  .cell.newcell { background: var(--hi-cell); border-color: var(--green); color: #fff; transform: scale(1.12); }
+  .cell.querycell { background: var(--hi-query); border-color: var(--purple); color: #fff; }
+  /* Factorial table */
+  .ftable { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  .ftable th, .ftable td {
+    border: 1px solid var(--border); padding: 5px 6px; text-align: center;
+  }
+  .ftable th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .ftable td { color: var(--text); transition: background .25s ease; }
+  .ftable td.scan { background: var(--hi-scan); color: #fff; }
+  .ftable td.use { background: var(--hi-query); color: #fff; }
+  .ftable-scroll { max-height: 260px; overflow-y: auto; }
+  /* info + bigO + log */
+  .info {
+    font-family: var(--mono); font-size: 13px; line-height: 1.7;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; min-height: 84px;
+  }
+  .info .k { color: var(--yellow); }
+  .info .g { color: var(--green); }
+  .info .p { color: var(--purple); }
+  .bigo { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .bigo th, .bigo td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  .bigo th { color: var(--muted); background: var(--panel-2); }
+  .bigo code { font-family: var(--mono); }
+  .c-green { color: var(--green); } .c-yellow { color: var(--yellow); } .c-purple { color: var(--purple); }
+  .log {
+    font-family: var(--mono); font-size: 12px; height: 150px;
+    overflow-y: auto; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  }
+  .log div { padding: 1px 0; border-bottom: 1px solid rgba(48,54,61,.4); color: var(--muted); }
+  .log div span { color: var(--text); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; }
+  .stat { font-family: var(--mono); }
+  .stat b { color: var(--accent); }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 4px; font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); }
+  .result { font-family: var(--mono); font-size: 15px; color: var(--green); margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Binomial Coefficients C(n, k) — Pascal's Triangle &amp; Modular Queries</h1>
+  <p>Build Pascal's triangle by addition, then answer C(n,k) mod p with a factorial / inverse-factorial table. Step through both.</p>
+  <div class="badges">
+    <span class="badge green">Pascal DP: O(n²)</span>
+    <span class="badge yellow">Precompute: O(N)</span>
+    <span class="badge purple">Query mod p: O(1)</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <label>rows (n) <input type="number" id="rows" min="1" max="14" value="8" /></label>
+    <label>n <input type="number" id="qn" min="0" max="14" value="6" /></label>
+    <label>k <input type="number" id="qk" min="0" max="14" value="3" /></label>
+    <label>prime p <input type="number" id="prime" min="2" value="1000000007" /></label>
+    <button class="primary" id="buildBtn">Build Triangle</button>
+    <button id="stepBtn">Step</button>
+    <button id="playBtn">Play</button>
+    <button id="queryBtn">Query C(n,k) mod p</button>
+    <button id="resetBtn">Reset</button>
+    <div class="spacer"></div>
+    <label>speed</label>
+    <input type="range" id="speed" min="1" max="10" value="6" />
+  </div>
+
+  <div class="stats">
+    <div class="stat">Pascal cells filled: <b id="stCells">0</b></div>
+    <div class="stat">Additions: <b id="stAdd">0</b></div>
+    <div class="stat">fact[] / invFact[] size: <b id="stFact">0</b></div>
+    <div class="stat">Modular inverses used: <b id="stInv">0</b></div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Pascal's Triangle — C(n,k) = C(n−1,k−1) + C(n−1,k)</h2>
+      <div class="triangle" id="triangle"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--hi-parent)"></span>parent cells</span>
+        <span><span class="sw" style="background:var(--hi-cell)"></span>new cell (sum)</span>
+        <span><span class="sw" style="background:var(--hi-query)"></span>query result</span>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <h2>Factorial / Inverse-Factorial Table (mod p)</h2>
+        <div class="ftable-scroll">
+          <table class="ftable" id="ftable">
+            <thead><tr><th>i</th><th>fact[i] = i! mod p</th><th>invFact[i] = (i!)⁻¹ mod p</th></tr></thead>
+            <tbody id="ftbody"></tbody>
+          </table>
+        </div>
+        <div class="result" id="queryResult">C(n,k) mod p = —</div>
+      </div>
+
+      <div class="card">
+        <h2>What's happening</h2>
+        <div class="info" id="info">Press <span class="g">Build Triangle</span> to fill Pascal's triangle row by row, then <span class="p">Query C(n,k) mod p</span> to answer with the factorial formula.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="layout" style="margin-top:18px;">
+    <div class="card">
+      <h2>Big-O Reference</h2>
+      <table class="bigo">
+        <thead><tr><th>Method</th><th>Setup</th><th>Per value / query</th><th>Modulus</th></tr></thead>
+        <tbody>
+          <tr><td>Pascal triangle DP</td><td class="c-yellow"><code>O(n²)</code></td><td class="c-green"><code>O(1)</code> lookup</td><td>any</td></tr>
+          <tr><td>Multiplicative formula</td><td><code>—</code></td><td class="c-green"><code>O(min(k,n−k))</code></td><td>none</td></tr>
+          <tr><td>Factorials + inverse</td><td class="c-yellow"><code>O(N)</code></td><td class="c-green"><code>O(1)</code></td><td class="c-purple">prime, n&lt;p</td></tr>
+          <tr><td>Inverse-factorial sweep</td><td class="c-green"><code>O(N + log p)</code></td><td>—</td><td>prime</td></tr>
+          <tr><td>Lucas (huge n)</td><td><code>O(p)</code></td><td><code>O(log_p n)</code></td><td>prime, n≥p</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Operation Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== State =====
+  let tri = [];          // tri[i][k] = C(i,k) as BigInt (exact for the visual)
+  let rows = 8;
+  let fact = [], invFact = [];
+  let prime = 1000000007n;
+  let factN = 0;
+  let buildQueue = [];   // animation steps for building
+  let qi = 0;
+  let playing = false;
+  let timer = null;
+  let cells = 0, adds = 0, invUsed = 0;
+
+  const $ = id => document.getElementById(id);
+  const sleep = () => 1100 - $('speed').value * 100;
+
+  function powMod(a, e, m) {
+    a %= m; if (a < 0n) a += m;
+    let r = 1n % m;
+    while (e > 0n) {
+      if (e & 1n) r = r * a % m;
+      a = a * a % m;
+      e >>= 1n;
+    }
+    return r;
+  }
+
+  function log(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    $('log').prepend(d);
+  }
+
+  function setInfo(html) { $('info').innerHTML = html; }
+
+  function updateStats() {
+    $('stCells').textContent = cells;
+    $('stAdd').textContent = adds;
+    $('stFact').textContent = factN;
+    $('stInv').textContent = invUsed;
+  }
+
+  // ===== Build the Pascal triangle data + step queue =====
+  function prepareBuild() {
+    rows = Math.max(1, Math.min(14, parseInt($('rows').value) || 8));
+    tri = [];
+    buildQueue = [];
+    cells = 0; adds = 0;
+    for (let i = 0; i <= rows; i++) tri.push(new Array(i + 1).fill(null));
+    // schedule cell fills
+    for (let i = 0; i <= rows; i++) {
+      for (let k = 0; k <= i; k++) {
+        if (k === 0 || k === i) {
+          buildQueue.push({ i, k, edge: true });
+        } else {
+          buildQueue.push({ i, k, edge: false });
+        }
+      }
+    }
+    qi = 0;
+    renderTriangle();
+  }
+
+  function renderTriangle(hl) {
+    hl = hl || {};
+    const cont = $('triangle');
+    cont.innerHTML = '';
+    for (let i = 0; i <= rows; i++) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'trow';
+      for (let k = 0; k <= i; k++) {
+        const c = document.createElement('div');
+        c.className = 'cell';
+        const v = tri[i] ? tri[i][k] : null;
+        if (v !== null && v !== undefined) {
+          c.classList.add('filled');
+          c.textContent = v.toString();
+        } else {
+          c.textContent = '·';
+        }
+        const key = i + ',' + k;
+        if (hl.parent && hl.parent.includes(key)) c.classList.add('parent');
+        if (hl.newcell === key) c.classList.add('newcell');
+        if (hl.query && hl.query.includes(key)) c.classList.add('querycell');
+        rowEl.appendChild(c);
+      }
+      cont.appendChild(rowEl);
+    }
+  }
+
+  function doStep() {
+    if (qi >= buildQueue.length) {
+      setInfo('Triangle complete. Now run <span class="p">Query C(n,k) mod p</span>.');
+      stopPlay();
+      buildFactTable();
+      return false;
+    }
+    const s = buildQueue[qi++];
+    const { i, k, edge } = s;
+    if (edge) {
+      tri[i][k] = 1n;
+      cells++;
+      renderTriangle({ newcell: i + ',' + k });
+      setInfo('Edge cell <span class="g">C(' + i + ',' + k + ') = 1</span> (C(n,0)=C(n,n)=1).');
+      log('C(' + i + ',' + k + ') = <span>1</span> (edge)');
+    } else {
+      const a = tri[i - 1][k - 1], b = tri[i - 1][k];
+      tri[i][k] = a + b;
+      cells++; adds++;
+      renderTriangle({
+        parent: [(i - 1) + ',' + (k - 1), (i - 1) + ',' + k],
+        newcell: i + ',' + k
+      });
+      setInfo('Pascal: <span class="g">C(' + i + ',' + k + ')</span> = C(' + (i-1) + ',' + (k-1) + ') + C(' + (i-1) + ',' + k + ') = <span class="k">' + a + ' + ' + b + ' = ' + (a + b) + '</span>');
+      log('C(' + i + ',' + k + ') = ' + a + '+' + b + ' = <span>' + (a + b) + '</span>');
+    }
+    updateStats();
+    return true;
+  }
+
+  function play() {
+    if (playing) return;
+    playing = true;
+    $('playBtn').textContent = 'Pause';
+    const tick = () => {
+      if (!playing) return;
+      const more = doStep();
+      if (more) timer = setTimeout(tick, sleep());
+      else stopPlay();
+    };
+    tick();
+  }
+  function stopPlay() {
+    playing = false;
+    $('playBtn').textContent = 'Play';
+    clearTimeout(timer);
+  }
+
+  // ===== Factorial / inverse-factorial table =====
+  function buildFactTable() {
+    prime = BigInt($('prime').value || '1000000007');
+    const maxN = Math.max(rows,
+      parseInt($('qn').value) || 0) + 1;
+    factN = maxN;
+    fact = new Array(maxN + 1);
+    invFact = new Array(maxN + 1);
+    fact[0] = 1n;
+    for (let i = 1; i <= maxN; i++) fact[i] = fact[i - 1] * BigInt(i) % prime;
+    invFact[maxN] = powMod(fact[maxN], prime - 2n, prime); // ONE inverse
+    invUsed = 1;
+    for (let i = maxN; i > 0; i--) invFact[i - 1] = invFact[i] * BigInt(i) % prime;
+    renderFactTable();
+    updateStats();
+    log('Built fact[0..' + maxN + '] and invFact[] with <span>1 inverse</span> (Fermat).');
+  }
+
+  function renderFactTable(hl) {
+    hl = hl || {};
+    const tb = $('ftbody');
+    tb.innerHTML = '';
+    for (let i = 0; i < fact.length; i++) {
+      const tr = document.createElement('tr');
+      const cls = (j) => (hl.use && hl.use.includes(j) && hl.col && hl.col[j]) ? hl.col[j] : '';
+      tr.innerHTML = '<td>' + i + '</td>' +
+        '<td class="' + (hl.useFact && hl.useFact.includes(i) ? 'use' : '') + '">' + fact[i].toString() + '</td>' +
+        '<td class="' + (hl.useInv && hl.useInv.includes(i) ? 'use' : '') + '">' + invFact[i].toString() + '</td>';
+      tb.appendChild(tr);
+    }
+  }
+
+  // ===== Query =====
+  function runQuery() {
+    if (!fact.length) buildFactTable();
+    prime = BigInt($('prime').value || '1000000007');
+    const n = parseInt($('qn').value);
+    const k = parseInt($('qk').value);
+    if (isNaN(n) || isNaN(k)) return;
+
+    if (k < 0 || k > n) {
+      $('queryResult').textContent = 'C(' + n + ',' + k + ') mod p = 0  (k<0 or k>n)';
+      setInfo('Boundary: k &lt; 0 or k &gt; n ⟹ <span class="g">C = 0</span>.');
+      log('C(' + n + ',' + k + ') = <span>0</span> (boundary)');
+      return;
+    }
+    if (n >= fact.length) {
+      setInfo('n exceeds the precompute size — rebuild with larger rows/n. (For n ≥ p you would need Lucas.)');
+      return;
+    }
+    // highlight triangle cell if within drawn triangle
+    if (n <= rows) renderTriangle({ query: [n + ',' + k] });
+    // highlight the three factorial entries used
+    renderFactTable({ useFact: [n], useInv: [k, n - k] });
+
+    const res = fact[n] * invFact[k] % prime * invFact[n - k] % prime;
+    $('queryResult').textContent = 'C(' + n + ',' + k + ') mod p = ' + res.toString();
+    setInfo('Query: <span class="p">C(' + n + ',' + k + ')</span> = fact[' + n + '] · invFact[' + k + '] · invFact[' + (n - k) +
+      '] mod p = <span class="g">' + res.toString() + '</span>  (O(1): 3 lookups, 2 multiplies)');
+    log('C(' + n + ',' + k + ') mod p = fact[' + n + ']·invFact[' + k + ']·invFact[' + (n - k) + '] = <span>' + res.toString() + '</span>');
+  }
+
+  // ===== Wire up =====
+  $('buildBtn').onclick = () => { stopPlay(); prepareBuild(); setInfo('Triangle ready. Use <span class="g">Step</span> or <span class="g">Play</span> to fill it.'); $('queryResult').textContent = 'C(n,k) mod p = —'; updateStats(); };
+  $('stepBtn').onclick = () => { if (!tri.length) prepareBuild(); doStep(); };
+  $('playBtn').onclick = () => { if (!tri.length) prepareBuild(); playing ? stopPlay() : play(); };
+  $('queryBtn').onclick = runQuery;
+  $('resetBtn').onclick = () => {
+    stopPlay(); tri = []; fact = []; invFact = [];
+    cells = 0; adds = 0; invUsed = 0; factN = 0; qi = 0; buildQueue = [];
+    $('triangle').innerHTML = ''; $('ftbody').innerHTML = '';
+    $('log').innerHTML = '';
+    $('queryResult').textContent = 'C(n,k) mod p = —';
+    setInfo('Reset. Press <span class="g">Build Triangle</span> to begin.');
+    updateStats();
+  };
+
+  // ===== Init =====
+  prepareBuild();
+  buildFactTable();
+  updateStats();
+</script>
+</body>
+</html>
