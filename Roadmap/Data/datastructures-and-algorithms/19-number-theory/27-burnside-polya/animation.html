@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Burnside's Lemma & Pólya Enumeration — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { font-size: 1.7rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 16px; text-align: center; font-size: 0.95rem; }
+
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+  .badge {
+    padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge.green  { color: var(--green);  border-color: var(--green); }
+  .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+  .badge.blue   { color: var(--blue);   border-color: var(--blue); }
+
+  .layout { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 1100px; }
+  .col-left  { flex: 1 1 420px; min-width: 340px; }
+  .col-right { flex: 1 1 420px; min-width: 340px; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 16px;
+  }
+  .panel h3 { color: var(--blue); margin-bottom: 12px; font-size: 1.05rem; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  button {
+    padding: 9px 18px; border: 2px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.92rem;
+    transition: all 0.2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .input-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .input-row label { color: var(--muted); font-size: 0.9rem; }
+  input[type="number"] {
+    width: 64px; padding: 7px 8px; border: 2px solid var(--border);
+    background: var(--bg); color: var(--text); border-radius: 8px; font-size: 0.92rem;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); }
+  .speed-control { display: flex; align-items: center; gap: 8px; }
+  .speed-control input[type="range"] { width: 120px; accent-color: var(--blue); }
+  .toggle { display: flex; gap: 8px; align-items: center; }
+
+  svg { display: block; margin: 0 auto; }
+  .bead { stroke: var(--border); stroke-width: 2; transition: all 0.3s ease; }
+  .bead.fixed-cycle { stroke: var(--green); stroke-width: 4; }
+  .bead-label { fill: var(--text); font-size: 12px; text-anchor: middle; dominant-baseline: middle; font-weight: 600; }
+  .cycle-arc { fill: none; stroke: var(--yellow); stroke-width: 2.5; opacity: 0.85; }
+
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
+  .stat { text-align: center; }
+  .stat .lbl { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .val { color: var(--blue); font-size: 1.3rem; font-weight: bold; }
+  .stat .val.green { color: var(--green); }
+  .stat .val.orange { color: var(--orange); }
+
+  .step-info {
+    font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.7;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+  }
+  .step-info .hl { color: var(--yellow); }
+  .step-info .g { color: var(--green); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.cplx { font-family: 'Courier New', monospace; font-weight: 600; }
+  .c-green  { color: var(--green); }
+  .c-yellow { color: var(--yellow); }
+  .c-red    { color: var(--red); }
+
+  .log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; height: 180px; overflow-y: auto; font-family: 'Courier New', monospace;
+    font-size: 0.8rem; line-height: 1.6;
+  }
+  .log .entry { color: var(--muted); }
+  .log .entry .num { color: var(--blue); }
+  .log .entry.identity { color: var(--purple); }
+  .log .entry.reflect { color: var(--orange); }
+  .log .entry.result { color: var(--green); font-weight: 600; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 8px 0 14px; font-size: 0.8rem; }
+  .legend-item { display: flex; gap: 6px; align-items: center; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>Burnside's Lemma &amp; Pólya Enumeration</h1>
+  <p class="subtitle">Average the fixed colorings over every symmetry &rarr; the number of distinct necklaces</p>
+
+  <div class="badges">
+    <span class="badge green">|Fix(g)| = k^(#cycles)</span>
+    <span class="badge blue">#orbits = (1/|G|) &Sigma; |Fix(g)|</span>
+    <span class="badge yellow">Necklace: (1/n) &Sigma;<sub>d|n</sub> &phi;(d) k^(n/d)</span>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: visualization + controls -->
+    <div class="col-left">
+      <div class="panel">
+        <h3>Necklace under symmetry</h3>
+        <div class="input-row">
+          <label>Beads n: <input type="number" id="nInput" value="6" min="1" max="14"></label>
+          <label>Colors k: <input type="number" id="kInput" value="2" min="1" max="6"></label>
+          <div class="toggle">
+            <label><input type="checkbox" id="reflToggle"> include reflections (bracelet)</label>
+          </div>
+        </div>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-dot" style="background:var(--yellow)"></span> cycle arc</div>
+          <div class="legend-item"><span class="legend-dot" style="border:3px solid var(--green); background:transparent"></span> beads forced equal (one cycle)</div>
+        </div>
+        <svg id="canvas" width="360" height="320" viewBox="0 0 360 320"></svg>
+      </div>
+
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="controls">
+          <button id="startBtn" onclick="start()">Play</button>
+          <button id="stepBtn" onclick="stepForward()">Step</button>
+          <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+          <button id="resetBtn" onclick="reset()">Reset</button>
+        </div>
+        <div class="speed-control">
+          <span style="color:var(--muted);font-size:0.85rem">Slow</span>
+          <input type="range" id="speed" min="1" max="10" value="5">
+          <span style="color:var(--muted);font-size:0.85rem">Fast</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: stats, info, big-O, log -->
+    <div class="col-right">
+      <div class="panel">
+        <h3>Live Burnside accumulation</h3>
+        <div class="stats">
+          <div class="stat"><div class="lbl">Symmetry</div><div class="val" id="symIdx">0 / 0</div></div>
+          <div class="stat"><div class="lbl">#cycles c(g)</div><div class="val orange" id="cycCount">0</div></div>
+          <div class="stat"><div class="lbl">|Fix(g)| = k^c</div><div class="val green" id="fixCount">0</div></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="lbl">&Sigma; |Fix|</div><div class="val" id="sumFix">0</div></div>
+          <div class="stat"><div class="lbl">|G|</div><div class="val" id="groupSize">0</div></div>
+          <div class="stat"><div class="lbl">avg = #orbits</div><div class="val green" id="orbitAvg">—</div></div>
+        </div>
+        <div class="step-info" id="stepInfo">
+          Press <span class="hl">Play</span> to sweep through each symmetry, or
+          <span class="hl">Step</span> one at a time. Each symmetry's
+          <span class="g">|Fix(g)| = k^(#cycles)</span> is added; the running average is the orbit count.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+          <tr><td>Count cycles of one symmetry</td><td class="cplx c-yellow">O(n)</td><td>visited-array walk</td></tr>
+          <tr><td>|Fix(g)| = k^(c(g))</td><td class="cplx c-green">O(log c)</td><td>fast power</td></tr>
+          <tr><td>General Burnside loop</td><td class="cplx c-yellow">O(|G|·n)</td><td>over all group elements</td></tr>
+          <tr><td>Necklace closed form</td><td class="cplx c-green">O(&radic;n)</td><td>(1/n)&Sigma;<sub>d|n</sub>&phi;(d)k^(n/d)</td></tr>
+          <tr><td>Brute-force orbit count</td><td class="cplx c-red">O(k^n·n)</td><td>oracle only</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ===== STATE =====
+  let n = 6, k = 2, includeReflections = false;
+  let symmetries = [];      // each: {perm, type, label}
+  let steps = [];           // animation steps (one per symmetry)
+  let stepIdx = 0;
+  let running = false;
+  let timer = null;
+  let runningSum = 0;
+
+  const CX = 180, CY = 150, R = 110, BEAD_R = 18;
+
+  function getSpeed() { return 1200 - document.getElementById('speed').value * 110; }
+
+  // ===== BUILD GROUP =====
+  function buildSymmetries(n, withRefl) {
+    const syms = [];
+    // rotations
+    for (let j = 0; j < n; j++) {
+      const perm = [];
+      for (let i = 0; i < n; i++) perm[i] = (i + j) % n;
+      syms.push({ perm, type: j === 0 ? 'identity' : 'rotation', label: j === 0 ? 'identity (rotate 0)' : 'rotate by ' + j });
+    }
+    if (withRefl) {
+      // n reflections: axis offset 'off' maps i -> (off - i) mod n
+      for (let off = 0; off < n; off++) {
+        const perm = [];
+        for (let i = 0; i < n; i++) perm[i] = ((off - i) % n + n) % n;
+        syms.push({ perm, type: 'reflect', label: 'reflection axis ' + off });
+      }
+    }
+    return syms;
+  }
+
+  function countCyclesDetailed(perm) {
+    const n = perm.length;
+    const seen = new Array(n).fill(false);
+    const cycles = [];
+    for (let s = 0; s < n; s++) {
+      if (!seen[s]) {
+        const cyc = [];
+        let j = s;
+        while (!seen[j]) { seen[j] = true; cyc.push(j); j = perm[j]; }
+        cycles.push(cyc);
+      }
+    }
+    return cycles;
+  }
+
+  function ipow(base, exp) {
+    let r = 1;
+    for (let i = 0; i < exp; i++) r *= base;
+    return r;
+  }
+
+  // ===== PRECOMPUTE STEPS =====
+  function buildSteps() {
+    symmetries = buildSymmetries(n, includeReflections);
+    steps = [];
+    let cumulative = 0;
+    symmetries.forEach((sym, idx) => {
+      const cycles = countCyclesDetailed(sym.perm);
+      const c = cycles.length;
+      const fix = ipow(k, c);
+      cumulative += fix;
+      steps.push({
+        idx, perm: sym.perm, type: sym.type, label: sym.label,
+        cycles, c, fix,
+        runningSum: cumulative,
+        avgSoFar: cumulative / (idx + 1),
+      });
+    });
+  }
+
+  // ===== GEOMETRY =====
+  function beadPos(i) {
+    const ang = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    return { x: CX + R * Math.cos(ang), y: CY + R * Math.sin(ang) };
+  }
+
+  // distinct hues for cycle highlighting
+  const CYCLE_COLORS = ['#3fb950', '#58a6ff', '#bc8cff', '#ffa657', '#d29922', '#f85149', '#3fb9b0'];
+
+  function render(step) {
+    const svg = document.getElementById('canvas');
+    let html = '';
+
+    // draw cycle arcs (chords connecting consecutive slots within each cycle)
+    if (step) {
+      step.cycles.forEach((cyc, ci) => {
+        if (cyc.length < 2) return;
+        const col = CYCLE_COLORS[ci % CYCLE_COLORS.length];
+        for (let m = 0; m < cyc.length; m++) {
+          const a = beadPos(cyc[m]);
+          const b = beadPos(cyc[(m + 1) % cyc.length]);
+          html += `<line class="cycle-arc" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" />`;
+        }
+      });
+    }
+
+    // draw beads
+    for (let i = 0; i < n; i++) {
+      const p = beadPos(i);
+      let beadColor = 'var(--surface)';
+      let cls = 'bead';
+      let stroke = 'var(--border)';
+      if (step) {
+        // find which cycle slot i belongs to
+        const ci = step.cycles.findIndex(cy => cy.includes(i));
+        if (ci >= 0 && step.cycles[ci].length >= 1) {
+          stroke = CYCLE_COLORS[ci % CYCLE_COLORS.length];
+        }
+      }
+      html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${BEAD_R}" fill="${beadColor}" stroke="${stroke}" stroke-width="${step ? 4 : 2}" />`;
+      html += `<text class="bead-label" x="${p.x}" y="${p.y}">${i}</text>`;
+    }
+
+    // center label
+    if (step) {
+      html += `<text x="${CX}" y="${CY - 6}" text-anchor="middle" fill="var(--muted)" font-size="13">c(g)=${step.c}</text>`;
+      html += `<text x="${CX}" y="${CY + 14}" text-anchor="middle" fill="var(--green)" font-size="15" font-weight="bold">k^${step.c}=${step.fix}</text>`;
+    }
+    svg.innerHTML = html;
+
+    // stats
+    if (step) {
+      document.getElementById('symIdx').textContent = (step.idx + 1) + ' / ' + symmetries.length;
+      document.getElementById('cycCount').textContent = step.c;
+      document.getElementById('fixCount').textContent = step.fix;
+      document.getElementById('sumFix').textContent = step.runningSum;
+      document.getElementById('groupSize').textContent = symmetries.length;
+      // show final average only when complete
+      if (step.idx + 1 === symmetries.length) {
+        document.getElementById('orbitAvg').textContent = (step.runningSum / symmetries.length);
+      } else {
+        document.getElementById('orbitAvg').textContent = step.avgSoFar.toFixed(2);
+      }
+      const cycleDesc = step.cycles.map(cy => '(' + cy.join(' ') + ')').join(' ');
+      document.getElementById('stepInfo').innerHTML =
+        `<span class="hl">${step.label}</span><br>` +
+        `cycles: <span class="g">${cycleDesc}</span><br>` +
+        `#cycles c(g) = <span class="hl">${step.c}</span>, ` +
+        `|Fix| = k^c = ${k}^${step.c} = <span class="g">${step.fix}</span><br>` +
+        `running &Sigma;|Fix| = ${step.runningSum}, avg = ${step.runningSum}/${step.idx + 1} = ${step.avgSoFar.toFixed(3)}`;
+    }
+  }
+
+  function addLog(step) {
+    const log = document.getElementById('log');
+    const div = document.createElement('div');
+    div.className = 'entry ' + (step.type === 'identity' ? 'identity' : step.type === 'reflect' ? 'reflect' : '');
+    div.innerHTML = `[g${step.idx}] ${step.label}: c=${step.c}, |Fix|=<span class="num">${step.fix}</span> &rarr; &Sigma;=${step.runningSum}`;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function logResult() {
+    const log = document.getElementById('log');
+    const div = document.createElement('div');
+    div.className = 'entry result';
+    const total = steps[steps.length - 1].runningSum;
+    const orbits = total / symmetries.length;
+    div.innerHTML = `= (1/${symmetries.length}) &times; ${total} = ${orbits} distinct ${includeReflections ? 'bracelets' : 'necklaces'}`;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ===== CONTROLS =====
+  function start() {
+    if (steps.length === 0) buildSteps();
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    runAnim();
+  }
+
+  function runAnim() {
+    if (!running || stepIdx >= steps.length) { pause(); if (stepIdx >= steps.length && steps.length) logResult(); return; }
+    const s = steps[stepIdx];
+    render(s);
+    addLog(s);
+    stepIdx++;
+    timer = setTimeout(runAnim, getSpeed());
+  }
+
+  function stepForward() {
+    if (steps.length === 0) buildSteps();
+    if (stepIdx < steps.length) {
+      const s = steps[stepIdx];
+      render(s);
+      addLog(s);
+      stepIdx++;
+      if (stepIdx === steps.length) logResult();
+    }
+  }
+
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+  }
+
+  function reset() {
+    pause();
+    stepIdx = 0;
+    runningSum = 0;
+    readInputs();
+    buildSteps();
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('symIdx').textContent = '0 / ' + symmetries.length;
+    document.getElementById('cycCount').textContent = '0';
+    document.getElementById('fixCount').textContent = '0';
+    document.getElementById('sumFix').textContent = '0';
+    document.getElementById('groupSize').textContent = symmetries.length;
+    document.getElementById('orbitAvg').textContent = '—';
+    document.getElementById('stepInfo').innerHTML =
+      'Press <span class="hl">Play</span> to sweep through each symmetry, or ' +
+      '<span class="hl">Step</span> one at a time. Each symmetry\'s ' +
+      '<span class="g">|Fix(g)| = k^(#cycles)</span> is added; the running average is the orbit count.';
+    render(null);
+  }
+
+  function readInputs() {
+    n = Math.max(1, Math.min(14, parseInt(document.getElementById('nInput').value) || 6));
+    k = Math.max(1, Math.min(6, parseInt(document.getElementById('kInput').value) || 2));
+    includeReflections = document.getElementById('reflToggle').checked;
+    document.getElementById('nInput').value = n;
+    document.getElementById('kInput').value = k;
+  }
+
+  // ===== INIT =====
+  document.getElementById('nInput').addEventListener('change', reset);
+  document.getElementById('kInput').addEventListener('change', reset);
+  document.getElementById('reflToggle').addEventListener('change', reset);
+  reset();
+</script>
+</body>
+</html>
