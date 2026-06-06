@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stars and Bars — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 20px; text-align: center; max-width: 760px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+  .badge {
+    padding: 4px 12px; border-radius: 14px; font-size: 0.78rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge.green  { color: var(--green);  border-color: var(--green); }
+  .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+  .badge.purple { color: var(--purple); border-color: var(--purple); }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 18px;
+    width: 100%; max-width: 940px;
+  }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; justify-content: center; }
+  label { color: var(--muted); font-size: 0.9rem; }
+  input[type="number"] {
+    width: 70px; padding: 7px 10px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); border-radius: 7px; font-size: 0.95rem;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); }
+  input[type="range"] { width: 150px; accent-color: var(--blue); }
+
+  button {
+    padding: 8px 18px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.92rem;
+    transition: all 0.2s;
+  }
+  button:hover { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.mode { border-color: var(--purple); color: var(--purple); }
+  button.mode:hover, button.mode.active { background: var(--purple); color: var(--bg); }
+
+  /* ===== STARS & BARS VISUAL ===== */
+  .stage {
+    background: var(--bg); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 30px 18px; min-height: 120px; display: flex; flex-wrap: wrap;
+    align-items: center; justify-content: center; gap: 6px; position: relative;
+    user-select: none;
+  }
+  .star {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; color: var(--bg); transition: background 0.2s, transform 0.2s;
+  }
+  .star.over { background: var(--red); }       /* belongs to an over-cap box */
+  .star.fixed { background: var(--green); }     /* forced/pre-placed */
+  .bar {
+    width: 14px; height: 46px; border-radius: 4px; background: var(--orange);
+    cursor: grab; transition: background 0.15s, transform 0.1s;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+  }
+  .bar:hover { background: var(--yellow); transform: scaleY(1.08); }
+  .bar.dragging { background: var(--yellow); cursor: grabbing; transform: scaleY(1.12); }
+
+  .tuple {
+    margin-top: 16px; text-align: center; font-family: 'Courier New', monospace;
+    font-size: 1.15rem; color: var(--text);
+  }
+  .tuple .box { color: var(--blue); font-weight: bold; }
+  .tuple .box.bad { color: var(--red); }
+
+  /* ===== STATS ===== */
+  .stats { display: flex; gap: 26px; flex-wrap: wrap; justify-content: center; }
+  .stat { text-align: center; }
+  .stat .k { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .v { color: var(--green); font-size: 1.35rem; font-weight: bold; }
+  .stat .v.big { color: var(--purple); }
+
+  /* ===== INFO + LOG ===== */
+  .info { font-family: 'Courier New', monospace; font-size: 0.92rem; line-height: 1.7; }
+  .info .hi { color: var(--yellow); }
+  .formula { color: var(--blue); font-weight: bold; }
+  h3 { color: var(--blue); margin-bottom: 10px; font-size: 1.05rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.c-green  { color: var(--green); }
+  td.c-yellow { color: var(--yellow); }
+  td.c-red    { color: var(--red); }
+
+  .log {
+    max-height: 150px; overflow-y: auto; font-family: 'Courier New', monospace;
+    font-size: 0.82rem; line-height: 1.6;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .log div:first-child { color: var(--text); }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--muted); }
+  .swatch { width: 16px; height: 16px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>Stars and Bars</h1>
+  <p class="subtitle">
+    Distribute <b>n</b> identical items (stars) into <b>k</b> distinct boxes by placing
+    <b>k&minus;1</b> dividers (bars). Drag a bar to change the distribution; the count
+    <span class="formula">C(n+k&minus;1, k&minus;1)</span> stays fixed for given n, k.
+  </p>
+
+  <div class="badges">
+    <span class="badge green">Non-negative: C(n+k&minus;1, k&minus;1)</span>
+    <span class="badge yellow">Positive: C(n&minus;1, k&minus;1)</span>
+    <span class="badge purple">Upper bound: inclusion&ndash;exclusion</span>
+  </div>
+
+  <!-- Controls -->
+  <div class="panel">
+    <div class="row" style="margin-bottom:14px;">
+      <label>n (stars) <input type="number" id="nInput" value="7" min="0" max="24"></label>
+      <label>k (boxes) <input type="number" id="kInput" value="3" min="1" max="8"></label>
+      <button onclick="rebuild()">Build</button>
+      <button onclick="randomize()">Random distribution</button>
+    </div>
+    <div class="row">
+      <button id="modeNonNeg"  class="mode active" onclick="setMode('nonneg')">Non-negative</button>
+      <button id="modePos"     class="mode"        onclick="setMode('pos')">Positive (&ge;1)</button>
+      <button id="modeCap"     class="mode"        onclick="setMode('cap')">Upper bound (&le; c)</button>
+      <label id="capWrap" style="display:none;">cap c <input type="number" id="capInput" value="4" min="0" max="24"></label>
+      <label>Speed <input type="range" id="speed" min="1" max="10" value="5"></label>
+      <button id="autoBtn" onclick="toggleAuto()">Auto-step</button>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><span class="swatch" style="background:var(--blue)"></span>Star (item)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--orange)"></span>Bar (drag me)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--green)"></span>Forced / pre-placed</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--red)"></span>Over-cap (bad)</div>
+  </div>
+
+  <!-- Visual stage -->
+  <div class="panel">
+    <div class="stage" id="stage"></div>
+    <div class="tuple" id="tuple"></div>
+  </div>
+
+  <!-- Stats -->
+  <div class="panel">
+    <div class="stats">
+      <div class="stat"><div class="k">n + k &minus; 1</div><div class="v" id="sTop">&ndash;</div></div>
+      <div class="stat"><div class="k">choose k &minus; 1</div><div class="v" id="sBot">&ndash;</div></div>
+      <div class="stat"><div class="k">total arrangements</div><div class="v big" id="sCount">&ndash;</div></div>
+      <div class="stat"><div class="k">current sum</div><div class="v" id="sSum">&ndash;</div></div>
+      <div class="stat"><div class="k">valid? (this mode)</div><div class="v" id="sValid">&ndash;</div></div>
+    </div>
+  </div>
+
+  <!-- Info panel -->
+  <div class="panel">
+    <h3>What is happening</h3>
+    <div class="info" id="info">Drag any orange bar left or right. The boxes between bars resize; the sum always equals n.</div>
+  </div>
+
+  <!-- Inclusion-Exclusion breakdown (cap mode) -->
+  <div class="panel" id="piePanel" style="display:none;">
+    <h3>Inclusion&ndash;Exclusion for the capped count (0 &le; x&#7522; &le; c)</h3>
+    <div class="info" id="pieFormula"></div>
+    <table id="pieTable">
+      <thead><tr><th>t (boxes forced over)</th><th>sign</th><th>C(k,t)</th><th>C(n&minus;t(c+1)+k&minus;1, k&minus;1)</th><th>contribution</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="info" id="pieTotal" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- Big-O table -->
+  <div class="panel">
+    <h3>Complexity</h3>
+    <table>
+      <thead><tr><th>Operation</th><th>Time</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>C(n+k&minus;1, k&minus;1) multiplicative loop</td><td class="c-green">O(min(k, n))</td><td>exact, divide-as-you-go</td></tr>
+        <tr><td>C(m, r) mod p, precomputed factorials</td><td class="c-green">O(1)</td><td>after O(N) precompute</td></tr>
+        <tr><td>Positive count C(n&minus;1, k&minus;1)</td><td class="c-green">O(min(k, n))</td><td>needs n &ge; k</td></tr>
+        <tr><td>Upper-bound count (uniform cap, PIE)</td><td class="c-yellow">O(k)</td><td>&le; k+1 signed terms</td></tr>
+        <tr><td>Upper-bound count (varied caps, subset PIE)</td><td class="c-red">O(2&#7503;)</td><td>prune forced &gt; n</td></tr>
+        <tr><td>Brute-force enumerate all solutions</td><td class="c-red">O(C(n+k&minus;1, k&minus;1))</td><td>testing only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+<script>
+  // ===== STATE =====
+  let n = 7, k = 3;
+  let mode = 'nonneg';          // 'nonneg' | 'pos' | 'cap'
+  let cap = 4;
+  // We model a row of n stars and (k-1) bars as a list of "slots".
+  // barPos[j] = number of stars to the LEFT of bar j (0..n), non-decreasing.
+  let barPos = [];
+  let autoTimer = null;
+  let dragIndex = -1;
+
+  function log(msg) {
+    const el = document.getElementById('log');
+    const d = document.createElement('div');
+    d.textContent = msg;
+    el.prepend(d);
+    while (el.children.length > 40) el.removeChild(el.lastChild);
+  }
+
+  // ===== COMBINATORICS (BigInt for exactness) =====
+  function binom(m, r) {
+    if (r < 0n || r > m) return 0n;
+    if (r > m - r) r = m - r;
+    let res = 1n;
+    for (let i = 0n; i < r; i++) {
+      res = res * (m - i) / (i + 1n);
+    }
+    return res;
+  }
+  function B(m, r) { return binom(BigInt(m), BigInt(r)); }
+
+  // ===== DERIVE TUPLE FROM BAR POSITIONS =====
+  function tupleFromBars() {
+    const t = [];
+    let prev = 0;
+    for (let j = 0; j < barPos.length; j++) {
+      t.push(barPos[j] - prev);
+      prev = barPos[j];
+    }
+    t.push(n - prev);
+    return t;
+  }
+
+  // ===== INITIAL EVEN-ISH DISTRIBUTION =====
+  function defaultBars() {
+    barPos = [];
+    // place k-1 bars to split n roughly evenly
+    for (let j = 1; j < k; j++) {
+      barPos.push(Math.round(j * n / k));
+    }
+    // ensure non-decreasing and within [0, n]
+    for (let j = 0; j < barPos.length; j++) {
+      barPos[j] = Math.max(0, Math.min(n, barPos[j]));
+      if (j > 0 && barPos[j] < barPos[j-1]) barPos[j] = barPos[j-1];
+    }
+  }
+
+  // ===== RENDER STAGE =====
+  function render() {
+    const stage = document.getElementById('stage');
+    stage.innerHTML = '';
+    const tup = tupleFromBars();
+
+    // Determine which boxes are over cap (for highlight in cap mode)
+    const overBox = tup.map(v => mode === 'cap' && v > cap);
+    // In positive mode, an empty box is "bad"
+    const badBox = tup.map(v => mode === 'pos' && v === 0);
+
+    // build sequence: for each box, its stars, then a bar (except after last box)
+    let boxIndex = 0;
+    function emitStars(count) {
+      for (let s = 0; s < count; s++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        if (overBox[boxIndex]) star.classList.add('over');
+        star.textContent = '★';
+        stage.appendChild(star);
+      }
+    }
+    for (let j = 0; j < tup.length; j++) {
+      boxIndex = j;
+      emitStars(tup[j]);
+      if (j < tup.length - 1) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.dataset.j = j;
+        attachDrag(bar, j);
+        stage.appendChild(bar);
+      }
+    }
+
+    // tuple line
+    const tEl = document.getElementById('tuple');
+    tEl.innerHTML = '(' + tup.map((v, i) => {
+      const bad = overBox[i] || badBox[i];
+      return `<span class="box ${bad ? 'bad' : ''}">${v}</span>`;
+    }).join(', ') + ')  &nbsp; sum = ' + tup.reduce((a,b)=>a+b,0);
+
+    updateStats(tup, overBox, badBox);
+  }
+
+  // ===== STATS =====
+  function updateStats(tup, overBox, badBox) {
+    const top = n + k - 1, bot = k - 1;
+    document.getElementById('sTop').textContent = top;
+    document.getElementById('sBot').textContent = bot;
+
+    let count;
+    if (mode === 'nonneg') {
+      count = B(top, bot);
+    } else if (mode === 'pos') {
+      count = (n >= k) ? B(n - 1, k - 1) : 0n;
+    } else {
+      count = cappedCount();
+    }
+    document.getElementById('sCount').textContent = count.toString();
+
+    const sum = tup.reduce((a,b)=>a+b,0);
+    document.getElementById('sSum').textContent = sum;
+
+    let valid = true, reason = '';
+    if (mode === 'pos') {
+      valid = tup.every(v => v >= 1);
+      if (!valid) reason = ' (a box is empty)';
+    } else if (mode === 'cap') {
+      valid = tup.every(v => v <= cap);
+      if (!valid) reason = ' (a box exceeds c=' + cap + ')';
+    }
+    const vEl = document.getElementById('sValid');
+    vEl.textContent = valid ? 'YES' : 'NO';
+    vEl.style.color = valid ? 'var(--green)' : 'var(--red)';
+
+    // info text
+    let info = '';
+    if (mode === 'nonneg') {
+      info = `Non-negative solutions of x1+...+x${k} = ${n}: ` +
+        `<span class="formula">C(${top}, ${bot}) = ${count}</span>. ` +
+        `Each arrangement of ${n} stars and ${k-1} bars is one solution.`;
+    } else if (mode === 'pos') {
+      info = `Positive solutions (each box &ge; 1): ` +
+        `<span class="formula">C(n&minus;1, k&minus;1) = C(${n-1}, ${k-1}) = ${count}</span>. ` +
+        (n < k ? `<span class="hi">n &lt; k, so there are 0 positive solutions.</span>` :
+                 `Pre-place one star per box, then distribute the remaining ${n-k}.`);
+    } else {
+      info = `Capped solutions (0 &le; x&#7522; &le; ${cap}): ` +
+        `<span class="formula">${count}</span> via inclusion&ndash;exclusion. ` +
+        `The current arrangement is <span class="hi">${valid ? 'valid' : 'INVALID' + reason}</span>.`;
+    }
+    document.getElementById('info').innerHTML = info;
+
+    if (mode === 'cap') renderPie(count);
+  }
+
+  // ===== CAPPED COUNT (uniform cap, PIE) =====
+  function cappedCount() {
+    let total = 0n;
+    for (let t = 0; t <= k; t++) {
+      const rem = n - t * (cap + 1);
+      if (rem < 0) break;
+      const term = B(k, t) * B(rem + k - 1, k - 1);
+      total += (t % 2 === 0) ? term : -term;
+    }
+    return total;
+  }
+
+  function renderPie(total) {
+    document.getElementById('pieFormula').innerHTML =
+      `<span class="formula">&Sigma;<sub>t&ge;0</sub> (&minus;1)<sup>t</sup> &middot; C(${k}, t) &middot; ` +
+      `C(${n} &minus; t&middot;${cap+1} + ${k-1}, ${k-1})</span>`;
+    const tbody = document.querySelector('#pieTable tbody');
+    tbody.innerHTML = '';
+    for (let t = 0; t <= k; t++) {
+      const rem = n - t * (cap + 1);
+      if (rem < 0) break;
+      const ckt = B(k, t);
+      const inner = B(rem + k - 1, k - 1);
+      const contrib = (t % 2 === 0 ? 1n : -1n) * ckt * inner;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${t}</td><td class="${t%2===0?'c-green':'c-red'}">${t%2===0?'+':'−'}</td>` +
+        `<td>${ckt}</td><td>${inner}</td><td>${contrib >= 0n ? '+' : ''}${contrib}</td>`;
+      tbody.appendChild(tr);
+    }
+    document.getElementById('pieTotal').innerHTML =
+      `Total valid distributions = <span class="formula">${total}</span>.`;
+  }
+
+  // ===== DRAGGING A BAR =====
+  function attachDrag(bar, j) {
+    bar.addEventListener('mousedown', (e) => startDrag(e, j));
+    bar.addEventListener('touchstart', (e) => startDrag(e, j), { passive: true });
+  }
+  function startDrag(e, j) {
+    dragIndex = j;
+    const bars = document.querySelectorAll('.bar');
+    bars[j].classList.add('dragging');
+  }
+  function clientX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
+
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('touchmove', onDrag, { passive: true });
+  function onDrag(e) {
+    if (dragIndex < 0) return;
+    const stage = document.getElementById('stage');
+    const rect = stage.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (clientX(e) - rect.left) / rect.width));
+    let target = Math.round(frac * n);
+    // clamp between neighbour bars
+    const lo = dragIndex > 0 ? barPos[dragIndex - 1] : 0;
+    const hi = dragIndex < barPos.length - 1 ? barPos[dragIndex + 1] : n;
+    target = Math.max(lo, Math.min(hi, target));
+    if (target !== barPos[dragIndex]) {
+      barPos[dragIndex] = target;
+      render();
+    }
+  }
+  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('touchend', endDrag);
+  function endDrag() {
+    if (dragIndex >= 0) {
+      const tup = tupleFromBars();
+      log(`Moved bar ${dragIndex + 1} -> distribution (${tup.join(', ')})`);
+    }
+    dragIndex = -1;
+    document.querySelectorAll('.bar').forEach(b => b.classList.remove('dragging'));
+  }
+
+  // ===== CONTROLS =====
+  function rebuild() {
+    n = Math.max(0, Math.min(24, parseInt(document.getElementById('nInput').value) || 0));
+    k = Math.max(1, Math.min(8,  parseInt(document.getElementById('kInput').value) || 1));
+    cap = Math.max(0, Math.min(24, parseInt(document.getElementById('capInput').value) || 0));
+    defaultBars();
+    log(`Built: n=${n}, k=${k}` + (mode === 'cap' ? `, cap c=${cap}` : '') + `, mode=${mode}`);
+    render();
+  }
+
+  function randomize() {
+    // random non-decreasing bar positions in [0, n]
+    barPos = [];
+    for (let j = 0; j < k - 1; j++) barPos.push(Math.floor(Math.random() * (n + 1)));
+    barPos.sort((a, b) => a - b);
+    const tup = tupleFromBars();
+    log(`Random distribution (${tup.join(', ')})`);
+    render();
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('modeNonNeg').classList.toggle('active', m === 'nonneg');
+    document.getElementById('modePos').classList.toggle('active', m === 'pos');
+    document.getElementById('modeCap').classList.toggle('active', m === 'cap');
+    document.getElementById('capWrap').style.display = (m === 'cap') ? '' : 'none';
+    document.getElementById('piePanel').style.display = (m === 'cap') ? '' : 'none';
+    if (m === 'cap') cap = Math.max(0, parseInt(document.getElementById('capInput').value) || 0);
+    log(`Mode -> ${m}`);
+    render();
+  }
+
+  document.getElementById('capInput').addEventListener('input', () => {
+    cap = Math.max(0, Math.min(24, parseInt(document.getElementById('capInput').value) || 0));
+    if (mode === 'cap') render();
+  });
+
+  // ===== AUTO-STEP: cycle through several distributions =====
+  function toggleAuto() {
+    const btn = document.getElementById('autoBtn');
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      btn.textContent = 'Auto-step';
+      btn.classList.remove('active');
+      return;
+    }
+    btn.textContent = 'Stop';
+    btn.classList.add('active');
+    autoTimer = setInterval(() => {
+      // nudge a random bar by +/-1
+      if (barPos.length === 0) { randomize(); return; }
+      const j = Math.floor(Math.random() * barPos.length);
+      const lo = j > 0 ? barPos[j-1] : 0;
+      const hi = j < barPos.length - 1 ? barPos[j+1] : n;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const nv = Math.max(lo, Math.min(hi, barPos[j] + dir));
+      barPos[j] = nv;
+      render();
+    }, () => 1200 - document.getElementById('speed').value * 100);
+    // setInterval can't take a function for delay; recreate with current speed:
+    clearInterval(autoTimer);
+    const delay = 1200 - document.getElementById('speed').value * 100;
+    autoTimer = setInterval(() => {
+      if (barPos.length === 0) { randomize(); return; }
+      const j = Math.floor(Math.random() * barPos.length);
+      const lo = j > 0 ? barPos[j-1] : 0;
+      const hi = j < barPos.length - 1 ? barPos[j+1] : n;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      barPos[j] = Math.max(lo, Math.min(hi, barPos[j] + dir));
+      render();
+    }, delay);
+  }
+
+  // ===== INIT =====
+  defaultBars();
+  render();
+  log('Ready. Drag a bar, switch modes, or press Auto-step.');
+</script>
+</body>
+</html>
