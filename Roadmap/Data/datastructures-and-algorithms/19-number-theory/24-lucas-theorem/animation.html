@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lucas' Theorem — C(n,k) mod p via Base-p Digits</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --purple: #bc8cff;
+    --hi-cur: rgba(88, 166, 255, 0.30);
+    --hi-good: rgba(63, 185, 80, 0.30);
+    --hi-bad: rgba(248, 81, 73, 0.32);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  header .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 12px; padding: 2px 9px;
+    border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2);
+  }
+  .badge.b1 { color: var(--good); border-color: var(--good); }
+  .badge.b2 { color: var(--accent); border-color: var(--accent); }
+  .badge.b3 { color: var(--accent-2); border-color: var(--accent-2); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 130px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input.small { width: 70px; }
+  .speed { display: flex; align-items: center; gap: 6px; }
+  .speed input[type="range"] { width: 110px; accent-color: var(--accent); }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  /* digit grid */
+  .digit-grid { display: flex; flex-direction: column; gap: 8px; }
+  .digit-row { display: flex; align-items: center; gap: 6px; }
+  .digit-row .rlabel { width: 96px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .cells { display: flex; gap: 6px; }
+  .cell {
+    width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 7px;
+    font-family: var(--mono); font-size: 16px; background: var(--panel-2);
+    transition: all 0.2s ease; position: relative;
+  }
+  .cell.place { color: var(--muted); font-size: 11px; background: transparent; border-style: dashed; }
+  .cell.cur { border-color: var(--accent); background: var(--hi-cur); color: #fff; font-weight: 700; }
+  .cell.ok { border-color: var(--good); background: var(--hi-good); color: #fff; }
+  .cell.bad { border-color: var(--bad); background: var(--hi-bad); color: #fff; font-weight: 700; }
+  .binrow { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .binbox {
+    border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px;
+    font-family: var(--mono); font-size: 13px; background: var(--panel-2); color: var(--muted);
+    transition: all 0.2s ease;
+  }
+  .binbox.cur { border-color: var(--accent); color: #fff; background: var(--hi-cur); }
+  .binbox.ok { border-color: var(--good); color: var(--good); }
+  .binbox.bad { border-color: var(--bad); color: var(--bad); font-weight: 700; }
+  .product {
+    margin-top: 14px; font-family: var(--mono); font-size: 16px;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg);
+  }
+  .product .pv { color: var(--good); font-weight: 700; font-size: 20px; }
+  .product .pv.bad { color: var(--bad); }
+  .facts { font-family: var(--mono); font-size: 13px; }
+  .facts .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .facts .k { color: var(--muted); }
+  .facts .v { color: var(--good); font-weight: 700; }
+  .facts .v.warn { color: var(--accent-2); }
+  .facts .v.bad { color: var(--bad); }
+  .facts .v.acc { color: var(--accent); }
+  table.bigo { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 6px; }
+  table.bigo th, table.bigo td {
+    border: 1px solid var(--border); padding: 5px 8px; text-align: left;
+  }
+  table.bigo th { color: var(--muted); background: var(--panel-2); }
+  table.bigo td.c { font-family: var(--mono); }
+  td.green { color: var(--good); } td.yellow { color: var(--accent-2); } td.red { color: var(--bad); }
+  .narrate {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 46px;
+  }
+  .narrate.bad { border-left-color: var(--bad); }
+  .narrate.done { border-left-color: var(--good); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .log {
+    margin-top: 16px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; height: 150px; overflow-y: auto;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .log div { padding: 1px 0; border-bottom: 1px dotted #21262d; }
+  .log .z { color: var(--bad); }
+  .log .g { color: var(--good); }
+  .log .a { color: var(--accent); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lucas' Theorem &mdash; C(n,k) mod p via Base-p Digits</h1>
+  <p>Write <b>n</b> and <b>k</b> in base <b>p</b>, multiply the small per-digit binomials <code>C(n_i, k_i) mod p</code>, and short-circuit to <b>0</b> the instant a digit <code>k_i &gt; n_i</code>.</p>
+  <div class="badges">
+    <span class="badge b1">Setup O(p)</span>
+    <span class="badge b2">Query O(log_p n)</span>
+    <span class="badge b3">Space O(p)</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>n = <input type="number" id="nInput" value="13" min="0" max="999999999" /></label>
+    <label>k = <input type="number" id="kInput" value="4" min="0" max="999999999" /></label>
+    <label>p = <input type="number" id="pInput" class="small" value="3" min="2" max="97" /></label>
+    <div class="speed"><label>speed</label><input type="range" id="speed" min="1" max="10" value="5" /></div>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Base-p digits of n and k</h2>
+      <div class="digit-grid" id="digitGrid"></div>
+      <div class="product" id="product">running product (mod p): <span class="pv" id="pv">1</span></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--hi-cur)"></span> current digit</span>
+        <span><span class="swatch" style="background:var(--hi-good)"></span> k_i &le; n_i (factor &ge; 1)</span>
+        <span><span class="swatch" style="background:var(--hi-bad)"></span> k_i &gt; n_i &rArr; 0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>State</h2>
+      <div class="facts">
+        <div class="row"><span class="k">prime p</span><span class="v acc" id="fP">3</span></div>
+        <div class="row"><span class="k">n (base p)</span><span class="v acc" id="fNp">111</span></div>
+        <div class="row"><span class="k">k (base p)</span><span class="v acc" id="fKp">011</span></div>
+        <div class="row"><span class="k">digit position i</span><span class="v" id="fPos">&mdash;</span></div>
+        <div class="row"><span class="k">factor C(n_i,k_i)</span><span class="v" id="fFactor">&mdash;</span></div>
+        <div class="row"><span class="k">product mod p</span><span class="v" id="fProd">1</span></div>
+        <div class="row"><span class="k">C(n,k) mod p</span><span class="v warn" id="fAns">&mdash;</span></div>
+        <div class="row"><span class="k">true C(n,k) mod p</span><span class="v" id="fTrue">&mdash;</span></div>
+      </div>
+
+      <h2 style="margin-top:16px;">Complexity</h2>
+      <table class="bigo">
+        <tr><th>step</th><th>cost</th></tr>
+        <tr><td>build fact/invFact (size p)</td><td class="c green">O(p)</td></tr>
+        <tr><td>one small binomial C(a,b)</td><td class="c green">O(1)</td></tr>
+        <tr><td>digit decomposition</td><td class="c yellow">O(log_p n)</td></tr>
+        <tr><td>full query C(n,k) mod p</td><td class="c yellow">O(p + log_p n)</td></tr>
+        <tr><td>plain factorial method</td><td class="c red">O(n)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to peel one base-p digit at a time, or <b>Run</b> to play the whole computation.</div>
+
+  <div class="log" id="log"></div>
+
+  <p class="footnote">
+    Lucas' theorem: for prime <code>p</code>, <code>C(n,k) &equiv; &prod;_i C(n_i, k_i) (mod p)</code> over the base-p digits.
+    A single factor of 0 (when <code>k_i &gt; n_i</code>) makes the whole product 0.
+    Each small <code>C(n_i, k_i)</code> comes from a precomputed factorial table of size p.
+  </p>
+</div>
+
+<script>
+  // ===== state =====
+  let p = 3, n = 13, k = 4;
+  let nDigits = [], kDigits = [];
+  let steps = [];           // precomputed animation steps
+  let idx = 0;
+  let running = false;
+  let timer = null;
+
+  const $ = id => document.getElementById(id);
+
+  function sleepMs() { return 1100 - $("speed").value * 100; }
+
+  // ---- small binomial via factorial table mod p ----
+  function powMod(a, e, m) {
+    a %= m; if (a < 0) a += m;
+    let r = 1 % m;
+    while (e > 0) {
+      if (e & 1) r = Number((BigInt(r) * BigInt(a)) % BigInt(m));
+      a = Number((BigInt(a) * BigInt(a)) % BigInt(m));
+      e = Math.floor(e / 2);
+    }
+    return r;
+  }
+  function buildTables(pr) {
+    const fact = new Array(pr).fill(1);
+    for (let i = 1; i < pr; i++) fact[i] = Number((BigInt(fact[i - 1]) * BigInt(i)) % BigInt(pr));
+    const inv = new Array(pr).fill(1);
+    inv[pr - 1] = powMod(fact[pr - 1], pr - 2, pr);
+    for (let i = pr - 1; i > 0; i--) inv[i - 1] = Number((BigInt(inv[i]) * BigInt(i)) % BigInt(pr));
+    return { fact, inv };
+  }
+  let tables = buildTables(p);
+  function smallC(a, b, pr) {
+    if (b < 0 || b > a) return 0;
+    return Number((BigInt(tables.fact[a]) * BigInt(tables.inv[b]) % BigInt(pr) * BigInt(tables.inv[a - b])) % BigInt(pr));
+  }
+
+  // ---- true value (small n only) for verification ----
+  function truthMod(nn, kk, pr) {
+    if (kk < 0 || kk > nn) return 0;
+    if (nn > 2000) return null; // skip for huge n
+    // Pascal row reduction mod pr
+    let row = [1 % pr];
+    for (let i = 1; i <= nn; i++) {
+      const nr = new Array(i + 1).fill(0);
+      nr[0] = 1 % pr; nr[i] = 1 % pr;
+      for (let j = 1; j < i; j++) nr[j] = (row[j - 1] + row[j]) % pr;
+      row = nr;
+    }
+    return row[kk];
+  }
+
+  function toDigits(x, pr) {
+    const d = [];
+    if (x === 0) return [0];
+    while (x > 0) { d.push(x % pr); x = Math.floor(x / pr); }
+    return d; // low -> high
+  }
+
+  // ===== build the step list =====
+  function generateSteps() {
+    steps = [];
+    const len = Math.max(nDigits.length, kDigits.length);
+    let prod = 1 % p;
+    // step 0: show digits, nothing processed
+    steps.push({ pos: -1, factor: null, prod, short: false, done: false,
+      msg: `n = ${n} = (${[...nDigits].reverse().join("")})_${p},  k = ${k} = (${[...kDigits].reverse().join("")})_${p}. Process digits low &rarr; high.` });
+    for (let i = 0; i < len; i++) {
+      const ni = nDigits[i] || 0;
+      const ki = kDigits[i] || 0;
+      if (ki > ni) {
+        steps.push({ pos: i, factor: 0, prod: 0, short: true, done: true,
+          msg: `Digit ${i}: k_${i}=${ki} &gt; n_${i}=${ni} &rArr; C(${ni},${ki})=0. <b>Short-circuit: answer = 0</b>.` });
+        return;
+      }
+      const f = smallC(ni, ki, p);
+      prod = Number((BigInt(prod) * BigInt(f)) % BigInt(p));
+      steps.push({ pos: i, factor: f, prod, short: false, done: false,
+        msg: `Digit ${i}: C(n_${i},k_${i}) = C(${ni},${ki}) = ${f}.  product = ${prod} (mod ${p}).` });
+    }
+    steps.push({ pos: len, factor: null, prod, short: false, done: true,
+      msg: `All digits processed. <b>C(${n},${k}) &equiv; ${prod} (mod ${p})</b>.` });
+  }
+
+  // ===== rendering =====
+  function placeRow() {
+    const len = Math.max(nDigits.length, kDigits.length);
+    let html = '<div class="cells">';
+    for (let i = len - 1; i >= 0; i--) html += `<div class="cell place">p<sup>${i}</sup></div>`;
+    html += "</div>";
+    return `<div class="digit-row"><span class="rlabel"></span>${html}</div>`;
+  }
+
+  function render(step) {
+    const len = Math.max(nDigits.length, kDigits.length);
+    let grid = "";
+    grid += placeRow();
+    // n row
+    grid += rowHtml("n", nDigits, step, "n");
+    // k row
+    grid += rowHtml("k", kDigits, step, "k");
+    // binomial row
+    grid += binHtml(step, len);
+    $("digitGrid").innerHTML = grid;
+
+    const pv = $("pv");
+    pv.textContent = step.short ? "0" : step.prod;
+    pv.className = "pv" + (step.short ? " bad" : "");
+
+    // facts
+    $("fPos").textContent = step.pos < 0 ? "—" : (step.pos >= len ? "done" : step.pos);
+    $("fFactor").textContent = step.factor === null ? "—" : step.factor;
+    $("fFactor").className = "v" + (step.short ? " bad" : "");
+    $("fProd").textContent = step.short ? "0" : step.prod;
+    $("fProd").className = "v" + (step.short ? " bad" : "");
+    if (step.done) {
+      $("fAns").textContent = step.short ? "0" : step.prod;
+      $("fAns").className = "v warn";
+    } else {
+      $("fAns").textContent = "…";
+      $("fAns").className = "v";
+    }
+
+    $("stepInfo").textContent = `step ${idx} / ${steps.length - 1}`;
+    const nar = $("narrate");
+    nar.innerHTML = step.msg;
+    nar.className = "narrate" + (step.short ? " bad" : (step.done ? " done" : ""));
+  }
+
+  function rowHtml(label, digits, step, which) {
+    const len = Math.max(nDigits.length, kDigits.length);
+    let cells = '<div class="cells">';
+    for (let i = len - 1; i >= 0; i--) {
+      const d = digits[i] || 0;
+      let cls = "cell";
+      if (step.pos === i) {
+        if (step.short && which === "k") cls += " bad";
+        else cls += " cur";
+      } else if (i < step.pos || (step.done && !step.short)) {
+        cls += " ok";
+      }
+      cells += `<div class="${cls}">${d}</div>`;
+    }
+    cells += "</div>";
+    return `<div class="digit-row"><span class="rlabel">${label} = ${which === "n" ? n : k}</span>${cells}</div>`;
+  }
+
+  function binHtml(step, len) {
+    let boxes = '<div class="binrow"><span class="rlabel">factors</span>';
+    for (let i = len - 1; i >= 0; i--) {
+      const ni = nDigits[i] || 0, ki = kDigits[i] || 0;
+      let cls = "binbox";
+      let val;
+      if (ki > ni) { val = `C(${ni},${ki})=0`; if (step.pos === i) cls += " bad"; }
+      else { val = `C(${ni},${ki})=${smallC(ni, ki, p)}`;
+        if (step.pos === i) cls += " cur";
+        else if (i < step.pos || (step.done && !step.short)) cls += " ok";
+      }
+      boxes += `<div class="${cls}">${val}</div>`;
+    }
+    boxes += "</div>";
+    return boxes;
+  }
+
+  function addLog(step) {
+    const div = document.createElement("div");
+    let cls = "a";
+    if (step.short) cls = "z";
+    else if (step.done) cls = "g";
+    div.className = cls;
+    div.innerHTML = step.msg.replace(/<[^>]+>/g, "");
+    $("log").appendChild(div);
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+
+  // ===== controls =====
+  function loadInputs() {
+    p = Math.max(2, Math.min(97, parseInt($("pInput").value) || 3));
+    n = Math.max(0, parseInt($("nInput").value) || 0);
+    k = Math.max(0, parseInt($("kInput").value) || 0);
+    tables = buildTables(p);
+    nDigits = toDigits(n, p);
+    kDigits = toDigits(k, p);
+    $("fP").textContent = p;
+    $("fNp").textContent = "(" + [...nDigits].reverse().join("") + ")_" + p;
+    $("fKp").textContent = "(" + [...kDigits].reverse().join("") + ")_" + p;
+    const t = truthMod(n, k, p);
+    $("fTrue").textContent = t === null ? "n too large" : t;
+    $("fTrue").className = "v" + (t === null ? " warn" : " green");
+  }
+
+  function reset() {
+    pause();
+    loadInputs();
+    generateSteps();
+    idx = 0;
+    $("log").innerHTML = "";
+    render(steps[0]);
+  }
+
+  function step() {
+    if (idx < steps.length - 1) {
+      idx++;
+      render(steps[idx]);
+      addLog(steps[idx]);
+    } else {
+      pause();
+    }
+  }
+
+  function run() {
+    if (running) return;
+    running = true;
+    $("btnRun").disabled = true;
+    (function loop() {
+      if (!running || idx >= steps.length - 1) { pause(); return; }
+      step();
+      timer = setTimeout(loop, sleepMs());
+    })();
+  }
+
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    $("btnRun").disabled = false;
+  }
+
+  $("btnStep").onclick = () => { pause(); step(); };
+  $("btnRun").onclick = run;
+  $("btnReset").onclick = reset;
+  ["nInput", "kInput", "pInput"].forEach(id => $(id).addEventListener("change", reset));
+
+  // ===== init =====
+  reset();
+</script>
+</body>
+</html>
