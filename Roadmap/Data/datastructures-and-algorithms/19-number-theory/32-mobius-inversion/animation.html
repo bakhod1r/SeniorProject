@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Möbius Function & Möbius Inversion — Visual Animation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;   /* μ = +1 */
+    --yellow: #d29922;  /* scanning / current */
+    --red: #f85149;     /* μ = -1 */
+    --blue: #58a6ff;    /* accent */
+    --purple: #bc8cff;  /* μ = 0 */
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+    line-height: 1.5;
+  }
+  header { max-width: 1180px; margin: 0 auto 18px; }
+  h1 { font-size: 1.7rem; color: var(--blue); margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 18px; }
+  .badge {
+    font-family: var(--mono); font-size: 0.8rem; padding: 4px 10px;
+    border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--muted);
+  }
+  .badge b { color: var(--blue); }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  .controls label { font-size: 0.85rem; color: var(--muted); }
+  button {
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  button.tab { border-radius: 7px; }
+  button.tab.active { background: var(--blue); border-color: var(--blue); color: #0d1117; }
+  input[type="number"] {
+    width: 90px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    font-family: var(--mono); font-size: 0.85rem;
+  }
+  input[type="range"] { width: 140px; accent-color: var(--blue); }
+  .spacer { flex: 1; }
+
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 16px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 0.8rem; color: var(--blue); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 12px;
+  }
+
+  /* Sieve grid */
+  .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cell {
+    width: 48px; min-height: 52px; border: 1px solid var(--border);
+    border-radius: 7px; background: var(--surface-2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: var(--mono); transition: all 0.2s ease;
+  }
+  .cell .idx { font-size: 0.7rem; color: var(--muted); }
+  .cell .val { font-size: 0.95rem; font-weight: 700; }
+  .cell.pos { background: rgba(63,185,80,0.18); border-color: var(--green); }
+  .cell.pos .val { color: var(--green); }
+  .cell.neg { background: rgba(248,81,73,0.18); border-color: var(--red); }
+  .cell.neg .val { color: var(--red); }
+  .cell.zero { background: rgba(188,140,255,0.16); border-color: var(--purple); }
+  .cell.zero .val { color: var(--purple); }
+  .cell.current { outline: 2px solid var(--yellow); outline-offset: 1px; }
+  .cell.touched { box-shadow: 0 0 0 2px rgba(210,153,34,0.5) inset; }
+  .cell.empty .val { color: var(--muted); }
+
+  /* Coprime term bars */
+  .terms { display: flex; align-items: flex-end; gap: 4px; min-height: 160px; padding-top: 8px; }
+  .term { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .term-bar { width: 26px; border-radius: 4px 4px 0 0; transition: all 0.2s ease; }
+  .term-bar.pos { background: var(--green); }
+  .term-bar.neg { background: var(--red); }
+  .term-bar.zero { background: var(--purple); height: 3px !important; }
+  .term-lbl { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+  .term.current .term-lbl { color: var(--yellow); font-weight: 700; }
+
+  .facts { font-family: var(--mono); font-size: 0.85rem; }
+  .facts .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .facts .k { color: var(--muted); }
+  .facts .v { color: var(--green); font-weight: 700; }
+  .facts .v.warn { color: var(--yellow); }
+  .facts .v.blue { color: var(--blue); }
+
+  .info {
+    font-family: var(--mono); font-size: 0.85rem; min-height: 60px;
+    background: var(--surface-2); border-radius: 7px; padding: 10px 12px;
+  }
+  .info .hl { color: var(--yellow); }
+
+  table.bigo { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  table.bigo th, table.bigo td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  table.bigo th { color: var(--muted); font-weight: 600; }
+  table.bigo td.c { font-family: var(--mono); color: var(--blue); }
+
+  .log {
+    font-family: var(--mono); font-size: 0.78rem; height: 150px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px;
+  }
+  .log div { padding: 1px 0; color: var(--muted); }
+  .log div:first-child { color: var(--text); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 0.78rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Möbius Function &amp; Möbius Inversion</h1>
+  <p class="subtitle">Linear sieve of μ(n), and coprime-pair counting via Σ μ(d)·⌊n/d⌋²</p>
+</header>
+
+<div class="wrap">
+  <div class="badges">
+    <span class="badge">Sieve μ(1..n): <b>O(n)</b></span>
+    <span class="badge">Single μ(n): <b>O(√n)</b></span>
+    <span class="badge">Coprime count: <b>O(n)</b> / <b>O(√n)</b> blocked</span>
+    <span class="badge">Identity: <b>μ * 1 = ε</b></span>
+  </div>
+
+  <div class="controls">
+    <label>n =</label>
+    <input type="number" id="nInput" value="12" min="1" max="60" />
+    <button class="tab active" id="tabSieve" onclick="setMode('sieve')">Mode: Sieve μ</button>
+    <button class="tab" id="tabCoprime" onclick="setMode('coprime')">Mode: Coprime Count</button>
+    <span class="spacer"></span>
+    <button class="primary" id="startBtn" onclick="start()">Play</button>
+    <button id="stepBtn" onclick="stepForward()">Step</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+    <label>Speed</label>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2 id="vizTitle">Linear Sieve of the Möbius Function</h2>
+        <div id="viz" class="grid"></div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--green)"></i> μ = +1 (even #primes)</span>
+          <span><i class="sw" style="background:var(--red)"></i> μ = −1 (odd #primes)</span>
+          <span><i class="sw" style="background:var(--purple)"></i> μ = 0 (not squarefree)</span>
+          <span><i class="sw" style="outline:2px solid var(--yellow)"></i> current</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Step Explanation</h2>
+        <div class="info" id="info">Press <span class="hl">Play</span> to run the linear sieve, or <span class="hl">Step</span> to advance one operation.</div>
+      </div>
+
+      <div class="card">
+        <h2>Operation Log</h2>
+        <div class="log" id="log"><div>Ready.</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Live Facts</h2>
+        <div class="facts" id="facts">
+          <div class="row"><span class="k">step</span><span class="v" id="fStep">0 / 0</span></div>
+          <div class="row"><span class="k">mode</span><span class="v blue" id="fMode">sieve</span></div>
+          <div class="row"><span class="k">n</span><span class="v blue" id="fN">12</span></div>
+          <div class="row"><span class="k">running total</span><span class="v" id="fTotal">—</span></div>
+          <div class="row"><span class="k">cross-check</span><span class="v warn" id="fCheck">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Complexity</h2>
+        <table class="bigo">
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>μ(n), one value (factor)</td><td class="c">O(√n)</td></tr>
+          <tr><td>μ(1..n) linear sieve</td><td class="c">O(n)</td></tr>
+          <tr><td>μ(1..n) Eratosthenes</td><td class="c">O(n log log n)</td></tr>
+          <tr><td>Inversion at one n</td><td class="c">O(d(n))</td></tr>
+          <tr><td>Coprime count Σμ(d)⌊n/d⌋²</td><td class="c">O(n)</td></tr>
+          <tr><td>Coprime count (divisor blocks)</td><td class="c">O(√n)</td></tr>
+          <tr><td>Sublinear Mertens M(x)</td><td class="c">O(n^2/3)</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Formula</h2>
+        <div class="info" id="formula">
+          <div><b>Sieve:</b> μ(i·p) = 0 if p|i, else −μ(i)</div>
+          <div style="margin-top:6px"><b>Coprime pairs ≤ n:</b><br/>Σ<sub>d=1..n</sub> μ(d)·⌊n/d⌋²</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== STATE =====
+  let mode = 'sieve';
+  let n = 12;
+  let steps = [];
+  let stepIndex = 0;
+  let isRunning = false;
+  let timer = null;
+
+  function getDelay() {
+    return 1100 - document.getElementById('speed').value * 100;
+  }
+
+  function addLog(msg, head) {
+    const log = document.getElementById('log');
+    const div = document.createElement('div');
+    div.textContent = msg;
+    if (head) { log.insertBefore(div, log.firstChild); }
+    else { log.insertBefore(div, log.firstChild); }
+    while (log.children.length > 120) log.removeChild(log.lastChild);
+  }
+
+  // ===== SIEVE STEP GENERATION (linear sieve of μ) =====
+  function genSieveSteps(N) {
+    const out = [];
+    const mu = new Array(N + 1).fill(null);
+    const comp = new Array(N + 1).fill(false);
+    const primes = [];
+    if (N >= 1) {
+      mu[1] = 1;
+      out.push({
+        mu: mu.slice(), current: 1, touched: [],
+        desc: 'Base case: μ(1) = 1 (empty product of primes, (-1)^0).',
+        log: 'set μ(1) = 1'
+      });
+    }
+    for (let i = 2; i <= N; i++) {
+      let touched = [];
+      if (!comp[i]) {
+        primes.push(i);
+        mu[i] = -1;
+        out.push({
+          mu: mu.slice(), current: i, touched: [],
+          desc: i + ' is prime → one distinct prime factor, so μ(' + i + ') = -1.',
+          log: 'prime ' + i + ': μ = -1'
+        });
+      }
+      for (const p of primes) {
+        if (i * p > N) break;
+        comp[i * p] = true;
+        if (i % p === 0) {
+          mu[i * p] = 0;
+          out.push({
+            mu: mu.slice(), current: i * p, touched: [i, p],
+            desc: 'p=' + p + ' divides i=' + i + ', so p² | ' + (i * p) + ' → not squarefree → μ(' + (i * p) + ') = 0. (break)',
+            log: 'μ(' + (i * p) + ') = 0  (p|i)'
+          });
+          break;
+        } else {
+          mu[i * p] = -mu[i];
+          out.push({
+            mu: mu.slice(), current: i * p, touched: [i, p],
+            desc: 'gcd(' + p + ',' + i + ')=1 → one more distinct prime → μ(' + (i * p) + ') = -μ(' + i + ') = ' + mu[i * p] + '.',
+            log: 'μ(' + (i * p) + ') = ' + mu[i * p] + '  (flip)'
+          });
+        }
+      }
+    }
+    // final verification of identity Σ_{d|n} μ(d)
+    out.push({
+      mu: mu.slice(), current: 0, touched: [], final: true,
+      desc: 'Sieve complete. μ * 1 = ε: Σ_{d|n} μ(d) = 1 only at n=1, else 0.',
+      log: 'sieve done'
+    });
+    return out;
+  }
+
+  // ===== COPRIME COUNT STEP GENERATION =====
+  function mobiusArray(N) {
+    const mu = new Array(N + 1).fill(0);
+    const comp = new Array(N + 1).fill(false);
+    const primes = [];
+    if (N >= 1) mu[1] = 1;
+    for (let i = 2; i <= N; i++) {
+      if (!comp[i]) { primes.push(i); mu[i] = -1; }
+      for (const p of primes) {
+        if (i * p > N) break;
+        comp[i * p] = true;
+        if (i % p === 0) { mu[i * p] = 0; break; }
+        mu[i * p] = -mu[i];
+      }
+    }
+    return mu;
+  }
+
+  function bruteCoprime(N) {
+    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+    let c = 0;
+    for (let a = 1; a <= N; a++)
+      for (let b = 1; b <= N; b++)
+        if (gcd(a, b) === 1) c++;
+    return c;
+  }
+
+  function genCoprimeSteps(N) {
+    const out = [];
+    const mu = mobiusArray(N);
+    let total = 0;
+    const terms = [];
+    for (let d = 1; d <= N; d++) {
+      const q = Math.floor(N / d);
+      const contrib = mu[d] * q * q;
+      total += contrib;
+      terms.push({ d, mu: mu[d], q, contrib });
+      out.push({
+        terms: terms.slice(), current: d, total,
+        desc: 'd=' + d + ': μ(' + d + ')=' + mu[d] + ', ⌊' + N + '/' + d + '⌋=' + q +
+              ' → term = ' + mu[d] + '·' + q + '² = ' + contrib + '. Running total = ' + total + '.',
+        log: 'd=' + d + ': ' + (contrib >= 0 ? '+' : '') + contrib + ' (total ' + total + ')'
+      });
+    }
+    const brute = bruteCoprime(N);
+    out.push({
+      terms: terms.slice(), current: 0, total, final: true, brute,
+      desc: 'Done. Coprime ordered pairs in {1..' + N + '}² = ' + total +
+            '. Brute-force gcd loop confirms ' + brute + '.',
+      log: 'coprime count = ' + total + ' (brute ' + brute + ')'
+    });
+    return out;
+  }
+
+  // ===== RENDER =====
+  function classFor(v) {
+    if (v === null || v === undefined) return 'empty';
+    if (v > 0) return 'pos';
+    if (v < 0) return 'neg';
+    return 'zero';
+  }
+
+  function renderSieve(step) {
+    const viz = document.getElementById('viz');
+    viz.className = 'grid';
+    let html = '';
+    for (let i = 1; i <= n; i++) {
+      const v = step.mu[i];
+      let cls = 'cell ' + classFor(v);
+      if (step.current === i) cls += ' current';
+      if (step.touched && step.touched.includes(i)) cls += ' touched';
+      html += '<div class="' + cls + '"><span class="idx">' + i + '</span><span class="val">' +
+              (v === null || v === undefined ? '·' : (v > 0 ? '+1' : v)) + '</span></div>';
+    }
+    viz.innerHTML = html;
+  }
+
+  function renderCoprime(step) {
+    const viz = document.getElementById('viz');
+    viz.className = 'terms';
+    const maxAbs = Math.max(1, ...step.terms.map(t => Math.abs(t.contrib)));
+    let html = '';
+    for (const t of step.terms) {
+      const h = t.contrib === 0 ? 3 : Math.max(4, Math.abs(t.contrib) / maxAbs * 140);
+      const cls = t.contrib > 0 ? 'pos' : (t.contrib < 0 ? 'neg' : 'zero');
+      const cur = step.current === t.d ? ' current' : '';
+      html += '<div class="term' + cur + '">' +
+              '<div class="term-bar ' + cls + '" style="height:' + h + 'px"></div>' +
+              '<div class="term-lbl">d' + t.d + '</div>' +
+              '<div class="term-lbl">' + (t.contrib >= 0 ? '+' : '') + t.contrib + '</div>' +
+              '</div>';
+    }
+    viz.innerHTML = html;
+  }
+
+  function renderStep(step) {
+    if (mode === 'sieve') renderSieve(step);
+    else renderCoprime(step);
+
+    document.getElementById('info').innerHTML = step.desc;
+    document.getElementById('fStep').textContent = (stepIndex + 1) + ' / ' + steps.length;
+    document.getElementById('fMode').textContent = mode;
+    document.getElementById('fN').textContent = n;
+
+    if (mode === 'coprime') {
+      document.getElementById('fTotal').textContent = step.total;
+      document.getElementById('fCheck').textContent = step.final ? ('brute = ' + step.brute) : '…';
+    } else {
+      // running sum of μ over divisors of n as a cross-check
+      if (step.final) {
+        let s = 0;
+        for (let d = 1; d <= n; d++) if (n % d === 0) s += (step.mu[d] || 0);
+        document.getElementById('fTotal').textContent = 'Σμ(d|n)=' + s;
+        document.getElementById('fCheck').textContent = (n === 1 ? '= 1 ✓' : '= 0 ✓');
+      } else {
+        document.getElementById('fTotal').textContent = '—';
+        document.getElementById('fCheck').textContent = '—';
+      }
+    }
+    if (step.log) addLog(step.log);
+  }
+
+  // ===== CONTROLS =====
+  function buildSteps() {
+    steps = (mode === 'sieve') ? genSieveSteps(n) : genCoprimeSteps(n);
+    stepIndex = 0;
+  }
+
+  function start() {
+    if (steps.length === 0) buildSteps();
+    isRunning = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    run();
+  }
+  function run() {
+    if (!isRunning || stepIndex >= steps.length) { pause(); return; }
+    renderStep(steps[stepIndex]);
+    stepIndex++;
+    timer = setTimeout(run, getDelay());
+  }
+  function stepForward() {
+    if (steps.length === 0) buildSteps();
+    if (stepIndex < steps.length) {
+      renderStep(steps[stepIndex]);
+      stepIndex++;
+    }
+  }
+  function pause() {
+    isRunning = false;
+    clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+  }
+  function reset() {
+    pause();
+    const v = parseInt(document.getElementById('nInput').value, 10);
+    n = (isNaN(v) || v < 1) ? 12 : Math.min(60, v);
+    document.getElementById('nInput').value = n;
+    document.getElementById('log').innerHTML = '<div>Reset. n = ' + n + ', mode = ' + mode + '.</div>';
+    buildSteps();
+    // render initial empty state
+    if (mode === 'sieve') {
+      renderSieve({ mu: new Array(n + 1).fill(null), current: 0, touched: [] });
+    } else {
+      renderCoprime({ terms: [], current: 0, total: 0 });
+    }
+    document.getElementById('fStep').textContent = '0 / ' + steps.length;
+    document.getElementById('fMode').textContent = mode;
+    document.getElementById('fN').textContent = n;
+    document.getElementById('fTotal').textContent = '—';
+    document.getElementById('fCheck').textContent = '—';
+    document.getElementById('info').innerHTML =
+      'Press <span class="hl">Play</span> to run, or <span class="hl">Step</span> to advance.';
+  }
+  function setMode(m) {
+    mode = m;
+    document.getElementById('tabSieve').classList.toggle('active', m === 'sieve');
+    document.getElementById('tabCoprime').classList.toggle('active', m === 'coprime');
+    document.getElementById('vizTitle').textContent =
+      m === 'sieve' ? 'Linear Sieve of the Möbius Function'
+                    : 'Coprime Count: Σ μ(d)·⌊n/d⌋²';
+    reset();
+  }
+
+  document.getElementById('nInput').addEventListener('change', reset);
+  // ===== INIT =====
+  reset();
+</script>
+</body>
+</html>
