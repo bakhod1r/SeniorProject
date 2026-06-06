@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tonelli-Shanks — Modular Square Root, Step by Step</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 20px; color: #fff; }
+  header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .badges { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 3px 9px;
+    border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .badge.green { color: var(--green); border-color: var(--green); }
+  .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+  .badge.blue { color: var(--blue); border-color: var(--blue); }
+  .badge.purple { color: var(--purple); border-color: var(--purple); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 110px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls .speed { display: flex; align-items: center; gap: 6px; }
+  .controls input[type="range"] { width: 120px; accent-color: var(--blue); }
+  .spacer { flex: 1; }
+  button {
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .card h3 { font-size: 14px; color: var(--blue); margin-bottom: 12px; }
+  .card h3 .sub { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+  /* Euler criterion gauge */
+  .gauge { display: flex; align-items: center; gap: 14px; }
+  .gauge .pill {
+    flex: 1; text-align: center; padding: 14px; border-radius: 8px;
+    border: 2px solid var(--border); font-family: var(--mono); font-size: 13px;
+    background: var(--surface-2); transition: all 0.3s;
+  }
+  .gauge .pill.lit-qr { border-color: var(--green); background: rgba(63,185,80,0.15); color: var(--green); }
+  .gauge .pill.lit-qnr { border-color: var(--red); background: rgba(248,81,73,0.15); color: var(--red); }
+  .gauge .arrow { color: var(--muted); font-size: 20px; }
+  .euler-formula { font-family: var(--mono); font-size: 13px; margin-bottom: 12px; color: var(--text); }
+  .euler-formula b { color: var(--yellow); }
+
+  /* Q*2^S decomposition */
+  .decomp { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .factor {
+    font-family: var(--mono); font-size: 14px; padding: 8px 12px;
+    border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .factor.odd { color: var(--orange); border-color: var(--orange); }
+  .factor.two { color: var(--purple); border-color: var(--purple); }
+  .factor.peeling { background: rgba(188,140,255,0.25); }
+  .decomp-line { font-family: var(--mono); font-size: 13px; margin-bottom: 10px; color: var(--muted); }
+  .decomp-line b { color: var(--text); }
+
+  /* Working values table */
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+  td.var { color: var(--blue); font-weight: 700; }
+  td.val { color: var(--text); }
+  tr.changed td.val { color: var(--green); animation: flash 0.6s; }
+  @keyframes flash { from { background: rgba(63,185,80,0.3); } to { background: transparent; } }
+  tr.target td.val { color: var(--yellow); }
+
+  /* convergence bar for t -> 1 */
+  .tbar-wrap { margin-top: 12px; }
+  .tbar-label { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .tbar {
+    height: 22px; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden; position: relative;
+  }
+  .tbar .fill {
+    height: 100%; background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
+    transition: width 0.4s ease; width: 0%;
+  }
+  .tbar .cap {
+    position: absolute; right: 8px; top: 2px; font-family: var(--mono);
+    font-size: 12px; color: var(--text);
+  }
+
+  /* Big-O table */
+  .bigo td:last-child { color: var(--green); font-weight: 700; }
+  .bigo td.warn:last-child { color: var(--yellow); }
+  .bigo td.bad:last-child { color: var(--red); }
+
+  /* Info panel + log */
+  .info { font-family: var(--mono); font-size: 13px; line-height: 1.7; min-height: 64px; }
+  .info .hi { color: var(--yellow); }
+  .info .ok { color: var(--green); }
+  .info .no { color: var(--red); }
+  .log {
+    font-family: var(--mono); font-size: 12px; max-height: 220px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px dotted #21262d; color: var(--muted); }
+  .log div:last-child { border-bottom: none; }
+  .log div .step { color: var(--blue); }
+  .result {
+    margin-top: 12px; font-family: var(--mono); font-size: 15px;
+    padding: 12px; border-radius: 8px; text-align: center;
+  }
+  .result.ok { background: rgba(63,185,80,0.12); border: 1px solid var(--green); color: var(--green); }
+  .result.no { background: rgba(248,81,73,0.12); border: 1px solid var(--red); color: var(--red); }
+  .result.idle { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 4px; font-size: 12px; }
+  .legend span { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tonelli-Shanks — Modular Square Root</h1>
+  <p>Solve x² ≡ n (mod p): Euler-criterion check → p−1 = Q·2^S decomposition → order-reduction tweak loop converging to a root.</p>
+  <div class="badges">
+    <span class="badge green">Euler: O(log p)</span>
+    <span class="badge blue">p≡3 mod4: O(log p)</span>
+    <span class="badge yellow">Tonelli loop: O(S² log p)</span>
+    <span class="badge purple">two roots: x, p−x</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <label>n =</label><input type="number" id="inN" value="10" min="0" />
+    <label>p =</label><input type="number" id="inP" value="13" min="2" />
+    <button class="primary" id="btnStart">Start</button>
+    <button id="btnStep">Step</button>
+    <button id="btnAuto">Auto</button>
+    <button id="btnReset">Reset</button>
+    <div class="spacer"></div>
+    <div class="speed">
+      <label>Slow</label>
+      <input type="range" id="speed" min="1" max="10" value="5" />
+      <label>Fast</label>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT COLUMN -->
+    <div>
+      <div class="card">
+        <h3>1 · Euler's Criterion <span class="sub">— does a root exist?</span></h3>
+        <div class="euler-formula">n<sup>(p−1)/2</sup> = <b id="eulerExp">10<sup>6</sup></b> mod p = <b id="eulerVal">?</b></div>
+        <div class="gauge">
+          <div class="pill" id="pillQR">+1 → quadratic residue (root exists)</div>
+          <div class="arrow">⇄</div>
+          <div class="pill" id="pillQNR">−1 → non-residue (no root)</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>2 · Decompose p − 1 = Q · 2<sup>S</sup> <span class="sub">— peel off factors of two</span></h3>
+        <div class="decomp-line">p − 1 = <b id="pm1">12</b> &nbsp;→&nbsp; Q (odd) = <b id="qVal">?</b>, &nbsp; S = <b id="sVal">?</b></div>
+        <div class="decomp" id="decompRow"></div>
+      </div>
+
+      <div class="card">
+        <h3>3 · Order-Reduction Tweak Loop <span class="sub">— drive t to 1</span></h3>
+        <table>
+          <thead><tr><th>var</th><th>meaning</th><th>value</th></tr></thead>
+          <tbody>
+            <tr id="rowM"><td class="var">M</td><td>current 2-group exponent</td><td class="val" id="vM">—</td></tr>
+            <tr id="rowC"><td class="var">c</td><td>generator z^Q (order 2^S)</td><td class="val" id="vC">—</td></tr>
+            <tr id="rowT" class="target"><td class="var">t</td><td>"error" → must reach 1</td><td class="val" id="vT">—</td></tr>
+            <tr id="rowR"><td class="var">R</td><td>running root guess</td><td class="val" id="vR">—</td></tr>
+          </tbody>
+        </table>
+        <div class="tbar-wrap">
+          <div class="tbar-label">order of t (2-adic) — collapses to 1:</div>
+          <div class="tbar"><div class="fill" id="tFill"></div><div class="cap" id="tCap">ord(t)=?</div></div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--blue)"></i> generator c</span>
+          <span><i style="background:var(--yellow)"></i> error t</span>
+          <span><i style="background:var(--green)"></i> root R</span>
+          <span><i style="background:var(--orange)"></i> odd Q</span>
+          <span><i style="background:var(--purple)"></i> 2-part</span>
+        </div>
+        <div class="result idle" id="result">Press Start to begin.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div>
+      <div class="card">
+        <h3>Explanation</h3>
+        <div class="info" id="info">Enter <span class="hi">n</span> and <span class="hi">p</span> (p an odd prime), then press <span class="hi">Start</span>. Try n=10, p=13 (works) or n=5, p=13 (no root) or n=2, p=7 (easy p≡3 mod 4 case).</div>
+      </div>
+
+      <div class="card">
+        <h3>Complexity</h3>
+        <table class="bigo">
+          <thead><tr><th>step</th><th>cost</th></tr></thead>
+          <tbody>
+            <tr><td>Euler's criterion</td><td>O(log p)</td></tr>
+            <tr><td>p≡3 (mod 4) shortcut</td><td>O(log p)</td></tr>
+            <tr><td>find non-residue z</td><td>O(log p)</td></tr>
+            <tr><td class="warn">Tonelli-Shanks loop</td><td class="warn">O(S² · log p)</td></tr>
+            <tr><td class="bad">brute force (try all x)</td><td class="bad">O(p · log p)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== modular arithmetic =====
+  function powmod(a, e, m) {
+    a = ((a % m) + m) % m;
+    let r = 1n;
+    a = BigInt(a); e = BigInt(e); m = BigInt(m);
+    while (e > 0n) {
+      if (e & 1n) r = (r * a) % m;
+      a = (a * a) % m;
+      e >>= 1n;
+    }
+    return Number(r);
+  }
+  function mulmod(a, b, m) { return Number((BigInt(a) * BigInt(b)) % BigInt(m)); }
+  function legendre(n, p) {
+    n = ((n % p) + p) % p;
+    if (n === 0) return 0;
+    const r = powmod(n, (p - 1) / 2, p);
+    return r === p - 1 ? -1 : r;
+  }
+
+  // ===== state =====
+  let steps = [];          // precomputed animation steps
+  let idx = 0;
+  let autoTimer = null;
+
+  const $ = id => document.getElementById(id);
+
+  function speedMs() { return 1150 - $("speed").value * 100; }
+
+  function log(html) {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    $("log").appendChild(d);
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+
+  // ===== build the step list for given n, p =====
+  function buildSteps(n, p) {
+    steps = [];
+    const push = s => steps.push(s);
+    n = ((n % p) + p) % p;
+
+    // Step 0: setup / validation
+    if (p < 2) { push({ kind: "error", msg: "p must be ≥ 2 (an odd prime)." }); return; }
+    if (p === 2) {
+      push({ kind: "p2", n, p, root: n % 2, msg: "p = 2 special case: every value is its own root mod 2 → x = " + (n % 2) });
+      return;
+    }
+    if (n === 0) {
+      push({ kind: "zero", n, p, msg: "n ≡ 0 (mod p): the only root is x = 0." });
+      return;
+    }
+
+    // Euler's criterion
+    const crit = powmod(n, (p - 1) / 2, p);
+    const isQR = crit === 1;
+    push({
+      kind: "euler", n, p, crit, isQR,
+      msg: `Euler's criterion: n^((p−1)/2) = ${n}^${(p - 1) / 2} ≡ ${crit === p - 1 ? "−1" : crit} (mod ${p}). ` +
+           (isQR ? "<span class='ok'>+1 → n IS a quadratic residue, a root exists.</span>"
+                 : "<span class='no'>−1 → n is a NON-residue, NO root exists.</span>")
+    });
+    if (!isQR) {
+      push({ kind: "done", ok: false, n, p, msg: "Stop: x² ≡ " + n + " (mod " + p + ") has no solution." });
+      return;
+    }
+
+    // Decompose p-1 = Q * 2^S (with peel animation)
+    let Q = p - 1, S = 0;
+    const peels = [{ Q, S }];
+    while (Q % 2 === 0) { Q /= 2; S++; peels.push({ Q, S }); }
+    push({ kind: "decompose", p, peels, Q, S, msg: `Decompose p − 1 = ${p - 1} = ${Q} · 2^${S}  (Q = ${Q} odd, S = ${S}).` });
+
+    // Easy case p ≡ 3 (mod 4)  <=> S == 1
+    if (p % 4 === 3) {
+      const R = powmod(n, (p + 1) / 4, p);
+      push({
+        kind: "easy", n, p, Q, S, R,
+        msg: `<span class='ok'>Easy case p ≡ 3 (mod 4) (S = 1)</span>: x = n^((p+1)/4) = ${n}^${(p + 1) / 4} ≡ ${R} (mod ${p}). The loop never runs.`
+      });
+      push({ kind: "done", ok: true, n, p, R, other: (p - R) % p, msg: `Root found: x = ${R}, other root = ${(p - R) % p}.` });
+      return;
+    }
+
+    // Find a non-residue z
+    let z = 2;
+    while (legendre(z, p) !== -1) z++;
+    push({ kind: "findz", z, p, msg: `Find a quadratic non-residue: z = ${z} (legendre(${z},${p}) = −1). It generates the 2-Sylow subgroup.` });
+
+    // Initialize M, c, t, R
+    let M = S;
+    let c = powmod(z, Q, p);
+    let t = powmod(n, Q, p);
+    let R = powmod(n, (Q + 1) / 2, p);
+    push({
+      kind: "init", M, c, t, R, S,
+      msg: `Initialize: M = S = ${M}, c = z^Q = ${c}, t = n^Q = ${t}, R = n^((Q+1)/2) = ${R}. Invariant: R² ≡ t·n.`
+    });
+
+    // tweak loop
+    let round = 0;
+    let guard = 0;
+    while (t !== 1 && guard++ < 64) {
+      round++;
+      // find least i with t^(2^i) == 1
+      let i = 0, tmp = t;
+      while (tmp !== 1) { tmp = mulmod(tmp, tmp, p); i++; }
+      // b = c^(2^(M-i-1))
+      let b = c;
+      for (let j = 0; j < M - i - 1; j++) b = mulmod(b, b, p);
+      const newR = mulmod(R, b, p);
+      const newC = mulmod(b, b, p);
+      const newT = mulmod(t, newC, p);
+      push({
+        kind: "tweak", round, M, c, t, R, i, b,
+        newM: i, newC, newT, newR, S,
+        msg: `Round ${round}: order of t is 2^${i} (least i with t^(2^i)=1). ` +
+             `Correction b = c^(2^(${M}−${i}−1)) = ${b}. ` +
+             `Update: R ← R·b = ${newR}, c ← b² = ${newC}, t ← t·b² = ${newT}, M ← ${i}. ` +
+             `<span class='hi'>ord(t) halved.</span>`
+      });
+      R = newR; c = newC; t = newT; M = i;
+    }
+    push({ kind: "converged", R, t, S, msg: `t = 1 → the invariant R² ≡ t·n becomes R² ≡ n. Root R = ${R}.` });
+    push({ kind: "done", ok: true, n, p, R, other: (p - R) % p, msg: `Root found: x = ${R}, other root = ${(p - R) % p}. Verify ${R}² mod ${p} = ${mulmod(R, R, p)}.` });
+  }
+
+  // ===== rendering one step =====
+  function clearChanged() {
+    ["rowM", "rowC", "rowT", "rowR"].forEach(r => $(r).classList.remove("changed"));
+  }
+  function setVals(M, c, t, R) {
+    $("vM").textContent = M; $("vC").textContent = c; $("vT").textContent = t; $("vR").textContent = R;
+  }
+  function renderTbar(t, S, p) {
+    // order of t as power of two; fraction toward 1
+    if (t === undefined) { $("tFill").style.width = "0%"; $("tCap").textContent = "ord(t)=?"; return; }
+    let i = 0, tmp = t;
+    let g = 0;
+    while (tmp !== 1 && g++ < 64) { tmp = mulmod(tmp, tmp, p); i++; }
+    const maxS = Math.max(1, S);
+    const frac = 1 - i / (maxS); // i=0 (t=1) → 100%
+    $("tFill").style.width = Math.max(4, frac * 100) + "%";
+    $("tCap").textContent = "ord(t)=2^" + i;
+  }
+  function renderDecomp(peels, p, activeIdx) {
+    const row = $("decompRow");
+    row.innerHTML = "";
+    if (!peels) return;
+    const last = peels[peels.length - 1];
+    // show Q odd then S two-factors
+    const qDiv = document.createElement("div");
+    qDiv.className = "factor odd";
+    qDiv.textContent = "Q=" + last.Q;
+    row.appendChild(qDiv);
+    for (let k = 0; k < last.S; k++) {
+      const d = document.createElement("div");
+      d.className = "factor two";
+      if (activeIdx !== undefined && k === activeIdx) d.classList.add("peeling");
+      d.textContent = "× 2";
+      row.appendChild(d);
+    }
+  }
+
+  function render(step) {
+    if (!step) return;
+    clearChanged();
+    $("info").innerHTML = step.msg;
+
+    switch (step.kind) {
+      case "euler": {
+        $("eulerExp").innerHTML = step.n + "<sup>" + ((step.p - 1) / 2) + "</sup>";
+        $("eulerVal").textContent = step.crit === step.p - 1 ? "−1" : step.crit;
+        $("pillQR").className = "pill" + (step.isQR ? " lit-qr" : "");
+        $("pillQNR").className = "pill" + (!step.isQR ? " lit-qnr" : "");
+        $("pm1").textContent = step.p - 1;
+        break;
+      }
+      case "decompose": {
+        $("qVal").textContent = step.Q; $("sVal").textContent = step.S;
+        $("pm1").textContent = step.p - 1;
+        renderDecomp(step.peels, step.p);
+        break;
+      }
+      case "easy": {
+        $("qVal").textContent = step.Q; $("sVal").textContent = step.S;
+        setVals(step.S, "—", 1, step.R);
+        $("rowR").classList.add("changed");
+        renderTbar(1, step.S, step.p);
+        break;
+      }
+      case "findz": {
+        break;
+      }
+      case "init": {
+        setVals(step.M, step.c, step.t, step.R);
+        ["rowM", "rowC", "rowT", "rowR"].forEach(r => $(r).classList.add("changed"));
+        renderTbar(step.t, step.S, $("inP").value | 0);
+        break;
+      }
+      case "tweak": {
+        setVals(step.newM, step.newC, step.newT, step.newR);
+        ["rowM", "rowC", "rowT", "rowR"].forEach(r => $(r).classList.add("changed"));
+        renderTbar(step.newT, step.S, ($("inP").value | 0));
+        break;
+      }
+      case "converged": {
+        $("vT").textContent = "1";
+        $("rowT").classList.add("changed");
+        renderTbar(1, step.S, $("inP").value | 0);
+        break;
+      }
+      case "done": {
+        const r = $("result");
+        if (step.ok) {
+          r.className = "result ok";
+          r.textContent = "√" + step.n + " mod " + step.p + " = " + step.R + " and " + step.other + "  ✓";
+        } else {
+          r.className = "result no";
+          r.textContent = "No square root exists (non-residue).";
+        }
+        break;
+      }
+      case "zero": {
+        const r = $("result"); r.className = "result ok"; r.textContent = "Root: x = 0";
+        break;
+      }
+      case "p2": {
+        const r = $("result"); r.className = "result ok"; r.textContent = "Root: x = " + step.root + " (mod 2)";
+        break;
+      }
+      case "error": {
+        const r = $("result"); r.className = "result no"; r.textContent = "Invalid input.";
+        break;
+      }
+    }
+    log("<span class='step'>[" + (idx + 1) + "/" + steps.length + "]</span> " + step.msg.replace(/<[^>]+>/g, ""));
+  }
+
+  // ===== controls =====
+  function isProbablePrime(n) {
+    if (n < 2) return false;
+    for (let i = 2; i * i <= n; i++) if (n % i === 0) return false;
+    return true;
+  }
+
+  function start() {
+    stopAuto();
+    $("log").innerHTML = "";
+    $("result").className = "result idle";
+    $("result").textContent = "Running…";
+    const n = $("inN").value | 0;
+    const p = $("inP").value | 0;
+    if (!isProbablePrime(p)) {
+      $("info").innerHTML = "<span class='no'>p = " + p + " is not prime.</span> Tonelli-Shanks needs an odd prime modulus. Try 7, 13, 17, 23, 29, 41.";
+      $("result").className = "result no"; $("result").textContent = "p must be prime.";
+      steps = []; return;
+    }
+    buildSteps(n, p);
+    idx = 0;
+    // reset panels
+    setVals("—", "—", "—", "—");
+    $("eulerVal").textContent = "?"; $("qVal").textContent = "?"; $("sVal").textContent = "?";
+    $("pm1").textContent = p - 1;
+    $("eulerExp").innerHTML = n + "<sup>" + ((p - 1) / 2) + "</sup>";
+    $("pillQR").className = "pill"; $("pillQNR").className = "pill";
+    $("tFill").style.width = "0%"; $("tCap").textContent = "ord(t)=?";
+    renderDecomp(null);
+    if (steps.length) { render(steps[idx]); idx++; }
+  }
+
+  function step() {
+    if (steps.length === 0) { start(); return; }
+    if (idx < steps.length) { render(steps[idx]); idx++; }
+    else stopAuto();
+  }
+
+  function auto() {
+    if (steps.length === 0) start();
+    stopAuto();
+    autoTimer = setInterval(() => {
+      if (idx >= steps.length) { stopAuto(); return; }
+      step();
+    }, speedMs());
+    $("btnAuto").textContent = "Pause";
+  }
+  function stopAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    $("btnAuto").textContent = "Auto";
+  }
+
+  function reset() {
+    stopAuto();
+    steps = []; idx = 0;
+    $("log").innerHTML = "";
+    setVals("—", "—", "—", "—");
+    $("eulerVal").textContent = "?"; $("qVal").textContent = "?"; $("sVal").textContent = "?";
+    $("pillQR").className = "pill"; $("pillQNR").className = "pill";
+    $("tFill").style.width = "0%"; $("tCap").textContent = "ord(t)=?";
+    renderDecomp(null);
+    $("result").className = "result idle"; $("result").textContent = "Press Start to begin.";
+    $("info").innerHTML = "Enter <span class='hi'>n</span> and <span class='hi'>p</span> (p an odd prime), then press <span class='hi'>Start</span>.";
+  }
+
+  $("btnStart").onclick = start;
+  $("btnStep").onclick = step;
+  $("btnAuto").onclick = () => { if (autoTimer) stopAuto(); else auto(); };
+  $("btnReset").onclick = reset;
+
+  // init
+  reset();
+</script>
+</body>
+</html>
