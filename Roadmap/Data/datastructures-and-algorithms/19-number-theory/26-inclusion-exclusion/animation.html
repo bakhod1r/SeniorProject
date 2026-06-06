@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inclusion-Exclusion Principle (PIE) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --add-bg: rgba(63, 185, 80, 0.16);
+    --sub-bg: rgba(248, 81, 73, 0.16);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; max-width: 900px; }
+  header b { color: var(--blue); }
+  .wrap { max-width: 1220px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"], .controls input[type="number"] {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="number"] { width: 92px; }
+  .controls input[type="text"] { width: 150px; }
+  .controls input[type="range"] { vertical-align: middle; }
+  .seg {
+    display: inline-flex; border: 1px solid var(--border);
+    border-radius: 7px; overflow: hidden;
+  }
+  .seg button { border: none; border-radius: 0; }
+  .seg button.active { background: var(--blue); color: #fff; }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 14px; color: var(--blue);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  svg { display: block; width: 100%; height: auto; }
+  .venn-circle {
+    fill-opacity: 0.10; stroke-width: 2.5;
+    transition: fill 0.3s ease, fill-opacity 0.3s ease, stroke 0.3s ease;
+  }
+  .venn-label { font-family: var(--mono); font-size: 15px; font-weight: 700; }
+  .formula {
+    font-family: var(--mono); font-size: 14px; line-height: 2;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 12px 14px; margin-top: 10px;
+    min-height: 54px; word-spacing: 2px;
+  }
+  .formula .t { padding: 1px 4px; border-radius: 4px; }
+  .formula .add { color: var(--green); }
+  .formula .sub { color: var(--red); }
+  .formula .cur { background: var(--surface-2); outline: 1px solid var(--blue); }
+  .ledger { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 7px; background: var(--surface-2);
+    font-family: var(--mono); font-size: 13px;
+  }
+  .row .k { color: var(--yellow); font-weight: 700; min-width: 130px; }
+  .row .v { color: var(--text); }
+  .row .v b { color: var(--green); }
+  .row .v.neg b { color: var(--red); }
+  /* Bitmask subset table */
+  table.masks {
+    width: 100%; border-collapse: collapse; margin-top: 6px;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  table.masks th, table.masks td {
+    border: 1px solid var(--border); padding: 5px 7px; text-align: center;
+  }
+  table.masks th { color: var(--muted); font-weight: 600; background: var(--surface-2); }
+  table.masks tr.add td.sign { color: var(--green); }
+  table.masks tr.sub td.sign { color: var(--red); }
+  table.masks tr.add { background: var(--add-bg); }
+  table.masks tr.sub { background: var(--sub-bg); }
+  table.masks tr.current { outline: 2px solid var(--blue); outline-offset: -2px; }
+  table.masks tr.pending td { color: var(--muted); opacity: 0.45; }
+  table.masks td.mono b { color: var(--text); }
+  /* Big-O table */
+  table.bigo { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12.5px; }
+  table.bigo th, table.bigo td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  table.bigo th { color: var(--muted); background: var(--surface-2); }
+  table.bigo td.c { font-family: var(--mono); }
+  table.bigo .g { color: var(--green); }
+  table.bigo .y { color: var(--yellow); }
+  table.bigo .r { color: var(--red); }
+  .narrate {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--blue); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 46px;
+  }
+  .narrate b { color: var(--blue); }
+  .narrate .g { color: var(--green); }
+  .narrate .r { color: var(--red); }
+  .log {
+    margin-top: 8px; max-height: 190px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 10px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .log div { padding: 2px 0; border-bottom: 1px dashed rgba(139,148,158,0.18); }
+  .log div:last-child { border-bottom: none; }
+  .log .add { color: var(--green); }
+  .log .sub { color: var(--red); }
+  .log .info { color: var(--blue); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .explain { margin-top: 18px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  .explain li { margin: 4px 0; font-size: 13px; color: var(--text); }
+  .explain li b { color: var(--green); }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--yellow); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  .total-banner {
+    margin-top: 12px; padding: 10px 14px; border-radius: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-family: var(--mono); font-size: 16px; text-align: center;
+  }
+  .total-banner b { color: var(--green); font-size: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Inclusion-Exclusion Principle &mdash; Add Singles, Subtract Pairs, Add Triples</h1>
+  <p>
+    Count the <b>union</b> of overlapping sets without double counting:
+    <span class="formula" style="display:inline;border:none;padding:0;background:none">
+    |A&cup;B&cup;C| = &Sigma;|A| &minus; &Sigma;|A&cap;B| + |A&cap;B&cap;C|</span>.
+    The left panel lights each Venn term as it is <b>added (green)</b> or <b>subtracted (red)</b>.
+    The right panel runs the same alternating sum as a <b>bitmask subset enumeration</b> to count
+    integers in [1, N] <b>divisible by at least one</b> of your numbers, with intersections sized by <code>floor(N / lcm)</code>.
+  </p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>N = <input type="number" id="nInput" value="100" min="1" max="1000000" /></label>
+    <label>numbers <input type="text" id="kInput" value="6,10,15" placeholder="e.g. 2,3,5" /></label>
+    <span class="seg" title="Union form starts at the first non-empty subset; complement (none) form includes the universe term">
+      <button id="modeUnion" class="active">Union</button>
+      <button id="modeNone">Complement</button>
+    </span>
+    <label>speed
+      <input type="range" id="speed" min="150" max="1400" value="700" step="50" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: Venn -->
+    <div class="card">
+      <h2>Venn regions &mdash; alternating add / subtract</h2>
+      <svg id="venn" viewBox="0 0 420 320" role="img" aria-label="Three overlapping sets">
+        <circle id="cA" class="venn-circle" cx="160" cy="135" r="100" stroke="var(--blue)"   style="fill:var(--blue)"></circle>
+        <circle id="cB" class="venn-circle" cx="260" cy="135" r="100" stroke="var(--purple)" style="fill:var(--purple)"></circle>
+        <circle id="cC" class="venn-circle" cx="210" cy="220" r="100" stroke="var(--orange)" style="fill:var(--orange)"></circle>
+        <text class="venn-label" x="95"  y="110" fill="var(--blue)">A</text>
+        <text class="venn-label" x="320" y="110" fill="var(--purple)">B</text>
+        <text class="venn-label" x="205" y="300" fill="var(--orange)">C</text>
+      </svg>
+      <div class="formula" id="vennFormula">Press <b>Step</b> to begin building the union formula.</div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--add-bg);border-color:var(--green)"></span> term added (+)</span>
+        <span><span class="swatch" style="background:var(--sub-bg);border-color:var(--red)"></span> term subtracted (&minus;)</span>
+        <span><span class="swatch" style="background:var(--surface-2);border-color:var(--blue)"></span> current term</span>
+      </div>
+      <div class="ledger" style="margin-top:14px">
+        <div class="row"><span class="k">current subset</span><span class="v" id="vSubset">&mdash;</span></div>
+        <div class="row"><span class="k">|subset| &rarr; sign</span><span class="v" id="vSign">&mdash;</span></div>
+        <div class="row"><span class="k">running union</span><span class="v" id="vUnion"><b>0</b></span></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Bitmask enumeration -->
+    <div class="card">
+      <h2>Bitmask subsets &mdash; divisible by at least one</h2>
+      <div class="total-banner">
+        answer so far: <b id="kTotal">0</b>
+        <span style="color:var(--muted);font-size:13px"> integers in [1, <span id="kN">100</span>] divisible by &ge;1 of {<span id="kSet">6,10,15</span>}</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="masks" id="maskTable">
+          <thead>
+            <tr><th>mask</th><th>subset</th><th>|S|</th><th>lcm</th><th>floor(N/lcm)</th><th>sign</th><th>running</th></tr>
+          </thead>
+          <tbody id="maskBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    This visualization runs PIE two ways at once. Both reach the <b>same</b> alternating sum:
+    odd-size subsets add, even-size subtract (union form).
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Complexity</h2>
+      <table class="bigo">
+        <thead><tr><th>Operation</th><th>Cost</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Full PIE over n sets</td><td class="c y">O(2&#8319; &middot; n)</td><td>2&#8319; subsets, n ops each</td></tr>
+          <tr><td>With subset-tree reuse</td><td class="c y">O(2&#8319;)</td><td>one incremental lcm/AND per node</td></tr>
+          <tr><td>DFS-pruned (lcm &gt; N)</td><td class="c g">&le; 2&#8319;, data-dependent</td><td>zero terms have zero supersets</td></tr>
+          <tr><td>Same-size collapse</td><td class="c g">O(n)</td><td>derangements / surjections only</td></tr>
+          <tr><td>Brute-force oracle</td><td class="c y">O(N &middot; n)</td><td>scan [1,N], test each</td></tr>
+          <tr><td>Independent of N?</td><td class="c g">yes</td><td>cost depends on n, not N</td></tr>
+        </tbody>
+      </table>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--green)"></span> cheap / sub-exponential</span>
+        <span><span class="swatch" style="background:var(--yellow)"></span> exponential in n</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Operation log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="card explain" style="margin-top:18px">
+    <h2>How to read this animation</h2>
+    <ul>
+      <li><b>Step</b> applies one PIE term; <b>Run</b> auto-plays at the chosen <b>speed</b>; <b>Reset</b> rebuilds from your inputs.</li>
+      <li><b>N</b> is the range upper bound; <b>numbers</b> is the comma-separated list whose multiples you are counting (first three drive the Venn labels A, B, C).</li>
+      <li><b>Union</b> mode enumerates non-empty subsets (mask 1 &hellip; 2&#8319;&minus;1); <b>Complement</b> mode also includes mask 0 (the universe term, +N).</li>
+      <li>Each subset's intersection size is <code>floor(N / lcm(chosen numbers))</code> &mdash; the count of integers in [1,N] divisible by <em>all</em> chosen numbers.</li>
+      <li>Odd-size subsets are <b style="color:var(--green)">added</b>, even-size <b style="color:var(--red)">subtracted</b>; once <code>lcm &gt; N</code> the term is 0 and contributes nothing (a free prune).</li>
+      <li>Set the numbers to the distinct primes of N (e.g. N=30, numbers=2,3,5) and the complement total equals Euler's totient &phi;(N).</li>
+    </ul>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization (no external resources). Both panels compute the identical alternating sum
+    &Sigma;<sub>&empty;&ne;S</sub> (&minus;1)<sup>|S|+1</sup> |&#8898; A&#7522;|. The sign is driven solely by <code>popcount(mask)</code>.
+    See <code>middle.md</code> for the coprime/divisible-by derivations, <code>senior.md</code> for pruning and scale, and
+    <code>professional.md</code> for the proofs and the M&ouml;bius generalization.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------- State ----------------
+const state = {
+  N: 100,
+  nums: [6, 10, 15],
+  mode: "union",   // "union" | "none"
+  plan: [],
+  stepIdx: 0,
+  running: false,
+  timer: null
+};
+
+// ---------------- Math helpers ----------------
+function gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
+function lcm(a, b) {
+  if (a === 0 || b === 0) return 0;
+  return a / gcd(a, b) * b;
+}
+function popcount(x) { let c = 0; while (x) { x &= x - 1; c++; } return c; }
+
+// Parse the numbers field: positive ints, capped at 12 to keep 2^n manageable.
+function parseNums(str) {
+  const out = [];
+  for (const tok of str.split(/[\s,]+/)) {
+    if (tok === "") continue;
+    const v = parseInt(tok, 10);
+    if (!isNaN(v) && v > 0) out.push(v);
+    if (out.length >= 12) break;
+  }
+  return out.length ? out : [6, 10, 15];
+}
+
+// ---------------- Build the deterministic step plan ----------------
+// Each step is one subset (mask). We precompute lcm, term, sign, running totals.
+function buildPlan(N, nums, mode) {
+  const n = nums.length;
+  const steps = [];
+  const startMask = (mode === "none") ? 0 : 1;
+
+  // Intro
+  steps.push({
+    type: "intro", mask: null,
+    desc: mode === "none"
+      ? "Complement form: we include the empty subset (the universe, +N) and subtract/add intersections to count integers divisible by NONE, i.e. the complement of the union."
+      : "Union form: enumerate every non-empty subset of the " + n + " numbers; add odd-sized intersections, subtract even-sized ones.",
+    union: 0, kTotal: 0
+  });
+
+  let running = 0;       // running PIE value for the divisible-by counter
+  let unionVal = 0;      // mirror used for the Venn 'running union' readout (same number)
+
+  for (let mask = startMask; mask < (1 << n); mask++) {
+    const bits = popcount(mask);
+    // build lcm of chosen numbers
+    let L = 1;
+    const chosen = [];
+    let overflow = false;
+    for (let i = 0; i < n; i++) {
+      if (mask & (1 << i)) {
+        chosen.push(nums[i]);
+        L = lcm(L, nums[i]);
+        if (L > N) { /* still compute but term will be 0 */ }
+      }
+    }
+    // term size: integers in [1,N] divisible by all chosen = floor(N/L); empty subset -> N
+    let term;
+    if (mask === 0) term = N;
+    else term = Math.floor(N / L);
+
+    // sign: union form -> odd subsets +, even -; complement form -> even +, odd -
+    // both expressed via (-1)^bits with the right base. We use union convention for display
+    // and flip for the empty/complement universe term.
+    let sign;
+    if (mode === "none") {
+      sign = (bits % 2 === 0) ? +1 : -1;   // complement: +universe, -singles, +pairs...
+    } else {
+      sign = (bits % 2 === 1) ? +1 : -1;   // union: +singles, -pairs, +triples...
+    }
+
+    const contribution = sign * term;
+    running += contribution;
+    unionVal = running;
+
+    steps.push({
+      type: "term",
+      mask: mask,
+      bits: bits,
+      chosen: chosen.slice(),
+      lcm: (mask === 0 ? 1 : L),
+      term: term,
+      sign: sign,
+      contribution: contribution,
+      pruned: (mask !== 0 && L > N),
+      union: unionVal,
+      kTotal: running,
+      desc: buildDesc(mask, bits, chosen, (mask === 0 ? 1 : L), term, sign, N, mode)
+    });
+  }
+
+  steps.push({
+    type: "done", mask: null,
+    desc: "Done. The alternating sum is complete: " +
+      (mode === "none"
+        ? "<b>" + running + "</b> integers in [1," + N + "] are divisible by NONE of {" + nums.join(",") + "} (the complement)."
+        : "<b>" + running + "</b> integers in [1," + N + "] are divisible by at least one of {" + nums.join(",") + "}."),
+    union: running, kTotal: running
+  });
+  return steps;
+}
+
+function subsetText(mask, nums) {
+  if (mask === 0) return "&empty; (universe)";
+  const parts = [];
+  for (let i = 0; i < nums.length; i++) if (mask & (1 << i)) parts.push(nums[i]);
+  return "{" + parts.join(", ") + "}";
+}
+
+function buildDesc(mask, bits, chosen, L, term, sign, N, mode) {
+  if (mask === 0) {
+    return "Universe term: all <b>" + N + "</b> integers in [1," + N + "] are added first (complement form).";
+  }
+  const signWord = sign > 0
+    ? "<span class='g'>add</span>"
+    : "<span class='r'>subtract</span>";
+  const inter = chosen.length === 1
+    ? "multiples of <b>" + chosen[0] + "</b>"
+    : "multiples of all of <b>" + chosen.join(", ") + "</b> (lcm = " + L + ")";
+  if (term === 0) {
+    return "Subset {" + chosen.join(",") + "}: lcm = <b>" + L + "</b> &gt; N, so floor(N/lcm) = <b>0</b> &mdash; a free prune (this term and all its supersets vanish).";
+  }
+  return "Subset of size " + bits + ": " + signWord + " |" + inter + "| = floor(" + N + "/" + L + ") = <b>" + term + "</b>.";
+}
+
+// ---------------- Rendering ----------------
+function buildMaskTable() {
+  const body = document.getElementById("maskBody");
+  body.innerHTML = "";
+  for (let i = 0; i < state.plan.length; i++) {
+    const s = state.plan[i];
+    if (s.type !== "term") continue;
+    const tr = document.createElement("tr");
+    tr.id = "mask-row-" + s.mask;
+    tr.className = "pending";
+    tr.innerHTML =
+      "<td class='mono'>" + s.mask.toString(2).padStart(state.nums.length, "0") + "</td>" +
+      "<td>" + subsetText(s.mask, state.nums) + "</td>" +
+      "<td>" + s.bits + "</td>" +
+      "<td>" + s.lcm + "</td>" +
+      "<td>" + s.term + "</td>" +
+      "<td class='sign'>" + (s.sign > 0 ? "+" : "&minus;") + "</td>" +
+      "<td class='run'>&mdash;</td>";
+    body.appendChild(tr);
+  }
+}
+
+function paintVenn(step) {
+  // Reset all circles to dim
+  const ids = ["cA", "cB", "cC"];
+  for (const id of ids) {
+    const c = document.getElementById(id);
+    c.style.fillOpacity = "0.08";
+    c.style.strokeWidth = "2.5";
+  }
+  if (!step || step.type !== "term" || step.mask === 0) return;
+  // Light circles in the current subset; tint by sign
+  const tint = step.sign > 0 ? "var(--green)" : "var(--red)";
+  for (let i = 0; i < Math.min(3, state.nums.length); i++) {
+    if (step.mask & (1 << i)) {
+      const c = document.getElementById(ids[i]);
+      c.style.fillOpacity = step.term === 0 ? "0.05" : "0.30";
+      c.style.strokeWidth = "4";
+    }
+  }
+}
+
+function renderVennFormula(uptoIdx) {
+  const parts = [];
+  for (let i = 1; i <= uptoIdx; i++) {
+    const s = state.plan[i];
+    if (!s || s.type !== "term") continue;
+    if (s.mask === 0) {
+      parts.push("<span class='t add" + (i === uptoIdx ? " cur" : "") + "'>+" + s.term + "</span>");
+      continue;
+    }
+    const cls = s.sign > 0 ? "add" : "sub";
+    const op = s.sign > 0 ? "+" : "&minus;";
+    const cur = (i === uptoIdx) ? " cur" : "";
+    parts.push("<span class='t " + cls + cur + "'>" + op + s.term + "</span>");
+  }
+  return parts.length ? parts.join(" ") : "(no terms yet)";
+}
+
+function pushLog(step) {
+  const log = document.getElementById("log");
+  let cls = "info", txt;
+  if (step.type === "term") {
+    if (step.mask === 0) { cls = "add"; txt = "universe term  +" + step.term + "  -> running " + step.kTotal; }
+    else {
+      cls = step.sign > 0 ? "add" : "sub";
+      const op = step.sign > 0 ? "+" : "-";
+      txt = "mask " + step.mask.toString(2).padStart(state.nums.length, "0") +
+            "  " + subsetTextPlain(step.mask) +
+            "  lcm=" + step.lcm + "  term=" + step.term +
+            "  " + op + step.term +
+            (step.pruned ? "  [pruned: lcm>N]" : "") +
+            "  -> running " + step.kTotal;
+    }
+  } else {
+    txt = step.desc.replace(/<[^>]+>/g, "");
+  }
+  const div = document.createElement("div");
+  div.className = cls;
+  div.textContent = txt;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function subsetTextPlain(mask) {
+  if (mask === 0) return "{}";
+  const parts = [];
+  for (let i = 0; i < state.nums.length; i++) if (mask & (1 << i)) parts.push(state.nums[i]);
+  return "{" + parts.join(",") + "}";
+}
+
+function renderStep(idx, fromNav) {
+  const step = state.plan[idx];
+
+  // Mask table highlight + reveal running totals up to idx
+  document.querySelectorAll("#maskBody tr").forEach(tr => {
+    tr.classList.remove("current");
+  });
+  // Reveal/hide rows based on progress
+  for (let i = 1; i < state.plan.length; i++) {
+    const s = state.plan[i];
+    if (s.type !== "term") continue;
+    const tr = document.getElementById("mask-row-" + s.mask);
+    if (!tr) continue;
+    if (i <= idx) {
+      tr.classList.remove("pending");
+      tr.classList.add(s.sign > 0 ? "add" : "sub");
+      tr.querySelector(".run").textContent = s.kTotal;
+    } else {
+      tr.classList.add("pending");
+      tr.classList.remove("add", "sub");
+      tr.querySelector(".run").textContent = "—";
+    }
+    if (i === idx) tr.classList.add("current");
+  }
+
+  // Venn
+  paintVenn(step);
+  document.getElementById("vennFormula").innerHTML =
+    (idx === 0) ? "Press <b>Step</b> to begin building the union formula."
+                : renderVennFormula(idx);
+
+  // Ledgers
+  if (step.type === "term") {
+    document.getElementById("vSubset").innerHTML = subsetText(step.mask, state.nums);
+    const signTxt = step.sign > 0
+      ? step.bits + " &rarr; <span style='color:var(--green)'>+ (add)</span>"
+      : step.bits + " &rarr; <span style='color:var(--red)'>&minus; (subtract)</span>";
+    document.getElementById("vSign").innerHTML = signTxt;
+  } else {
+    document.getElementById("vSubset").innerHTML = "&mdash;";
+    document.getElementById("vSign").innerHTML = "&mdash;";
+  }
+  document.getElementById("vUnion").innerHTML = "<b>" + (step.union || 0) + "</b>";
+  document.getElementById("kTotal").textContent = step.kTotal || 0;
+
+  document.getElementById("narrate").innerHTML = step.desc;
+  document.getElementById("stepInfo").textContent =
+    "step " + idx + " / " + (state.plan.length - 1);
+
+  if (!fromNav) pushLog(step);
+  updateButtons();
+}
+
+// ---------------- Navigation ----------------
+function gotoStep(idx) {
+  if (idx < 0 || idx >= state.plan.length) return;
+  state.stepIdx = idx;
+  renderStep(idx, false);
+}
+
+function stepForward() {
+  if (state.stepIdx < state.plan.length - 1) gotoStep(state.stepIdx + 1);
+}
+
+function updateButtons() {
+  const atEnd = state.stepIdx >= state.plan.length - 1;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause ⏸" : "Run ▶▶";
+}
+
+function run() {
+  if (state.running) {
+    clearInterval(state.timer); state.running = false; updateButtons(); return;
+  }
+  if (state.stepIdx >= state.plan.length - 1) rebuild();
+  state.running = true; updateButtons();
+  const delay = parseInt(document.getElementById("speed").value, 10) || 700;
+  state.timer = setInterval(() => {
+    if (state.stepIdx >= state.plan.length - 1) {
+      clearInterval(state.timer); state.running = false; updateButtons(); return;
+    }
+    stepForward();
+  }, delay);
+}
+
+// ---------------- Rebuild from inputs ----------------
+function rebuild() {
+  if (state.running) { clearInterval(state.timer); state.running = false; }
+
+  let N = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(N) || N < 1) N = 1;
+  if (N > 1000000) N = 1000000;
+  document.getElementById("nInput").value = N;
+
+  const nums = parseNums(document.getElementById("kInput").value);
+  document.getElementById("kInput").value = nums.join(",");
+
+  state.N = N;
+  state.nums = nums;
+  state.mode = document.getElementById("modeUnion").classList.contains("active") ? "union" : "none";
+
+  state.plan = buildPlan(N, nums, state.mode);
+  state.stepIdx = 0;
+
+  document.getElementById("kN").textContent = N;
+  document.getElementById("kSet").textContent = nums.join(",");
+  document.getElementById("log").innerHTML = "";
+  buildMaskTable();
+  renderStep(0, true);
+}
+
+// ---------------- Wire up controls ----------------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; updateButtons(); }
+  stepForward();
+});
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+document.getElementById("kInput").addEventListener("change", rebuild);
+document.getElementById("speed").addEventListener("change", () => {
+  if (state.running) { clearInterval(state.timer); state.running = false; run(); }
+});
+function setMode(union) {
+  document.getElementById("modeUnion").classList.toggle("active", union);
+  document.getElementById("modeNone").classList.toggle("active", !union);
+  rebuild();
+}
+document.getElementById("modeUnion").addEventListener("click", () => setMode(true));
+document.getElementById("modeNone").addEventListener("click", () => setMode(false));
+
+// ---------------- Initial load ----------------
+rebuild();
+</script>
+</body>
+</html>
