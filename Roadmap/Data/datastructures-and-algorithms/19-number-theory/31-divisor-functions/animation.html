@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Divisor Functions — d(n), σ(n) &amp; the Divisor Sieve</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #d29922;
+    --good: #3fb950;
+    --bad: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab {
+    background: var(--panel-2); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 86px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    font-family: var(--mono); font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  /* factorization blocks */
+  .factor-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; min-height: 120px; }
+  .pblock {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    background: var(--panel-2); min-width: 120px;
+    transition: all 0.3s ease;
+  }
+  .pblock.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .pblock .ph { font-family: var(--mono); color: var(--orange); font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .pblock .pd { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .pblock .pd b { color: var(--good); }
+  .pblock .ps { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .pblock .ps b { color: var(--purple); }
+  .timesx { align-self: center; font-size: 20px; color: var(--muted); }
+  .result-line {
+    margin-top: 14px; font-family: var(--mono); font-size: 15px;
+    padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  }
+  .result-line .dval { color: var(--good); font-weight: 700; }
+  .result-line .sval { color: var(--purple); font-weight: 700; }
+  /* sieve grid */
+  .grid { display: grid; gap: 4px; just-content: start; }
+  .cell {
+    width: 46px; height: 46px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--mono); font-size: 11px; color: var(--text);
+    background: var(--panel-2);
+    transition: background 0.2s ease, transform 0.12s ease, border-color 0.2s ease;
+  }
+  .cell .num { font-size: 12px; font-weight: 700; }
+  .cell .dd { color: var(--good); font-size: 10px; }
+  .cell .ss { color: var(--purple); font-size: 10px; }
+  .cell.striking { background: rgba(88,166,255,0.30); border-color: var(--accent); transform: scale(1.10); }
+  .cell.touched { border-color: rgba(63,185,80,0.5); }
+  .ledger { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 7px; background: var(--panel-2);
+    font-family: var(--mono); font-size: 13px;
+  }
+  .row .k { color: var(--accent-2); font-weight: 700; min-width: 110px; }
+  .row .v { color: var(--text); }
+  .row .v b { color: var(--good); }
+  .bigo { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
+  .bigo th, .bigo td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  .bigo th { color: var(--accent); background: var(--panel-2); }
+  .bigo td.c { font-family: var(--mono); }
+  .c-green { color: var(--good); } .c-yellow { color: var(--accent-2); } .c-blue { color: var(--accent); }
+  .narrate {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 46px;
+  }
+  .narrate b { color: var(--accent); }
+  .log {
+    margin-top: 14px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 10px 12px; font-family: var(--mono);
+    font-size: 12px; color: var(--muted); height: 150px; overflow-y: auto;
+  }
+  .log div { padding: 1px 0; }
+  .log div:last-child { color: var(--text); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .hidden { display: none; }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Divisor Functions — d(n), σ(n) &amp; the Divisor Sieve</h1>
+  <p>From the prime factorization, d(n) = Π(a&#7522;+1) and σ(n) = Π(1+p+…+p^a). The divisor sieve computes both for all numbers up to N by striding each divisor through its multiples — Σ N/d ≈ N ln N.</p>
+</header>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab active" id="tabFactor">Factorization → d(n), σ(n)</button>
+    <button class="tab" id="tabSieve">Divisor sieve (all m ≤ N)</button>
+  </div>
+
+  <!-- ===================== VIEW 1: FACTORIZATION ===================== -->
+  <div id="viewFactor">
+    <div class="controls">
+      <button id="fStep" class="primary">Step &#9654;</button>
+      <button id="fRun">Run &#9654;&#9654;</button>
+      <button id="fReset">Reset &#8635;</button>
+      <span class="spacer"></span>
+      <label>n = <input type="number" id="nInput" value="360" min="1" max="100000" /></label>
+      <button id="fRandom">Random</button>
+      <span class="step-counter" id="fStepInfo">step 0</span>
+    </div>
+
+    <div class="layout">
+      <div class="card">
+        <h2>Prime-power blocks of n = <span id="nLabel">360</span></h2>
+        <div class="factor-row" id="factorRow"></div>
+        <div class="result-line" id="resultLine">d(n) = <span class="dval">?</span> &nbsp;&nbsp; σ(n) = <span class="sval">?</span></div>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--panel-2);border-color:var(--accent)"></span> active prime power</span>
+          <span><span class="swatch" style="background:rgba(63,185,80,0.4)"></span> contributes (a+1) to d</span>
+          <span><span class="swatch" style="background:rgba(188,140,255,0.4)"></span> contributes geom. sum to σ</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Running product</h2>
+        <div class="ledger">
+          <div class="row"><span class="k">prime p</span><span class="v" id="curP">&mdash;</span></div>
+          <div class="row"><span class="k">exponent a</span><span class="v" id="curA">&mdash;</span></div>
+          <div class="row"><span class="k">d ×= (a+1)</span><span class="v" id="dRun"><b>1</b></span></div>
+          <div class="row"><span class="k">σ ×= 1+…+p^a</span><span class="v" id="sRun"><b>1</b></span></div>
+        </div>
+        <h2 style="margin-top:16px;">Complexity</h2>
+        <table class="bigo">
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>Factor n (trial division)</td><td class="c c-yellow">O(√n)</td></tr>
+          <tr><td>d(n) from exponents</td><td class="c c-green">O(#primes)</td></tr>
+          <tr><td>σ(n) from exponents</td><td class="c c-green">O(Σ a&#7522;)</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="narrate" id="fNarrate">Press <b>Step</b>. We factor n into prime powers, then fold each block into the product: every prime power multiplies d by (a+1) and σ by (1 + p + … + p^a).</div>
+  </div>
+
+  <!-- ===================== VIEW 2: DIVISOR SIEVE ===================== -->
+  <div id="viewSieve" class="hidden">
+    <div class="controls">
+      <button id="sStep" class="primary">Step &#9654;</button>
+      <button id="sRun">Run &#9654;&#9654;</button>
+      <button id="sReset">Reset &#8635;</button>
+      <span class="spacer"></span>
+      <label>N = <input type="number" id="NInput" value="20" min="2" max="40" /></label>
+      <label>speed <input type="range" id="speed" min="40" max="600" value="220" step="20" /></label>
+      <span class="step-counter" id="sStepInfo">step 0</span>
+    </div>
+
+    <div class="layout">
+      <div class="card">
+        <h2>Numbers 1 … <span id="NLabel">20</span> &nbsp; (top = d(m), bottom = σ(m))</h2>
+        <div class="grid" id="sieveGrid"></div>
+        <div class="legend">
+          <span><span class="swatch" style="background:rgba(88,166,255,0.30);border-color:var(--accent)"></span> being struck by divisor d</span>
+          <span><span class="swatch" style="background:var(--panel-2);border-color:rgba(63,185,80,0.5)"></span> received a divisor</span>
+          <span><span class="dd" style="color:var(--good)">d</span> count &nbsp; <span class="ss" style="color:var(--purple)">σ</span> sum</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>State</h2>
+        <div class="ledger">
+          <div class="row"><span class="k">current divisor d</span><span class="v" id="curDiv">&mdash;</span></div>
+          <div class="row"><span class="k">striking m</span><span class="v" id="curMul">&mdash;</span></div>
+          <div class="row"><span class="k">m gets d(m)++</span><span class="v" id="mCnt">&mdash;</span></div>
+          <div class="row"><span class="k">m gets σ(m)+=d</span><span class="v" id="mSum">&mdash;</span></div>
+          <div class="row"><span class="k">total strikes</span><span class="v" id="totStrikes"><b>0</b></span></div>
+        </div>
+        <h2 style="margin-top:16px;">Complexity</h2>
+        <table class="bigo">
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>Divisor sieve (all m ≤ N)</td><td class="c c-yellow">O(N log N)</td></tr>
+          <tr><td>Linear sieve (all m ≤ N)</td><td class="c c-green">O(N)</td></tr>
+          <tr><td>Query d(m)/σ(m) after</td><td class="c c-green">O(1)</td></tr>
+          <tr><td>Space</td><td class="c c-blue">O(N)</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="narrate" id="sNarrate">Press <b>Step</b>. For each divisor d = 1, 2, 3, …, we stride through its multiples d, 2d, 3d, …, adding 1 to each multiple's divisor count and adding d to its divisor sum.</div>
+    <div class="log" id="sLog"></div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization. Left tab: the closed forms <code>d(n)=Π(a&#7522;+1)</code> and <code>σ(n)=Π(1+p+…+p^a)</code> from the factorization (multiplicativity over coprime prime powers). Right tab: the divisor sieve, whose total work <code>Σ&#8323;&#8804;&#8345; N/d ≈ N ln N</code> gives O(N log N). See <code>junior.md</code>, <code>middle.md</code>, and <code>professional.md</code> for derivations and the linear-sieve O(N) variant.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   VIEW 1 — Factorization → d(n), σ(n)
+   ========================================================= */
+const fState = { n: 360, blocks: [], idx: 0, running: false, timer: null, dRun: 1, sRun: 1 };
+
+function factorize(n) {
+  const blocks = [];
+  let m = n;
+  for (let p = 2; p * p <= m; p++) {
+    if (m % p === 0) {
+      let a = 0, geom = 1, pk = 1;
+      while (m % p === 0) { m /= p; a++; pk *= p; geom += pk; }
+      blocks.push({ p, a, geom });
+    }
+  }
+  if (m > 1) blocks.push({ p: m, a: 1, geom: 1 + m });
+  return blocks;
+}
+
+function renderFactor() {
+  const row = document.getElementById("factorRow");
+  row.innerHTML = "";
+  if (fState.blocks.length === 0) {
+    row.innerHTML = '<div class="pblock"><div class="ph">1</div><div class="pd">n = 1: empty product</div><div class="ps">d = 1, σ = 1</div></div>';
+  }
+  fState.blocks.forEach((b, i) => {
+    if (i > 0) {
+      const x = document.createElement("div");
+      x.className = "timesx"; x.textContent = "×";
+      row.appendChild(x);
+    }
+    const div = document.createElement("div");
+    div.className = "pblock" + (i === fState.idx - 1 ? " active" : "");
+    div.innerHTML =
+      '<div class="ph">' + b.p + "<sup>" + b.a + "</sup></div>" +
+      '<div class="pd">d: (a+1) = <b>' + (b.a + 1) + "</b></div>" +
+      '<div class="ps">σ: 1+…+' + b.p + "<sup>" + b.a + "</sup> = <b>" + b.geom + "</b></div>";
+    row.appendChild(div);
+  });
+
+  // recompute running product up to idx
+  let d = 1, s = 1, cp = "—", ca = "—";
+  for (let i = 0; i < fState.idx; i++) {
+    d *= fState.blocks[i].a + 1;
+    s *= fState.blocks[i].geom;
+    cp = fState.blocks[i].p;
+    ca = fState.blocks[i].a;
+  }
+  document.getElementById("curP").textContent = cp;
+  document.getElementById("curA").textContent = ca;
+  document.getElementById("dRun").innerHTML = "<b>" + d + "</b>";
+  document.getElementById("sRun").innerHTML = "<b>" + s + "</b>";
+
+  const done = fState.idx >= fState.blocks.length;
+  document.getElementById("resultLine").innerHTML =
+    "d(n) = <span class='dval'>" + (done || fState.idx > 0 ? d : "?") + "</span> &nbsp;&nbsp; σ(n) = <span class='sval'>" + (done || fState.idx > 0 ? s : "?") + "</span>";
+
+  document.getElementById("fStepInfo").textContent = "step " + fState.idx + " / " + fState.blocks.length;
+
+  if (fState.idx === 0) {
+    document.getElementById("fNarrate").innerHTML =
+      "n = <b>" + fState.n + "</b> factors into " + fState.blocks.length +
+      " prime power" + (fState.blocks.length === 1 ? "" : "s") + ". Step to fold each into the product.";
+  } else if (done) {
+    document.getElementById("fNarrate").innerHTML =
+      "Done. <b>d(" + fState.n + ") = " + d + "</b> and <b>σ(" + fState.n + ") = " + s +
+      "</b>. The closed form: d = Π(a+1), σ = Π(1+p+…+p^a).";
+  } else {
+    const b = fState.blocks[fState.idx - 1];
+    document.getElementById("fNarrate").innerHTML =
+      "Folded in <b>" + b.p + "<sup>" + b.a + "</sup></b>: d ×= (" + b.a +
+      "+1) = " + (b.a + 1) + ", σ ×= (1+…+" + b.p + "^" + b.a + ") = " + b.geom + ".";
+  }
+}
+
+function fStepForward() {
+  if (fState.idx < fState.blocks.length) { fState.idx++; renderFactor(); }
+}
+function fRebuild() {
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  if (n > 100000) n = 100000;
+  document.getElementById("nInput").value = n;
+  document.getElementById("nLabel").textContent = n;
+  if (fState.running) { clearInterval(fState.timer); fState.running = false; document.getElementById("fRun").textContent = "Run ▶▶"; }
+  fState.n = n;
+  fState.blocks = factorize(n);
+  fState.idx = 0;
+  renderFactor();
+}
+function fRun() {
+  const btn = document.getElementById("fRun");
+  if (fState.running) { clearInterval(fState.timer); fState.running = false; btn.textContent = "Run ▶▶"; return; }
+  if (fState.idx >= fState.blocks.length) fRebuild();
+  fState.running = true; btn.textContent = "Pause ⏸";
+  fState.timer = setInterval(() => {
+    if (fState.idx >= fState.blocks.length) { clearInterval(fState.timer); fState.running = false; btn.textContent = "Run ▶▶"; return; }
+    fStepForward();
+  }, 750);
+}
+
+/* =========================================================
+   VIEW 2 — Divisor sieve
+   ========================================================= */
+const sState = { N: 20, plan: [], idx: 0, running: false, timer: null };
+
+function buildSievePlan(N) {
+  const steps = [];
+  const cnt = new Array(N + 1).fill(0);
+  const sum = new Array(N + 1).fill(0);
+  let strikes = 0;
+  steps.push({ type: "init", cnt: cnt.slice(), sum: sum.slice(), d: null, m: null, strikes: 0,
+    desc: "Start: d(m) and σ(m) are 0 for all m. Each divisor will stride through its multiples." });
+  for (let d = 1; d <= N; d++) {
+    for (let m = d; m <= N; m += d) {
+      cnt[m] += 1; sum[m] += d; strikes++;
+      steps.push({ type: "strike", cnt: cnt.slice(), sum: sum.slice(), d: d, m: m, strikes: strikes,
+        desc: "divisor <b>" + d + "</b> divides <b>" + m + "</b>: d(" + m + ")→" + cnt[m] +
+              ", σ(" + m + ")+=" + d + "→" + sum[m] + "." });
+    }
+  }
+  steps.push({ type: "done", cnt: cnt.slice(), sum: sum.slice(), d: null, m: null, strikes: strikes,
+    desc: "Done after <b>" + strikes + "</b> strikes (≈ Σ N/d ≈ N ln N). Each cell now holds d(m) and σ(m)." });
+  return steps;
+}
+
+function colsFor(N) { return N <= 15 ? 5 : (N <= 25 ? 7 : 8); }
+
+function buildSieveGrid(N) {
+  const grid = document.getElementById("sieveGrid");
+  grid.innerHTML = "";
+  grid.style.gridTemplateColumns = "repeat(" + colsFor(N) + ", 46px)";
+  for (let v = 1; v <= N; v++) {
+    const cell = document.createElement("div");
+    cell.className = "cell"; cell.id = "scell-" + v;
+    cell.innerHTML = '<span class="num">' + v + '</span><span class="dd">d 0</span><span class="ss">σ 0</span>';
+    grid.appendChild(cell);
+  }
+}
+
+function renderSieveStep(step) {
+  for (let v = 1; v <= sState.N; v++) {
+    const cell = document.getElementById("scell-" + v);
+    if (!cell) continue;
+    let cls = "cell";
+    if (step.cnt[v] > 0) cls += " touched";
+    if (step.m === v) cls += " striking";
+    cell.className = cls;
+    cell.querySelector(".dd").textContent = "d " + step.cnt[v];
+    cell.querySelector(".ss").textContent = "σ " + step.sum[v];
+  }
+  document.getElementById("curDiv").innerHTML = step.d !== null ? step.d : "&mdash;";
+  document.getElementById("curMul").innerHTML = step.m !== null ? step.m : "&mdash;";
+  document.getElementById("mCnt").innerHTML = step.m !== null ? step.cnt[step.m] : "&mdash;";
+  document.getElementById("mSum").innerHTML = step.m !== null ? step.sum[step.m] : "&mdash;";
+  document.getElementById("totStrikes").innerHTML = "<b>" + step.strikes + "</b>";
+  document.getElementById("sNarrate").innerHTML = step.desc;
+  document.getElementById("sStepInfo").textContent = "step " + sState.idx + " / " + (sState.plan.length - 1);
+
+  const log = document.getElementById("sLog");
+  const line = document.createElement("div");
+  line.innerHTML = step.desc.replace(/<[^>]+>/g, "");
+  log.appendChild(line);
+  while (log.childNodes.length > 60) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+function sStepForward() {
+  if (sState.idx < sState.plan.length - 1) { sState.idx++; renderSieveStep(sState.plan[sState.idx]); }
+}
+function sRebuild() {
+  let N = parseInt(document.getElementById("NInput").value, 10);
+  if (isNaN(N) || N < 2) N = 2;
+  if (N > 40) N = 40;
+  document.getElementById("NInput").value = N;
+  document.getElementById("NLabel").textContent = N;
+  if (sState.running) { clearInterval(sState.timer); sState.running = false; document.getElementById("sRun").textContent = "Run ▶▶"; }
+  sState.N = N;
+  sState.plan = buildSievePlan(N);
+  sState.idx = 0;
+  document.getElementById("sLog").innerHTML = "";
+  buildSieveGrid(N);
+  renderSieveStep(sState.plan[0]);
+}
+function sRun() {
+  const btn = document.getElementById("sRun");
+  if (sState.running) { clearInterval(sState.timer); sState.running = false; btn.textContent = "Run ▶▶"; return; }
+  if (sState.idx >= sState.plan.length - 1) sRebuild();
+  sState.running = true; btn.textContent = "Pause ⏸";
+  const delay = parseInt(document.getElementById("speed").value, 10) || 220;
+  sState.timer = setInterval(() => {
+    if (sState.idx >= sState.plan.length - 1) { clearInterval(sState.timer); sState.running = false; btn.textContent = "Run ▶▶"; return; }
+    sStepForward();
+  }, delay);
+}
+
+/* ===================== Tabs & wiring ===================== */
+function showTab(which) {
+  const f = which === "factor";
+  document.getElementById("viewFactor").classList.toggle("hidden", !f);
+  document.getElementById("viewSieve").classList.toggle("hidden", f);
+  document.getElementById("tabFactor").classList.toggle("active", f);
+  document.getElementById("tabSieve").classList.toggle("active", !f);
+}
+document.getElementById("tabFactor").addEventListener("click", () => showTab("factor"));
+document.getElementById("tabSieve").addEventListener("click", () => showTab("sieve"));
+
+document.getElementById("fStep").addEventListener("click", () => {
+  if (fState.running) { clearInterval(fState.timer); fState.running = false; document.getElementById("fRun").textContent = "Run ▶▶"; }
+  fStepForward();
+});
+document.getElementById("fRun").addEventListener("click", fRun);
+document.getElementById("fReset").addEventListener("click", fRebuild);
+document.getElementById("nInput").addEventListener("change", fRebuild);
+document.getElementById("fRandom").addEventListener("click", () => {
+  document.getElementById("nInput").value = Math.floor(Math.random() * 900) + 12;
+  fRebuild();
+});
+
+document.getElementById("sStep").addEventListener("click", () => {
+  if (sState.running) { clearInterval(sState.timer); sState.running = false; document.getElementById("sRun").textContent = "Run ▶▶"; }
+  sStepForward();
+});
+document.getElementById("sRun").addEventListener("click", sRun);
+document.getElementById("sReset").addEventListener("click", sRebuild);
+document.getElementById("NInput").addEventListener("change", sRebuild);
+document.getElementById("speed").addEventListener("change", () => {
+  if (sState.running) { clearInterval(sState.timer); sState.running = false; sRun(); }
+});
+
+/* ===================== Init ===================== */
+fRebuild();
+sRebuild();
+</script>
+</body>
+</html>
