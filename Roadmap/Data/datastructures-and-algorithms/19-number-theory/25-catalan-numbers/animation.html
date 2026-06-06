@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Catalan Numbers — Dyck Paths & the Convolution Recurrence</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;     /* blue */
+    --green: #3fb950;      /* up-step / good */
+    --yellow: #d29922;     /* scanning / convolution term */
+    --red: #f85149;        /* bad / below-baseline */
+    --purple: #bc8cff;     /* secondary accent */
+    --orange: #ffa657;     /* highlight */
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 3px 8px;
+    border-radius: 20px; border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.b1 { color: var(--green); border-color: rgba(63,185,80,.4); }
+  .badge.b2 { color: var(--yellow); border-color: rgba(210,153,34,.4); }
+  .badge.b3 { color: var(--accent); border-color: rgba(88,166,255,.4); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  button.active { background: var(--accent); border-color: var(--accent); color: #0d1117; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 64px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { accent-color: var(--accent); width: 120px; }
+  .spacer { flex: 1; }
+  .toggle-group { display: flex; gap: 6px; }
+  .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 14px; color: #fff; }
+  .stats {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .stat { color: var(--muted); }
+  .stat b { color: var(--accent); font-weight: 700; }
+  svg { width: 100%; height: auto; display: block; background: var(--bg);
+        border: 1px solid var(--border); border-radius: 8px; }
+  .info {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; font-size: 13px; min-height: 64px;
+  }
+  .info .op { color: var(--orange); font-weight: 700; font-family: var(--mono); }
+  .info .cx { color: var(--green); font-family: var(--mono); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.mono, .mono { font-family: var(--mono); }
+  .ok { color: var(--green); } .warn { color: var(--yellow); } .bad { color: var(--red); }
+  .log {
+    height: 150px; overflow-y: auto; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  }
+  .log div { padding: 1px 0; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin: 10px 0 2px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .conv-row { font-family: var(--mono); font-size: 13px; margin: 4px 0; }
+  .term { display: inline-block; padding: 1px 5px; border-radius: 4px; margin: 0 1px; }
+  .term.hot { background: rgba(210,153,34,.25); color: var(--yellow); }
+  .term.done { color: var(--green); }
+  .seq { font-family: var(--mono); font-size: 13px; margin-top: 6px; }
+  .seq b { color: var(--orange); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Catalan Numbers — Dyck Paths &amp; the Convolution Recurrence</h1>
+  <p>Cₙ = C(2n,n)/(n+1) counts balanced parentheses, binary trees, triangulations, and Dyck paths.</p>
+  <div class="badges">
+    <span class="badge b1">Recurrence O(n²)</span>
+    <span class="badge b2">Closed form O(n)</span>
+    <span class="badge b3">Cₙ ~ 4ⁿ / (n^1.5 √π)</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <label>n =</label>
+    <input type="number" id="nInput" min="1" max="6" value="3" />
+    <button class="primary" id="startBtn" onclick="start()">▶ Play</button>
+    <button id="stepBtn" onclick="stepForward()">Step</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+    <span class="spacer"></span>
+    <label>Speed</label>
+    <span style="font-size:11px;color:var(--muted)">slow</span>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+    <span style="font-size:11px;color:var(--muted)">fast</span>
+  </div>
+
+  <div class="controls">
+    <label>Interpretation:</label>
+    <div class="toggle-group">
+      <button id="iDyck" class="active" onclick="setView('dyck')">Dyck path / mountain</button>
+      <button id="iTree" onclick="setView('tree')">Binary tree shape</button>
+      <button id="iPoly" onclick="setView('poly')">Polygon triangulation</button>
+    </div>
+    <span class="spacer"></span>
+    <button id="enumBtn" onclick="cycleExample()">Next example ▸</button>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Visualization</h2>
+      <div class="stats">
+        <span class="stat">n = <b id="sN">3</b></span>
+        <span class="stat">Cₙ = <b id="sC">5</b></span>
+        <span class="stat">example <b id="sIdx">1</b>/<b id="sTot">5</b></span>
+        <span class="stat">string = <b id="sStr" class="mono">((()))</b></span>
+      </div>
+      <svg id="svg" viewBox="0 0 600 320" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--green)"></i> up-step "("</span>
+        <span><i class="sw" style="background:var(--red)"></i> down-step ")"</span>
+        <span><i class="sw" style="background:var(--accent)"></i> current</span>
+        <span><i class="sw" style="background:var(--purple)"></i> baseline (height 0)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Convolution: Cₙ = Σ Cᵢ · Cₙ₋₁₋ᵢ</h2>
+      <div id="conv"></div>
+      <div class="seq" id="seq"></div>
+      <h2 style="margin-top:16px;">Info</h2>
+      <div class="info" id="info">Press <span class="op">Play</span> to trace a Dyck path, or <span class="op">Step</span> through it. Toggle the interpretation to see the same n as a tree or a triangulated polygon.</div>
+    </div>
+  </div>
+
+  <div class="layout" style="margin-top:18px;">
+    <div class="card">
+      <h2>Complexity</h2>
+      <table>
+        <thead><tr><th>Method</th><th>Time</th><th>Space</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Convolution recurrence</td><td class="mono warn">O(n²)</td><td class="mono">O(n)</td><td>builds the whole table</td></tr>
+          <tr><td>Closed form (incremental)</td><td class="mono ok">O(n)</td><td class="mono">O(1)</td><td>Cₙ = Cₙ₋₁·2(2n-1)/(n+1)</td></tr>
+          <tr><td>Modular Cₙ mod p</td><td class="mono ok">O(1)*</td><td class="mono">O(n)</td><td>after O(n) factorial precompute</td></tr>
+          <tr><td>Enumerate all structures</td><td class="mono bad">O(Cₙ·n)</td><td class="mono">O(n)</td><td>exponential ~4ⁿ</td></tr>
+        </tbody>
+      </table>
+      <div class="seq" style="margin-top:10px;color:var(--muted)">First values: <span class="mono">1, 1, 2, 5, 14, 42, 132, 429, 1430, 4862</span></div>
+    </div>
+    <div class="card">
+      <h2>Operation Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== Catalan numbers =====
+  const CAT = [1, 1, 2, 5, 14, 42, 132, 429, 1430, 4862, 16796];
+
+  // ===== State =====
+  let n = 3;
+  let view = 'dyck';
+  let examples = [];      // all balanced strings of n pairs
+  let exIdx = 0;          // which example
+  let steps = [];         // animation steps for current Dyck-path trace
+  let stepI = 0;
+  let running = false;
+  let timer = null;
+
+  const $ = id => document.getElementById(id);
+
+  // generate all balanced strings of n pairs (there are C_n)
+  function genBalanced(k) {
+    const res = [];
+    (function rec(s, open, close) {
+      if (s.length === 2 * k) { res.push(s); return; }
+      if (open < k) rec(s + "(", open + 1, close);
+      if (close < open) rec(s + ")", open, close + 1);
+    })("", 0, 0);
+    return res;
+  }
+
+  function log(msg) {
+    const d = document.createElement('div');
+    d.textContent = msg;
+    $('log').prepend(d);
+  }
+
+  function setInfo(op, msg, cx) {
+    $('info').innerHTML = `<span class="op">${op}</span> — ${msg}` +
+      (cx ? ` <span class="cx">[${cx}]</span>` : '');
+  }
+
+  // build the step list for tracing one Dyck path (the current example)
+  function buildSteps() {
+    steps = [];
+    const s = examples[exIdx];
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+      h += (s[i] === '(') ? 1 : -1;
+      steps.push({ i, ch: s[i], h, below: h < 0 });
+    }
+    $('sTot').textContent = examples.length;
+    $('sIdx').textContent = exIdx + 1;
+    $('sStr').textContent = s;
+  }
+
+  // ===== Convolution panel =====
+  function renderConv(highlightI) {
+    // C_n = sum_{i=0}^{n-1} C_i * C_{n-1-i}
+    let html = `<div class="conv-row">C<sub>${n}</sub> = `;
+    let parts = [];
+    for (let i = 0; i < n; i++) {
+      const a = CAT[i], b = CAT[n - 1 - i];
+      const cls = (highlightI === i) ? 'term hot' : (highlightI > i ? 'term done' : 'term');
+      parts.push(`<span class="${cls}">C<sub>${i}</sub>·C<sub>${n-1-i}</sub></span>`);
+    }
+    html += parts.join(' + ') + `</div>`;
+    // numeric
+    let nums = [];
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      const prod = CAT[i] * CAT[n - 1 - i];
+      if (highlightI >= i) acc += prod;
+      const cls = (highlightI === i) ? 'term hot' : (highlightI > i ? 'term done' : 'term');
+      nums.push(`<span class="${cls}">${CAT[i]}·${CAT[n-1-i]}=${prod}</span>`);
+    }
+    html += `<div class="conv-row">= ${nums.join(' + ')}</div>`;
+    html += `<div class="conv-row">running sum = <b style="color:var(--orange)">${acc}</b>` +
+            (highlightI >= n - 1 ? `  →  C<sub>${n}</sub> = ${CAT[n]}` : '') + `</div>`;
+    $('conv').innerHTML = html;
+  }
+
+  function renderSeq() {
+    let parts = [];
+    for (let i = 0; i <= Math.min(n + 1, 10); i++) {
+      parts.push(i === n ? `<b>C${i}=${CAT[i]}</b>` : `C${i}=${CAT[i]}`);
+    }
+    $('seq').innerHTML = "Sequence: " + parts.join(', ');
+  }
+
+  // ===== SVG rendering per interpretation =====
+  function renderDyck(upto) {
+    const s = examples[exIdx];
+    const W = 600, H = 320, pad = 30;
+    const stepW = (W - 2 * pad) / (2 * n);
+    const unit = Math.min(40, (H - 2 * pad) / (n + 1));
+    const baseY = H - pad - 20;
+    let h = 0;
+    let pts = [[pad, baseY]];
+    let segs = [];
+    for (let i = 0; i < s.length; i++) {
+      const x0 = pad + i * stepW, x1 = pad + (i + 1) * stepW;
+      const y0 = baseY - h * unit;
+      h += (s[i] === '(') ? 1 : -1;
+      const y1 = baseY - h * unit;
+      segs.push({ x0, y0, x1, y1, ch: s[i], idx: i, below: h < 0 });
+      pts.push([x1, y1]);
+    }
+    let svg = '';
+    // baseline
+    svg += `<line x1="${pad}" y1="${baseY}" x2="${W - pad}" y2="${baseY}" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+    svg += `<text x="${pad - 6}" y="${baseY + 4}" fill="var(--muted)" font-size="11" text-anchor="end">0</text>`;
+    // segments
+    for (const sg of segs) {
+      let color = (sg.ch === '(') ? 'var(--green)' : 'var(--red)';
+      let w = 3;
+      const drawn = sg.idx < upto;
+      const isCur = sg.idx === upto - 1;
+      if (!drawn) { color = 'var(--border)'; w = 2; }
+      if (isCur) { color = 'var(--accent)'; w = 4; }
+      svg += `<line x1="${sg.x0}" y1="${sg.y0}" x2="${sg.x1}" y2="${sg.y1}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+      if (drawn) {
+        svg += `<circle cx="${sg.x1}" cy="${sg.y1}" r="${isCur ? 5 : 3}" fill="${isCur ? 'var(--accent)' : color}"/>`;
+        svg += `<text x="${(sg.x0 + sg.x1) / 2}" y="${baseY + 16}" fill="${sg.ch === '(' ? 'var(--green)' : 'var(--red)'}" font-size="12" text-anchor="middle" font-family="${'monospace'}">${sg.ch}</text>`;
+      }
+    }
+    $('svg').innerHTML = svg;
+  }
+
+  // simple deterministic binary tree shape from the balanced string (first-return decomposition)
+  function parseTree(s) {
+    // returns {l, r} or null. s is balanced.
+    if (s.length === 0) return null;
+    // first return decomposition: ( A ) B
+    let depth = 0, split = 0;
+    for (let i = 0; i < s.length; i++) {
+      depth += (s[i] === '(') ? 1 : -1;
+      if (depth === 0) { split = i; break; }
+    }
+    const A = s.slice(1, split);
+    const B = s.slice(split + 1);
+    return { l: parseTree(A), r: parseTree(B) };
+  }
+
+  function renderTree() {
+    const s = examples[exIdx];
+    const root = parseTree(s);
+    const W = 600, H = 320;
+    let svg = '';
+    let leafX = 40;
+    const dx = root ? Math.max(50, (W - 80) / Math.max(1, countNodes(root))) : 0;
+    function countNodes(t) { return t ? 1 + countNodes(t.l) + countNodes(t.r) : 0; }
+    function layout(t, depth) {
+      if (!t) return null;
+      const L = layout(t.l, depth + 1);
+      const x = leafX; leafX += dx;
+      const R = layout(t.r, depth + 1);
+      const y = 40 + depth * 50;
+      const node = { x, y, L, R };
+      return node;
+    }
+    const tree = layout(root, 0);
+    function draw(node) {
+      if (!node) return;
+      for (const c of [node.L, node.R]) {
+        if (c) svg += `<line x1="${node.x}" y1="${node.y}" x2="${c.x}" y2="${c.y}" stroke="var(--border)" stroke-width="2"/>`;
+      }
+      draw(node.L); draw(node.R);
+      svg += `<circle cx="${node.x}" cy="${node.y}" r="11" fill="var(--panel-2)" stroke="var(--accent)" stroke-width="2"/>`;
+    }
+    draw(tree);
+    if (!tree) svg += `<text x="300" y="160" fill="var(--muted)" text-anchor="middle">empty tree (n=0)</text>`;
+    svg += `<text x="300" y="305" fill="var(--muted)" font-size="12" text-anchor="middle">binary tree shape for ${s} — one of ${CAT[n]} shapes with ${n} nodes</text>`;
+    $('svg').innerHTML = svg;
+  }
+
+  function renderPoly() {
+    const sides = n + 2;
+    const W = 600, H = 320, cx = 300, cy = 150, R = 110;
+    let svg = '';
+    const pts = [];
+    for (let i = 0; i < sides; i++) {
+      const ang = -Math.PI / 2 + (2 * Math.PI * i) / sides;
+      pts.push([cx + R * Math.cos(ang), cy + R * Math.sin(ang)]);
+    }
+    // polygon edges
+    for (let i = 0; i < sides; i++) {
+      const a = pts[i], b = pts[(i + 1) % sides];
+      svg += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--purple)" stroke-width="2.5"/>`;
+    }
+    // a fan triangulation from vertex 0 (one of C_n; index chooses which diagonal set, simplified)
+    // Use exIdx to vary: ear-based triangulation derived from the tree structure for variety.
+    const tri = triangulateFromTree(parseTree(examples[exIdx]), 0, sides - 1, pts);
+    for (const d of tri) {
+      svg += `<line x1="${d[0][0]}" y1="${d[0][1]}" x2="${d[1][0]}" y2="${d[1][1]}" stroke="var(--green)" stroke-width="2"/>`;
+    }
+    for (let i = 0; i < sides; i++) {
+      svg += `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="5" fill="var(--accent)"/>`;
+      svg += `<text x="${pts[i][0]}" y="${pts[i][1] - 9}" fill="var(--muted)" font-size="11" text-anchor="middle">${i}</text>`;
+    }
+    svg += `<text x="300" y="305" fill="var(--muted)" font-size="12" text-anchor="middle">${sides}-gon triangulation — one of C${n} = ${CAT[n]} ways</text>`;
+    $('svg').innerHTML = svg;
+  }
+
+  // map a binary tree (first-return) to non-crossing diagonals of the polygon on vertices [lo..hi]
+  function triangulateFromTree(t, lo, hi, pts) {
+    // The base edge is (lo, hi). The apex is some vertex k in (lo, hi); recurse.
+    const out = [];
+    function rec(node, lo, hi) {
+      if (hi - lo < 2) return;          // edge, no triangle
+      // choose apex by left-subtree size
+      const leftSize = node && node.l ? subtreeNodes(node.l) : 0;
+      const k = lo + 1 + leftSize;
+      const apex = Math.min(Math.max(k, lo + 1), hi - 1);
+      // diagonals from the base edge endpoints to apex (skip if they are polygon edges)
+      if (apex !== lo + 1 || hi !== apex) {
+        if (!(apex === lo + 1)) out.push([pts[lo], pts[apex]]);
+        if (!(apex === hi - 1)) out.push([pts[apex], pts[hi]]);
+      }
+      rec(node ? node.l : null, lo, apex);
+      rec(node ? node.r : null, apex, hi);
+    }
+    function subtreeNodes(x) { return x ? 1 + subtreeNodes(x.l) + subtreeNodes(x.r) : 0; }
+    rec(t, lo, hi);
+    return out;
+  }
+
+  function renderView(upto) {
+    if (view === 'dyck') renderDyck(upto === undefined ? steps.length : upto);
+    else if (view === 'tree') renderTree();
+    else renderPoly();
+  }
+
+  // ===== Controls =====
+  function speedMs() { return 1100 - $('speed').value * 100; }
+
+  function start() {
+    if (view !== 'dyck') { setInfo('Note', 'Animation steps trace the Dyck path. Switch to "Dyck path" to play.'); return; }
+    if (steps.length === 0) buildSteps();
+    running = true;
+    $('startBtn').disabled = true; $('pauseBtn').disabled = false;
+    run();
+  }
+  function run() {
+    if (!running || stepI >= steps.length) { pause(); if (stepI >= steps.length) finish(); return; }
+    doStep();
+    timer = setTimeout(run, speedMs());
+  }
+  function doStep() {
+    const st = steps[stepI];
+    renderDyck(stepI + 1);
+    renderConv(-1);
+    const dir = st.ch === '(' ? 'up' : 'down';
+    setInfo(`step ${stepI + 1}`, `read "${st.ch}" → ${dir}-step, height now ${st.h}` +
+      (st.below ? ' — <span style="color:var(--red)">below baseline! (not a valid Dyck path)</span>' : ''),
+      'O(1) per step');
+    log(`step ${stepI + 1}: '${st.ch}' height=${st.h}${st.below ? ' BELOW 0' : ''}`);
+    stepI++;
+  }
+  function stepForward() {
+    if (view !== 'dyck') { setView('dyck'); }
+    if (steps.length === 0) buildSteps();
+    if (stepI < steps.length) doStep();
+    else finish();
+  }
+  function finish() {
+    setInfo('done', `path complete and never went below 0 → valid. This is example ${exIdx + 1} of C${n} = ${CAT[n]}.`, 'valid Dyck path');
+    animateConv();
+  }
+  function pause() {
+    running = false; clearTimeout(timer);
+    $('startBtn').disabled = false; $('pauseBtn').disabled = true;
+  }
+
+  // animate the convolution build at the end
+  function animateConv() {
+    let i = 0;
+    (function tick() {
+      renderConv(i);
+      if (i < n) {
+        log(`convolution term C${i}·C${n-1-i} = ${CAT[i]*CAT[n-1-i]}`);
+        i++;
+        setTimeout(tick, Math.max(180, speedMs()));
+      } else {
+        renderConv(n - 1);
+        setInfo('recurrence', `C${n} = Σ Cᵢ·C${'₍ₙ₋₁₋ᵢ₎'} = ${CAT[n]}`, 'O(n²) over the table');
+      }
+    })();
+  }
+
+  function reset() {
+    pause();
+    n = Math.max(1, Math.min(6, parseInt($('nInput').value) || 3));
+    $('nInput').value = n;
+    examples = genBalanced(n);
+    exIdx = 0;
+    stepI = 0; steps = [];
+    $('sN').textContent = n;
+    $('sC').textContent = CAT[n];
+    buildSteps();
+    renderView(0);
+    renderConv(-1);
+    renderSeq();
+    setInfo('reset', `n = ${n}, C${n} = ${CAT[n]} structures. Press Play to trace example ${exIdx + 1}.`);
+    $('log').innerHTML = '';
+    log(`reset: n=${n}, C${n}=${CAT[n]}, ${examples.length} balanced strings`);
+  }
+
+  function setView(v) {
+    view = v;
+    $('iDyck').classList.toggle('active', v === 'dyck');
+    $('iTree').classList.toggle('active', v === 'tree');
+    $('iPoly').classList.toggle('active', v === 'poly');
+    if (v === 'dyck') renderDyck(stepI === 0 ? 0 : stepI);
+    else renderView();
+    const name = v === 'dyck' ? 'Dyck path / mountain range' : v === 'tree' ? 'binary tree shape' : 'polygon triangulation';
+    setInfo('interpretation', `showing the ${name} for "${examples[exIdx]}" — all counted by C${n} = ${CAT[n]}.`);
+    log(`view → ${name}`);
+  }
+
+  function cycleExample() {
+    pause();
+    exIdx = (exIdx + 1) % examples.length;
+    stepI = 0; buildSteps();
+    renderView(view === 'dyck' ? steps.length : undefined);
+    renderConv(-1);
+    setInfo('example', `example ${exIdx + 1}/${examples.length}: "${examples[exIdx]}"`, `1 of C${n}=${CAT[n]}`);
+    log(`example → ${exIdx + 1}: ${examples[exIdx]}`);
+  }
+
+  $('nInput').addEventListener('change', reset);
+
+  // init
+  reset();
+  renderDyck(steps.length);  // show full first path initially
+</script>
+</body>
+</html>
