@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reservoir Sampling — Algorithm R</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --amber: #d29922;
+    --green: #3fb950;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --hi-keep: rgba(63, 185, 80, 0.40);
+    --hi-discard: rgba(248, 81, 73, 0.28);
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; color: #fff; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  }
+  button {
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 70px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { vertical-align: middle; }
+  .controls select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-size: 13px;
+  }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  /* stream */
+  .stream-track {
+    display: flex; align-items: center; gap: 6px;
+    min-height: 58px; padding: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; overflow-x: auto;
+  }
+  .item {
+    flex: 0 0 auto; min-width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--surface-2); font-family: var(--mono);
+    font-size: 14px; font-weight: 700; color: var(--muted);
+    transition: all 0.25s ease; position: relative;
+  }
+  .item.seen { color: var(--text); }
+  .item.fill { border-color: var(--accent); color: #fff; background: #173a5e; }
+  .item.current { border-color: var(--amber); color: #fff; box-shadow: 0 0 0 2px var(--amber) inset; transform: translateY(-4px); }
+  .item.kept { border-color: var(--green); color: #fff; background: #14361f; }
+  .item.discarded { border-color: var(--red); color: var(--muted); opacity: 0.55; }
+  .item .idx { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--muted); }
+  /* reservoir */
+  .reservoir {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px;
+  }
+  .slot {
+    width: 66px; height: 66px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border: 2px dashed var(--border); border-radius: 10px;
+    background: var(--bg); font-family: var(--mono);
+    transition: all 0.25s ease; position: relative;
+  }
+  .slot.filled { border-style: solid; border-color: var(--accent); }
+  .slot .val { font-size: 18px; font-weight: 800; color: #fff; }
+  .slot .lab { font-size: 10px; color: var(--muted); position: absolute; top: 4px; }
+  .slot.evict { border-color: var(--green); box-shadow: 0 0 0 2px var(--green) inset; animation: pop 0.4s ease; }
+  @keyframes pop { 0%{transform:scale(1);} 50%{transform:scale(1.12);} 100%{transform:scale(1);} }
+  /* probability gauge */
+  .prob-box {
+    margin-top: 14px; font-family: var(--mono); font-size: 14px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .prob-box .formula { color: var(--amber); font-weight: 700; font-size: 16px; }
+  .gauge {
+    margin-top: 10px; height: 16px; border-radius: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    overflow: hidden; position: relative;
+  }
+  .gauge .fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--accent)); transition: width 0.3s ease; }
+  .gauge .marker { position: absolute; top: -3px; width: 2px; height: 22px; background: var(--red); }
+  .verdict {
+    margin-top: 12px; font-family: var(--mono); font-size: 14px; font-weight: 700;
+    padding: 9px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg);
+  }
+  .verdict.keep { color: var(--green); border-color: var(--green); }
+  .verdict.discard { color: var(--red); border-color: var(--red); }
+  .verdict.fill { color: var(--accent); border-color: var(--accent); }
+  .verdict.pending { color: var(--muted); }
+  .verdict.done { color: var(--purple); border-color: var(--purple); }
+  /* big-O + log */
+  table.bigo { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.bigo th, table.bigo td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; }
+  table.bigo th { color: var(--accent); background: var(--surface-2); }
+  table.bigo td.mono { font-family: var(--mono); color: var(--amber); }
+  .log {
+    margin-top: 6px; max-height: 230px; overflow-y: auto;
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .log .lk { color: var(--green); }
+  .log .ld { color: var(--red); }
+  .log .lf { color: var(--accent); }
+  .narrate {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 46px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--amber); }
+  .stat-row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; font-family: var(--mono); font-size: 13px; }
+  .stat-row b { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Reservoir Sampling &mdash; Algorithm R</h1>
+  <p>A stream flows in one item at a time. Fill <b>k</b> slots, then keep the <b>i</b>-th item with probability <b>k/i</b>, evicting a uniformly random slot. When the stream ends, each item has probability <b>k/n</b> of being in the reservoir.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>k = <input type="number" id="kInput" value="3" min="1" max="8" /></label>
+    <label>n = <input type="number" id="nInput" value="10" min="1" max="20" /></label>
+    <label>speed
+      <input type="range" id="speed" min="200" max="1600" value="900" step="100" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Stream &amp; Reservoir</h2>
+      <div class="step-counter">Incoming stream (current item highlighted):</div>
+      <div class="stream-track" id="streamTrack"></div>
+
+      <div class="step-counter" style="margin-top:14px;">Reservoir &mdash; k slots:</div>
+      <div class="reservoir" id="reservoir"></div>
+
+      <div class="prob-box" id="probBox">
+        <div>Replace probability for item i: <span class="formula" id="probFormula">&mdash;</span></div>
+        <div class="gauge"><div class="fill" id="gaugeFill" style="width:0%"></div></div>
+        <div class="step-counter" style="margin-top:6px;">Green/blue bar = keep probability k/i. The red tick is where the random draw landed (left of the bar boundary &rarr; keep).</div>
+      </div>
+
+      <div class="verdict pending" id="verdict">verdict: press Step to begin</div>
+
+      <div class="stat-row">
+        <span><b>seen i</b> = <span id="statI">0</span></span>
+        <span><b>kept</b> = <span id="statKept">0</span></span>
+        <span><b>discarded</b> = <span id="statDisc">0</span></span>
+        <span><b>RNG draws</b> = <span id="statRng">0</span></span>
+      </div>
+
+      <div class="legend">
+        <span><span class="swatch" style="background:#173a5e"></span> fill phase</span>
+        <span><span class="swatch" style="background:var(--amber)"></span> current item</span>
+        <span><span class="swatch" style="background:#14361f"></span> kept</span>
+        <span><span class="swatch" style="background:var(--red)"></span> discarded</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Complexity</h2>
+      <table class="bigo">
+        <tr><th>Operation</th><th>Time</th><th>Space</th></tr>
+        <tr><td>Process one item</td><td class="mono">O(1)</td><td class="mono">&mdash;</td></tr>
+        <tr><td>Whole stream (Algo R)</td><td class="mono">O(n)</td><td class="mono">O(k)</td></tr>
+        <tr><td>RNG calls (Algo R)</td><td class="mono">O(n)</td><td class="mono">&mdash;</td></tr>
+        <tr><td>RNG calls (Algo L)</td><td class="mono">O(k&middot;log(n/k))</td><td class="mono">O(k)</td></tr>
+        <tr><td>Naive shuffle</td><td class="mono">O(n)</td><td class="mono">O(n)</td></tr>
+      </table>
+
+      <h2 style="margin-top:16px;">Operation Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">Press <b>Step</b> to advance one item. The first k items fill the reservoir; each later item is kept with probability k/i and evicts a random slot if kept.</div>
+
+  <div class="footnote">
+    Self-contained visualization. Each "keep with probability k/i" decision uses one random draw; watch the gauge shrink as i grows &mdash; later items are kept less often, but they also have fewer chances to be evicted, so every item ends with probability k/n.
+    See <code>junior.md</code> for the walkthrough and <code>professional.md</code> for the uniformity proof.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  n: 10,
+  k: 3,
+  stream: [],
+  reservoir: [],   // array of {val, srcIdx}
+  i: 0,            // number of items processed (0-based count)
+  kept: 0,
+  discarded: 0,
+  rng: 0,
+  running: false,
+  timer: null,
+  finished: false,
+  lastDecision: null  // {type, item, prob, draw, slot}
+};
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRST";
+
+function makeStream(n) {
+  const s = [];
+  for (let i = 0; i < n; i++) s.push(LETTERS[i] || ("x" + i));
+  return s;
+}
+
+// ---------- Core: one step of Algorithm R ----------
+function stepOnce() {
+  if (state.finished) return;
+  const i = state.i;            // 0-based index of the item to process now
+  if (i >= state.n) { finish(); return; }
+  const item = state.stream[i];
+
+  if (i < state.k) {
+    // fill phase
+    state.reservoir.push({ val: item, srcIdx: i });
+    state.lastDecision = { type: "fill", item, idx: i };
+    logLine("lf", "fill: slot " + i + " &larr; " + item + "  (i=" + (i + 1) + " &le; k)");
+  } else {
+    // replace phase: draw j uniform in [0, i]; keep iff j < k
+    const j = Math.floor(Math.random() * (i + 1));
+    state.rng++;
+    const prob = state.k / (i + 1);
+    if (j < state.k) {
+      const evicted = state.reservoir[j].val;
+      state.reservoir[j] = { val: item, srcIdx: i };
+      state.kept++;
+      state.lastDecision = { type: "keep", item, idx: i, prob, draw: j, slot: j, evicted };
+      logLine("lk", "i=" + (i + 1) + ": draw j=" + j + " &lt; k &rArr; KEEP " + item +
+        " &rarr; slot " + j + " (evict " + evicted + "), p=k/i=" + fmt(prob));
+    } else {
+      state.discarded++;
+      state.lastDecision = { type: "discard", item, idx: i, prob, draw: j };
+      logLine("ld", "i=" + (i + 1) + ": draw j=" + j + " &ge; k &rArr; DISCARD " + item +
+        ", p=k/i=" + fmt(prob));
+    }
+  }
+  state.i++;
+  if (state.i >= state.n) state.finished = true;
+  render();
+}
+
+function finish() {
+  state.finished = true;
+  render();
+}
+
+function fmt(p) { return (Math.round(p * 1000) / 1000).toString(); }
+
+// ---------- Logging ----------
+function logLine(cls, html) {
+  const log = document.getElementById("log");
+  const div = document.createElement("div");
+  div.className = cls;
+  div.innerHTML = html;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ---------- Rendering ----------
+function render() {
+  renderStream();
+  renderReservoir();
+  renderProb();
+  renderVerdict();
+  renderStats();
+  document.getElementById("stepInfo").textContent =
+    "step " + state.i + " / " + state.n;
+  updateButtons();
+}
+
+function renderStream() {
+  const track = document.getElementById("streamTrack");
+  track.innerHTML = "";
+  for (let idx = 0; idx < state.n; idx++) {
+    const el = document.createElement("div");
+    el.className = "item";
+    const lab = document.createElement("span");
+    lab.className = "idx";
+    lab.textContent = "i=" + (idx + 1);
+    el.appendChild(lab);
+    el.appendChild(document.createTextNode(state.stream[idx]));
+
+    const processed = idx < state.i;
+    const isCurrent = (idx === state.i - 1) && state.lastDecision;
+    if (processed) el.classList.add("seen");
+    if (idx < state.k) el.classList.add("fill");
+    if (isCurrent) {
+      el.classList.add("current");
+      if (state.lastDecision.type === "keep") el.classList.add("kept");
+      else if (state.lastDecision.type === "discard") el.classList.add("discarded");
+    }
+    track.appendChild(el);
+  }
+}
+
+function renderReservoir() {
+  const res = document.getElementById("reservoir");
+  res.innerHTML = "";
+  for (let s = 0; s < state.k; s++) {
+    const el = document.createElement("div");
+    el.className = "slot";
+    const lab = document.createElement("span");
+    lab.className = "lab";
+    lab.textContent = "R[" + s + "]";
+    el.appendChild(lab);
+    const v = document.createElement("span");
+    v.className = "val";
+    if (state.reservoir[s]) {
+      el.classList.add("filled");
+      v.textContent = state.reservoir[s].val;
+    } else {
+      v.textContent = "·";
+    }
+    el.appendChild(v);
+    // highlight the slot just written
+    if (state.lastDecision &&
+        (state.lastDecision.type === "keep" || state.lastDecision.type === "fill")) {
+      const wrote = state.lastDecision.type === "fill"
+        ? state.lastDecision.idx
+        : state.lastDecision.slot;
+      if (wrote === s) el.classList.add("evict");
+    }
+    res.appendChild(el);
+  }
+}
+
+function renderProb() {
+  const f = document.getElementById("probFormula");
+  const gauge = document.getElementById("gaugeFill");
+  const box = document.getElementById("probBox");
+  // remove any old marker
+  const old = box.querySelector(".marker");
+  if (old) old.remove();
+
+  const d = state.lastDecision;
+  if (!d || d.type === "fill") {
+    f.innerHTML = (d && d.type === "fill")
+      ? "fill phase &mdash; kept with certainty (p = 1)"
+      : "&mdash;";
+    gauge.style.width = (d && d.type === "fill") ? "100%" : "0%";
+    return;
+  }
+  const i1 = d.idx + 1; // 1-based i
+  const prob = d.prob;
+  f.innerHTML = "k/i = " + state.k + "/" + i1 + " = " + fmt(prob);
+  gauge.style.width = (prob * 100).toFixed(1) + "%";
+  // marker for the draw: j in [0, i] -> position (j+0.5)/(i+1)
+  const marker = document.createElement("div");
+  marker.className = "marker";
+  const pos = ((d.draw + 0.5) / (i1)) * 100;
+  marker.style.left = pos + "%";
+  document.querySelector(".gauge").appendChild(marker);
+}
+
+function renderVerdict() {
+  const el = document.getElementById("verdict");
+  if (state.finished && state.i >= state.n) {
+    el.className = "verdict done";
+    const items = state.reservoir.map(r => r.val).join(", ");
+    el.innerHTML = "DONE &mdash; final sample: [" + items + "].  Each of the " +
+      state.n + " items had probability k/n = " + state.k + "/" + state.n +
+      " = " + fmt(state.k / state.n) + ".";
+    return;
+  }
+  const d = state.lastDecision;
+  if (!d) { el.className = "verdict pending"; el.textContent = "verdict: press Step to begin"; return; }
+  if (d.type === "fill") {
+    el.className = "verdict fill";
+    el.innerHTML = "FILL &mdash; item " + d.item + " placed directly into slot R[" + d.idx + "] (i &le; k).";
+  } else if (d.type === "keep") {
+    el.className = "verdict keep";
+    el.innerHTML = "KEEP &mdash; draw j=" + d.draw + " &lt; k, so " + d.item +
+      " enters slot R[" + d.slot + "], evicting " + d.evicted + ".";
+  } else {
+    el.className = "verdict discard";
+    el.innerHTML = "DISCARD &mdash; draw j=" + d.draw + " &ge; k, so " + d.item + " is dropped.";
+  }
+}
+
+function renderStats() {
+  document.getElementById("statI").textContent = state.i;
+  document.getElementById("statKept").textContent = state.kept;
+  document.getElementById("statDisc").textContent = state.discarded;
+  document.getElementById("statRng").textContent = state.rng;
+}
+
+function narrate() {
+  const el = document.getElementById("narrate");
+  const d = state.lastDecision;
+  if (state.finished && state.i >= state.n) {
+    el.innerHTML = "Stream exhausted. The reservoir is a uniform random " +
+      state.k + "-subset of all " + state.n + " items. Reset or change k/n to run again.";
+    return;
+  }
+  if (!d) return;
+  if (d.type === "fill") {
+    el.innerHTML = "<b>Fill phase:</b> the first k items go straight into the reservoir &mdash; no randomness yet.";
+  } else if (d.type === "keep") {
+    el.innerHTML = "The random draw fell <b>below k</b> (probability k/i = " + fmt(d.prob) +
+      "), so item <b>" + d.item + "</b> is kept and a uniformly random slot is evicted.";
+  } else {
+    el.innerHTML = "The random draw fell <b>at or above k</b> (probability 1 &minus; k/i = " +
+      fmt(1 - d.prob) + "), so item <b>" + d.item + "</b> is discarded. Most items are discarded once i &gt; k.";
+  }
+}
+
+// ---------- Controls ----------
+function updateButtons() {
+  const atEnd = state.finished && state.i >= state.n;
+  document.getElementById("btnStep").disabled = atEnd && !state.running;
+  document.getElementById("btnRun").textContent = state.running ? "Pause &#9208;" : "Run &#9654;&#9654;";
+}
+
+function doStep() {
+  if (state.running) { stopRun(); }
+  stepOnce();
+  narrate();
+}
+
+function run() {
+  if (state.running) { stopRun(); return; }
+  if (state.finished && state.i >= state.n) rebuild();
+  state.running = true;
+  updateButtons();
+  const delay = 1800 - parseInt(document.getElementById("speed").value, 10);
+  state.timer = setInterval(() => {
+    if (state.finished && state.i >= state.n) { stopRun(); return; }
+    stepOnce();
+    narrate();
+  }, Math.max(150, delay));
+}
+
+function stopRun() {
+  if (state.timer) clearInterval(state.timer);
+  state.running = false;
+  updateButtons();
+}
+
+function rebuild() {
+  stopRun();
+  let k = parseInt(document.getElementById("kInput").value, 10);
+  let n = parseInt(document.getElementById("nInput").value, 10);
+  if (isNaN(k) || k < 1) k = 1;
+  if (isNaN(n) || n < 1) n = 1;
+  if (k > 8) k = 8;
+  if (n > 20) n = 20;
+  if (k > n) k = n;
+  document.getElementById("kInput").value = k;
+  document.getElementById("nInput").value = n;
+
+  state.k = k;
+  state.n = n;
+  state.stream = makeStream(n);
+  state.reservoir = [];
+  state.i = 0;
+  state.kept = 0;
+  state.discarded = 0;
+  state.rng = 0;
+  state.finished = false;
+  state.lastDecision = null;
+  document.getElementById("log").innerHTML = "";
+  logLine("lf", "start: k=" + k + ", n=" + n + " (stream length pretended unknown)");
+  render();
+  document.getElementById("narrate").innerHTML =
+    "Ready. Fill the first " + k + " slots, then keep item i with probability k/i.";
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnRun").addEventListener("click", run);
+document.getElementById("btnReset").addEventListener("click", rebuild);
+document.getElementById("kInput").addEventListener("change", rebuild);
+document.getElementById("nInput").addEventListener("change", rebuild);
+
+// ---------- Initial load ----------
+rebuild();
+</script>
+</body>
+</html>
