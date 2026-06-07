@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quickselect — k-th Order Statistic — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; }
+
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+  .badge {
+    padding: 5px 12px; border-radius: 20px; font-size: .8rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge.green { color: var(--green); border-color: var(--green); }
+  .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+  .badge.red { color: var(--red); border-color: var(--red); }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; width: 100%; max-width: 960px; margin-bottom: 16px;
+  }
+
+  .input-control, .controls, .speed-control { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; }
+  .input-control { margin-bottom: 14px; }
+  .controls { margin-bottom: 14px; }
+  .speed-control { margin-bottom: 14px; }
+
+  input[type="text"], input[type="number"] {
+    padding: 9px 14px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); border-radius: 8px; font-size: .95rem;
+  }
+  input[type="text"] { width: 320px; }
+  input[type="number"] { width: 90px; }
+  input:focus { outline: none; border-color: var(--blue); }
+
+  button {
+    padding: 9px 20px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: .95rem; transition: all .2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .speed-control label, .speed-control span { color: var(--muted); font-size: .9rem; }
+  .speed-control input[type="range"] { width: 140px; accent-color: var(--blue); }
+
+  .stats-bar {
+    display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+    color: var(--muted); font-size: .9rem; margin-bottom: 6px;
+  }
+  .stats-bar b { color: var(--text); }
+
+  /* Visual area */
+  .canvas {
+    display: flex; justify-content: center; align-items: flex-end; gap: 5px;
+    min-height: 280px; flex-wrap: nowrap; padding: 16px 8px; overflow-x: auto;
+  }
+  .bar { display: flex; flex-direction: column; align-items: center; transition: opacity .3s; }
+  .bar-visual {
+    width: 38px; border-radius: 5px 5px 0 0; transition: all .25s ease; position: relative;
+    background: var(--blue);
+  }
+  .bar-label { margin-top: 6px; font-size: .8rem; color: var(--muted); font-weight: 600; }
+  .bar-index { font-size: .68rem; color: #555; margin-top: 2px; }
+
+  .bar.out { opacity: .18; }            /* discarded side */
+  .bar-visual.active   { background: var(--orange); }   /* in current window */
+  .bar-visual.pivot    { background: var(--purple); box-shadow: 0 0 10px var(--purple); }
+  .bar-visual.scanning { background: var(--yellow); }
+  .bar-visual.less     { background: var(--green); }    /* moved to < region */
+  .bar-visual.found    { background: var(--green); box-shadow: 0 0 14px var(--green); }
+  .bar-visual.target   { outline: 2px dashed var(--red); outline-offset: 2px; }
+
+  /* k marker */
+  .kmark { position: relative; }
+  .kmark::after {
+    content: "k"; position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+    color: var(--red); font-weight: 700; font-size: .8rem;
+  }
+
+  .info { font-family: 'Courier New', monospace; font-size: .92rem; line-height: 1.7; min-height: 3.4em; }
+  .info .hl { color: var(--yellow); }
+  .info .cplx { color: var(--green); font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .c-green { color: var(--green); }
+  .c-yellow { color: var(--yellow); }
+  .c-red { color: var(--red); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+  .legend-color { width: 14px; height: 14px; border-radius: 3px; }
+
+  .log { max-height: 150px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: .82rem; }
+  .log div { padding: 2px 0; border-bottom: 1px solid #21262d; color: var(--muted); }
+  .log div .step { color: var(--blue); }
+  h3 { color: var(--blue); margin-bottom: 10px; font-size: 1.05rem; }
+</style>
+</head>
+<body>
+  <h1>Quickselect — k-th Order Statistic</h1>
+  <p class="subtitle">Partition around a random pivot, then recurse into only the side containing rank <b>k</b></p>
+
+  <div class="badges">
+    <span class="badge green">Best/Avg: O(n)</span>
+    <span class="badge yellow">Worst: O(n²)</span>
+    <span class="badge green">Space: O(1)</span>
+    <span class="badge red">In-place (mutates)</span>
+  </div>
+
+  <!-- Input -->
+  <div class="panel">
+    <div class="input-control">
+      <input type="text" id="customInput" placeholder="Enter numbers: 7, 2, 1, 6, 8, 5, 3">
+      <label style="color:var(--muted)">k (1-based):</label>
+      <input type="number" id="kInput" value="3" min="1">
+      <button onclick="loadCustom()">Load</button>
+      <button onclick="generateRandom()">Random</button>
+    </div>
+    <div class="controls">
+      <button id="startBtn" onclick="start()">Start</button>
+      <button id="stepBtn" onclick="stepForward()">Step</button>
+      <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+      <button id="resetBtn" onclick="reset()">Reset</button>
+    </div>
+    <div class="speed-control">
+      <label>Speed:</label><span>Slow</span>
+      <input type="range" id="speedSlider" min="1" max="10" value="6">
+      <span>Fast</span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><span class="legend-color" style="background:var(--orange)"></span>Active window</div>
+    <div class="legend-item"><span class="legend-color" style="background:var(--purple)"></span>Pivot</div>
+    <div class="legend-item"><span class="legend-color" style="background:var(--yellow)"></span>Scanning</div>
+    <div class="legend-item"><span class="legend-color" style="background:var(--green)"></span>&lt; pivot</div>
+    <div class="legend-item"><span class="legend-color" style="background:var(--bg);border:1px solid var(--border)"></span>Discarded</div>
+    <div class="legend-item"><span class="legend-color" style="border:2px dashed var(--red)"></span>Target rank k</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <span>Window: <b id="window">[0, 0]</b></span>
+    <span>Target index k: <b id="ktarget">0</b></span>
+    <span>Partitions: <b id="partitions">0</b></span>
+    <span>Comparisons: <b id="comparisons">0</b></span>
+    <span>Step: <b id="curStep">0</b>/<b id="totStep">0</b></span>
+  </div>
+
+  <!-- Canvas -->
+  <div class="panel">
+    <div class="canvas" id="canvas"></div>
+  </div>
+
+  <!-- Info panel -->
+  <div class="panel">
+    <h3>What's happening</h3>
+    <div class="info" id="info">Press <span class="hl">Start</span> to run Quickselect, or <span class="hl">Step</span> one move at a time.</div>
+  </div>
+
+  <!-- Big-O table -->
+  <div class="panel">
+    <h3>Complexity</h3>
+    <table>
+      <tr><th>Scenario</th><th>Time</th><th>Why</th></tr>
+      <tr><td>Best / Average (random pivot)</td><td class="c-green">O(n)</td><td>One-side recursion: n + n/2 + n/4 + ... = 2n</td></tr>
+      <tr><td>Worst (naive pivot)</td><td class="c-red">O(n²)</td><td>Bad pivot shaves one element per step</td></tr>
+      <tr><td>Worst (median-of-medians)</td><td class="c-green">O(n)</td><td>T(n)=T(n/5)+T(7n/10)+O(n)</td></tr>
+      <tr><td>Space (iterative)</td><td class="c-green">O(1)</td><td>In-place partition, loop instead of recursion</td></tr>
+      <tr><td>vs full sort</td><td class="c-yellow">O(n log n)</td><td>Selection asks for less → does less</td></tr>
+      <tr><td>vs heap top-k</td><td class="c-yellow">O(n log k)</td><td>Heap streams; Quickselect needs all data</td></tr>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+<script>
+  let array = [7, 2, 1, 6, 8, 5, 3];
+  let kOneBased = 3;
+  let steps = [];
+  let stepIndex = 0;
+  let running = false;
+  let timer = null;
+
+  function sleepSpeed() {
+    return 1100 - document.getElementById('speedSlider').value * 100;
+  }
+
+  // Deterministic-ish "random" pivot using a seedable generator so a Reset replays differently
+  let seed = Date.now() % 100000;
+  function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  function randInt(lo, hi) { return lo + Math.floor(rnd() * (hi - lo + 1)); }
+
+  // ===== Generate all animation steps =====
+  function generateSteps() {
+    steps = [];
+    const a = array.slice();
+    const k = kOneBased - 1; // 0-based target index
+    let comparisons = 0, partitions = 0;
+
+    function snapshot(desc, hl, lo, hi, cls) {
+      steps.push({
+        array: a.slice(),
+        highlights: Object.assign({}, hl),
+        lo, hi, k,
+        comparisons, partitions,
+        desc, cls: cls || ''
+      });
+    }
+
+    let lo = 0, hi = a.length - 1;
+
+    if (k < 0 || k >= a.length) {
+      snapshot(`Invalid k. Array has ${a.length} elements; need 1 ≤ k ≤ ${a.length}.`, {}, 0, a.length-1, 'O(1)');
+      finalize();
+      return;
+    }
+
+    snapshot(`Goal: find the <span class="hl">${kOneBased}-th smallest</span> (0-based index k=${k}). Window starts at [${lo}, ${hi}].`,
+             windowHi(lo, hi, {}), lo, hi, 'O(n)');
+
+    while (lo < hi) {
+      // pick random pivot
+      const pivotIdx = randInt(lo, hi);
+      let hl = windowHi(lo, hi, {});
+      hl[pivotIdx] = 'pivot';
+      snapshot(`Pick a <span class="hl">random pivot</span> at index ${pivotIdx} (value ${a[pivotIdx]}).`, hl, lo, hi, 'O(1)');
+
+      // move pivot to end (Lomuto)
+      [a[pivotIdx], a[hi]] = [a[hi], a[pivotIdx]];
+      hl = windowHi(lo, hi, {});
+      hl[hi] = 'pivot';
+      snapshot(`Move pivot ${a[hi]} to the end of the window.`, hl, lo, hi, 'O(1)');
+
+      const pivot = a[hi];
+      let i = lo - 1;
+      for (let j = lo; j < hi; j++) {
+        comparisons++;
+        hl = windowHi(lo, hi, {});
+        hl[hi] = 'pivot';
+        for (let t = lo; t <= i; t++) hl[t] = 'less';
+        hl[j] = 'scanning';
+        snapshot(`Compare a[${j}]=${a[j]} with pivot ${pivot}.`, hl, lo, hi, 'O(n)');
+        if (a[j] < pivot) {
+          i++;
+          [a[i], a[j]] = [a[j], a[i]];
+          hl = windowHi(lo, hi, {});
+          hl[hi] = 'pivot';
+          for (let t = lo; t <= i; t++) hl[t] = 'less';
+          snapshot(`a[${j}] &lt; pivot → swap into the &lt;-region (now size ${i - lo + 1}).`, hl, lo, hi, 'O(1)');
+        }
+      }
+      // place pivot
+      [a[i + 1], a[hi]] = [a[hi], a[i + 1]];
+      const p = i + 1;
+      partitions++;
+      hl = windowHi(lo, hi, {});
+      hl[p] = 'pivot';
+      snapshot(`Partition #${partitions} done. Pivot ${a[p]} lands at its final index <span class="hl">p=${p}</span>.`, hl, lo, hi, 'O(n)');
+
+      // compare p with k
+      if (p === k) {
+        hl = {}; hl[p] = 'found';
+        snapshot(`<span class="hl">p == k</span> → found it! The ${kOneBased}-th smallest is <span class="hl">${a[p]}</span>.`, hl, p, p, 'O(n) total');
+        finalize();
+        return;
+      } else if (k < p) {
+        hi = p - 1;
+        let h2 = windowHi(lo, hi, {});
+        snapshot(`k=${k} &lt; p=${p} → answer is on the <span class="hl">LEFT</span>. Discard the right; new window [${lo}, ${hi}].`, h2, lo, hi, 'O(n)');
+      } else {
+        lo = p + 1;
+        let h2 = windowHi(lo, hi, {});
+        snapshot(`k=${k} &gt; p=${p} → answer is on the <span class="hl">RIGHT</span>. Discard the left; new window [${lo}, ${hi}].`, h2, lo, hi, 'O(n)');
+      }
+    }
+
+    // window collapsed to one element
+    let hl = {}; hl[lo] = 'found';
+    snapshot(`Window has one element. The ${kOneBased}-th smallest is <span class="hl">${a[lo]}</span>.`, hl, lo, lo, 'O(n) total');
+    finalize();
+
+    function finalize() {
+      document.getElementById('totStep').textContent = steps.length;
+    }
+  }
+
+  // highlight all in-window bars as 'active' unless overridden
+  function windowHi(lo, hi, base) {
+    const hl = {};
+    for (let t = lo; t <= hi; t++) hl[t] = 'active';
+    return Object.assign(hl, base);
+  }
+
+  // ===== Render =====
+  function render(step) {
+    const canvas = document.getElementById('canvas');
+    const maxVal = Math.max(...step.array, 1);
+    canvas.innerHTML = step.array.map((val, idx) => {
+      const inWindow = idx >= step.lo && idx <= step.hi;
+      const cls = step.highlights[idx] || (inWindow ? 'active' : 'default');
+      const height = 40 + (val / maxVal) * 200;
+      const outClass = inWindow ? '' : 'out';
+      const targetClass = (idx === step.k) ? 'target' : '';
+      const kMark = (idx === step.k) ? 'kmark' : '';
+      return `
+        <div class="bar ${outClass} ${kMark}">
+          <div class="bar-visual ${cls} ${targetClass}" style="height:${height}px"></div>
+          <div class="bar-label">${val}</div>
+          <div class="bar-index">${idx}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('window').textContent = `[${step.lo}, ${step.hi}]`;
+    document.getElementById('ktarget').textContent = step.k;
+    document.getElementById('partitions').textContent = step.partitions;
+    document.getElementById('comparisons').textContent = step.comparisons;
+    document.getElementById('curStep').textContent = stepIndex + 1;
+    document.getElementById('info').innerHTML = step.desc +
+      (step.cls ? ` &nbsp;<span class="cplx">[${step.cls}]</span>` : '');
+  }
+
+  function addLog(step) {
+    const log = document.getElementById('log');
+    const div = document.createElement('div');
+    div.innerHTML = `<span class="step">#${stepIndex + 1}</span> ${step.desc.replace(/<[^>]+>/g, '')}`;
+    log.insertBefore(div, log.firstChild);
+  }
+
+  // ===== Controls =====
+  function ensureSteps() { if (steps.length === 0) generateSteps(); }
+
+  function start() {
+    ensureSteps();
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    run();
+  }
+  function run() {
+    if (!running || stepIndex >= steps.length) { pause(); return; }
+    render(steps[stepIndex]);
+    addLog(steps[stepIndex]);
+    stepIndex++;
+    timer = setTimeout(run, sleepSpeed());
+  }
+  function stepForward() {
+    ensureSteps();
+    if (stepIndex < steps.length) {
+      render(steps[stepIndex]);
+      addLog(steps[stepIndex]);
+      stepIndex++;
+    }
+  }
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+  }
+  function reset() {
+    pause();
+    stepIndex = 0;
+    steps = [];
+    seed = Date.now() % 100000;
+    document.getElementById('totStep').textContent = '0';
+    document.getElementById('curStep').textContent = '0';
+    document.getElementById('partitions').textContent = '0';
+    document.getElementById('comparisons').textContent = '0';
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('info').innerHTML =
+      'Press <span class="hl">Start</span> to run Quickselect, or <span class="hl">Step</span> one move at a time.';
+    renderInitial();
+  }
+  function loadCustom() {
+    const raw = document.getElementById('customInput').value;
+    const nums = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    if (nums.length > 0) array = nums;
+    const kv = parseInt(document.getElementById('kInput').value);
+    if (!isNaN(kv) && kv >= 1) kOneBased = kv;
+    if (kOneBased > array.length) { kOneBased = array.length; document.getElementById('kInput').value = kOneBased; }
+    reset();
+  }
+  function generateRandom() {
+    const size = Math.floor(rnd() * 6) + 7; // 7-12
+    array = Array.from({length: size}, () => Math.floor(rnd() * 50) + 1);
+    kOneBased = Math.floor(rnd() * size) + 1;
+    document.getElementById('customInput').value = array.join(', ');
+    document.getElementById('kInput').value = kOneBased;
+    reset();
+  }
+  function renderInitial() {
+    const canvas = document.getElementById('canvas');
+    const maxVal = Math.max(...array, 1);
+    const k = kOneBased - 1;
+    canvas.innerHTML = array.map((val, idx) => {
+      const height = 40 + (val / maxVal) * 200;
+      const targetClass = (idx === k) ? 'target' : '';
+      const kMark = (idx === k) ? 'kmark' : '';
+      return `
+        <div class="bar ${kMark}">
+          <div class="bar-visual active ${targetClass}" style="height:${height}px"></div>
+          <div class="bar-label">${val}</div>
+          <div class="bar-index">${idx}</div>
+        </div>`;
+    }).join('');
+    document.getElementById('window').textContent = `[0, ${array.length - 1}]`;
+    document.getElementById('ktarget').textContent = k;
+  }
+
+  // ===== Init =====
+  document.getElementById('customInput').value = array.join(', ');
+  document.getElementById('kInput').value = kOneBased;
+  renderInitial();
+</script>
+</body>
+</html>
