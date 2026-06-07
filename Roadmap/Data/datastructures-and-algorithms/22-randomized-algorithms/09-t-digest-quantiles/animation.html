@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>t-digest &amp; Streaming Quantiles — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); text-align:center; margin-bottom:6px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:20px;}
+  .badges{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:4px 12px; border-radius:14px; font-size:.78rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-blue{color:var(--blue); border-color:var(--blue);}
+  .b-purple{color:var(--purple); border-color:var(--purple);}
+  .b-orange{color:var(--orange); border-color:var(--orange);}
+
+  .wrap{width:100%; max-width:980px; display:flex; flex-direction:column; gap:16px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px;}
+  .panel h3{color:var(--blue); margin-bottom:12px; font-size:1rem;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  button{
+    padding:9px 18px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+  button.warn{border-color:var(--orange); color:var(--orange);}
+  button.warn:hover:not(:disabled){background:var(--orange); color:var(--bg);}
+  button.danger{border-color:var(--red); color:var(--red);}
+  button.danger:hover:not(:disabled){background:var(--red); color:var(--bg);}
+  label{color:var(--muted); font-size:.85rem;}
+  input[type=range]{accent-color:var(--blue); width:140px;}
+  input[type=number]{
+    width:90px; padding:7px 10px; background:var(--bg); color:var(--text);
+    border:1px solid var(--border); border-radius:6px;
+  }
+  select{padding:7px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px;}
+
+  .stats{display:flex; gap:24px; flex-wrap:wrap;}
+  .stat{text-align:center;}
+  .stat .v{color:var(--blue); font-size:1.2rem; font-weight:700;}
+  .stat .l{color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.04em;}
+
+  /* visualization */
+  .viz{position:relative; height:300px; background:linear-gradient(180deg,#0b0f15,#10151c);
+       border:1px solid var(--border); border-radius:10px; overflow:hidden;}
+  svg{width:100%; height:100%; display:block;}
+
+  .legend{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; font-size:.8rem; color:var(--muted);}
+  .legend .item{display:flex; align-items:center; gap:6px;}
+  .swatch{width:14px; height:14px; border-radius:3px;}
+
+  .info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7; color:var(--text);}
+  .info .hl{color:var(--yellow);}
+  .info .ok{color:var(--green);}
+
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:7px 10px; border-bottom:1px solid var(--border); text-align:left;}
+  th{color:var(--muted); font-weight:600;}
+  td .c-green{color:var(--green);} td .c-yellow{color:var(--yellow);} td .c-red{color:var(--red);}
+
+  .log{height:140px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.8rem; line-height:1.6;}
+  .log div{padding:2px 0; border-bottom:1px solid rgba(255,255,255,.04);}
+  .log .t{color:var(--muted);}
+</style>
+</head>
+<body>
+  <h1>t-digest &amp; Streaming Quantiles</h1>
+  <p class="subtitle">A stream of values forms centroids — small at the tails, large in the middle — then a quantile query interpolates.</p>
+  <div class="badges">
+    <span class="badge b-green">Add: O(log C) amortized</span>
+    <span class="badge b-blue">Query: O(C)</span>
+    <span class="badge b-purple">Memory: O(compression)</span>
+    <span class="badge b-orange">Tail-accurate p99 / p999</span>
+  </div>
+
+  <div class="wrap">
+    <!-- Controls -->
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls" style="margin-bottom:12px;">
+        <label>Distribution:</label>
+        <select id="dist">
+          <option value="normal">Normal (bell)</option>
+          <option value="lognormal" selected>Log-normal (latency-like)</option>
+          <option value="uniform">Uniform</option>
+        </select>
+        <label>Compression:</label>
+        <input type="number" id="compression" value="20" min="4" max="80">
+        <button onclick="resetAll()" class="danger">Reset</button>
+      </div>
+      <div class="controls" style="margin-bottom:12px;">
+        <button id="addOneBtn" onclick="addOne()">Add 1 value</button>
+        <button id="streamBtn" onclick="toggleStream()" class="warn">Stream</button>
+        <label>Speed:</label><span style="color:var(--muted)">slow</span>
+        <input type="range" id="speed" min="1" max="10" value="6"><span style="color:var(--muted)">fast</span>
+      </div>
+      <div class="controls">
+        <label>Query quantile q:</label>
+        <input type="range" id="q" min="0" max="100" value="99" oninput="document.getElementById('qval').textContent=(this.value/100).toFixed(2)">
+        <span id="qval" style="color:var(--blue); font-weight:700;">0.99</span>
+        <button onclick="runQuery()" class="b-blue" style="border:1px solid var(--blue);">Query quantile</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel">
+      <div class="stats">
+        <div class="stat"><div class="v" id="sN">0</div><div class="l">values (n)</div></div>
+        <div class="stat"><div class="v" id="sC">0</div><div class="l">centroids (C)</div></div>
+        <div class="stat"><div class="v" id="sMin">–</div><div class="l">min</div></div>
+        <div class="stat"><div class="v" id="sMax">–</div><div class="l">max</div></div>
+        <div class="stat"><div class="v" id="sEst">–</div><div class="l">estimate</div></div>
+        <div class="stat"><div class="v" id="sExact">–</div><div class="l">exact</div></div>
+        <div class="stat"><div class="v" id="sErr">–</div><div class="l">rel. error</div></div>
+      </div>
+    </div>
+
+    <!-- Visualization -->
+    <div class="panel">
+      <h3>Centroids along the distribution</h3>
+      <div class="viz"><svg id="svg" viewBox="0 0 960 300" preserveAspectRatio="none"></svg></div>
+      <div class="legend" style="margin-top:12px;">
+        <div class="item"><span class="swatch" style="background:var(--blue)"></span>centroid (width = value range, height = count)</div>
+        <div class="item"><span class="swatch" style="background:var(--green)"></span>just merged / added</div>
+        <div class="item"><span class="swatch" style="background:var(--orange)"></span>new centroid (tail)</div>
+        <div class="item"><span class="swatch" style="background:var(--purple)"></span>query interpolation</div>
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div class="panel">
+      <h3>What just happened</h3>
+      <div class="info" id="info">Pick a distribution and press <span class="hl">Stream</span> or <span class="hl">Add 1 value</span>. Watch centroids stay small near the tails and grow large in the middle. Then <span class="hl">Query quantile</span> to interpolate p99.</div>
+    </div>
+
+    <!-- Complexity / accuracy -->
+    <div class="panel">
+      <h3>Complexity &amp; accuracy</h3>
+      <table>
+        <tr><th>Operation</th><th>Time</th><th>Space</th><th>Notes</th></tr>
+        <tr><td>Add value (buffered)</td><td class="c-green">O(log C)</td><td>—</td><td>amortized; C = compression</td></tr>
+        <tr><td>Quantile query</td><td class="c-yellow">O(C)</td><td>—</td><td>sweep + interpolate</td></tr>
+        <tr><td>Merge two digests</td><td class="c-yellow">O(C log C)</td><td class="c-green">O(C)</td><td>concatenate, sort, re-cluster</td></tr>
+        <tr><td>Total memory</td><td>—</td><td class="c-green">O(compression)</td><td>independent of n</td></tr>
+        <tr><td>Exact (sort)</td><td class="c-red">O(n log n)</td><td class="c-red">O(n)</td><td>impossible on a stream</td></tr>
+      </table>
+      <p style="color:var(--muted); font-size:.8rem; margin-top:10px;">
+        Rank error ≈ (π/δ)·√(q(1−q)) — smallest at the tails (p99/p999), largest at the median.
+        Accuracy is empirical; GK is deterministic, KLL is randomized.
+      </p>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <h3>Operation log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+// ===================== t-digest core =====================
+let centroids = [];     // {mean, count}
+let n = 0, vmin = Infinity, vmax = -Infinity;
+let lastQuery = null;    // {q, est, lo, hi}
+let streaming = false, streamTimer = null;
+
+function compression(){ return Math.max(4, Math.min(80, +document.getElementById('compression').value || 20)); }
+
+// size limit: small near q=0 and q=1 (tails), large near q=0.5 (middle)
+function sizeLimit(q){ return 4 * n * q * (1 - q) / compression() + 1; }
+
+function addValue(x){
+  n++;
+  vmin = Math.min(vmin, x); vmax = Math.max(vmax, x);
+  if (centroids.length === 0){ centroids.push({mean:x, count:1, state:'add'}); return {idx:0, merged:false}; }
+  // nearest centroid by mean
+  let best = 0, bd = Infinity;
+  for (let i=0;i<centroids.length;i++){ const d = Math.abs(centroids[i].mean - x); if (d < bd){ bd = d; best = i; } }
+  let cum = 0; for (let i=0;i<best;i++) cum += centroids[i].count;
+  const q = (cum + centroids[best].count/2) / n;
+  if (centroids[best].count + 1 <= sizeLimit(q)){
+    const c = centroids[best];
+    c.mean = (c.mean*c.count + x)/(c.count+1); c.count++; c.state='merge';
+    return {idx:best, merged:true, q};
+  } else {
+    centroids.push({mean:x, count:1, state:'new'});
+    centroids.sort((a,b)=>a.mean-b.mean);
+    const idx = centroids.findIndex(c=>c.mean===x && c.count===1);
+    return {idx: idx<0?centroids.length-1:idx, merged:false, q};
+  }
+}
+
+function quantile(qq){
+  if (centroids.length === 0) return {est:NaN};
+  if (qq <= 0) return {est:vmin, lo:0, hi:0};
+  if (qq >= 1) return {est:vmax, lo:centroids.length-1, hi:centroids.length-1};
+  const target = qq * n; let cum = 0;
+  for (let i=0;i<centroids.length;i++){
+    const c = centroids[i]; const center = cum + c.count/2;
+    if (target <= center){
+      if (i === 0) return {est:c.mean, lo:0, hi:0};
+      const prev = centroids[i-1]; const pc = cum - prev.count/2;
+      const frac = (target - pc)/(center - pc);
+      return {est: prev.mean + frac*(c.mean - prev.mean), lo:i-1, hi:i};
+    }
+    cum += c.count;
+  }
+  return {est: centroids[centroids.length-1].mean, lo:centroids.length-1, hi:centroids.length-1};
+}
+
+// ===================== random data =====================
+function gauss(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function sample(){
+  const d = document.getElementById('dist').value;
+  if (d==='normal') return 50 + gauss()*12;
+  if (d==='uniform') return Math.random()*100;
+  // lognormal latency-like: mostly small, long right tail
+  return Math.exp(gauss()*0.6 + 2.7); // ~3..120, heavy tail
+}
+
+// store raw values for an exact comparison (capped to keep memory sane in the demo)
+let rawSample = [];
+function recordRaw(x){ rawSample.push(x); if (rawSample.length > 200000) rawSample.shift(); }
+function exactQuantile(qq){
+  if (rawSample.length === 0) return NaN;
+  const a = rawSample.slice().sort((p,q)=>p-q);
+  const idx = Math.min(a.length-1, Math.max(0, Math.round(qq*(a.length-1))));
+  return a[idx];
+}
+
+// ===================== rendering =====================
+const W = 960, H = 300, PAD = 14;
+function render(highlightIdx, highlightState){
+  const svg = document.getElementById('svg');
+  if (centroids.length === 0){ svg.innerHTML = '<text x="480" y="150" fill="#8b949e" text-anchor="middle">no data yet</text>'; return; }
+  const lo = vmin, hi = vmax || vmin+1; const range = (hi-lo)||1;
+  const maxCount = Math.max(...centroids.map(c=>c.count));
+  const xOf = v => PAD + ( (v - lo)/range ) * (W - 2*PAD);
+  let parts = [];
+
+  // baseline axis
+  parts.push(`<line x1="${PAD}" y1="${H-22}" x2="${W-PAD}" y2="${H-22}" stroke="#30363d"/>`);
+
+  // each centroid as a bar: x = mean, width ∝ value span (count/n of range), height ∝ count
+  let cum = 0;
+  for (let i=0;i<centroids.length;i++){
+    const c = centroids[i];
+    const cx = xOf(c.mean);
+    const h = 12 + (c.count/maxCount) * (H - 60);
+    const y = (H-22) - h;
+    // width: proportional to the value-range the centroid covers (visual cue of tail vs middle)
+    const span = (c.count / n) * (W - 2*PAD);
+    const w = Math.max(3, Math.min(span, 70));
+    let fill = 'var(--blue)';
+    if (i === highlightIdx){ fill = highlightState==='new' ? 'var(--orange)' : 'var(--green)'; }
+    parts.push(`<rect x="${cx-w/2}" y="${y}" width="${w}" height="${h}" rx="2" fill="${fill}" opacity="0.85"/>`);
+    cum += c.count;
+  }
+
+  // query interpolation overlay
+  if (lastQuery && !isNaN(lastQuery.est)){
+    const qx = xOf(lastQuery.est);
+    parts.push(`<line x1="${qx}" y1="20" x2="${qx}" y2="${H-22}" stroke="var(--purple)" stroke-width="2" stroke-dasharray="5,4"/>`);
+    parts.push(`<circle cx="${qx}" cy="${H-22}" r="5" fill="var(--purple)"/>`);
+    parts.push(`<text x="${Math.min(W-70,Math.max(40,qx))}" y="16" fill="var(--purple)" font-size="13" text-anchor="middle">p${(lastQuery.q*100).toFixed(1)} ≈ ${lastQuery.est.toFixed(1)}</text>`);
+    // highlight straddling centroids
+    [lastQuery.lo, lastQuery.hi].forEach(idx=>{
+      if (idx>=0 && idx<centroids.length){
+        const cx = xOf(centroids[idx].mean);
+        parts.push(`<circle cx="${cx}" cy="${H-30}" r="4" fill="var(--purple)"/>`);
+      }
+    });
+  }
+
+  // tail labels
+  parts.push(`<text x="${PAD}" y="${H-6}" fill="#8b949e" font-size="11">min ${isFinite(vmin)?vmin.toFixed(1):'–'} (left tail: small centroids)</text>`);
+  parts.push(`<text x="${W-PAD}" y="${H-6}" fill="#8b949e" font-size="11" text-anchor="end">max ${isFinite(vmax)?vmax.toFixed(1):'–'} (right tail)</text>`);
+
+  svg.innerHTML = parts.join('');
+  updateStats();
+}
+
+function updateStats(){
+  document.getElementById('sN').textContent = n;
+  document.getElementById('sC').textContent = centroids.length;
+  document.getElementById('sMin').textContent = isFinite(vmin)? vmin.toFixed(1):'–';
+  document.getElementById('sMax').textContent = isFinite(vmax)? vmax.toFixed(1):'–';
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function addLog(msg){
+  const log = document.getElementById('log');
+  const t = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  div.innerHTML = `<span class="t">${t}</span> ${msg}`;
+  log.insertBefore(div, log.firstChild);
+  while (log.children.length > 60) log.removeChild(log.lastChild);
+}
+
+// ===================== actions =====================
+function addOne(){
+  const x = sample(); recordRaw(x);
+  const r = addValue(x);
+  const tail = r.q !== undefined && (r.q < 0.1 || r.q > 0.9);
+  render(r.idx, r.merged ? 'merge' : 'new');
+  if (r.merged){
+    setInfo(`Added <span class="hl">${x.toFixed(1)}</span> → <span class="ok">merged</span> into nearest centroid (now mean ${centroids[r.idx].mean.toFixed(1)}, count ${centroids[r.idx].count}).`);
+    addLog(`add ${x.toFixed(1)} → merge (count→${centroids[r.idx].count})`);
+  } else {
+    setInfo(`Added <span class="hl">${x.toFixed(1)}</span> → started a <span style="color:var(--orange)">new centroid</span>${tail?' (near a <b>tail</b> — small size limit forces a fresh centroid)':''}.`);
+    addLog(`add ${x.toFixed(1)} → new centroid${tail?' (tail)':''}`);
+  }
+}
+
+function toggleStream(){
+  streaming = !streaming;
+  document.getElementById('streamBtn').textContent = streaming ? 'Pause' : 'Stream';
+  if (streaming) loopStream(); else clearTimeout(streamTimer);
+}
+function loopStream(){
+  if (!streaming) return;
+  // add a small batch per tick
+  for (let i=0;i<3;i++){ const x = sample(); recordRaw(x); addValue(x); }
+  render();
+  const sp = +document.getElementById('speed').value;
+  streamTimer = setTimeout(loopStream, 420 - sp*38);
+}
+
+function runQuery(){
+  if (centroids.length === 0){ setInfo('No data — add some values first.'); return; }
+  const qq = (+document.getElementById('q').value)/100;
+  const res = quantile(qq);
+  lastQuery = {q:qq, est:res.est, lo:res.lo, hi:res.hi};
+  const exact = exactQuantile(qq);
+  const err = isFinite(exact) && exact!==0 ? Math.abs(res.est-exact)/Math.abs(exact)*100 : 0;
+  document.getElementById('sEst').textContent = res.est.toFixed(2);
+  document.getElementById('sExact').textContent = isFinite(exact)? exact.toFixed(2):'–';
+  document.getElementById('sErr').textContent = err.toFixed(2)+'%';
+  render();
+  setInfo(`Query <span class="hl">p${(qq*100).toFixed(1)}</span>: target rank ${(qq*n).toFixed(0)}/${n}. Swept centroids and <span style="color:var(--purple)">interpolated</span> between two centroid centers → estimate <b>${res.est.toFixed(2)}</b> (exact ${isFinite(exact)?exact.toFixed(2):'–'}, error ${err.toFixed(2)}%).`);
+  addLog(`query p${(qq*100).toFixed(1)} → ${res.est.toFixed(2)} (exact ${isFinite(exact)?exact.toFixed(2):'–'}, err ${err.toFixed(2)}%)`);
+}
+
+function resetAll(){
+  streaming = false; clearTimeout(streamTimer);
+  document.getElementById('streamBtn').textContent = 'Stream';
+  centroids = []; n = 0; vmin = Infinity; vmax = -Infinity; lastQuery = null; rawSample = [];
+  ['sN','sC'].forEach(id=>document.getElementById(id).textContent='0');
+  ['sMin','sMax','sEst','sExact','sErr'].forEach(id=>document.getElementById(id).textContent='–');
+  render();
+  setInfo('Reset. Pick a distribution and press <span class="hl">Stream</span> or <span class="hl">Add 1 value</span>.');
+  addLog('reset');
+}
+
+// init
+render();
+addLog('ready — t-digest demo loaded');
+</script>
+</body>
+</html>
