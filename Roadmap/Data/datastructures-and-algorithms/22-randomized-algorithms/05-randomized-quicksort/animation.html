@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Randomized Quicksort — Visual Animation</title>
+<style>
+    :root {
+        --bg:      #0d1117;
+        --surface: #161b22;
+        --border:  #30363d;
+        --text:    #e6edf3;
+        --muted:   #8b949e;
+        --green:   #3fb950;
+        --yellow:  #d29922;
+        --red:     #f85149;
+        --blue:    #58a6ff;
+        --purple:  #bc8cff;
+        --orange:  #ffa657;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+    }
+    h1 { font-size: 2rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+    .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; }
+
+    .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+    .badge {
+        padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+        border: 1px solid var(--border); background: var(--surface);
+    }
+    .badge .lbl { color: var(--muted); }
+    .badge .val { color: var(--blue); }
+    .badge.worst .val { color: var(--red); }
+    .badge.exp .val { color: var(--green); }
+
+    .panel {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; padding: 18px; width: 100%; max-width: 960px; margin-bottom: 16px;
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+
+    input[type="text"] {
+        padding: 9px 14px; border: 1px solid var(--border); background: var(--bg);
+        color: var(--text); border-radius: 8px; font-size: 0.95rem; width: 320px;
+    }
+    input[type="text"]:focus { outline: none; border-color: var(--blue); }
+
+    button {
+        padding: 9px 18px; border: 1px solid var(--blue); background: transparent;
+        color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.92rem;
+        transition: all 0.2s;
+    }
+    button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.warn { border-color: var(--orange); color: var(--orange); }
+    button.warn:hover:not(:disabled) { background: var(--orange); color: var(--bg); }
+
+    .speed-control { display: flex; align-items: center; gap: 8px; }
+    .speed-control label { color: var(--muted); font-size: 0.9rem; }
+    .speed-control input[type="range"] { width: 150px; accent-color: var(--blue); }
+
+    .stats {
+        display: flex; gap: 26px; flex-wrap: wrap; justify-content: center;
+        font-size: 0.9rem;
+    }
+    .stat .num { color: var(--blue); font-weight: bold; font-size: 1.15rem; }
+    .stat .num.green { color: var(--green); }
+    .stat .lbl { color: var(--muted); }
+
+    .canvas-container {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+        padding: 24px 16px 16px; width: 100%; max-width: 960px; min-height: 320px;
+        display: flex; justify-content: center; align-items: flex-end; gap: 4px; margin-bottom: 16px;
+        position: relative; overflow: hidden;
+    }
+    .bar { display: flex; flex-direction: column; align-items: center; transition: all 0.25s ease; }
+    .bar-visual {
+        width: 36px; border-radius: 5px 5px 0 0; transition: background 0.2s, height 0.25s;
+        position: relative; display: flex; align-items: flex-start; justify-content: center;
+    }
+    .bar-label { margin-top: 6px; font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+
+    .bar-visual.default  { background: var(--blue); }
+    .bar-visual.range    { background: #2a4d6e; }      /* in current active subarray */
+    .bar-visual.pivot    { background: var(--purple); box-shadow: 0 0 12px var(--purple); }
+    .bar-visual.comparing{ background: var(--yellow); }
+    .bar-visual.swapping { background: var(--red); }
+    .bar-visual.lessregion { background: var(--green); }
+    .bar-visual.sorted   { background: var(--green); opacity: 0.55; }
+
+    .pivot-crown {
+        position: absolute; top: -18px; font-size: 0.7rem; color: var(--purple); font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+    .legend-color { width: 14px; height: 14px; border-radius: 4px; }
+
+    .info-panel h3 { color: var(--blue); margin-bottom: 8px; font-size: 1rem; }
+    .step-info { font-family: 'Courier New', monospace; font-size: 0.92rem; line-height: 1.7; color: var(--text); }
+    .step-info .hl { color: var(--yellow); }
+    .step-info .pv { color: var(--purple); font-weight: 700; }
+
+    .bigO { width: 100%; max-width: 960px; border-collapse: collapse; margin-bottom: 16px; font-size: 0.88rem; }
+    .bigO th, .bigO td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
+    .bigO th { background: var(--surface); color: var(--blue); }
+    .bigO td.green { color: var(--green); font-weight: 600; }
+    .bigO td.red { color: var(--red); font-weight: 600; }
+    .bigO td.yellow { color: var(--yellow); font-weight: 600; }
+
+    .log-panel { max-height: 180px; overflow-y: auto; }
+    .log-panel h3 { color: var(--blue); margin-bottom: 8px; font-size: 1rem; }
+    .log-entry {
+        font-family: 'Courier New', monospace; font-size: 0.82rem; padding: 2px 0;
+        color: var(--muted); border-bottom: 1px solid #21262d;
+    }
+    .log-entry .depth { color: var(--orange); }
+</style>
+</head>
+<body>
+    <h1>Randomized Quicksort</h1>
+    <p class="subtitle">Random pivot &middot; in-place partition &middot; recursion &middot; live comparison count</p>
+
+    <div class="badges">
+        <div class="badge exp"><span class="lbl">Expected:</span> <span class="val">O(n log n)</span></div>
+        <div class="badge"><span class="lbl">Best:</span> <span class="val">O(n log n)</span></div>
+        <div class="badge worst"><span class="lbl">Worst:</span> <span class="val">O(n²) (prob→0)</span></div>
+        <div class="badge"><span class="lbl">Space:</span> <span class="val">O(log n)</span></div>
+        <div class="badge"><span class="lbl">Type:</span> <span class="val">Las Vegas</span></div>
+    </div>
+
+    <div class="panel">
+        <div class="row" style="margin-bottom: 14px;">
+            <input type="text" id="customInput" placeholder="Enter numbers: 5, 3, 8, 1, 9, 2, 7">
+            <button onclick="loadCustomInput()">Load</button>
+            <button onclick="generateRandom()">Random</button>
+            <button class="warn" onclick="loadSorted()">Sorted input (defeated!)</button>
+        </div>
+        <div class="row">
+            <button id="startBtn" onclick="start()">Start</button>
+            <button id="stepBtn" onclick="stepForward()">Step</button>
+            <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+            <button onclick="reset()">Reset</button>
+            <button class="warn" onclick="reroll()">Re-roll pivots</button>
+            <div class="speed-control">
+                <label>Speed</label><span style="color:var(--muted);font-size:.8rem">slow</span>
+                <input type="range" id="speedSlider" min="1" max="10" value="6">
+                <span style="color:var(--muted);font-size:.8rem">fast</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel stats">
+        <div class="stat"><div class="num" id="stepNum">0</div><div class="lbl">step / <span id="totalSteps">0</span></div></div>
+        <div class="stat"><div class="num" id="comparisons">0</div><div class="lbl">comparisons</div></div>
+        <div class="stat"><div class="num" id="swaps">0</div><div class="lbl">swaps</div></div>
+        <div class="stat"><div class="num" id="depth">0</div><div class="lbl">recursion depth</div></div>
+        <div class="stat"><div class="num green" id="predicted">0</div><div class="lbl">≈1.39·n·log₂n (predicted)</div></div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>Unsorted</div>
+        <div class="legend-item"><div class="legend-color" style="background:#2a4d6e"></div>Active subarray</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Random pivot</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Comparing</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>Swapping</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>≤ pivot / sorted</div>
+    </div>
+
+    <div class="canvas-container" id="canvas"></div>
+
+    <div class="panel info-panel">
+        <h3>What's happening</h3>
+        <div class="step-info" id="stepInfo">
+            Press <span class="hl">Start</span> for the full animation, or <span class="hl">Step</span> to advance one move.
+            Try <span class="hl">Sorted input</span> &mdash; randomization keeps it fast (no O(n²) blow-up).
+        </div>
+    </div>
+
+    <table class="bigO">
+        <thead><tr><th>Case</th><th>Time</th><th>Why</th></tr></thead>
+        <tbody>
+            <tr><td>Best</td><td class="green">O(n log n)</td><td>balanced partitions</td></tr>
+            <tr><td>Expected (any input)</td><td class="green">O(n log n)</td><td>~1.39 n log₂ n comparisons; random pivot</td></tr>
+            <tr><td>Worst (theoretical)</td><td class="red">O(n²)</td><td>unlucky pivot streak; probability → 0</td></tr>
+            <tr><td>Space</td><td class="yellow">O(log n)</td><td>recursion stack (expected)</td></tr>
+            <tr><td>Stable</td><td class="red">No</td><td>partition can reorder equal keys</td></tr>
+            <tr><td>Correctness</td><td class="green">Always</td><td>Las Vegas: only runtime is random</td></tr>
+        </tbody>
+    </table>
+
+    <div class="panel log-panel">
+        <h3>Operation log</h3>
+        <div id="log"></div>
+    </div>
+
+<script>
+    let array = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    let steps = [];
+    let currentStepIndex = 0;
+    let isRunning = false;
+    let animationTimer = null;
+
+    // Each step: { array, highlights:{idx:class}, pivotIndex, lo, hi, description, comparisons, swaps, depth }
+
+    function generateSteps(input) {
+        steps = [];
+        const a = [...input];
+        let cmp = 0, swp = 0, maxDepth = 0;
+        const logs = [];
+
+        function snapshot(highlights, desc, pivotIndex, lo, hi, depth) {
+            steps.push({
+                array: [...a],
+                highlights: { ...highlights },
+                pivotIndex: pivotIndex,
+                lo: lo, hi: hi,
+                description: desc,
+                comparisons: cmp,
+                swaps: swp,
+                depth: maxDepth
+            });
+        }
+
+        function baseHighlights(lo, hi) {
+            const h = {};
+            for (let i = 0; i < a.length; i++) {
+                if (i >= lo && i <= hi) h[i] = 'range';
+            }
+            return h;
+        }
+
+        function quicksort(lo, hi, depth) {
+            maxDepth = Math.max(maxDepth, depth);
+            if (lo >= hi) {
+                if (lo === hi) {
+                    const h = {}; h[lo] = 'sorted';
+                    snapshot(h, `Subarray of size 1 at index ${lo} — already in place.`, -1, lo, hi, depth);
+                }
+                return;
+            }
+            // === RANDOM PIVOT ===
+            const r = lo + Math.floor(Math.random() * (hi - lo + 1));
+            const h0 = baseHighlights(lo, hi); h0[r] = 'pivot';
+            snapshot(h0, `Depth ${depth}: range [${lo}..${hi}]. <span class="pv">Randomly picked index ${r} (value ${a[r]}) as pivot.</span>`, r, lo, hi, depth);
+            // swap pivot to end
+            [a[r], a[hi]] = [a[hi], a[r]]; swp++;
+            const h1 = baseHighlights(lo, hi); h1[hi] = 'pivot'; h1[r] = 'swapping';
+            snapshot(h1, `Swap random pivot to the end (index ${hi}). Pivot value = <span class="pv">${a[hi]}</span>.`, hi, lo, hi, depth);
+
+            const pivot = a[hi];
+            let i = lo - 1;
+            for (let j = lo; j < hi; j++) {
+                cmp++;
+                const hc = baseHighlights(lo, hi);
+                hc[hi] = 'pivot'; hc[j] = 'comparing';
+                for (let k = lo; k <= i; k++) hc[k] = 'lessregion';
+                snapshot(hc, `Compare a[${j}]=${a[j]} with pivot ${pivot}. ${a[j] <= pivot ? 'a[j] ≤ pivot → belongs left.' : 'a[j] > pivot → stays right.'}`, hi, lo, hi, depth);
+                if (a[j] <= pivot) {
+                    i++;
+                    if (i !== j) {
+                        [a[i], a[j]] = [a[j], a[i]]; swp++;
+                        const hs = baseHighlights(lo, hi);
+                        hs[hi] = 'pivot'; hs[i] = 'swapping'; hs[j] = 'swapping';
+                        for (let k = lo; k <= i; k++) hs[k] = 'lessregion';
+                        snapshot(hs, `Swap a[${i}] ↔ a[${j}] to grow the ≤-pivot region.`, hi, lo, hi, depth);
+                    }
+                }
+            }
+            // place pivot
+            [a[i + 1], a[hi]] = [a[hi], a[i + 1]]; swp++;
+            const p = i + 1;
+            const hp = baseHighlights(lo, hi); hp[p] = 'sorted';
+            for (let k = lo; k < p; k++) hp[k] = 'lessregion';
+            snapshot(hp, `Place pivot ${pivot} at its <b>final position ${p}</b>. Left ≤ pivot, right > pivot.`, p, lo, hi, depth);
+
+            quicksort(lo, p - 1, depth + 1);
+            quicksort(p + 1, hi, depth + 1);
+        }
+
+        quicksort(0, a.length - 1, 1);
+
+        const finalH = {};
+        for (let i = 0; i < a.length; i++) finalH[i] = 'sorted';
+        steps.push({
+            array: [...a], highlights: finalH, pivotIndex: -1, lo: 0, hi: a.length - 1,
+            description: '<b>Sorted!</b> Output is always correct — only the path/time was random (Las Vegas).',
+            comparisons: cmp, swaps: swp, depth: maxDepth
+        });
+
+        document.getElementById('totalSteps').textContent = steps.length;
+        const n = input.length;
+        const predicted = n > 1 ? Math.round(1.39 * n * Math.log2(n)) : 0;
+        document.getElementById('predicted').textContent = predicted;
+    }
+
+    function render(step) {
+        const canvas = document.getElementById('canvas');
+        const maxVal = Math.max(...step.array, 1);
+        const barWidth = Math.max(16, Math.min(46, (canvas.clientWidth - 40) / step.array.length - 4));
+        canvas.innerHTML = step.array.map((val, i) => {
+            const height = (val / maxVal) * 250 + 6;
+            const cls = step.highlights[i] || 'default';
+            const crown = (i === step.pivotIndex) ? `<span class="pivot-crown">▼ pivot</span>` : '';
+            return `<div class="bar">
+                        <div class="bar-visual ${cls}" style="height:${height}px;width:${barWidth}px;">${crown}</div>
+                        <div class="bar-label">${val}</div>
+                    </div>`;
+        }).join('');
+
+        document.getElementById('stepNum').textContent = currentStepIndex + 1;
+        document.getElementById('comparisons').textContent = step.comparisons;
+        document.getElementById('swaps').textContent = step.swaps;
+        document.getElementById('depth').textContent = step.depth;
+        document.getElementById('stepInfo').innerHTML = step.description;
+    }
+
+    function addLog(step) {
+        const log = document.getElementById('log');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        const plain = step.description.replace(/<[^>]+>/g, '');
+        entry.innerHTML = `<span class="depth">[d${step.depth}]</span> ${plain}`;
+        log.insertBefore(entry, log.firstChild);
+    }
+
+    function getSpeed() {
+        return 1150 - document.getElementById('speedSlider').value * 110;
+    }
+
+    function start() {
+        if (steps.length === 0) generateSteps(array);
+        isRunning = true;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('pauseBtn').disabled = false;
+        runAnimation();
+    }
+
+    function runAnimation() {
+        if (!isRunning || currentStepIndex >= steps.length) { pause(); return; }
+        render(steps[currentStepIndex]);
+        addLog(steps[currentStepIndex]);
+        currentStepIndex++;
+        animationTimer = setTimeout(runAnimation, getSpeed());
+    }
+
+    function stepForward() {
+        if (steps.length === 0) generateSteps(array);
+        if (currentStepIndex < steps.length) {
+            render(steps[currentStepIndex]);
+            addLog(steps[currentStepIndex]);
+            currentStepIndex++;
+        }
+    }
+
+    function pause() {
+        isRunning = false;
+        clearTimeout(animationTimer);
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('pauseBtn').disabled = true;
+    }
+
+    function reset() {
+        pause();
+        currentStepIndex = 0;
+        steps = [];
+        document.getElementById('log').innerHTML = '';
+        document.getElementById('stepNum').textContent = '0';
+        document.getElementById('totalSteps').textContent = '0';
+        document.getElementById('comparisons').textContent = '0';
+        document.getElementById('swaps').textContent = '0';
+        document.getElementById('depth').textContent = '0';
+        const n = array.length;
+        document.getElementById('predicted').textContent = n > 1 ? Math.round(1.39 * n * Math.log2(n)) : 0;
+        document.getElementById('stepInfo').innerHTML =
+            'Press <span class="hl">Start</span> for the full animation, or <span class="hl">Step</span> to advance one move.';
+        renderInitial();
+    }
+
+    function reroll() {
+        // regenerate steps with new random pivots on the SAME array
+        reset();
+        generateSteps(array);
+        document.getElementById('stepInfo').innerHTML =
+            'Pivots <span class="hl">re-rolled</span> — same input, different random path. Output will be identical (Las Vegas).';
+    }
+
+    function loadCustomInput() {
+        const nums = document.getElementById('customInput').value
+            .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+        if (nums.length > 0) { array = nums; reset(); }
+    }
+
+    function generateRandom() {
+        const size = Math.floor(Math.random() * 8) + 7; // 7-14
+        array = Array.from({ length: size }, () => Math.floor(Math.random() * 50) + 1);
+        document.getElementById('customInput').value = array.join(', ');
+        reset();
+    }
+
+    function loadSorted() {
+        const size = 12;
+        array = Array.from({ length: size }, (_, i) => (i + 1) * 3);
+        document.getElementById('customInput').value = array.join(', ');
+        reset();
+        document.getElementById('stepInfo').innerHTML =
+            'Loaded an <span class="hl">already-sorted</span> array — the worst case for fixed-pivot Quicksort. ' +
+            'With a <span class="pv">random pivot</span>, recursion stays shallow (O(n log n)). Press Start.';
+    }
+
+    function renderInitial() {
+        const canvas = document.getElementById('canvas');
+        const maxVal = Math.max(...array, 1);
+        const barWidth = Math.max(16, Math.min(46, (canvas.clientWidth - 40) / array.length - 4));
+        canvas.innerHTML = array.map(val => {
+            const height = (val / maxVal) * 250 + 6;
+            return `<div class="bar">
+                        <div class="bar-visual default" style="height:${height}px;width:${barWidth}px;"></div>
+                        <div class="bar-label">${val}</div>
+                    </div>`;
+        }).join('');
+    }
+
+    // init
+    document.getElementById('customInput').value = array.join(', ');
+    reset();
+</script>
+</body>
+</html>
