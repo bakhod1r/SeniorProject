@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MinHash — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; }
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+  .badge {
+    padding: 4px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge.b { color: var(--blue); border-color: var(--blue); }
+  .badge.g { color: var(--green); border-color: var(--green); }
+  .badge.y { color: var(--yellow); border-color: var(--yellow); }
+  .badge.p { color: var(--purple); border-color: var(--purple); }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 16px;
+    width: 100%; max-width: 980px;
+  }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  button {
+    padding: 9px 18px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.95rem; transition: all .2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  input[type="text"], input[type="number"] {
+    padding: 8px 12px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); border-radius: 8px; font-size: 0.9rem;
+  }
+  input[type="text"] { width: 200px; }
+  input[type="number"] { width: 70px; }
+  label { color: var(--muted); font-size: 0.9rem; }
+  .speed-control { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 12px; }
+  .speed-control input[type="range"] { width: 140px; accent-color: var(--blue); }
+
+  .sets-row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  .set-box { flex: 1; min-width: 280px; }
+  .set-title { font-weight: 700; margin-bottom: 8px; }
+  .set-title.A { color: var(--blue); }
+  .set-title.B { color: var(--orange); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    padding: 5px 10px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--bg); transition: all .25s;
+  }
+  .chip.A { border-color: var(--blue); color: var(--blue); }
+  .chip.B { border-color: var(--orange); color: var(--orange); }
+  .chip.inter { background: rgba(63,185,80,.18); border-color: var(--green); color: var(--green); }
+  .chip.hashing { background: rgba(210,153,34,.22); border-color: var(--yellow); color: var(--yellow); transform: translateY(-3px); }
+  .chip.winner { background: rgba(63,185,80,.30); border-color: var(--green); color: var(--green); transform: scale(1.12); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: center; }
+  th { color: var(--muted); font-weight: 600; }
+  td.slotA { color: var(--blue); font-family: 'Courier New', monospace; }
+  td.slotB { color: var(--orange); font-family: 'Courier New', monospace; }
+  tr.curr { background: rgba(88,166,255,.12); }
+  td.match { background: rgba(63,185,80,.22); color: var(--green); font-weight: 700; }
+  td.nomatch { color: var(--muted); }
+
+  .sig-table-wrap { max-height: 260px; overflow-y: auto; }
+  .stats { display: flex; gap: 26px; flex-wrap: wrap; justify-content: center; }
+  .stat { text-align: center; }
+  .stat .label { color: var(--muted); font-size: 0.75rem; }
+  .stat .value { font-size: 1.3rem; font-weight: 700; }
+  .stat .value.est { color: var(--green); }
+  .stat .value.true { color: var(--purple); }
+  .stat .value.k { color: var(--blue); }
+
+  .info { font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.7; min-height: 48px; }
+  .info .hl { color: var(--yellow); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: 0.8rem; margin-bottom: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-color { width: 14px; height: 14px; border-radius: 4px; }
+
+  .log { font-family: 'Courier New', monospace; font-size: 0.82rem; max-height: 160px; overflow-y: auto; line-height: 1.6; }
+  .log div { color: var(--muted); }
+  .log div:last-child { color: var(--text); }
+
+  .bigo td.o1 { color: var(--green); }
+  .bigo td.on { color: var(--yellow); }
+  .bigo td.onn { color: var(--red); }
+</style>
+</head>
+<body>
+  <h1>MinHash</h1>
+  <p class="subtitle">Estimating Jaccard similarity of two sets via per-hash minimums — step by step</p>
+
+  <div class="badges">
+    <span class="badge g">Build: O(n·k)</span>
+    <span class="badge b">Compare: O(k)</span>
+    <span class="badge y">Error ≈ O(1/√k)</span>
+    <span class="badge p">P(slot match) = Jaccard</span>
+  </div>
+
+  <!-- Inputs -->
+  <div class="panel">
+    <div class="controls">
+      <label>Set A:</label>
+      <input type="text" id="inputA" value="1, 2, 3, 4, 5, 6">
+      <label>Set B:</label>
+      <input type="text" id="inputB" value="3, 4, 5, 6, 7, 8">
+      <label>k (hashes):</label>
+      <input type="number" id="inputK" value="8" min="1" max="40">
+      <button onclick="loadInput()">Load</button>
+      <button onclick="randomize()">Random</button>
+    </div>
+    <div class="controls" style="margin-top:12px;">
+      <button id="startBtn" onclick="start()">Run</button>
+      <button id="stepBtn" onclick="stepForward()">Step</button>
+      <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+      <button id="resetBtn" onclick="reset()">Reset</button>
+    </div>
+    <div class="speed-control">
+      <label>Speed:</label><span class="badge">Slow</span>
+      <input type="range" id="speed" min="1" max="10" value="6">
+      <span class="badge">Fast</span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>Set A</div>
+    <div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>Set B</div>
+    <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Intersection / slot win / match</div>
+    <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Currently hashing</div>
+  </div>
+
+  <!-- Sets -->
+  <div class="panel">
+    <div class="sets-row">
+      <div class="set-box">
+        <div class="set-title A">Set A</div>
+        <div class="chips" id="chipsA"></div>
+      </div>
+      <div class="set-box">
+        <div class="set-title B">Set B</div>
+        <div class="chips" id="chipsB"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="panel stats">
+    <div class="stat"><div class="label">k (signature length)</div><div class="value k" id="statK">8</div></div>
+    <div class="stat"><div class="label">Slots filled</div><div class="value" id="statFilled">0 / 8</div></div>
+    <div class="stat"><div class="label">Matching slots</div><div class="value" id="statMatch">0</div></div>
+    <div class="stat"><div class="label">Estimated Jaccard</div><div class="value est" id="statEst">—</div></div>
+    <div class="stat"><div class="label">True Jaccard</div><div class="value true" id="statTrue">—</div></div>
+  </div>
+
+  <!-- Signature table -->
+  <div class="panel">
+    <div class="sig-table-wrap">
+      <table>
+        <thead>
+          <tr><th>hash i</th><th>h(x) = (a·x + b) mod p</th><th>min over A = sig A[i]</th><th>min over B = sig B[i]</th><th>match?</th></tr>
+        </thead>
+        <tbody id="sigBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Info -->
+  <div class="panel">
+    <div class="info" id="info">Press <span class="hl">Run</span> to build both signatures one hash at a time, or <span class="hl">Step</span> to advance manually. Each row is one hash function; a green "match" means that slot collided — and the fraction of matches estimates the Jaccard.</div>
+  </div>
+
+  <!-- Big-O -->
+  <div class="panel">
+    <table class="bigo">
+      <thead><tr><th>Operation</th><th>Time</th><th>Space</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Exact Jaccard</td><td class="on">O(|A|+|B|)</td><td class="on">O(|A|+|B|)</td><td>store + intersect both sets</td></tr>
+        <tr><td>Build signature</td><td class="on">O(n·k)</td><td class="o1">O(k)</td><td>hash n elements with k functions</td></tr>
+        <tr><td>Compare signatures</td><td class="o1">O(k)</td><td class="o1">O(1)</td><td>independent of set size</td></tr>
+        <tr><td>All-pairs (no LSH)</td><td class="onn">O(N²·k)</td><td class="on">O(N·k)</td><td>fix with LSH banding</td></tr>
+        <tr><td>Estimation error</td><td class="o1">O(1/√k)</td><td>—</td><td>quadruple k → halve error</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <div style="color:var(--muted);font-size:0.8rem;margin-bottom:6px;">Operation Log</div>
+    <div class="log" id="log"></div>
+  </div>
+
+<script>
+  const PRIME = 2147483647; // 2^31 - 1, prime
+  let setA = [1,2,3,4,5,6], setB = [3,4,5,6,7,8];
+  let k = 8;
+  let hashes = [];          // [{a,b}]
+  let sigA = [], sigB = [];
+  let stepIndex = 0;        // which hash we are on
+  let matchCount = 0;
+  let running = false, timer = null;
+
+  function rng(seed){ let r = (seed|1)>>>0; return ()=>{ r^=r<<13; r^=r>>>17; r^=r<<5; return (r>>>0); }; }
+
+  function genHashes(kk, seed){
+    const next = rng(seed);
+    const hs = [];
+    for(let i=0;i<kk;i++){
+      hs.push({ a: (next() % (PRIME-1)) + 1, b: next() % PRIME });
+    }
+    return hs;
+  }
+
+  function hv(h, x){ return ((h.a * x) % PRIME + h.b) % PRIME; }
+
+  function minOver(h, arr){
+    let m = Infinity, winner = null;
+    for(const x of arr){ const v = hv(h,x); if(v<m){ m=v; winner=x; } }
+    return {m, winner};
+  }
+
+  function exactJaccard(a,b){
+    const sa=new Set(a), sb=new Set(b);
+    if(sa.size===0 && sb.size===0) return 1;
+    let inter=0; const uni=new Set([...sa,...sb]);
+    for(const x of sa) if(sb.has(x)) inter++;
+    return inter/uni.size;
+  }
+
+  function intersection(a,b){ const sb=new Set(b); return new Set(a.filter(x=>sb.has(x))); }
+
+  // ---- rendering ----
+  function renderChips(highlightX, winA, winB){
+    const inter = intersection(setA, setB);
+    const draw = (arr, cls, host) => {
+      host.innerHTML = arr.map(x=>{
+        let c = cls;
+        if(inter.has(x)) c += ' inter';
+        if(x===highlightX) c += ' hashing';
+        if((cls==='A' && x===winA) || (cls==='B' && x===winB)) c += ' winner';
+        return `<div class="chip ${c}">${x}</div>`;
+      }).join('');
+    };
+    draw(setA,'A',document.getElementById('chipsA'));
+    draw(setB,'B',document.getElementById('chipsB'));
+  }
+
+  function renderTable(){
+    const body = document.getElementById('sigBody');
+    let html='';
+    for(let i=0;i<k;i++){
+      const filled = i < stepIndex;
+      const curr = i === stepIndex ? 'curr' : '';
+      const aTxt = filled ? sigA[i] : '·';
+      const bTxt = filled ? sigB[i] : '·';
+      let matchCell = '<td class="nomatch">—</td>';
+      if(filled){
+        matchCell = sigA[i]===sigB[i] ? '<td class="match">YES</td>' : '<td class="nomatch">no</td>';
+      }
+      const formula = `(${hashes[i].a}·x + ${hashes[i].b}) mod p`;
+      html += `<tr class="${curr}"><td>${i}</td><td style="font-family:'Courier New',monospace;font-size:0.78rem;color:var(--muted)">${formula}</td><td class="slotA">${aTxt}</td><td class="slotB">${bTxt}</td>${matchCell}</tr>`;
+    }
+    body.innerHTML = html;
+  }
+
+  function updateStats(){
+    document.getElementById('statK').textContent = k;
+    document.getElementById('statFilled').textContent = `${stepIndex} / ${k}`;
+    document.getElementById('statMatch').textContent = matchCount;
+    document.getElementById('statTrue').textContent = exactJaccard(setA,setB).toFixed(3);
+    document.getElementById('statEst').textContent = stepIndex>0 ? (matchCount/stepIndex).toFixed(3) : '—';
+  }
+
+  function setInfo(html){ document.getElementById('info').innerHTML = html; }
+  function addLog(msg){
+    const log = document.getElementById('log');
+    const d = document.createElement('div'); d.textContent = msg;
+    log.appendChild(d); log.scrollTop = log.scrollHeight;
+  }
+
+  function prepare(){
+    hashes = genHashes(k, 0x9e3779b9 ^ (k*2654435761));
+    sigA = new Array(k).fill(null);
+    sigB = new Array(k).fill(null);
+    stepIndex = 0; matchCount = 0;
+  }
+
+  function reset(){
+    pause();
+    setA = parseSet(document.getElementById('inputA').value, setA);
+    setB = parseSet(document.getElementById('inputB').value, setB);
+    k = Math.max(1, Math.min(40, parseInt(document.getElementById('inputK').value)||8));
+    prepare();
+    document.getElementById('log').innerHTML='';
+    renderChips(null,null,null);
+    renderTable();
+    updateStats();
+    setInfo('Press <span class="hl">Run</span> to build both signatures one hash at a time, or <span class="hl">Step</span>. Green chips are the intersection A∩B; a slot matches when both sets pick the same minimum.');
+  }
+
+  function parseSet(str, fallback){
+    const nums = str.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+    const uniq = [...new Set(nums)];
+    return uniq.length ? uniq : fallback;
+  }
+
+  function loadInput(){ reset(); }
+
+  function randomize(){
+    const mk = () => { const n = 5+Math.floor(Math.random()*4); const s=new Set(); while(s.size<n) s.add(1+Math.floor(Math.random()*12)); return [...s]; };
+    setA = mk(); setB = mk();
+    document.getElementById('inputA').value = setA.join(', ');
+    document.getElementById('inputB').value = setB.join(', ');
+    reset();
+  }
+
+  // ---- one step: process hash function `stepIndex` ----
+  function doStep(){
+    if(stepIndex >= k){ return false; }
+    const h = hashes[stepIndex];
+    const ra = minOver(h, setA);
+    const rb = minOver(h, setB);
+    sigA[stepIndex] = ra.m;
+    sigB[stepIndex] = rb.m;
+    const isMatch = ra.m === rb.m;
+    if(isMatch) matchCount++;
+    renderChips(null, ra.winner, rb.winner);
+    stepIndex++;
+    renderTable();
+    updateStats();
+    const matchTxt = isMatch
+      ? `<span style="color:var(--green)">MATCH</span> — both sets' minimum is ${ra.m} (winner element ${ra.winner===rb.winner?ra.winner:ra.winner+' / '+rb.winner}); this slot is a collision`
+      : `<span style="color:var(--red)">no match</span> — A's min ${ra.m} (elem ${ra.winner}) vs B's min ${rb.m} (elem ${rb.winner})`;
+    setInfo(`Hash <span class="hl">#${stepIndex-1}</span>: take the minimum of h over each set. ${matchTxt}. Running estimate = ${matchCount}/${stepIndex} = <span class="hl">${(matchCount/stepIndex).toFixed(3)}</span> (true = ${exactJaccard(setA,setB).toFixed(3)}).`);
+    addLog(`hash#${stepIndex-1}: minA=${ra.m} minB=${rb.m} -> ${isMatch?'MATCH':'no'}  est=${(matchCount/stepIndex).toFixed(3)}`);
+    if(stepIndex >= k){
+      addLog(`done: ${matchCount}/${k} slots match -> estimate ${(matchCount/k).toFixed(3)}, true ${exactJaccard(setA,setB).toFixed(3)}`);
+      setInfo(`Signatures complete. <span class="hl">${matchCount}</span> of ${k} slots matched → estimate <span style="color:var(--green)">${(matchCount/k).toFixed(3)}</span> vs true Jaccard <span style="color:var(--purple)">${exactJaccard(setA,setB).toFixed(3)}</span>. Increase k for a tighter estimate (error ≈ 1/√k).`);
+    }
+    return true;
+  }
+
+  function stepForward(){ if(running) return; if(stepIndex>=k) return; doStep(); }
+
+  function speedMs(){ return 1100 - document.getElementById('speed').value*100; }
+
+  function start(){
+    if(stepIndex>=k) prepare();
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    document.getElementById('stepBtn').disabled = true;
+    runLoop();
+  }
+  function runLoop(){
+    if(!running || stepIndex>=k){ pause(); return; }
+    doStep();
+    timer = setTimeout(runLoop, speedMs());
+  }
+  function pause(){
+    running = false; clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('stepBtn').disabled = false;
+  }
+
+  // init
+  reset();
+</script>
+</body>
+</html>
