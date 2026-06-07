@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Locality-Sensitive Hashing — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; padding: 18px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 1.8rem; color: var(--blue); margin-bottom: 4px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 14px; text-align: center; font-size: .92rem; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+  .badge { padding: 4px 11px; border-radius: 999px; font-size: .75rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface); }
+  .badge.b { color: var(--blue); border-color: var(--blue); }
+  .badge.g { color: var(--green); border-color: var(--green); }
+  .badge.y { color: var(--yellow); border-color: var(--yellow); }
+  .badge.p { color: var(--purple); border-color: var(--purple); }
+
+  .layout { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    width: 100%; max-width: 1180px; }
+  .col { display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 340px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; }
+  .panel h3 { color: var(--blue); font-size: 1rem; margin-bottom: 10px; }
+
+  .controls { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  button { padding: 8px 15px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: .9rem; transition: all .2s; }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.alt { border-color: var(--purple); color: var(--purple); }
+  button.alt:hover:not(:disabled) { background: var(--purple); color: var(--bg); }
+
+  .slider-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .slider-row label { color: var(--muted); font-size: .85rem; min-width: 150px; }
+  input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--blue); }
+  .val { color: var(--yellow); font-weight: 700; min-width: 40px; text-align: right; font-family: 'Courier New', monospace; }
+
+  svg { width: 100%; height: auto; display: block; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px; }
+
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+  .stat { text-align: center; }
+  .stat .k { color: var(--muted); font-size: .72rem; }
+  .stat .v { color: var(--blue); font-size: 1.15rem; font-weight: 700; font-family: 'Courier New', monospace; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.o1 { color: var(--green); } td.on { color: var(--yellow); } td.bad { color: var(--red); }
+  code { font-family: 'Courier New', monospace; color: var(--orange); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 10px; font-size: .78rem; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; }
+
+  .info { font-family: 'Courier New', monospace; font-size: .85rem; line-height: 1.7; min-height: 48px; }
+  .info .hl { color: var(--yellow); }
+  .info .ok { color: var(--green); }
+  .log { font-family: 'Courier New', monospace; font-size: .78rem; color: var(--muted);
+    max-height: 150px; overflow-y: auto; line-height: 1.6; }
+  .log div { border-bottom: 1px solid #21262d; padding: 2px 0; }
+</style>
+</head>
+<body>
+  <h1>Locality-Sensitive Hashing</h1>
+  <p class="subtitle">Similar points collide into the same bucket — banding tunes the recall / precision S-curve — a query finds candidates without scanning everything</p>
+  <div class="badges">
+    <span class="badge b">Query ~ O(N^&rho;), &rho;&lt;1</span>
+    <span class="badge g">Build O(N&middot;b&middot;r&middot;d)</span>
+    <span class="badge y">Approximate NN</span>
+    <span class="badge p">S-curve 1-(1-p^r)^b</span>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: points + buckets -->
+    <div class="col">
+      <div class="panel">
+        <h3>Points hashed by random hyperplanes (2-D)</h3>
+        <svg id="space" viewBox="0 0 400 360"></svg>
+        <div class="legend">
+          <div class="legend-item"><span class="dot" style="background:var(--blue)"></span>stored point</div>
+          <div class="legend-item"><span class="dot" style="background:var(--orange)"></span>query</div>
+          <div class="legend-item"><span class="dot" style="background:var(--green)"></span>candidate (same bucket)</div>
+          <div class="legend-item"><span class="dot" style="background:var(--red)"></span>nearest neighbor</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Buckets (band signatures)</h3>
+        <svg id="buckets" viewBox="0 0 400 200"></svg>
+        <div class="stats">
+          <div class="stat"><div class="k">candidates</div><div class="v" id="sCand">0</div></div>
+          <div class="stat"><div class="k">scanned / N</div><div class="v" id="sScan">0</div></div>
+          <div class="stat"><div class="k">recall@1</div><div class="v" id="sRecall">-</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: controls + S-curve + tables -->
+    <div class="col">
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="controls">
+          <button id="btnHash" onclick="doHash()">Hash all points</button>
+          <button id="btnQuery" class="alt" onclick="doQuery()">Run query</button>
+          <button onclick="newData()">New random data</button>
+          <button onclick="reset()">Reset</button>
+        </div>
+        <div class="slider-row">
+          <label>bands b (OR)</label>
+          <input type="range" id="sb" min="1" max="8" value="4" oninput="onParam()">
+          <span class="val" id="vb">4</span>
+        </div>
+        <div class="slider-row">
+          <label>rows r per band (AND)</label>
+          <input type="range" id="sr" min="1" max="8" value="3" oninput="onParam()">
+          <span class="val" id="vr">3</span>
+        </div>
+        <div class="slider-row">
+          <label>points N</label>
+          <input type="range" id="sn" min="6" max="40" value="18" oninput="newData()">
+          <span class="val" id="vn">18</span>
+        </div>
+        <div class="slider-row">
+          <label>speed</label>
+          <input type="range" id="sspeed" min="1" max="10" value="6">
+          <span class="val">&nbsp;</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>S-curve &nbsp; P[candidate] = 1 - (1 - p^r)^b</h3>
+        <svg id="scurve" viewBox="0 0 400 220"></svg>
+        <div class="stats">
+          <div class="stat"><div class="k">k = b&middot;r</div><div class="v" id="sK">12</div></div>
+          <div class="stat"><div class="k">threshold s* &asymp; (1/b)^(1/r)</div><div class="v" id="sStar">0.79</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Last operation</h3>
+        <div class="info" id="info">Press <span class="hl">Hash all points</span> to bucket every point, then <span class="hl">Run query</span> to find candidates.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Cost</th><th>Note</th></tr>
+          <tr><td>Brute-force NN</td><td class="on">O(N&middot;d)</td><td>scan everything</td></tr>
+          <tr><td>Build signature</td><td class="o1">O(b&middot;r&middot;d)</td><td>b&middot;r dot products</td></tr>
+          <tr><td>Insert (b tables)</td><td class="o1">O(b&middot;r&middot;d)</td><td>hash into bands</td></tr>
+          <tr><td>Query (typical)</td><td class="o1">O(N^&rho; + cand&middot;d)</td><td>sublinear, &rho;&lt;1</td></tr>
+          <tr><td>Space</td><td class="on">O(N^(1+&rho;))</td><td>L tables</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===================== state =====================
+let pts = [];            // {x,y,id, sig:[bandKey...], cand:false, nn:false}
+let query = null;        // {x,y, sig:[]}
+let planes = [];         // k random {nx,ny}
+let busy = false;
+
+function speedMs(){ return 1100 - document.getElementById('sspeed').value * 100; }
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function $(id){ return document.getElementById(id); }
+function B(){ return +$('sb').value; }
+function R(){ return +$('sr').value; }
+function N(){ return +$('sn').value; }
+
+function logMsg(m){
+  const l = $('log');
+  const d = document.createElement('div');
+  d.innerHTML = m;
+  l.prepend(d);
+}
+function setInfo(html){ $('info').innerHTML = html; }
+
+// ===================== random data =====================
+function rand(a,b){ return a + Math.random()*(b-a); }
+
+function makePlanes(){
+  const k = B()*R();
+  planes = [];
+  for (let i=0;i<k;i++){
+    const a = rand(0, Math.PI*2);
+    planes.push({nx: Math.cos(a), ny: Math.sin(a)});
+  }
+}
+
+function newData(){
+  if (busy) return;
+  $('vn').textContent = N();
+  pts = [];
+  // make a few clusters so "near points collide" is visible
+  const clusters = 3 + Math.floor(Math.random()*2);
+  const centers = [];
+  for (let c=0;c<clusters;c++) centers.push({x: rand(60,340), y: rand(60,300)});
+  for (let i=0;i<N();i++){
+    const c = centers[i % clusters];
+    pts.push({x: c.x + rand(-35,35), y: c.y + rand(-35,35), id:i, sig:[], cand:false, nn:false});
+  }
+  query = null;
+  makePlanes();
+  onParam(false);
+  renderSpace(); renderBuckets(); drawSCurve();
+  $('sCand').textContent='0'; $('sScan').textContent='0'; $('sRecall').textContent='-';
+  setInfo('New random data generated. Press <span class="hl">Hash all points</span>.');
+  logMsg('Generated N='+N()+' points in '+clusters+' clusters.');
+}
+
+// ===================== hashing =====================
+// signature of a point: one band-key per band, each band-key = r bits packed
+function signature(p){
+  const b=B(), r=R();
+  const sig=[];
+  for (let band=0; band<b; band++){
+    let key=0;
+    for (let row=0; row<r; row++){
+      const pl = planes[band*r+row];
+      const dot = p.x*pl.nx + p.y*pl.ny;
+      key = (key<<1) | (dot>=0 ? 1 : 0);
+    }
+    sig.push(band+'#'+key);  // namespace per band
+  }
+  return sig;
+}
+
+async function doHash(){
+  if (busy) return;
+  busy=true; lockBtns(true);
+  makePlanes();
+  for (const p of pts){
+    p.sig = signature(p);
+    p.cand=false; p.nn=false;
+  }
+  // animate filling buckets one by one
+  buckets = buildBuckets();
+  renderSpace();
+  let shown=0;
+  for (const p of pts){
+    shown++;
+    setInfo('Hashing point <span class="hl">#'+p.id+'</span> &rarr; band keys '+p.sig.map(s=>s.split('#')[1]).join(', '));
+    renderBucketsPartial(shown);
+    await sleep(speedMs()/1.5);
+  }
+  renderBuckets();
+  setInfo('All <span class="ok">'+pts.length+'</span> points hashed into '+countNonEmpty()+' buckets across '+B()+' bands. Near points now share buckets. Press <span class="hl">Run query</span>.');
+  logMsg('Hashed all points: b='+B()+', r='+R()+', k='+(B()*R())+'.');
+  busy=false; lockBtns(false);
+}
+
+let buckets = {};
+function buildBuckets(){
+  const m={};
+  for (const p of pts){
+    for (const key of p.sig){
+      (m[key] = m[key] || []).push(p.id);
+    }
+  }
+  return m;
+}
+function countNonEmpty(){ return Object.keys(buckets).length; }
+
+// ===================== query =====================
+function cosineDist(a,b){ // here just euclidean for the 2-D picture
+  return Math.hypot(a.x-b.x, a.y-b.y);
+}
+
+async function doQuery(){
+  if (busy) return;
+  if (pts.length===0 || Object.keys(buckets).length===0){
+    setInfo('Hash the points first.'); return;
+  }
+  busy=true; lockBtns(true);
+  // a query near one cluster
+  const anchor = pts[Math.floor(Math.random()*pts.length)];
+  query = {x: anchor.x + rand(-25,25), y: anchor.y + rand(-25,25), sig:[]};
+  query.sig = signature(query);
+  for (const p of pts){ p.cand=false; p.nn=false; }
+
+  // true nearest (brute force, for recall measurement)
+  let trueNN=-1, best=1e9;
+  for (const p of pts){ const d=cosineDist(query,p); if(d<best){best=d;trueNN=p.id;} }
+
+  setInfo('Query hashed &rarr; band keys '+query.sig.map(s=>s.split('#')[1]).join(', ')+'. Gathering candidates (OR across bands)...');
+  renderSpace(); renderBuckets();
+  await sleep(speedMs());
+
+  // OR across bands
+  const candSet = new Set();
+  for (const key of query.sig){
+    for (const id of (buckets[key]||[])){ candSet.add(id); }
+  }
+  for (const p of pts){ p.cand = candSet.has(p.id); }
+  renderSpace(); renderBuckets();
+  await sleep(speedMs());
+
+  // re-rank candidates exactly
+  let bestCand=-1, bd=1e9;
+  for (const p of pts){ if(p.cand){ const d=cosineDist(query,p); if(d<bd){bd=d;bestCand=p.id;} } }
+  if (bestCand>=0){ pts[bestCand].nn=true; }
+  renderSpace();
+
+  const cand = candSet.size;
+  $('sCand').textContent = cand;
+  $('sScan').textContent = cand + '/' + pts.length;
+  const found = (bestCand === trueNN);
+  $('sRecall').textContent = found ? '1.0' : '0.0';
+  $('sRecall').style.color = found ? 'var(--green)' : 'var(--red)';
+
+  if (found){
+    setInfo('<span class="ok">Found the true nearest neighbor</span> (#'+trueNN+') by scanning only <span class="hl">'+cand+'/'+pts.length+'</span> points. Recall@1 = 1.0.');
+  } else {
+    setInfo('Returned candidate #'+bestCand+' but true NN is #'+trueNN+' &mdash; <span style="color:var(--red)">missed</span>. Raise <span class="hl">b</span> (more bands) for higher recall.');
+  }
+  logMsg('Query: '+cand+' candidates, recall@1 = '+(found?'1.0':'0.0')+'.');
+  busy=false; lockBtns(false);
+}
+
+// ===================== rendering: space =====================
+function renderSpace(){
+  const svg=$('space');
+  let s='';
+  // draw a couple of hyperplanes through center for intuition
+  const cx=200, cy=180;
+  for (let i=0;i<Math.min(3, planes.length);i++){
+    const pl=planes[i];
+    // line perpendicular to normal (nx,ny): direction (-ny,nx)
+    const dx=-pl.ny*260, dy=pl.nx*260;
+    s+=`<line x1="${cx-dx}" y1="${cy-dy}" x2="${cx+dx}" y2="${cy+dy}" stroke="#21262d" stroke-width="1" stroke-dasharray="4 4"/>`;
+  }
+  for (const p of pts){
+    let fill='var(--blue)', rad=6;
+    if (p.cand) { fill='var(--green)'; rad=7; }
+    if (p.nn) { fill='var(--red)'; rad=8.5; }
+    s+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${rad}" fill="${fill}" stroke="#0d1117" stroke-width="1.5"/>`;
+    s+=`<text x="${p.x.toFixed(1)}" y="${(p.y-9).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="middle">${p.id}</text>`;
+  }
+  if (query){
+    s+=`<circle cx="${query.x.toFixed(1)}" cy="${query.y.toFixed(1)}" r="9" fill="none" stroke="var(--orange)" stroke-width="2.5"/>`;
+    s+=`<circle cx="${query.x.toFixed(1)}" cy="${query.y.toFixed(1)}" r="3.5" fill="var(--orange)"/>`;
+    s+=`<text x="${query.x.toFixed(1)}" y="${(query.y-13).toFixed(1)}" fill="var(--orange)" font-size="9" text-anchor="middle" font-weight="bold">Q</text>`;
+  }
+  svg.innerHTML=s;
+}
+
+// ===================== rendering: buckets =====================
+function renderBuckets(){ renderBucketsPartial(pts.length); }
+function renderBucketsPartial(limit){
+  const svg=$('buckets');
+  // group point ids (first `limit` points) by their band-0 key, for a clean column view
+  const groups={};
+  let count=0;
+  for (const p of pts){
+    if (count++>=limit) break;
+    const key = (p.sig[0]||'?').split('#')[1];
+    (groups[key]=groups[key]||[]).push(p);
+  }
+  const keys=Object.keys(groups).sort();
+  const colW = 400/Math.max(keys.length,1);
+  const qKey = query ? (query.sig[0]||'?').split('#')[1] : null;
+  let s='';
+  keys.forEach((k,ci)=>{
+    const x=ci*colW+4;
+    const isQ = (k===qKey);
+    s+=`<rect x="${x}" y="6" width="${colW-8}" height="188" rx="6" fill="${isQ?'rgba(255,166,87,.10)':'var(--surface)'}" stroke="${isQ?'var(--orange)':'var(--border)'}" stroke-width="${isQ?2:1}"/>`;
+    s+=`<text x="${x+(colW-8)/2}" y="22" fill="${isQ?'var(--orange)':'var(--muted)'}" font-size="9" text-anchor="middle" font-weight="bold">band0=${k}</text>`;
+    groups[k].forEach((p,pi)=>{
+      const py=34+pi*20;
+      if (py>180) return;
+      let fill='var(--blue)';
+      if (p.cand) fill='var(--green)';
+      if (p.nn) fill='var(--red)';
+      s+=`<circle cx="${x+14}" cy="${py}" r="6" fill="${fill}"/>`;
+      s+=`<text x="${x+26}" y="${py+3}" fill="var(--text)" font-size="9">#${p.id}</text>`;
+    });
+  });
+  if (keys.length===0) s='<text x="200" y="100" fill="var(--muted)" font-size="11" text-anchor="middle">no buckets yet</text>';
+  svg.innerHTML=s;
+}
+
+// ===================== S-curve =====================
+function drawSCurve(){
+  const b=B(), r=R();
+  $('sK').textContent = b*r;
+  const star = Math.pow(1/b, 1/r);
+  $('sStar').textContent = star.toFixed(2);
+  const svg=$('scurve');
+  const W=400,H=220, padL=38, padB=28, padT=10, padR=10;
+  const plotW=W-padL-padR, plotH=H-padB-padT;
+  const X = p => padL + p*plotW;
+  const Y = v => padT + (1-v)*plotH;
+  let s='';
+  // axes
+  s+=`<line x1="${padL}" y1="${Y(0)}" x2="${W-padR}" y2="${Y(0)}" stroke="var(--border)"/>`;
+  s+=`<line x1="${padL}" y1="${Y(0)}" x2="${padL}" y2="${padT}" stroke="var(--border)"/>`;
+  for (let g=0; g<=1.0001; g+=0.25){
+    s+=`<line x1="${X(g)}" y1="${Y(0)}" x2="${X(g)}" y2="${Y(0)+4}" stroke="var(--border)"/>`;
+    s+=`<text x="${X(g)}" y="${Y(0)+16}" fill="var(--muted)" font-size="8" text-anchor="middle">${g.toFixed(2)}</text>`;
+    s+=`<text x="${padL-6}" y="${Y(g)+3}" fill="var(--muted)" font-size="8" text-anchor="end">${g.toFixed(2)}</text>`;
+    s+=`<line x1="${padL-3}" y1="${Y(g)}" x2="${padL}" y2="${Y(g)}" stroke="var(--border)"/>`;
+  }
+  s+=`<text x="${X(0.5)}" y="${H-2}" fill="var(--muted)" font-size="9" text-anchor="middle">similarity p</text>`;
+  // curve
+  let path='';
+  for (let i=0;i<=100;i++){
+    const p=i/100;
+    const pr=Math.pow(p,r);
+    const P=1-Math.pow(1-pr,b);
+    path += (i===0?'M':'L') + X(p).toFixed(1) + ' ' + Y(P).toFixed(1) + ' ';
+  }
+  s+=`<path d="${path}" fill="none" stroke="var(--purple)" stroke-width="2.5"/>`;
+  // threshold line
+  s+=`<line x1="${X(star)}" y1="${Y(0)}" x2="${X(star)}" y2="${padT}" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  s+=`<text x="${X(star)}" y="${padT+10}" fill="var(--yellow)" font-size="9" text-anchor="middle">s*=${star.toFixed(2)}</text>`;
+  svg.innerHTML=s;
+}
+
+function onParam(redraw=true){
+  $('vb').textContent=B(); $('vr').textContent=R();
+  makePlanes();
+  drawSCurve();
+  // re-hash invalidated
+  if (redraw){
+    for (const p of pts){ p.sig=[]; p.cand=false; p.nn=false; }
+    query=null; buckets={};
+    renderSpace(); renderBuckets();
+    $('sCand').textContent='0'; $('sScan').textContent='0'; $('sRecall').textContent='-';
+    $('sRecall').style.color='var(--blue)';
+    setInfo('Parameters changed (b='+B()+', r='+R()+'). Re-hash the points.');
+  }
+}
+
+function lockBtns(v){
+  $('btnHash').disabled=v; $('btnQuery').disabled=v;
+}
+
+function reset(){
+  if (busy) return;
+  $('log').innerHTML='';
+  newData();
+}
+
+// ===================== init =====================
+newData();
+</script>
+</body>
+</html>
