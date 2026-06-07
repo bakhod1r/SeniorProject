@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Space-Saving Algorithm — Top-k Frequent Items</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 21px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 3px 8px;
+    border-radius: 5px; border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .badge.green { color: var(--green); border-color: var(--green); }
+  .badge.blue { color: var(--blue); border-color: var(--blue); }
+  .badge.orange { color: var(--orange); border-color: var(--orange); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 16px 24px 60px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  button {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="text"], .controls input[type="number"] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 9px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="text"] { width: 320px; }
+  .controls input[type="number"] { width: 64px; }
+  .controls input[type="range"] { accent-color: var(--blue); width: 120px; }
+  .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 13px; color: var(--blue); text-transform: uppercase;
+    letter-spacing: .5px; margin-bottom: 12px;
+  }
+  /* Incoming item */
+  .incoming {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+    font-family: var(--mono);
+  }
+  .incoming .pill {
+    font-size: 20px; font-weight: 700; padding: 8px 18px; border-radius: 8px;
+    background: var(--surface-2); border: 2px solid var(--purple); color: var(--purple);
+    min-width: 56px; text-align: center;
+  }
+  .incoming .arrow { color: var(--muted); font-size: 20px; }
+  .stream-tape {
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    word-spacing: 4px; margin-top: 4px;
+  }
+  .stream-tape .done { color: #3a4150; }
+  .stream-tape .cur { color: var(--purple); font-weight: 700; text-decoration: underline; }
+  /* Counter slots */
+  .slots { display: flex; flex-wrap: wrap; gap: 10px; }
+  .slot {
+    border: 2px solid var(--border); border-radius: 9px; padding: 10px 12px;
+    background: var(--surface-2); min-width: 92px; text-align: center;
+    transition: all .25s ease; position: relative;
+  }
+  .slot .key { font-size: 17px; font-weight: 700; font-family: var(--mono); }
+  .slot .cnt { font-size: 22px; font-weight: 800; color: var(--blue); margin: 2px 0; }
+  .slot .err { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .slot.empty { border-style: dashed; opacity: .55; }
+  .slot.empty .key { color: var(--muted); }
+  .slot.hit { border-color: var(--green); box-shadow: 0 0 0 3px rgba(63,185,80,.25); }
+  .slot.hit .cnt { color: var(--green); }
+  .slot.minslot { border-color: var(--yellow); }
+  .slot.evicting { border-color: var(--red); box-shadow: 0 0 0 3px rgba(248,81,73,.25); }
+  .slot.evicting .key { color: var(--red); }
+  .slot.inserting { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(188,140,255,.3); }
+  .slot.inserting .cnt { color: var(--purple); }
+  .slot .tag {
+    position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: .4px;
+  }
+  .slot.minslot .tag { background: var(--yellow); color: #0d1117; }
+  .slot.evicting .tag { background: var(--red); color: #fff; }
+  .slot.inserting .tag { background: var(--purple); color: #0d1117; }
+  /* Stream-Summary buckets */
+  .buckets { display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap; }
+  .bucket {
+    border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+    padding: 8px 10px; min-width: 70px; transition: all .25s ease;
+  }
+  .bucket.head { border-color: var(--yellow); }
+  .bucket .bc { font-family: var(--mono); font-size: 12px; color: var(--orange); font-weight: 700; margin-bottom: 4px; }
+  .bucket.head .bc { color: var(--yellow); }
+  .bucket .items { display: flex; flex-direction: column; gap: 3px; }
+  .bucket .it {
+    font-family: var(--mono); font-size: 12px; padding: 2px 6px; border-radius: 4px;
+    background: var(--surface-2); text-align: center;
+  }
+  .bucket-arrow { align-self: center; color: var(--muted); font-size: 16px; }
+  /* Info / stats */
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--mono); font-size: 13px; }
+  .stats div span { color: var(--blue); font-weight: 700; }
+  .info {
+    font-family: var(--mono); font-size: 13px; line-height: 1.7;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; min-height: 70px;
+  }
+  .info .hi { color: var(--yellow); }
+  .info .ev { color: var(--red); }
+  .info .ins { color: var(--purple); }
+  .info .ok { color: var(--green); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.c { font-family: var(--mono); }
+  .cx-1 { color: var(--green); } .cx-m { color: var(--yellow); } .cx-log { color: var(--orange); }
+  .log {
+    font-family: var(--mono); font-size: 12px; height: 180px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  .log div { padding: 1px 0; border-bottom: 1px dotted #21262d; }
+  .log .g { color: var(--green); } .log .r { color: var(--red); }
+  .log .p { color: var(--purple); } .log .y { color: var(--yellow); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Space-Saving Algorithm — Top-k Frequent Items in a Stream</h1>
+  <p>Keep <b>m</b> counters. Hit → increment. New + free slot → count 1. New + full → replace the <b>min</b> slot with count = min+1, recording error = min.</p>
+  <div class="badges">
+    <span class="badge green">Per item: O(1) (Stream-Summary)</span>
+    <span class="badge blue">Space: O(m)</span>
+    <span class="badge orange">count − error ≤ f ≤ count</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <label>m</label>
+    <input type="number" id="mInput" value="3" min="1" max="8" />
+    <label>stream</label>
+    <input type="text" id="streamInput" value="A B C A A B D A B E A C A" />
+    <button onclick="loadStream()">Load</button>
+    <button onclick="randomStream()">Random</button>
+    <div class="spacer"></div>
+    <button class="primary" id="stepBtn" onclick="step()">Step ▶</button>
+    <button id="runBtn" onclick="toggleRun()">Run ▶▶</button>
+    <button onclick="reset()">Reset ↺</button>
+    <label>speed</label>
+    <input type="range" id="speed" min="1" max="10" value="5" />
+  </div>
+
+  <div class="card">
+    <h2>Incoming Item</h2>
+    <div class="incoming">
+      <div class="pill" id="incoming">—</div>
+      <div class="arrow">→</div>
+      <div id="incomingNote" style="font-size:13px;color:var(--muted);font-family:var(--mono);">press Step to process</div>
+    </div>
+    <div class="stream-tape" id="tape"></div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>Counters (m slots)</h2>
+        <div class="slots" id="slots"></div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--green)"></i>hit / increment</span>
+          <span><i class="sw" style="background:var(--yellow)"></i>min slot</span>
+          <span><i class="sw" style="background:var(--red)"></i>evicting</span>
+          <span><i class="sw" style="background:var(--purple)"></i>inserting (min+1)</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Step Explanation</h2>
+        <div class="info" id="info">Press <span class="hi">Step</span> to process one item, or <span class="hi">Run</span> for the whole stream.</div>
+        <div class="stats" style="margin-top:12px;">
+          <div>n = <span id="statN">0</span></div>
+          <div>distinct seen = <span id="statD">0</span></div>
+          <div>min counter = <span id="statMin">0</span></div>
+          <div>error bound n/m = <span id="statBound">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Stream-Summary (buckets by count, smallest first → O(1) min)</h2>
+        <div class="buckets" id="buckets"></div>
+      </div>
+
+      <div class="card">
+        <h2>Big-O</h2>
+        <table>
+          <tr><th>Operation</th><th>Time</th><th>Note</th></tr>
+          <tr><td>Hit (increment)</td><td class="c cx-1">O(1)</td><td>move to adjacent bucket</td></tr>
+          <tr><td>Miss, free slot</td><td class="c cx-1">O(1)</td><td>count-1 bucket</td></tr>
+          <tr><td>Miss, evict min</td><td class="c cx-1">O(1)</td><td>head bucket (Stream-Summary)</td></tr>
+          <tr><td>Miss, evict (naive)</td><td class="c cx-m">O(m)</td><td>min-scan</td></tr>
+          <tr><td>Report top-k</td><td class="c cx-m">O(m log m)</td><td>sort the slots</td></tr>
+          <tr><td>Space</td><td class="c cx-1">O(m)</td><td>independent of stream length</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Operation Log</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== state =====
+  let m = 3;
+  let stream = ["A","B","C","A","A","B","D","A","B","E","A","C","A"];
+  let pos = 0;                  // next index to process
+  let slots = {};              // key -> {count, error}
+  let n = 0;
+  let distinct = new Set();
+  let running = false;
+  let timer = null;
+
+  // ===== helpers =====
+  function speedMs() { return 1150 - document.getElementById("speed").value * 100; }
+  function order() {            // slots sorted by count desc for stable display
+    return Object.keys(slots).sort((a,b) => slots[b].count - slots[a].count || (a<b?-1:1));
+  }
+  function minSlot() {
+    let mk = null, mc = Infinity;
+    for (const k of Object.keys(slots)) if (slots[k].count < mc) { mc = slots[k].count; mk = k; }
+    return { key: mk, count: mc };
+  }
+  function curBound() { return n === 0 ? 0 : (n / m).toFixed(2); }
+
+  function log(html, cls) {
+    const el = document.getElementById("log");
+    const d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.innerHTML = html;
+    el.prepend(d);
+  }
+
+  // ===== rendering =====
+  function renderTape() {
+    const el = document.getElementById("tape");
+    el.innerHTML = stream.map((x, i) => {
+      if (i < pos) return `<span class="done">${x}</span>`;
+      if (i === pos) return `<span class="cur">${x}</span>`;
+      return `<span>${x}</span>`;
+    }).join(" ");
+  }
+
+  function renderSlots(highlights) {
+    highlights = highlights || {};
+    const el = document.getElementById("slots");
+    const keys = order();
+    let html = "";
+    for (const k of keys) {
+      const cls = highlights[k] || "";
+      const tag = cls === "hit" ? "HIT"
+                : cls === "minslot" ? "MIN"
+                : cls === "evicting" ? "EVICT"
+                : cls === "inserting" ? "NEW" : "";
+      html += `<div class="slot ${cls}">${tag?`<span class="tag">${tag}</span>`:""}
+        <div class="key">${k}</div>
+        <div class="cnt">${slots[k].count}</div>
+        <div class="err">err ${slots[k].error}</div></div>`;
+    }
+    for (let i = keys.length; i < m; i++) {
+      html += `<div class="slot empty"><div class="key">·</div><div class="cnt">—</div><div class="err">free</div></div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  function renderBuckets(highlightKey) {
+    const el = document.getElementById("buckets");
+    const byCount = {};
+    for (const k of Object.keys(slots)) {
+      const c = slots[k].count;
+      (byCount[c] = byCount[c] || []).push(k);
+    }
+    const counts = Object.keys(byCount).map(Number).sort((a,b)=>a-b);
+    if (counts.length === 0) { el.innerHTML = `<span style="color:var(--muted);font-size:13px;">empty</span>`; return; }
+    let html = "";
+    counts.forEach((c, idx) => {
+      const head = idx === 0 ? "head" : "";
+      const items = byCount[c].sort().map(k =>
+        `<div class="it" style="${k===highlightKey?'background:var(--purple);color:#0d1117;font-weight:700;':''}">${k}</div>`
+      ).join("");
+      html += `<div class="bucket ${head}"><div class="bc">count ${c}${idx===0?" (min)":""}</div><div class="items">${items}</div></div>`;
+      if (idx < counts.length - 1) html += `<div class="bucket-arrow">→</div>`;
+    });
+    el.innerHTML = html;
+  }
+
+  function renderStats() {
+    document.getElementById("statN").textContent = n;
+    document.getElementById("statD").textContent = distinct.size;
+    document.getElementById("statMin").textContent =
+      Object.keys(slots).length === m ? minSlot().count : 0;
+    document.getElementById("statBound").textContent = curBound();
+  }
+
+  function renderAll(slotHi, bucketHi) {
+    renderTape();
+    renderSlots(slotHi);
+    renderBuckets(bucketHi);
+    renderStats();
+  }
+
+  // ===== core step =====
+  function step() {
+    if (pos >= stream.length) {
+      setInfo(`<span class="ok">Stream complete.</span> Top items = largest counters. Every item with f &gt; n/m (= ${curBound()}) is guaranteed present.`);
+      stopRun();
+      return;
+    }
+    const item = stream[pos];
+    n++; pos++;
+    distinct.add(item);
+    document.getElementById("incoming").textContent = item;
+
+    if (slots[item] !== undefined) {
+      // Case 1: hit
+      slots[item].count++;
+      document.getElementById("incomingNote").innerHTML = `tracked → <b style="color:var(--green)">increment</b> to ${slots[item].count}`;
+      setInfo(`<span class="ok">HIT.</span> Item <b>${item}</b> is already tracked → increment its counter to <b>${slots[item].count}</b> (error unchanged at ${slots[item].error}).`);
+      log(`+ <b>${item}</b> hit → count ${slots[item].count}`, "g");
+      renderAll({[item]:"hit"}, item);
+    } else if (Object.keys(slots).length < m) {
+      // Case 2: free slot
+      slots[item] = { count: 1, error: 0 };
+      document.getElementById("incomingNote").innerHTML = `new + free slot → <b style="color:var(--blue)">count 1</b>`;
+      setInfo(`<span class="ins">NEW + FREE SLOT.</span> Item <b>${item}</b> is new and a slot is free → insert with count <b>1</b>, error <b>0</b>.`);
+      log(`+ <b>${item}</b> new (free slot) → count 1`, "p");
+      renderAll({[item]:"inserting"}, item);
+    } else {
+      // Case 3: evict the min
+      const ms = minSlot();
+      const min = ms.count, victim = ms.key;
+      // show min/evict first
+      renderAll({[victim]:"minslot"}, null);
+      setInfo(`<span class="hi">FULL.</span> Item <b>${item}</b> is new and all ${m} slots are taken. The minimum counter is <b>${victim}</b> = ${min}. <span class="ev">Evict ${victim}</span>, then insert ${item} at <span class="ins">min+1 = ${min+1}</span> with error = ${min}.`);
+      document.getElementById("incomingNote").innerHTML = `new + full → evict min <b style="color:var(--red)">${victim}</b>(${min}), insert at <b style="color:var(--purple)">${min+1}</b>`;
+      delete slots[victim];
+      slots[item] = { count: min + 1, error: min };
+      log(`+ <b>${item}</b> new (full) → evict <b>${victim}</b>(${min}), insert ${item} count ${min+1} <span class="y">err ${min}</span>`, "r");
+      // brief eviction highlight then settle
+      setTimeout(() => renderAll({[item]:"inserting"}, item), Math.min(450, speedMs()/2));
+    }
+    updateButtons();
+  }
+
+  function setInfo(html) { document.getElementById("info").innerHTML = html; }
+
+  // ===== run / reset =====
+  function toggleRun() { running ? stopRun() : startRun(); }
+  function startRun() {
+    if (pos >= stream.length) return;
+    running = true;
+    document.getElementById("runBtn").textContent = "Pause ⏸";
+    document.getElementById("runBtn").classList.add("primary");
+    tick();
+  }
+  function tick() {
+    if (!running) return;
+    step();
+    if (pos >= stream.length) { stopRun(); return; }
+    timer = setTimeout(tick, speedMs());
+  }
+  function stopRun() {
+    running = false;
+    clearTimeout(timer);
+    document.getElementById("runBtn").textContent = "Run ▶▶";
+    document.getElementById("runBtn").classList.remove("primary");
+  }
+  function updateButtons() {
+    const done = pos >= stream.length;
+    document.getElementById("stepBtn").disabled = done;
+  }
+
+  function reset() {
+    stopRun();
+    pos = 0; n = 0; slots = {}; distinct = new Set();
+    document.getElementById("incoming").textContent = "—";
+    document.getElementById("incomingNote").textContent = "press Step to process";
+    document.getElementById("log").innerHTML = "";
+    document.getElementById("stepBtn").disabled = false;
+    setInfo('Press <span class="hi">Step</span> to process one item, or <span class="hi">Run</span> for the whole stream.');
+    renderAll();
+  }
+
+  function loadStream() {
+    const raw = document.getElementById("streamInput").value.trim();
+    const parts = raw.split(/[\s,]+/).filter(Boolean);
+    if (parts.length) stream = parts;
+    m = Math.max(1, Math.min(8, parseInt(document.getElementById("mInput").value) || 3));
+    reset();
+  }
+
+  function randomStream() {
+    // skewed (Zipfian-ish) random stream so heavy hitters emerge
+    const alphabet = ["A","B","C","D","E","F","G","H"];
+    const weights = alphabet.map((_, i) => 1 / (i + 1));
+    const total = weights.reduce((a,b)=>a+b,0);
+    const len = 12 + Math.floor(Math.random() * 8);
+    const out = [];
+    for (let i = 0; i < len; i++) {
+      let r = Math.random() * total, acc = 0, pick = alphabet[0];
+      for (let j = 0; j < alphabet.length; j++) { acc += weights[j]; if (r <= acc) { pick = alphabet[j]; break; } }
+      out.push(pick);
+    }
+    stream = out;
+    document.getElementById("streamInput").value = out.join(" ");
+    reset();
+  }
+
+  // ===== init =====
+  loadStream();
+</script>
+</body>
+</html>
