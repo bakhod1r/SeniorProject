@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Misra-Gries Heavy Hitters — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; }
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+  .badge {
+    padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge .v { color: var(--green); }
+  .wrap { width: 100%; max-width: 980px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 16px;
+  }
+  .panel h3 { color: var(--blue); margin-bottom: 12px; font-size: 1rem; }
+
+  /* controls */
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  button {
+    padding: 9px 18px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.95rem;
+    transition: all 0.2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .input-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; margin-bottom: 12px; }
+  input[type="text"], input[type="number"] {
+    padding: 9px 12px; border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); border-radius: 8px; font-size: 0.95rem;
+  }
+  input[type="text"] { width: 320px; }
+  input[type="number"] { width: 70px; }
+  .speed { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 12px; }
+  .speed label { color: var(--muted); font-size: 0.85rem; }
+  input[type="range"] { accent-color: var(--blue); width: 160px; }
+  label.lbl { color: var(--muted); font-size: 0.85rem; }
+
+  /* stream */
+  .stream { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; min-height: 56px; }
+  .stream-item {
+    width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--bg);
+    font-weight: 700; font-size: 1.05rem; color: var(--text); transition: all 0.3s;
+  }
+  .stream-item.done { opacity: 0.3; }
+  .stream-item.current { border-color: var(--blue); background: rgba(88,166,255,0.18); transform: translateY(-4px); box-shadow: 0 0 12px rgba(88,166,255,0.4); }
+
+  /* counter slots */
+  .slots { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; min-height: 90px; }
+  .slot {
+    width: 92px; border-radius: 10px; border: 2px dashed var(--border);
+    background: var(--bg); padding: 10px 8px; text-align: center; transition: all 0.3s;
+    position: relative;
+  }
+  .slot.filled { border-style: solid; border-color: var(--border); }
+  .slot.incr { border-color: var(--green); box-shadow: 0 0 14px rgba(63,185,80,0.45); }
+  .slot.claim { border-color: var(--purple); box-shadow: 0 0 14px rgba(188,140,255,0.45); }
+  .slot.decr { border-color: var(--red); box-shadow: 0 0 14px rgba(248,81,73,0.45); }
+  .slot.dropping { opacity: 0.25; border-color: var(--red); }
+  .slot .item-name { font-size: 1.3rem; font-weight: 800; color: var(--blue); }
+  .slot .count { font-size: 1.6rem; font-weight: 800; margin-top: 4px; color: var(--text); }
+  .slot .empty-txt { color: var(--muted); font-size: 0.8rem; padding-top: 16px; }
+  .slot .barwrap { height: 8px; background: var(--surface); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  .slot .bar { height: 100%; background: var(--green); transition: width 0.3s; }
+
+  /* stats bar */
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+  .stat { text-align: center; }
+  .stat .label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { color: var(--blue); font-size: 1.25rem; font-weight: 800; }
+
+  /* info */
+  .info { font-family: 'Courier New', monospace; font-size: 0.92rem; line-height: 1.7; min-height: 48px; }
+  .info .hl { color: var(--yellow); }
+  .info .ok { color: var(--green); }
+  .info .bad { color: var(--red); }
+
+  /* big-O table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  th { background: var(--bg); color: var(--muted); }
+  .c-green { color: var(--green); font-weight: 700; }
+  .c-yellow { color: var(--yellow); font-weight: 700; }
+
+  /* legend */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+  .dot { width: 14px; height: 14px; border-radius: 4px; }
+
+  /* log */
+  .log { max-height: 180px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.82rem; }
+  .log div { padding: 3px 6px; border-bottom: 1px solid var(--border); }
+  .log .e-incr { color: var(--green); }
+  .log .e-claim { color: var(--purple); }
+  .log .e-decr { color: var(--red); }
+  .log .e-info { color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1>Misra-Gries Heavy Hitters</h1>
+  <p class="subtitle">Find items with frequency &gt; n/k using only k&minus;1 counters &mdash; watch the decrement-all step</p>
+
+  <div class="badges">
+    <span class="badge">Space <span class="v">O(k)</span></span>
+    <span class="badge">Per item <span class="v">O(1) amortized</span></span>
+    <span class="badge">Pass <span class="v">1 (one pass)</span></span>
+    <span class="badge">Error <span class="v">undercount &le; n/k</span></span>
+  </div>
+
+  <div class="wrap">
+    <!-- input -->
+    <div class="panel">
+      <div class="input-row">
+        <input type="text" id="streamInput" placeholder="Stream, e.g. A B A C C A B D A">
+        <label class="lbl">k = <input type="number" id="kInput" value="3" min="2" max="9"></label>
+        <button onclick="loadInput()">Load</button>
+        <button onclick="randomStream()">Random</button>
+      </div>
+      <div class="controls">
+        <button id="startBtn" onclick="start()">Run</button>
+        <button id="stepBtn" onclick="stepForward()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+      <div class="speed">
+        <label>Speed:</label><span class="lbl">Slow</span>
+        <input type="range" id="speedSlider" min="1" max="10" value="5">
+        <span class="lbl">Fast</span>
+      </div>
+    </div>
+
+    <!-- stream -->
+    <div class="panel">
+      <h3>Stream (processed one item at a time)</h3>
+      <div class="stream" id="streamView"></div>
+    </div>
+
+    <!-- counters -->
+    <div class="panel">
+      <h3>Counter slots (k&minus;1 = <span id="slotCount">2</span>)</h3>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:var(--green)"></span>increment</div>
+        <div class="legend-item"><span class="dot" style="background:var(--purple)"></span>claim free slot</div>
+        <div class="legend-item"><span class="dot" style="background:var(--red)"></span>decrement-all / drop</div>
+      </div>
+      <div class="slots" id="slotsView"></div>
+    </div>
+
+    <!-- stats -->
+    <div class="panel">
+      <div class="stats">
+        <div class="stat"><div class="label">Processed</div><div class="value" id="stProcessed">0</div></div>
+        <div class="stat"><div class="label">n (total)</div><div class="value" id="stN">0</div></div>
+        <div class="stat"><div class="label">Threshold n/k</div><div class="value" id="stThr">0</div></div>
+        <div class="stat"><div class="label">Decrement-all events</div><div class="value" id="stDecr">0</div></div>
+        <div class="stat"><div class="label">Max events (n/k)</div><div class="value" id="stMaxDecr">0</div></div>
+        <div class="stat"><div class="label">Step</div><div class="value"><span id="stStep">0</span>/<span id="stTotal">0</span></div></div>
+      </div>
+    </div>
+
+    <!-- info -->
+    <div class="panel">
+      <h3>What's happening</h3>
+      <div class="info" id="infoView">Press <span class="hl">Run</span> to start, or <span class="hl">Step</span> to advance one item at a time.</div>
+    </div>
+
+    <!-- big-O -->
+    <div class="panel">
+      <h3>Complexity</h3>
+      <table>
+        <tr><th>Operation</th><th>Cost</th><th>Note</th></tr>
+        <tr><td>Process one item (avg)</td><td class="c-green">O(1)</td><td>hash lookup + increment/claim</td></tr>
+        <tr><td>Decrement-all (worst per item)</td><td class="c-yellow">O(k)</td><td>touches all k&minus;1 counters; &le; n/k times total</td></tr>
+        <tr><td>Whole pass</td><td class="c-yellow">O(n)</td><td>amortized over the stream</td></tr>
+        <tr><td>Space</td><td class="c-green">O(k)</td><td>fixed, independent of distinct count</td></tr>
+        <tr><td>Naive exact counting</td><td class="c-yellow">O(distinct)</td><td>full hash map — blows up memory</td></tr>
+      </table>
+    </div>
+
+    <!-- log -->
+    <div class="panel">
+      <h3>Operation log</h3>
+      <div class="log" id="logView"></div>
+    </div>
+  </div>
+
+<script>
+  // ===== state =====
+  let stream = ["A","B","A","C","C","A","B","D","A"];
+  let k = 3;
+  let steps = [];          // precomputed animation steps
+  let idx = 0;
+  let running = false;
+  let timer = null;
+
+  // ===== step generation =====
+  // Each step: { i, item, action, slotsAfter:{item:count}, highlight:{item:class}, dropped:[], desc, processed, decrCount }
+  function generateSteps() {
+    steps = [];
+    const counters = {};
+    let decrCount = 0;
+    const cap = k - 1;
+
+    // intro step
+    steps.push({
+      i: -1, item: null, action: "init",
+      slotsAfter: {}, highlight: {}, dropped: [],
+      desc: `Stream of ${stream.length} items, k = ${k}. We keep k&minus;1 = ${cap} counters and look for items with frequency &gt; n/k.`,
+      processed: 0, decrCount: 0
+    });
+
+    for (let i = 0; i < stream.length; i++) {
+      const x = stream[i];
+      let action, highlight = {}, dropped = [];
+      let desc;
+
+      if (counters.hasOwnProperty(x)) {
+        counters[x]++;
+        action = "incr";
+        highlight[x] = "incr";
+        desc = `<span class="ok">'${x}' is already tracked</span> &rarr; increment its counter to ${counters[x]}.`;
+      } else if (Object.keys(counters).length < cap) {
+        counters[x] = 1;
+        action = "claim";
+        highlight[x] = "claim";
+        desc = `<span class="hl">'${x}' is new</span> and a slot is free &rarr; claim it with count 1.`;
+      } else {
+        // decrement-all
+        action = "decr";
+        decrCount++;
+        for (const key of Object.keys(counters)) {
+          counters[key]--;
+          highlight[key] = "decr";
+          if (counters[key] === 0) {
+            dropped.push(key);
+          }
+        }
+        for (const key of dropped) delete counters[key];
+        desc = `<span class="bad">'${x}' is new and all slots are full</span> &rarr; <b>decrement EVERY counter by 1</b>` +
+               (dropped.length ? `, dropping ${dropped.map(d=>`'${d}'`).join(", ")} (hit 0).` : ".") +
+               ` This event removes k = ${k} distinct items.`;
+      }
+
+      steps.push({
+        i, item: x, action,
+        slotsAfter: { ...counters },
+        highlight, dropped,
+        desc, processed: i + 1, decrCount
+      });
+    }
+
+    // final step
+    const n = stream.length;
+    const thr = (n / k);
+    steps.push({
+      i: -1, item: null, action: "final",
+      slotsAfter: { ...counters }, highlight: {}, dropped: [],
+      desc: `Done. Candidates = {${Object.entries(counters).map(([a,c])=>`${a}:${c}`).join(", ") || "∅"}}. ` +
+            `Every item with true frequency &gt; n/k = ${thr.toFixed(2)} is guaranteed present (no false negatives). ` +
+            `A second pass re-counts these candidates to drop false positives.`,
+      processed: n, decrCount
+    });
+
+    document.getElementById("stTotal").textContent = steps.length;
+  }
+
+  // ===== rendering =====
+  function renderStream(curIdx) {
+    const v = document.getElementById("streamView");
+    v.innerHTML = stream.map((x, i) => {
+      let cls = "stream-item";
+      if (i < curIdx) cls += " done";
+      else if (i === curIdx) cls += " current";
+      return `<div class="${cls}">${x}</div>`;
+    }).join("");
+  }
+
+  function renderSlots(step) {
+    const v = document.getElementById("slotsView");
+    const cap = k - 1;
+    const entries = Object.entries(step.slotsAfter);
+    const maxCount = Math.max(1, ...Object.values(step.slotsAfter), 1);
+    let html = "";
+    for (let s = 0; s < cap; s++) {
+      if (s < entries.length) {
+        const [item, count] = entries[s];
+        let cls = "slot filled";
+        if (step.highlight[item]) cls += " " + step.highlight[item];
+        if (step.dropped.includes(item)) cls += " dropping";
+        const w = Math.round((count / maxCount) * 100);
+        html += `<div class="${cls}">
+          <div class="item-name">${item}</div>
+          <div class="count">${count}</div>
+          <div class="barwrap"><div class="bar" style="width:${w}%"></div></div>
+        </div>`;
+      } else {
+        html += `<div class="slot"><div class="empty-txt">empty</div></div>`;
+      }
+    }
+    // show dropped slots that are no longer in slotsAfter (already removed) — render as fading empties is enough
+    v.innerHTML = html;
+  }
+
+  function renderStats(step) {
+    const n = stream.length;
+    document.getElementById("stProcessed").textContent = step.processed;
+    document.getElementById("stN").textContent = n;
+    document.getElementById("stThr").textContent = (n / k).toFixed(2);
+    document.getElementById("stDecr").textContent = step.decrCount;
+    document.getElementById("stMaxDecr").textContent = Math.floor(n / k);
+    document.getElementById("stStep").textContent = idx;
+    document.getElementById("slotCount").textContent = k - 1;
+  }
+
+  function addLog(step) {
+    if (step.action === "init" || step.action === "final") {
+      logLine("e-info", step.action === "init" ? "— start —" : "— end: candidates ready —");
+      return;
+    }
+    const cls = step.action === "incr" ? "e-incr" : step.action === "claim" ? "e-claim" : "e-decr";
+    let msg;
+    if (step.action === "incr") msg = `incr '${step.item}' -> ${step.slotsAfter[step.item]}`;
+    else if (step.action === "claim") msg = `claim '${step.item}' = 1`;
+    else msg = `decrement-all (trigger '${step.item}')` + (step.dropped.length ? ` drop ${step.dropped.join(",")}` : "");
+    logLine(cls, `[${step.processed}] ${msg}`);
+  }
+
+  function logLine(cls, text) {
+    const v = document.getElementById("logView");
+    const d = document.createElement("div");
+    d.className = cls;
+    d.textContent = text;
+    v.appendChild(d);
+    v.scrollTop = v.scrollHeight;
+  }
+
+  function renderStep() {
+    const step = steps[idx];
+    renderStream(step.i >= 0 ? step.i : (step.action === "final" ? stream.length : 0));
+    renderSlots(step);
+    renderStats(step);
+    document.getElementById("infoView").innerHTML = step.desc;
+  }
+
+  // ===== controls =====
+  function speedMs() { return 1200 - document.getElementById("speedSlider").value * 110; }
+
+  function ensureSteps() { if (steps.length === 0) generateSteps(); }
+
+  function start() {
+    ensureSteps();
+    running = true;
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("pauseBtn").disabled = false;
+    run();
+  }
+
+  function run() {
+    if (!running || idx >= steps.length) { pause(); return; }
+    renderStep();
+    addLog(steps[idx]);
+    idx++;
+    timer = setTimeout(run, speedMs());
+  }
+
+  function stepForward() {
+    ensureSteps();
+    if (idx < steps.length) {
+      renderStep();
+      addLog(steps[idx]);
+      idx++;
+    }
+  }
+
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("pauseBtn").disabled = true;
+  }
+
+  function reset() {
+    pause();
+    idx = 0;
+    steps = [];
+    document.getElementById("logView").innerHTML = "";
+    document.getElementById("stStep").textContent = "0";
+    document.getElementById("stTotal").textContent = "0";
+    renderStream(-1);
+    generateSteps();
+    renderStep();           // show intro
+    document.getElementById("logView").innerHTML = "";
+    idx = 0;
+  }
+
+  function loadInput() {
+    const raw = document.getElementById("streamInput").value.trim();
+    const ki = parseInt(document.getElementById("kInput").value);
+    const items = raw.split(/[\s,]+/).filter(s => s.length > 0);
+    if (items.length > 0) stream = items;
+    if (ki >= 2 && ki <= 9) k = ki;
+    reset();
+  }
+
+  function randomStream() {
+    const alphabet = ["A","B","C","D","E"];
+    const len = 8 + Math.floor(Math.random() * 8);
+    stream = [];
+    for (let i = 0; i < len; i++) {
+      // bias toward A so a heavy hitter appears
+      const r = Math.random();
+      stream.push(r < 0.4 ? "A" : alphabet[Math.floor(Math.random() * alphabet.length)]);
+    }
+    document.getElementById("streamInput").value = stream.join(" ");
+    reset();
+  }
+
+  // ===== init =====
+  document.getElementById("streamInput").value = stream.join(" ");
+  document.getElementById("kInput").value = k;
+  generateSteps();
+  renderStep();
+  document.getElementById("logView").innerHTML = "";
+  idx = 0;
+</script>
+</body>
+</html>
