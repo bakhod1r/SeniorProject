@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Monte Carlo vs Las Vegas — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;  /* page background */
+    --surface: #161b22;  /* card/panel background */
+    --surface2:#1c2330;  /* nested surfaces */
+    --border:  #30363d;  /* borders */
+    --text:    #e6edf3;  /* primary text */
+    --muted:   #8b949e;  /* secondary text */
+    --green:   #3fb950;  /* O(1) / success / inside */
+    --yellow:  #d29922;  /* O(n) / warning / scan */
+    --red:     #f85149;  /* delete / error / outside */
+    --blue:    #58a6ff;  /* accent / Monte Carlo */
+    --purple:  #bc8cff;  /* secondary accent / Las Vegas */
+    --orange:  #ffa657;  /* tail / rear pointer */
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 21px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 12px; padding: 3px 9px;
+    border-radius: 6px; border: 1px solid var(--border);
+  }
+  .badge.mc { color: var(--blue); border-color: var(--blue); }
+  .badge.lv { color: var(--purple); border-color: var(--purple); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  button {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .controls label { font-size: 13px; color: var(--muted); }
+  .controls input[type="number"] {
+    width: 96px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: var(--mono); font-size: 13px;
+  }
+  .controls input[type="range"] { width: 130px; accent-color: var(--blue); }
+  .spacer { flex: 1; }
+  .step-counter { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin-bottom: 10px; font-size: 14px; text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .card.mc h2 { color: var(--blue); }
+  .card.lv h2 { color: var(--purple); }
+
+  /* Monte Carlo dartboard */
+  .board-area { display: flex; flex-direction: column; align-items: center; }
+  #board {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; display: block;
+  }
+  .readout {
+    margin-top: 10px; width: 100%; font-family: var(--mono); font-size: 13px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 10px 12px;
+  }
+  .readout .k { color: var(--muted); }
+  .readout .v { color: var(--green); font-weight: 700; }
+  .readout .err { color: var(--orange); font-weight: 700; }
+
+  /* error curve */
+  #curve { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: block; margin-top: 10px; }
+
+  /* Las Vegas retry */
+  .lv-target {
+    font-family: var(--mono); font-size: 14px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 10px 12px; margin-bottom: 10px;
+  }
+  .lv-target b { color: var(--purple); }
+  .dice {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; min-height: 52px;
+  }
+  .die {
+    width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); display: flex; align-items: center;
+    justify-content: center; font-family: var(--mono); font-size: 20px;
+    font-weight: 700; color: var(--text); transition: all 0.2s ease;
+  }
+  .die.fail { border-color: var(--red); color: var(--red); }
+  .die.win  { border-color: var(--green); color: var(--green);
+              box-shadow: 0 0 0 1px var(--green) inset; }
+  .lv-stats {
+    font-family: var(--mono); font-size: 13px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px;
+  }
+  .lv-stats .v { color: var(--purple); font-weight: 700; }
+  .lv-stats .t { color: var(--green); font-weight: 700; }
+
+  .narrate {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-left: 3px solid var(--blue); border-radius: 6px;
+    padding: 10px 14px; margin: 16px 0 0; font-size: 14px; min-height: 44px;
+  }
+
+  /* Big-O table */
+  table.bigo {
+    width: 100%; border-collapse: collapse; margin-top: 16px;
+    font-size: 13px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  table.bigo th, table.bigo td {
+    padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border);
+  }
+  table.bigo th { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  table.bigo td.cplx { font-family: var(--mono); font-weight: 700; }
+  .o1 { color: var(--green); }
+  .on { color: var(--yellow); }
+  .orand { color: var(--purple); }
+
+  /* operation log */
+  .logwrap { margin-top: 16px; }
+  .logwrap h2 { font-size: 14px; color: var(--blue); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    height: 150px; overflow-y: auto; padding: 8px 12px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  #log div { padding: 2px 0; border-bottom: 1px dashed #21262d; }
+  #log .mcline { color: var(--blue); }
+  #log .lvline { color: var(--purple); }
+  #log .sys    { color: var(--muted); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+  .footnote { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); color: var(--yellow); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Monte Carlo vs Las Vegas — Two Randomized Paradigms, Side by Side</h1>
+  <p><b>Monte Carlo</b> (left): throw a fixed number of darts to estimate &pi; &mdash; fixed time, approximate answer. <b>Las Vegas</b> (right): retry a random draw until it succeeds &mdash; always correct, random time.</p>
+  <div class="badges">
+    <span class="badge mc">Monte Carlo: time O(N) fixed, error ~ 1/&radic;N</span>
+    <span class="badge lv">Las Vegas: always correct, expected 1/p attempts</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <button id="btnStep" class="primary">Step &#9654;</button>
+    <button id="btnRun">Run &#9654;&#9654;</button>
+    <button id="btnReset">Reset &#8635;</button>
+    <span class="spacer"></span>
+    <label>darts/step <input type="number" id="batchInput" value="25" min="1" max="2000" /></label>
+    <label>LV success p = 1/<input type="number" id="pInput" value="6" min="2" max="20" /></label>
+    <label>speed
+      <input type="range" id="speedSlider" min="1" max="10" value="6" />
+    </label>
+    <span class="step-counter" id="stepInfo">step 0</span>
+  </div>
+
+  <div class="layout">
+    <!-- ===== MONTE CARLO ===== -->
+    <div class="card mc">
+      <h2>Monte Carlo &mdash; estimating &pi; by darts</h2>
+      <div class="board-area">
+        <canvas id="board" width="300" height="300"></canvas>
+        <div class="readout">
+          darts <span class="k">N =</span> <span class="v" id="mcN">0</span>
+          &nbsp;|&nbsp; inside <span id="mcInside">0</span><br>
+          &pi; &asymp; 4&middot;(inside/N) = <span class="v" id="mcEst">0.00000</span><br>
+          true &pi; = 3.14159265 &nbsp; <span class="k">abs error =</span>
+          <span class="err" id="mcErr">&mdash;</span>
+        </div>
+        <canvas id="curve" width="300" height="110"></canvas>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--green)"></span> inside circle</span>
+          <span><span class="swatch" style="background:var(--red)"></span> outside circle</span>
+          <span><span class="swatch" style="background:var(--orange)"></span> error curve ~ 1/&radic;N</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== LAS VEGAS ===== -->
+    <div class="card lv">
+      <h2>Las Vegas &mdash; retry until success</h2>
+      <div class="lv-target">
+        Goal: roll a die until it shows <b id="lvGoal">6</b>.
+        The result is <b>always</b> a <span id="lvGoal2">6</span> (correct);
+        the number of rolls is <b>random</b>.
+      </div>
+      <div class="dice" id="dice"></div>
+      <div class="lv-stats">
+        current run attempts: <span class="v" id="lvCur">0</span><br>
+        runs completed: <span id="lvRuns">0</span>
+        &nbsp;|&nbsp; total attempts: <span id="lvTotal">0</span><br>
+        average attempts = <span class="t" id="lvAvg">0.000</span>
+        &nbsp;(theory 1/p = <span id="lvTheory">6.00</span>)
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--red)"></span> failed draw (retry)</span>
+        <span><span class="swatch" style="background:var(--green)"></span> success (return, always correct)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="narrate" id="narrate">
+    Press <b>Step</b> to advance one event, or <b>Run</b> to animate. Watch the
+    Monte Carlo &pi; estimate tighten as darts accumulate, while the Las Vegas
+    loop retries until it hits the goal &mdash; its answer is always right, but the
+    attempt count wobbles around <code>1/p</code>.
+  </div>
+
+  <!-- Big-O comparison table -->
+  <table class="bigo">
+    <thead>
+      <tr><th>Aspect</th><th>Monte Carlo (&pi; darts)</th><th>Las Vegas (retry)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Running time</td><td class="cplx on">O(N) fixed</td><td class="cplx orand">random, E = O(1/p)</td></tr>
+      <tr><td>Answer</td><td>approximate (may err)</td><td>always correct</td></tr>
+      <tr><td>Quality metric</td><td class="cplx on">error ~ 1/&radic;N</td><td class="cplx orand">expected attempts 1/p</td></tr>
+      <tr><td>Improve by</td><td>more darts / amplify</td><td>raise p (more good draws)</td></tr>
+      <tr><td>Tail risk</td><td class="cplx o1">none (fixed time)</td><td class="cplx orand">P[&gt;t] = (1&minus;p)^t</td></tr>
+      <tr><td>Finishes when</td><td>after N darts</td><td>on first success</td></tr>
+    </tbody>
+  </table>
+
+  <!-- operation log -->
+  <div class="logwrap">
+    <h2>Operation Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <div class="footnote">
+    Self-contained visualization &mdash; no external dependencies. Left:
+    <b>Monte Carlo</b> spends a fixed amount of work (darts) for an approximate
+    answer whose error shrinks like <code>1/&radic;N</code>. Right:
+    <b>Las Vegas</b> guarantees a correct answer but pays a random number of
+    attempts, averaging <code>1/p</code>. See <code>junior.md</code> and
+    <code>middle.md</code> for the trade-off, <code>senior.md</code> for SLA
+    sizing, and <code>professional.md</code> for the RP/ZPP/BPP theory.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+const state = {
+  // Monte Carlo
+  mcN: 0,
+  mcInside: 0,
+  errHistory: [],     // {n, err}
+  // Las Vegas
+  lvGoal: 6,
+  p: 1 / 6,
+  lvDice: [],         // current run's draws
+  lvCurAttempts: 0,
+  lvRuns: 0,
+  lvTotal: 0,
+  // engine
+  step: 0,
+  running: false,
+  timer: null,
+  // whose turn this step: alternate MC batch / one LV draw
+  turn: 0
+};
+
+const TRUE_PI = Math.PI;
+const board = document.getElementById("board");
+const bctx = board.getContext("2d");
+const curve = document.getElementById("curve");
+const cctx = curve.getContext("2d");
+
+// ---------- Drawing the dartboard ----------
+function drawBoardFrame() {
+  bctx.clearRect(0, 0, board.width, board.height);
+  // square
+  bctx.strokeStyle = "#30363d";
+  bctx.lineWidth = 1;
+  bctx.strokeRect(1, 1, board.width - 2, board.height - 2);
+  // quarter circle (radius = board size), centered at bottom-left
+  bctx.beginPath();
+  bctx.strokeStyle = "#58a6ff";
+  bctx.lineWidth = 1.5;
+  bctx.arc(0, board.height, board.width, -Math.PI / 2, 0, false);
+  bctx.stroke();
+}
+
+function plotDart(x, y, inside) {
+  // x,y in [0,1); map to canvas with origin bottom-left
+  const px = x * board.width;
+  const py = board.height - y * board.height;
+  bctx.beginPath();
+  bctx.fillStyle = inside ? "#3fb950" : "#f85149";
+  bctx.arc(px, py, 1.6, 0, Math.PI * 2);
+  bctx.fill();
+}
+
+// ---------- Error curve ----------
+function drawCurve() {
+  cctx.clearRect(0, 0, curve.width, curve.height);
+  cctx.strokeStyle = "#30363d";
+  cctx.strokeRect(0.5, 0.5, curve.width - 1, curve.height - 1);
+  if (state.errHistory.length < 2) return;
+  const maxErr = Math.max(0.001, ...state.errHistory.map(e => e.err));
+  const n = state.errHistory.length;
+  cctx.beginPath();
+  cctx.strokeStyle = "#ffa657";
+  cctx.lineWidth = 1.5;
+  state.errHistory.forEach((e, i) => {
+    const px = (i / (n - 1)) * (curve.width - 4) + 2;
+    const py = curve.height - 4 - (e.err / maxErr) * (curve.height - 8);
+    if (i === 0) cctx.moveTo(px, py); else cctx.lineTo(px, py);
+  });
+  cctx.stroke();
+  cctx.fillStyle = "#8b949e";
+  cctx.font = "10px monospace";
+  cctx.fillText("error vs steps (top = " + maxErr.toFixed(4) + ")", 6, 12);
+}
+
+// ---------- Las Vegas rendering ----------
+function renderDice() {
+  const el = document.getElementById("dice");
+  el.innerHTML = "";
+  state.lvDice.forEach(d => {
+    const div = document.createElement("div");
+    div.className = "die " + (d.win ? "win" : "fail");
+    div.textContent = d.val;
+    el.appendChild(div);
+  });
+}
+
+// ---------- Logging ----------
+function log(msg, cls) {
+  const el = document.getElementById("log");
+  const line = document.createElement("div");
+  line.className = cls || "sys";
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---------- Stats refresh ----------
+function refreshMC() {
+  document.getElementById("mcN").textContent = state.mcN;
+  document.getElementById("mcInside").textContent = state.mcInside;
+  if (state.mcN === 0) {
+    document.getElementById("mcEst").textContent = "0.00000";
+    document.getElementById("mcErr").textContent = "—";
+    return;
+  }
+  const est = 4 * state.mcInside / state.mcN;
+  document.getElementById("mcEst").textContent = est.toFixed(5);
+  document.getElementById("mcErr").textContent = Math.abs(est - TRUE_PI).toFixed(5);
+}
+
+function refreshLV() {
+  document.getElementById("lvCur").textContent = state.lvCurAttempts;
+  document.getElementById("lvRuns").textContent = state.lvRuns;
+  document.getElementById("lvTotal").textContent = state.lvTotal;
+  const avg = state.lvRuns > 0 ? state.lvTotal / state.lvRuns : 0;
+  document.getElementById("lvAvg").textContent = avg.toFixed(3);
+  document.getElementById("lvTheory").textContent = (1 / state.p).toFixed(2);
+}
+
+// ---------- One Monte Carlo batch ----------
+function mcBatch() {
+  const batch = clampInt(document.getElementById("batchInput").value, 1, 2000, 25);
+  for (let i = 0; i < batch; i++) {
+    const x = Math.random(), y = Math.random();
+    const inside = (x * x + y * y) <= 1.0;
+    if (inside) state.mcInside++;
+    state.mcN++;
+    plotDart(x, y, inside);
+  }
+  const est = 4 * state.mcInside / state.mcN;
+  const err = Math.abs(est - TRUE_PI);
+  state.errHistory.push({ n: state.mcN, err });
+  if (state.errHistory.length > 120) state.errHistory.shift();
+  drawCurve();
+  refreshMC();
+  log("MC: +" + batch + " darts  N=" + state.mcN +
+      "  pi~=" + est.toFixed(5) + "  err=" + err.toFixed(5), "mcline");
+  document.getElementById("narrate").innerHTML =
+    "Monte Carlo threw <b>" + batch + "</b> more darts (total N=" + state.mcN +
+    "). Estimate &pi; &asymp; <b>" + est.toFixed(5) +
+    "</b>, error <b>" + err.toFixed(5) + "</b> &mdash; shrinking roughly like 1/&radic;N.";
+}
+
+// ---------- One Las Vegas draw (uses state.lvSuccess from applyP) ----------
+function lvDrawWrapped() {
+  const val = 1 + Math.floor(Math.random() * 6);
+  state.lvCurAttempts++;
+  const win = state.lvSuccess ? state.lvSuccess(val) : (val === state.lvGoal);
+  state.lvDice.push({ val, win });
+  if (state.lvDice.length > 24) state.lvDice.shift();
+  renderDice();
+  if (win) {
+    state.lvRuns++;
+    state.lvTotal += state.lvCurAttempts;
+    log("LV: rolled " + val + " = success -> DONE in " +
+        state.lvCurAttempts + " attempts (always correct)", "lvline");
+    document.getElementById("narrate").innerHTML =
+      "Las Vegas rolled <b>" + val + "</b> = success after <b>" +
+      state.lvCurAttempts + "</b> attempts. Answer always correct; count random. " +
+      "Average &rarr; 1/p = " + (1 / state.p).toFixed(2) + ".";
+    state.lvCurAttempts = 0;
+    state.lvDice = [];
+    refreshLV();
+  } else {
+    log("LV: rolled " + val + " -> retry (attempt " +
+        state.lvCurAttempts + ")", "lvline");
+    document.getElementById("narrate").innerHTML =
+      "Las Vegas rolled <b>" + val + "</b> &mdash; not a success, <b>retry</b> " +
+      "(attempt " + state.lvCurAttempts + ").";
+    refreshLV();
+  }
+}
+
+// ---------- Engine: each step does one MC batch AND one LV draw ----------
+function doStepReal() {
+  state.step++;
+  mcBatch();
+  lvDrawWrapped();
+  document.getElementById("stepInfo").textContent = "step " + state.step;
+}
+
+function clampInt(raw, lo, hi, dflt) {
+  let v = parseInt(raw, 10);
+  if (isNaN(v)) v = dflt;
+  return Math.max(lo, Math.min(hi, v));
+}
+
+// ---------- Controls ----------
+function getDelay() {
+  const s = parseInt(document.getElementById("speedSlider").value, 10);
+  return 1100 - s * 100; // 1000ms (slow) .. 100ms (fast)
+}
+
+function run() {
+  if (state.running) { pause(); return; }
+  state.running = true;
+  document.getElementById("btnRun").textContent = "Pause ⏸";
+  state.timer = setInterval(doStepReal, getDelay());
+}
+
+function pause() {
+  state.running = false;
+  clearInterval(state.timer);
+  document.getElementById("btnRun").textContent = "Run ▶▶";
+}
+
+function reset() {
+  pause();
+  state.mcN = 0; state.mcInside = 0; state.errHistory = [];
+  state.lvDice = []; state.lvCurAttempts = 0;
+  state.lvRuns = 0; state.lvTotal = 0; state.step = 0;
+  applyP();
+  drawBoardFrame();
+  cctx.clearRect(0, 0, curve.width, curve.height);
+  document.getElementById("dice").innerHTML = "";
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("stepInfo").textContent = "step 0";
+  refreshMC(); refreshLV();
+  log("reset — Monte Carlo board cleared, Las Vegas counters zeroed", "sys");
+  document.getElementById("narrate").innerHTML =
+    "Press <b>Step</b> to advance one event, or <b>Run</b> to animate. " +
+    "Monte Carlo (left) accumulates darts; Las Vegas (right) retries until success.";
+}
+
+// The LV "success probability" knob: p = 1/d means a d-sided notion, but we
+// keep a real 6-sided die and let the goal be a single face (p = 1/6). For
+// other p values we treat "success" as rolling <= round(6*p) faces so the
+// theoretical 1/p matches what the user dials in.
+function applyP() {
+  const d = clampInt(document.getElementById("pInput").value, 2, 20, 6);
+  state.p = 1 / d;
+  // map p onto the 6-face die: success if val <= ceil(6/d) (approx p)
+  // but keep the simple, exact case d=6 -> goal face 6.
+  // For display we still show "goal 6" when d==6; otherwise describe success set.
+  if (d === 6) {
+    state.lvGoal = 6;
+    state.lvSuccess = v => v === 6;
+    document.getElementById("lvGoal").textContent = "6";
+    document.getElementById("lvGoal2").textContent = "6";
+  } else {
+    const k = Math.max(1, Math.round(6 / d)); // faces that count as success
+    state.p = k / 6;
+    state.lvSuccess = v => v <= k;
+    document.getElementById("lvGoal").textContent = "one of {1.." + k + "}";
+    document.getElementById("lvGoal2").textContent = "valid face";
+  }
+}
+
+// ---------- Wire up ----------
+document.getElementById("btnStep").addEventListener("click", () => {
+  if (state.running) pause();
+  doStepReal();
+});
+document.getElementById("btnRun").addEventListener("click", () => {
+  if (state.running) { pause(); return; }
+  state.running = true;
+  document.getElementById("btnRun").textContent = "Pause ⏸";
+  state.timer = setInterval(doStepReal, getDelay());
+});
+document.getElementById("btnReset").addEventListener("click", reset);
+document.getElementById("pInput").addEventListener("change", () => { applyP(); refreshLV(); });
+document.getElementById("speedSlider").addEventListener("input", () => {
+  if (state.running) { pause(); run(); }
+});
+
+// ---------- Initial load ----------
+applyP();
+reset();
+</script>
+</body>
+</html>
