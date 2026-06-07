@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simulated Annealing — Search over a Landscape</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;   /* accept / better */
+    --yellow: #d29922;  /* current / scan */
+    --red: #f85149;     /* reject */
+    --blue: #58a6ff;    /* accent */
+    --purple: #bc8cff;  /* best */
+    --orange: #ffa657;  /* temperature */
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161d, #0d1117);
+  }
+  header h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  header .badges { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; font-family: var(--mono); padding: 3px 8px;
+    border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .badge.g { color: var(--green); border-color: rgba(63,185,80,.4); }
+  .badge.y { color: var(--yellow); border-color: rgba(210,153,34,.4); }
+  .badge.p { color: var(--purple); border-color: rgba(188,140,255,.4); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 24px 60px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: #fff; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #388bfd; }
+  .ctrl-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .ctrl-group input[type=range] { accent-color: var(--blue); width: 120px; }
+  select, input[type=number] {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--mono);
+  }
+  .layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+  @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+  canvas { width: 100%; display: block; background: var(--surface); border-radius: 8px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px;
+  }
+  .stat .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 16px; font-family: var(--mono); font-weight: 700; }
+  .tempbar-outer {
+    height: 16px; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin-top: 6px;
+  }
+  .tempbar-inner {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--orange), var(--red));
+    transition: width .1s linear;
+  }
+  h3 { font-size: 13px; color: var(--blue); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .info { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+  .info .hl { color: var(--yellow); }
+  .info .ok { color: var(--green); }
+  .info .no { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  th { color: var(--muted); font-weight: 600; }
+  td.c1 { color: var(--green); } td.cn { color: var(--yellow); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .log {
+    height: 150px; overflow-y: auto; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6;
+  }
+  .log div.acc { color: var(--green); }
+  .log div.rej { color: var(--red); }
+  .log div.bet { color: var(--purple); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulated Annealing — Searching a Cost Landscape</h1>
+  <p>The current point hops over a bumpy 1-D function. Worse moves are accepted with probability exp(-&Delta;/T); T cools over time. Best-so-far is tracked separately.</p>
+  <div class="badges">
+    <span class="badge y">Accept worse: exp(-&Delta;/T)</span>
+    <span class="badge g">Always accept &Delta; &le; 0</span>
+    <span class="badge p">Return best, not current</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel controls">
+    <button id="startBtn" class="primary" onclick="start()">Start</button>
+    <button id="stepBtn" onclick="stepOnce()">Step</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button id="resetBtn" onclick="reset()">Reset</button>
+    <div class="ctrl-group">
+      <label>Speed</label>
+      <input type="range" id="speed" min="1" max="20" value="10" />
+    </div>
+    <div class="ctrl-group">
+      <label>T&#8320;</label>
+      <input type="number" id="T0" value="8" min="0.1" step="0.5" style="width:64px" />
+    </div>
+    <div class="ctrl-group">
+      <label>cooling &alpha;</label>
+      <input type="number" id="alpha" value="0.995" min="0.9" max="0.9999" step="0.001" style="width:74px" />
+    </div>
+    <div class="ctrl-group">
+      <label>function</label>
+      <select id="func">
+        <option value="0">two valleys (deep right)</option>
+        <option value="1">multi-modal sine</option>
+        <option value="2">many small dips</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="panel" style="padding:8px">
+        <canvas id="cv" width="820" height="380"></canvas>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--yellow)"></span> current</span>
+          <span><span class="dot" style="background:var(--purple)"></span> best-so-far</span>
+          <span><span class="dot" style="background:var(--green)"></span> accepted move</span>
+          <span><span class="dot" style="background:var(--red)"></span> rejected move</span>
+          <span><span class="dot" style="background:var(--blue)"></span> proposed neighbor</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Big-O / Cost</h3>
+        <table>
+          <tr><th>Quantity</th><th>Cost</th><th>Note</th></tr>
+          <tr><td>Per iteration</td><td class="c1">O(1)</td><td>incremental &Delta; + one exp</td></tr>
+          <tr><td>Whole run</td><td class="cn">O(I &middot; c)</td><td>I iterations, c per-move cost</td></tr>
+          <tr><td>Memory</td><td class="c1">O(state)</td><td>hold current + best only</td></tr>
+          <tr><td>Global-opt guarantee</td><td class="cn">log cooling</td><td>T&#8341; = c/log(k+2), impractical</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h3>State</h3>
+        <div class="stats">
+          <div class="stat"><div class="label">Temperature T</div><div class="value" id="sT" style="color:var(--orange)">—</div></div>
+          <div class="stat"><div class="label">Iteration</div><div class="value" id="sIter">0</div></div>
+          <div class="stat"><div class="label">Current cost</div><div class="value" id="sCur" style="color:var(--yellow)">—</div></div>
+          <div class="stat"><div class="label">Best cost</div><div class="value" id="sBest" style="color:var(--purple)">—</div></div>
+          <div class="stat"><div class="label">Accept rate</div><div class="value" id="sAcc" style="color:var(--green)">—</div></div>
+          <div class="stat"><div class="label">Worse accepted</div><div class="value" id="sWorse" style="color:var(--blue)">0</div></div>
+        </div>
+        <div class="tempbar-outer"><div class="tempbar-inner" id="tempbar"></div></div>
+      </div>
+
+      <div class="panel">
+        <h3>Last Move</h3>
+        <div class="info" id="info">Press <span class="hl">Start</span> to run, or <span class="hl">Step</span> for one move at a time.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== landscape functions (we MINIMIZE f) =====
+  const FUNCS = [
+    { // 0: two valleys, deeper on the right (classic SA win)
+      lo: -2, hi: 4,
+      f: x => x*x*x*x - 3*x*x*x + 2
+    },
+    { // 1: multi-modal sine
+      lo: -10, hi: 10,
+      f: x => Math.sin(x) * x + 0.3 * x
+    },
+    { // 2: many small dips on a slope
+      lo: -8, hi: 8,
+      f: x => 0.15*x*x + 3*Math.sin(2.2*x)
+    }
+  ];
+
+  // ===== state =====
+  let fn, lo, hi, fmin, fmax;
+  let cur, curE, best, bestE, T, T0, alpha, iter;
+  let proposed = null, lastAccepted = null, lastDelta = 0, lastP = 1;
+  let accepted = 0, proposedCount = 0, worseAccepted = 0;
+  let running = false, timer = null;
+  let rngState = 123456789;
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+
+  // deterministic RNG for reproducibility
+  function rand() {
+    rngState = (rngState * 1103515245 + 12345) & 0x7fffffff;
+    return rngState / 0x7fffffff;
+  }
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+  function scanRange() {
+    fmin = Infinity; fmax = -Infinity;
+    for (let i = 0; i <= 400; i++) {
+      const x = lo + (hi - lo) * i / 400;
+      const y = fn(x);
+      if (y < fmin) fmin = y;
+      if (y > fmax) fmax = y;
+    }
+  }
+
+  function loadFunc() {
+    const idx = +document.getElementById('func').value;
+    fn = FUNCS[idx].f; lo = FUNCS[idx].lo; hi = FUNCS[idx].hi;
+    scanRange();
+  }
+
+  function init() {
+    loadFunc();
+    T0 = parseFloat(document.getElementById('T0').value) || 8;
+    alpha = parseFloat(document.getElementById('alpha').value) || 0.995;
+    rngState = 123456789;
+    cur = lo + (hi - lo) * 0.12; // start near the shallow side for func 0
+    curE = fn(cur);
+    best = cur; bestE = curE;
+    T = T0; iter = 0;
+    accepted = 0; proposedCount = 0; worseAccepted = 0;
+    proposed = null; lastAccepted = null; lastDelta = 0; lastP = 1;
+    document.getElementById('log').innerHTML = '';
+    updateStats();
+    draw();
+    setInfo('Initialized. current x=' + cur.toFixed(3) + ', cost=' + curE.toFixed(3));
+  }
+
+  // ===== coordinate transforms =====
+  const PAD = 36;
+  function sx(x) { return PAD + (x - lo) / (hi - lo) * (cv.width - 2 * PAD); }
+  function sy(y) {
+    const pad = (fmax - fmin) * 0.12 + 1e-9;
+    const ymin = fmin - pad, ymax = fmax + pad;
+    return PAD + (ymax - y) / (ymax - ymin) * (cv.height - 2 * PAD);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    // axis baseline
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD, cv.height - PAD); ctx.lineTo(cv.width - PAD, cv.height - PAD); ctx.stroke();
+
+    // curve
+    ctx.strokeStyle = '#3a4252'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= 400; i++) {
+      const x = lo + (hi - lo) * i / 400;
+      const X = sx(x), Y = sy(fn(x));
+      i === 0 ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y);
+    }
+    ctx.stroke();
+    // fill under curve faintly
+    ctx.lineTo(sx(hi), cv.height - PAD); ctx.lineTo(sx(lo), cv.height - PAD); ctx.closePath();
+    ctx.fillStyle = 'rgba(88,166,255,0.05)'; ctx.fill();
+
+    // proposed neighbor (blue, dashed connector)
+    if (proposed !== null) {
+      ctx.strokeStyle = '#58a6ff'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(sx(cur), sy(curE)); ctx.lineTo(sx(proposed), sy(fn(proposed))); ctx.stroke();
+      ctx.setLineDash([]);
+      dot(sx(proposed), sy(fn(proposed)), 6, '#58a6ff');
+    }
+
+    // best marker (purple, with vertical drop line)
+    ctx.strokeStyle = 'rgba(188,140,255,.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(sx(best), sy(bestE)); ctx.lineTo(sx(best), cv.height - PAD); ctx.stroke();
+    dot(sx(best), sy(bestE), 7, '#bc8cff');
+
+    // current point (yellow, big)
+    const cc = lastAccepted === true ? '#3fb950' : (lastAccepted === false ? '#d29922' : '#d29922');
+    dot(sx(cur), sy(curE), 9, '#d29922');
+    ctx.lineWidth = 2; ctx.strokeStyle = '#0d1117'; ctx.beginPath();
+    ctx.arc(sx(cur), sy(curE), 9, 0, Math.PI * 2); ctx.stroke();
+
+    // labels
+    ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
+    ctx.fillText('cost f(x)', PAD - 30, PAD - 12);
+    ctx.fillText('x = ' + lo, sx(lo) - 6, cv.height - PAD + 16);
+    ctx.fillText('x = ' + hi, sx(hi) - 18, cv.height - PAD + 16);
+  }
+
+  function dot(x, y, r, color) {
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ===== one SA iteration =====
+  function stepOnce() {
+    if (T < 1e-6) { setInfo('Frozen: T &asymp; 0. Run complete. Best cost = ' + bestE.toFixed(4)); pause(); return; }
+    iter++;
+    proposedCount++;
+    const sigma = Math.max(0.05, T / T0 * (hi - lo) * 0.15);
+    proposed = clamp(cur + (rand() * 2 - 1) * sigma, lo, hi);
+    const pe = fn(proposed);
+    lastDelta = pe - curE;
+    let accept;
+    if (lastDelta <= 0) {
+      accept = true; lastP = 1;
+    } else {
+      lastP = Math.exp(-lastDelta / T);
+      accept = rand() < lastP;
+    }
+
+    if (accept) {
+      const wasWorse = lastDelta > 0;
+      cur = proposed; curE = pe;
+      accepted++; lastAccepted = true;
+      if (wasWorse) worseAccepted++;
+      if (curE < bestE) { best = cur; bestE = curE; }
+      logLine((wasWorse ? 'ACCEPT&uarr; worse' : 'accept&darr; better') +
+        ' x=' + cur.toFixed(2) + ' cost=' + curE.toFixed(3) +
+        (wasWorse ? ' p=' + lastP.toFixed(3) : ''),
+        wasWorse ? 'acc' : 'bet');
+      setInfo('&Delta; = ' + lastDelta.toFixed(3) +
+        (lastDelta <= 0
+          ? ' &le; 0 &rarr; <span class="ok">ACCEPT (better)</span>'
+          : ' &gt; 0, p = exp(-&Delta;/T) = <span class="hl">' + lastP.toFixed(3) + '</span> &rarr; <span class="ok">ACCEPT (worse, explored!)</span>'));
+    } else {
+      lastAccepted = false;
+      logLine('reject  x=' + proposed.toFixed(2) + ' cost=' + pe.toFixed(3) +
+        ' p=' + lastP.toFixed(3), 'rej');
+      setInfo('&Delta; = ' + lastDelta.toFixed(3) +
+        ' &gt; 0, p = exp(-&Delta;/T) = <span class="hl">' + lastP.toFixed(3) +
+        '</span> &rarr; <span class="no">REJECT</span>');
+    }
+
+    T *= alpha;
+    updateStats();
+    draw();
+  }
+
+  function logLine(msg, cls) {
+    const log = document.getElementById('log');
+    const d = document.createElement('div');
+    d.className = cls;
+    d.innerHTML = '#' + iter + ' ' + msg;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+    while (log.childElementCount > 200) log.removeChild(log.firstChild);
+  }
+
+  function updateStats() {
+    document.getElementById('sT').textContent = T.toFixed(4);
+    document.getElementById('sIter').textContent = iter;
+    document.getElementById('sCur').textContent = curE.toFixed(4);
+    document.getElementById('sBest').textContent = bestE.toFixed(4);
+    document.getElementById('sAcc').textContent =
+      proposedCount ? (accepted / proposedCount * 100).toFixed(0) + '%' : '—';
+    document.getElementById('sWorse').textContent = worseAccepted;
+    document.getElementById('tempbar').style.width = clamp(T / T0 * 100, 0, 100) + '%';
+  }
+
+  function setInfo(html) { document.getElementById('info').innerHTML = html; }
+
+  // ===== controls =====
+  function getDelay() { return 520 - document.getElementById('speed').value * 24; }
+  function loop() {
+    if (!running) return;
+    if (T < 1e-6) { pause(); setInfo('Frozen: T &asymp; 0. Best cost = <span class="ok">' + bestE.toFixed(4) + '</span>'); return; }
+    stepOnce();
+    timer = setTimeout(loop, getDelay());
+  }
+  function start() {
+    running = true;
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    loop();
+  }
+  function pause() {
+    running = false; clearTimeout(timer);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+  }
+  function reset() { pause(); init(); }
+
+  document.getElementById('func').addEventListener('change', reset);
+  document.getElementById('T0').addEventListener('change', reset);
+  document.getElementById('alpha').addEventListener('change', reset);
+
+  // responsive canvas
+  function fit() {
+    const w = cv.parentElement.clientWidth - 16;
+    cv.width = Math.max(420, w);
+    cv.height = Math.round(cv.width * 0.46);
+    draw();
+  }
+  window.addEventListener('resize', fit);
+
+  // init
+  init();
+  fit();
+</script>
+</body>
+</html>
