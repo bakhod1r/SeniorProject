@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rope — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:4px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:16px;text-align:center;max-width:920px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.log{color:var(--yellow);border-color:var(--yellow)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;width:100%;max-width:1180px}
+.ctl-group{display:flex;gap:6px;align-items:center;padding:4px 8px;border-right:1px solid var(--border)}
+.ctl-group:last-child{border-right:none}
+.ctl-group .lbl{color:var(--muted);font-size:.78rem;margin-right:2px}
+button{padding:7px 14px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.88rem;transition:all .15s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+input[type=text],input[type=number]{padding:7px 10px;border:2px solid var(--border);background:var(--bg);color:var(--text);border-radius:6px;font-size:.88rem}
+input[type=text]{width:230px}
+input[type=number]{width:62px}
+.speed{display:flex;align-items:center;gap:6px}
+.speed input{accent-color:var(--blue)}
+.layout{display:flex;gap:16px;width:100%;max-width:1180px;flex-wrap:wrap}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px;flex:1 1 640px;min-width:340px;min-height:430px;overflow:auto}
+.side{flex:1 1 300px;min-width:280px;display:flex;flex-direction:column;gap:16px}
+svg{display:block;margin:0 auto}
+.node rect{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .25s}
+.node.leaf rect{fill:#1b2230;stroke:var(--orange)}
+.node.path rect{fill:var(--yellow);stroke:var(--yellow)}
+.node.target rect{fill:var(--green);stroke:var(--green)}
+.node.newnode rect{fill:var(--purple);stroke:var(--purple)}
+.node.leftres rect{fill:rgba(63,185,80,.25);stroke:var(--green)}
+.node.rightres rect{fill:rgba(88,166,255,.25);stroke:var(--blue)}
+.node text{text-anchor:middle;font-family:'Consolas',monospace;font-weight:700;fill:var(--text)}
+.node .w{font-size:.72rem;fill:var(--blue)}
+.node.path .w,.node.target .w,.node.newnode .w{fill:var(--bg)}
+.node .chunk{font-size:.82rem;fill:var(--orange)}
+.node.path .chunk,.node.target .chunk{fill:var(--bg)}
+.node .tag{font-size:.6rem;fill:var(--muted)}
+.node.path .tag,.node.target .tag,.node.newnode .tag{fill:var(--bg)}
+.edge{stroke:var(--border);stroke-width:1.6;fill:none}
+.edge.active{stroke:var(--yellow);stroke-width:2.6}
+.panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 16px}
+.panel h3{color:var(--blue);font-size:.95rem;margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:5px}
+.step-info{font-family:'Consolas',monospace;font-size:.84rem;line-height:1.6;min-height:60px}
+.step-info .hl{color:var(--yellow);font-weight:700}
+.step-info .ok{color:var(--green);font-weight:700}
+.step-info .bad{color:var(--red);font-weight:700}
+.step-info .pos{color:var(--purple);font-weight:700}
+.stats{display:flex;flex-wrap:wrap;gap:14px}
+.stat{flex:1 1 80px}
+.stat-label{color:var(--muted);font-size:.66rem;text-transform:uppercase;letter-spacing:.5px}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+table.bigo{width:100%;border-collapse:collapse;font-size:.78rem}
+table.bigo th,table.bigo td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)}
+table.bigo th{color:var(--muted);font-weight:600}
+.cx-good{color:var(--green);font-weight:700;font-family:monospace}
+.cx-log{color:var(--yellow);font-weight:700;font-family:monospace}
+.cx-lin{color:var(--red);font-weight:700;font-family:monospace}
+.log-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;height:150px;overflow-y:auto;font-family:'Consolas',monospace;font-size:.76rem;line-height:1.5}
+.log-line{padding:2px 0;border-bottom:1px solid rgba(48,54,61,.5)}
+.log-line .t{color:var(--muted)}
+.array-strip{display:flex;gap:3px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+.cell{min-width:24px;height:30px;padding:0 4px;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:.78rem;position:relative}
+.cell.hit{border-color:var(--green);background:rgba(63,185,80,.2)}
+.cell .idx{position:absolute;bottom:-15px;font-size:.55rem;color:var(--muted)}
+.legend{display:flex;gap:14px;margin:10px 0 4px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:.76rem;color:var(--muted)}
+.legend-color{width:13px;height:13px;border-radius:3px;border:1px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.74rem;margin-top:14px;text-align:center;max-width:900px}
+</style>
+</head>
+<body>
+<h1>Rope</h1>
+<p class="subtitle">A balanced binary tree over a string. Leaves hold short chunks; each internal node stores <b>weight</b> = characters in its left subtree. Index descends by weight (O(log n)); concat just makes a parent (O(1)); split partitions one path (O(log n)).</p>
+
+<div class="badges">
+  <span class="badge log">Index: O(log n)</span>
+  <span class="badge best">Concat: O(1)</span>
+  <span class="badge log">Split: O(log n)</span>
+  <span class="badge log">Insert/Delete: O(log n)</span>
+  <span class="badge space">Space: O(n)</span>
+</div>
+
+<div class="controls">
+  <div class="ctl-group">
+    <span class="lbl">Build</span>
+    <input type="text" id="strIn" value="Hello_my_name_is_Simon">
+    <input type="number" id="chunkIn" value="5" min="1" max="12" title="chunk size">
+    <button onclick="buildFromString()">Build</button>
+  </div>
+  <div class="ctl-group">
+    <span class="lbl">Index i</span>
+    <input type="number" id="idxIn" value="10" min="0">
+    <button onclick="doIndex()">Index</button>
+  </div>
+  <div class="ctl-group">
+    <span class="lbl">Split at</span>
+    <input type="number" id="splitIn" value="11" min="0">
+    <button onclick="doSplit()">Split</button>
+  </div>
+  <div class="ctl-group">
+    <span class="lbl">Concat +</span>
+    <input type="text" id="concatIn" value="_says_hi" style="width:120px">
+    <button onclick="doConcat()">Concat</button>
+  </div>
+  <div class="ctl-group">
+    <button class="secondary" onclick="resetVis()">↺ Clear</button>
+    <div class="speed"><span class="lbl">Speed</span><input type="range" id="speed" min="120" max="1100" value="650" step="60"></div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>Internal (weight)</div>
+  <div class="legend-item"><div class="legend-color" style="background:#1b2230;border-color:var(--orange)"></div>Leaf (chunk)</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>On descent path</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Target / left result</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>New node</div>
+</div>
+
+<div class="array-strip" id="strip"></div>
+
+<div class="layout">
+  <div class="canvas-container" id="canvas"></div>
+  <div class="side">
+    <div class="panel">
+      <h3>Info Panel</h3>
+      <div class="step-info" id="info">Build a rope, then run Index / Split / Concat to watch the descent.</div>
+    </div>
+    <div class="panel">
+      <h3>Stats</h3>
+      <div class="stats">
+        <div class="stat"><div class="stat-label">n (chars)</div><div class="stat-value" id="sN">0</div></div>
+        <div class="stat"><div class="stat-label">Leaves</div><div class="stat-value" id="sLeaves">0</div></div>
+        <div class="stat"><div class="stat-label">Height</div><div class="stat-value" id="sHeight">0</div></div>
+        <div class="stat"><div class="stat-label">Nodes visited</div><div class="stat-value" id="sVisited">0</div></div>
+        <div class="stat"><div class="stat-label">Result</div><div class="stat-value" id="sResult">-</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Big-O</h3>
+      <table class="bigo">
+        <tr><th>Operation</th><th>Time</th><th>vs Flat string</th></tr>
+        <tr><td>Index char i</td><td class="cx-log">O(log n)</td><td class="cx-good">O(1)</td></tr>
+        <tr><td>Concat A+B</td><td class="cx-good">O(1)</td><td class="cx-lin">O(a+b)</td></tr>
+        <tr><td>Split at i</td><td class="cx-log">O(log n)</td><td class="cx-lin">O(n)</td></tr>
+        <tr><td>Insert / Delete</td><td class="cx-log">O(log n)</td><td class="cx-lin">O(n)</td></tr>
+        <tr><td>Substring (m)</td><td class="cx-log">O(log n + m)</td><td class="cx-good">O(m)</td></tr>
+        <tr><td>Space</td><td class="cx-log">O(n)</td><td class="cx-good">O(n)</td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-box" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<p class="footer-note">Weight of a node = number of characters in its <b>left</b> subtree. Index: if i &lt; weight go left, else i −= weight and go right. Concat builds a parent (no characters copied). Split partitions one root-to-leaf path. Balancing (treap / AVL / rebuild) keeps height O(log n) — see senior/professional.md.</p>
+
+<script>
+let busy=false;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const speed=()=>1220-parseInt(document.getElementById('speed').value);
+
+// ---- Rope model ----
+let idc=0;
+function mkLeaf(s){return {id:idc++,left:null,right:null,chunk:s,weight:s.length,length:s.length};}
+function mkInternal(l,r){return {id:idc++,left:l,right:r,chunk:null,weight:l.length,length:l.length+r.length};}
+function isLeaf(n){return n&&n.chunk!==null;}
+function concat(a,b){if(!a)return b;if(!b)return a;return mkInternal(a,b);}
+function ropeStr(n){if(!n)return"";if(isLeaf(n))return n.chunk;return ropeStr(n.left)+ropeStr(n.right);}
+function ropeLen(n){return n?n.length:0;}
+function height(n){if(!n||isLeaf(n))return 0;return 1+Math.max(height(n.left),height(n.right));}
+function countLeaves(n){if(!n)return 0;if(isLeaf(n))return 1;return countLeaves(n.left)+countLeaves(n.right);}
+
+function buildFromStr(s,chunk){
+  if(s.length===0)return null;
+  let leaves=[];
+  for(let i=0;i<s.length;i+=chunk)leaves.push(mkLeaf(s.slice(i,i+chunk)));
+  // balanced bottom-up combine
+  while(leaves.length>1){
+    let next=[];
+    for(let i=0;i<leaves.length;i+=2){
+      if(i+1<leaves.length)next.push(mkInternal(leaves[i],leaves[i+1]));
+      else next.push(leaves[i]);
+    }
+    leaves=next;
+  }
+  return leaves[0];
+}
+
+let root=null;
+let cls=new Map();      // node.id -> css state class
+let edgeActive=new Set(); // "parentid-childid"
+
+// ---- rendering ----
+function layout(n,depth,xref,pos){
+  if(!n)return;
+  if(isLeaf(n)){pos.x=xref.c++;n._x=pos.x;n._d=depth;return;}
+  let lp={x:0},rp={x:0};
+  layout(n.left,depth+1,xref,lp);
+  layout(n.right,depth+1,xref,rp);
+  n._x=(n.left._x+n.right._x)/2;n._d=depth;
+}
+function collect(n,arr){if(!n)return;arr.push(n);collect(n.left,arr);collect(n.right,arr);}
+
+function render(){
+  const c=document.getElementById('canvas');
+  document.getElementById('sN').textContent=ropeLen(root);
+  document.getElementById('sLeaves').textContent=countLeaves(root);
+  document.getElementById('sHeight').textContent=height(root);
+  // strip
+  const str=ropeStr(root);
+  const strip=document.getElementById('strip');
+  strip.innerHTML=[...str].map((ch,i)=>{
+    const hit=highlightIdx===i;
+    const disp=ch===' '? '·' : (ch==='_'?'_':ch);
+    return `<div class="cell ${hit?'hit':''}">${disp}<span class="idx">${i}</span></div>`;
+  }).join('');
+  if(!root){c.innerHTML='<p style="color:var(--muted);text-align:center;padding-top:150px">Empty rope.</p>';return;}
+  const xref={c:0};
+  layout(root,0,xref,{x:0});
+  const cols=Math.max(1,xref.c);
+  const depth=height(root);
+  const nodes=[];collect(root,nodes);
+  const W=Math.max(620,cols*86),H=Math.max(360,(depth+1)*92);
+  const sx=x=>40+ (cols<=1?W/2-40 : x*(W-80)/(cols-1));
+  const sy=d=>34+d*(H-70)/Math.max(1,depth);
+  let edges='',rects='';
+  for(const n of nodes){
+    if(isLeaf(n))continue;
+    for(const ch of [n.left,n.right]){
+      if(!ch)continue;
+      const act=edgeActive.has(n.id+'-'+ch.id)?'active':'';
+      edges+=`<line class="edge ${act}" x1="${sx(n._x)}" y1="${sy(n._d)+20}" x2="${sx(ch._x)}" y2="${sy(ch._d)-20}"/>`;
+    }
+  }
+  for(const n of nodes){
+    const st=cls.get(n.id)||'';
+    if(isLeaf(n)){
+      const disp=n.chunk.length>7?n.chunk.slice(0,6)+'…':n.chunk;
+      rects+=`<g class="node leaf ${st}">
+        <rect x="${sx(n._x)-34}" y="${sy(n._d)-20}" width="68" height="40" rx="6"/>
+        <text class="chunk" x="${sx(n._x)}" y="${sy(n._d)-2}">"${disp}"</text>
+        <text class="tag" x="${sx(n._x)}" y="${sy(n._d)+13}">len ${n.length}</text>
+      </g>`;
+    }else{
+      rects+=`<g class="node ${st}">
+        <rect x="${sx(n._x)-30}" y="${sy(n._d)-20}" width="60" height="40" rx="6"/>
+        <text class="w" x="${sx(n._x)}" y="${sy(n._d)-2}">w=${n.weight}</text>
+        <text class="tag" x="${sx(n._x)}" y="${sy(n._d)+13}">len ${n.length}</text>
+      </g>`;
+    }
+  }
+  c.innerHTML=`<svg width="${W}" height="${H}">${edges}${rects}</svg>`;
+}
+
+// ---- info / log ----
+let highlightIdx=-1;
+function setInfo(html){document.getElementById('info').innerHTML=html;}
+function setVisited(v){document.getElementById('sVisited').textContent=v;}
+function setResult(v){document.getElementById('sResult').textContent=v;}
+function addLog(msg){
+  const box=document.getElementById('log');
+  const t=new Date().toLocaleTimeString().split(' ')[0];
+  box.innerHTML=`<div class="log-line"><span class="t">${t}</span> ${msg}</div>`+box.innerHTML;
+}
+
+// ---- operations ----
+function buildFromString(){
+  if(busy)return;
+  const s=document.getElementById('strIn').value.replace(/\s/g,'_');
+  let ch=parseInt(document.getElementById('chunkIn').value)||5;
+  ch=Math.max(1,Math.min(12,ch));
+  root=buildFromStr(s,ch);
+  cls=new Map();edgeActive=new Set();highlightIdx=-1;
+  setVisited(0);setResult('-');
+  setInfo(`Built rope for <span class="hl">"${s}"</span> with chunk size ${ch}: ${countLeaves(root)} leaves, height ${height(root)}.`);
+  addLog(`build "${s}" chunk=${ch} → ${countLeaves(root)} leaves, h=${height(root)}`);
+  render();
+}
+
+async function doIndex(){
+  if(busy||!root)return;busy=true;
+  const i=parseInt(document.getElementById('idxIn').value);
+  cls=new Map();edgeActive=new Set();highlightIdx=-1;setVisited(0);
+  if(isNaN(i)||i<0||i>=ropeLen(root)){setInfo(`<span class="bad">Index ${i} out of range [0, ${ropeLen(root)-1}].</span>`);busy=false;render();return;}
+  let n=root,orig=i,cur=i,visited=0;
+  setInfo(`Looking up <span class="pos">index ${orig}</span>. Descend by weight…`);
+  render();await sleep(speed());
+  while(!isLeaf(n)){
+    visited++;setVisited(visited);
+    cls.set(n.id,'path');
+    if(cur<n.weight){
+      edgeActive.add(n.id+'-'+n.left.id);
+      setInfo(`At weight node w=${n.weight}: <span class="pos">i=${cur}</span> &lt; ${n.weight} → <span class="hl">go LEFT</span>, i stays ${cur}.`);
+      render();await sleep(speed());
+      n=n.left;
+    }else{
+      edgeActive.add(n.id+'-'+n.right.id);
+      const ni=cur-n.weight;
+      setInfo(`At weight node w=${n.weight}: <span class="pos">i=${cur}</span> ≥ ${n.weight} → <span class="hl">go RIGHT</span>, i = ${cur} − ${n.weight} = <span class="pos">${ni}</span>.`);
+      render();await sleep(speed());
+      cur=ni;n=n.right;
+    }
+  }
+  visited++;setVisited(visited);
+  cls.set(n.id,'target');highlightIdx=orig;
+  const ch=n.chunk[cur];
+  setResult(`'${ch}'`);
+  setInfo(`Reached leaf <span class="hl">"${n.chunk}"</span>, local offset ${cur} → <span class="ok">char '${ch}'</span> at index ${orig}. Visited ${visited} nodes (O(log n)).`);
+  addLog(`index(${orig}) = '${ch}'  (${visited} nodes)`);
+  render();busy=false;
+}
+
+async function doConcat(){
+  if(busy||!root)return;busy=true;
+  let s=document.getElementById('concatIn').value.replace(/\s/g,'_');
+  if(s.length===0){busy=false;return;}
+  cls=new Map();edgeActive=new Set();highlightIdx=-1;setVisited(0);
+  const oldLen=ropeLen(root);
+  const B=buildFromStr(s,Math.max(1,Math.min(12,parseInt(document.getElementById('chunkIn').value)||5)));
+  setInfo(`Concatenating rope B = <span class="hl">"${s}"</span>. A new internal node becomes the root: weight = len(A) = <span class="pos">${oldLen}</span>. <b>No characters are copied.</b>`);
+  render();await sleep(speed());
+  const newRoot=mkInternal(root,B);
+  root=newRoot;
+  cls.set(newRoot.id,'newnode');
+  setVisited(1);setResult('O(1)');
+  setInfo(`<span class="ok">Concat done in O(1)</span>: new root w=${newRoot.weight}, total length ${newRoot.length}. Left subtree = old rope, right subtree = "${s}".`);
+  addLog(`concat + "${s}"  → len ${newRoot.length}, root weight ${newRoot.weight}`);
+  render();busy=false;
+}
+
+async function doSplit(){
+  if(busy||!root)return;busy=true;
+  const i=parseInt(document.getElementById('splitIn').value);
+  cls=new Map();edgeActive=new Set();highlightIdx=-1;setVisited(0);
+  if(isNaN(i)||i<0||i>ropeLen(root)){setInfo(`<span class="bad">Split position ${i} out of range [0, ${ropeLen(root)}].</span>`);busy=false;render();return;}
+  setInfo(`Splitting at <span class="pos">position ${i}</span> into L=[0,${i}) and R=[${i},${ropeLen(root)}). Descend, partition each node…`);
+  render();await sleep(speed());
+  // animate the descent path first
+  let n=root,cur=i,visited=0;
+  while(n&&!isLeaf(n)){
+    visited++;setVisited(visited);
+    cls.set(n.id,'path');
+    if(cur<=n.weight){edgeActive.add(n.id+'-'+n.left.id);setInfo(`w=${n.weight}: i=${cur} ≤ weight → cut in LEFT subtree; right child joins the R result.`);n=n.left;}
+    else{edgeActive.add(n.id+'-'+n.right.id);setInfo(`w=${n.weight}: i=${cur} &gt; weight → cut in RIGHT subtree; left child joins the L result; i = ${cur-n.weight}.`);cur-=n.weight;n=n.right;}
+    render();await sleep(speed());
+  }
+  // perform actual split
+  const [L,R]=splitRope(root,i);
+  // recolor results: show two trees side by side by making a temporary combined view
+  root=mkInternal(L||mkLeaf(''),R||mkLeaf(''));
+  // tag halves
+  tagSubtree(L,'leftres');tagSubtree(R,'rightres');
+  cls.set(root.id,'newnode');
+  setVisited(visited);setResult(`L="${ropeStr(L)}"`);
+  setInfo(`<span class="ok">Split complete</span> (O(log n)). <span style="color:var(--green)">L = "${ropeStr(L)}"</span> &nbsp; <span style="color:var(--blue)">R = "${ropeStr(R)}"</span>. (Shown joined under a temporary purple root for display.)`);
+  addLog(`split(${i}) → L="${ropeStr(L)}" | R="${ropeStr(R)}"`);
+  render();busy=false;
+}
+function tagSubtree(n,c){if(!n)return;cls.set(n.id,c);tagSubtree(n.left,c);tagSubtree(n.right,c);}
+function splitRope(n,i){
+  if(!n)return [null,null];
+  if(isLeaf(n)){
+    if(i<=0)return [null,n];
+    if(i>=n.chunk.length)return [n,null];
+    return [mkLeaf(n.chunk.slice(0,i)),mkLeaf(n.chunk.slice(i))];
+  }
+  if(i<=n.weight){const [l,rsub]=splitRope(n.left,i);return [l,concat(rsub,n.right)];}
+  const [lsub,r]=splitRope(n.right,i-n.weight);return [concat(n.left,lsub),r];
+}
+
+function resetVis(){
+  if(busy)return;
+  cls=new Map();edgeActive=new Set();highlightIdx=-1;setVisited(0);setResult('-');
+  setInfo('Cleared highlights. Rope structure unchanged.');render();
+}
+
+// init
+buildFromString();
+</script>
+</body>
+</html>
