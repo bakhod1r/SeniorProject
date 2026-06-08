@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>k-d Tree — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+  }
+  h1{font-size:1.7rem; color:var(--blue); text-align:center; margin-bottom:4px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:18px; font-size:.9rem;}
+  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;}
+  .badge{padding:4px 10px; border-radius:6px; font-size:.78rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-red{color:var(--red); border-color:var(--red);}
+  .b-blue{color:var(--blue); border-color:var(--blue);}
+
+  .layout{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; align-items:flex-start;}
+  .panel{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:16px;
+  }
+  .viz-wrap{flex:1 1 420px; min-width:340px; max-width:560px;}
+  .side{flex:1 1 320px; min-width:300px; max-width:420px; display:flex; flex-direction:column; gap:16px;}
+
+  svg{display:block; width:100%; height:auto; background:#0a0e14; border-radius:8px;}
+  .plane-line-x{stroke:var(--blue); stroke-width:1.2; opacity:.55;}
+  .plane-line-y{stroke:var(--orange); stroke-width:1.2; opacity:.55;}
+  .pt{fill:var(--muted);}
+  .pt.in-best{fill:var(--green);}
+  .pt.current{fill:var(--yellow);}
+  .pt.pruned{fill:#3a3f47;}
+  .pt.bestpt{fill:var(--green); stroke:#fff; stroke-width:1.5;}
+  .query{fill:var(--purple); stroke:#fff; stroke-width:1.5;}
+  .best-circle{fill:none; stroke:var(--green); stroke-width:1.2; stroke-dasharray:4 3; opacity:.8;}
+  .prune-rect{fill:var(--red); opacity:.10;}
+
+  /* tree */
+  .tree-svg{background:#0a0e14;}
+  .edge{stroke:var(--border); stroke-width:1.5;}
+  .tnode circle{fill:var(--surface); stroke:var(--muted); stroke-width:1.5;}
+  .tnode.current circle{stroke:var(--yellow); stroke-width:2.5; fill:#2b2410;}
+  .tnode.visited circle{stroke:var(--blue);}
+  .tnode.bestpt circle{stroke:var(--green); stroke-width:2.5; fill:#10251a;}
+  .tnode.pruned circle{stroke:#3a3f47;}
+  .tnode.pruned text{fill:#4a4f57;}
+  .tnode text{fill:var(--text); font-size:9px; text-anchor:middle; font-family:'Courier New',monospace;}
+
+  .controls{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:12px;}
+  button{
+    padding:8px 16px; border:1.5px solid var(--blue); background:transparent;
+    color:var(--blue); border-radius:8px; cursor:pointer; font-size:.88rem; transition:.2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+  .input-row{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:10px; align-items:center;}
+  input[type=text]{
+    padding:7px 12px; border:1.5px solid var(--border); background:#0a0e14;
+    color:var(--text); border-radius:8px; font-size:.85rem; width:130px;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue);}
+  .speed-row{display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:8px; color:var(--muted); font-size:.82rem;}
+  input[type=range]{accent-color:var(--blue); width:130px;}
+  label{color:var(--muted); font-size:.82rem;}
+
+  h3{color:var(--blue); font-size:1rem; margin-bottom:8px;}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:.82rem;}
+  .stats .k{color:var(--muted);}
+  .stats .v{color:var(--text); font-weight:600; font-family:'Courier New',monospace;}
+
+  table{width:100%; border-collapse:collapse; font-size:.78rem;}
+  th,td{border:1px solid var(--border); padding:5px 7px; text-align:left;}
+  th{color:var(--muted); font-weight:600;}
+  .c-green{color:var(--green);} .c-yellow{color:var(--yellow);} .c-red{color:var(--red);}
+
+  .info{font-family:'Courier New',monospace; font-size:.84rem; line-height:1.6; min-height:48px;}
+  .info .hl{color:var(--yellow);}
+  .log{max-height:160px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.76rem; line-height:1.5;}
+  .log div{padding:2px 0; border-bottom:1px solid #1d2129; color:var(--muted);}
+  .log .prune{color:var(--red);} .log .keep{color:var(--green);} .log .visit{color:var(--blue);}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0; font-size:.76rem;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .dot{width:12px; height:12px; border-radius:50%;}
+</style>
+</head>
+<body>
+  <h1>k-d Tree</h1>
+  <p class="subtitle">Alternating x/y splits partition the plane — nearest-neighbor search prunes whole branches</p>
+
+  <div class="badges">
+    <span class="badge b-green">Build O(n log n)</span>
+    <span class="badge b-blue">NN avg O(log n)</span>
+    <span class="badge b-yellow">NN worst O(n)</span>
+    <span class="badge b-red">High-dim → O(n)</span>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="ptsInput" placeholder="7,2 5,4 9,6 ...">
+    <input type="text" id="queryInput" placeholder="query: 6,5">
+    <button onclick="loadCustom()">Load</button>
+    <button onclick="randomPoints()">Random</button>
+  </div>
+
+  <div class="controls">
+    <button id="buildBtn" onclick="animateBuild()">Build Tree</button>
+    <button id="nnBtn" onclick="animateNN()">Nearest Query</button>
+    <button id="stepBtn" onclick="stepNN()">Step</button>
+    <button id="resetBtn" onclick="resetAll()">Reset</button>
+  </div>
+
+  <div class="speed-row">
+    <span>Slow</span>
+    <input type="range" id="speed" min="1" max="10" value="5">
+    <span>Fast</span>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--purple)"></span>query</span>
+    <span><span class="dot" style="background:var(--yellow)"></span>current node</span>
+    <span><span class="dot" style="background:var(--green)"></span>best so far</span>
+    <span><span class="dot" style="background:#3a3f47"></span>pruned</span>
+    <span><span class="dot" style="background:var(--blue)"></span>x-split</span>
+    <span><span class="dot" style="background:var(--orange)"></span>y-split</span>
+  </div>
+
+  <div class="layout">
+    <div class="panel viz-wrap">
+      <h3>Plane partition</h3>
+      <svg id="plane" viewBox="0 0 360 360"></svg>
+      <h3 style="margin-top:14px;">Tree</h3>
+      <svg id="tree" class="tree-svg" viewBox="0 0 360 260"></svg>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h3>Live stats</h3>
+        <div class="stats">
+          <span class="k">Points (n)</span><span class="v" id="s-n">0</span>
+          <span class="k">Tree height</span><span class="v" id="s-h">0</span>
+          <span class="k">Nodes visited</span><span class="v" id="s-visited">0</span>
+          <span class="k">Nodes pruned</span><span class="v" id="s-pruned">0</span>
+          <span class="k">Best point</span><span class="v" id="s-best">—</span>
+          <span class="k">Best dist²</span><span class="v" id="s-bestd">∞</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>What's happening</h3>
+        <div class="info" id="info">Press <span class="hl">Build Tree</span>, then <span class="hl">Nearest Query</span> (or <span class="hl">Step</span>).</div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Avg (low dim)</th><th>Worst</th></tr>
+          <tr><td>Build (median)</td><td class="c-green">O(n log n)</td><td class="c-yellow">O(n log n)</td></tr>
+          <tr><td>Nearest neighbor</td><td class="c-green">O(log n)</td><td class="c-red">O(n)</td></tr>
+          <tr><td>k-NN</td><td class="c-green">O(k+log n)</td><td class="c-red">O(n)</td></tr>
+          <tr><td>Range (2D box)</td><td class="c-yellow">O(√n+m)</td><td class="c-red">O(n)</td></tr>
+          <tr><td>Space</td><td class="c-green">O(n)</td><td class="c-green">O(n)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== state =====
+let points = [[7,2],[5,4],[9,6],[2,3],[4,7],[8,1],[9,9]];
+let query = [6,5];
+let root = null;
+let steps = [];          // precomputed NN steps
+let stepIdx = 0;
+let timer = null;
+let busy = false;
+
+const PAD = 28, SVG = 360;       // plane svg
+let dataMin = 0, dataMax = 10;   // data coordinate bounds
+
+function speedMs(){ return 1150 - document.getElementById('speed').value*100; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// ===== build (median split, alternating axis) =====
+let nodeSeq = 0;
+function build(pts, depth){
+  if(pts.length===0) return null;
+  const axis = depth % 2;
+  pts = pts.slice().sort((a,b)=>a[axis]-b[axis]);
+  const mid = Math.floor(pts.length/2);
+  return {
+    id: nodeSeq++,
+    point: pts[mid],
+    axis,
+    depth,
+    left: build(pts.slice(0,mid), depth+1),
+    right: build(pts.slice(mid+1), depth+1)
+  };
+}
+
+function treeHeight(n){ return n? 1+Math.max(treeHeight(n.left),treeHeight(n.right)) : 0; }
+
+// assign each node a bounding rect of the plane (in data coords) for prune-rect drawing
+function assignRegions(n, minX,minY,maxX,maxY){
+  if(!n) return;
+  n.region = [minX,minY,maxX,maxY];
+  const s = n.point[n.axis];
+  if(n.axis===0){
+    assignRegions(n.left,  minX,minY, s,maxY);
+    assignRegions(n.right, s,minY, maxX,maxY);
+  } else {
+    assignRegions(n.left,  minX,minY, maxX,s);
+    assignRegions(n.right, minX,s, maxX,maxY);
+  }
+}
+
+// ===== coordinate mapping data -> svg =====
+function recomputeBounds(){
+  const xs = points.map(p=>p[0]).concat(query[0]);
+  const ys = points.map(p=>p[1]).concat(query[1]);
+  let lo = Math.min(...xs, ...ys), hi = Math.max(...xs, ...ys);
+  const span = Math.max(hi-lo, 1);
+  dataMin = lo - span*0.08; dataMax = hi + span*0.08;
+}
+function sx(x){ return PAD + (x-dataMin)/(dataMax-dataMin)*(SVG-2*PAD); }
+function sy(y){ return SVG-PAD - (y-dataMin)/(dataMax-dataMin)*(SVG-2*PAD); }
+
+// ===== NN with step recording =====
+function computeNNSteps(){
+  steps = [];
+  let best = null, bestD = Infinity;
+  let visited = 0, pruned = 0;
+
+  function countSub(n){ return n? 1+countSub(n.left)+countSub(n.right):0; }
+
+  function rec(n){
+    if(!n) return;
+    visited++;
+    const d = sqd(query, n.point);
+    let improved=false;
+    if(d<bestD){ bestD=d; best=n.point; improved=true; }
+    steps.push({type:'visit', node:n.id, point:n.point, d, best:best.slice(), bestD, visited, pruned, improved,
+      msg:`visit (${n.point}) split ${n.axis===0?'x':'y'} · dist²=${d}${improved?' → new best!':''}`});
+
+    const diff = query[n.axis]-n.point[n.axis];
+    const near = diff<0? n.left : n.right;
+    const far  = diff<0? n.right : n.left;
+    rec(near);
+
+    if(diff*diff < bestD){
+      steps.push({type:'keep', node:n.id, best:best.slice(), bestD, visited, pruned,
+        msg:`far side: ${diff*diff} < best ${bestD} → MUST explore`});
+      rec(far);
+    } else if(far){
+      const cnt = countSub(far);
+      pruned += cnt;
+      steps.push({type:'prune', node:n.id, far:far.id, region:far.region, best:best.slice(), bestD, visited, pruned, count:cnt,
+        msg:`PRUNE far subtree: ${diff*diff} ≥ best ${bestD} → skip ${cnt} node(s)`});
+    }
+  }
+  rec(root);
+  steps.push({type:'done', best:best.slice(), bestD, visited, pruned,
+    msg:`done · nearest = (${best}) at dist² ${bestD}`});
+}
+
+function sqd(a,b){ let s=0; for(let i=0;i<a.length;i++){const d=a[i]-b[i]; s+=d*d;} return s; }
+
+// ===== rendering: plane =====
+function renderPlane(state){
+  const svg = document.getElementById('plane');
+  let h = '';
+  // grid border
+  h += `<rect x="${PAD}" y="${PAD}" width="${SVG-2*PAD}" height="${SVG-2*PAD}" fill="none" stroke="#1d2129"/>`;
+
+  // splitting lines (only if tree built)
+  if(root){
+    const lines=[];
+    (function walk(n){
+      if(!n) return;
+      const [minX,minY,maxX,maxY]=n.region;
+      const s=n.point[n.axis];
+      if(n.axis===0){
+        lines.push(`<line class="plane-line-x" x1="${sx(s)}" y1="${sy(minY)}" x2="${sx(s)}" y2="${sy(maxY)}"/>`);
+      } else {
+        lines.push(`<line class="plane-line-y" x1="${sx(minX)}" y1="${sy(s)}" x2="${sx(maxX)}" y2="${sy(s)}"/>`);
+      }
+      walk(n.left); walk(n.right);
+    })(root);
+    h += lines.join('');
+  }
+
+  // pruned region highlight
+  if(state && state.type==='prune' && state.region){
+    const [minX,minY,maxX,maxY]=state.region;
+    h += `<rect class="prune-rect" x="${sx(minX)}" y="${sy(maxY)}" width="${sx(maxX)-sx(minX)}" height="${sy(minY)-sy(maxY)}"/>`;
+  }
+
+  // best-distance circle
+  if(state && state.bestD!==undefined && isFinite(state.bestD)){
+    const r = Math.sqrt(state.bestD)/(dataMax-dataMin)*(SVG-2*PAD);
+    h += `<circle class="best-circle" cx="${sx(query[0])}" cy="${sy(query[1])}" r="${r}"/>`;
+  }
+
+  // points
+  const bestPt = state && state.best ? state.best.join(',') : null;
+  const curPt  = state && state.point ? state.point.join(',') : null;
+  for(const p of points){
+    let cls='pt';
+    if(bestPt===p.join(',')) cls='pt bestpt';
+    else if(curPt===p.join(',')) cls='pt current';
+    h += `<circle class="${cls}" cx="${sx(p[0])}" cy="${sy(p[1])}" r="5"/>`;
+    h += `<text x="${sx(p[0])+7}" y="${sy(p[1])+3}" fill="#6b7280" font-size="8">${p[0]},${p[1]}</text>`;
+  }
+  // query
+  h += `<circle class="query" cx="${sx(query[0])}" cy="${sy(query[1])}" r="6"/>`;
+  h += `<text x="${sx(query[0])+8}" y="${sy(query[1])-6}" fill="#bc8cff" font-size="9">q(${query})</text>`;
+
+  svg.innerHTML = h;
+}
+
+// ===== rendering: tree =====
+function layoutTree(){
+  // assign x positions by in-order, y by depth
+  let order=0; const TW=360, levelH=46;
+  (function walk(n){
+    if(!n) return;
+    walk(n.left);
+    n._x = order++;
+    walk(n.right);
+  })(root);
+  const total = order;
+  (function setpos(n){
+    if(!n) return;
+    n._px = 22 + n._x/(Math.max(total-1,1))*(TW-44);
+    n._py = 22 + n.depth*levelH;
+    setpos(n.left); setpos(n.right);
+  })(root);
+}
+
+function renderTree(state){
+  const svg=document.getElementById('tree');
+  if(!root){ svg.innerHTML=''; return; }
+  layoutTree();
+  let edges='', nodes='';
+  const curId = state && state.node!==undefined ? state.node : -1;
+  const bestPt = state && state.best ? state.best.join(',') : null;
+  const prunedFar = state && state.type==='prune' ? state.far : -1;
+
+  // collect pruned subtree ids
+  const prunedIds = new Set();
+  if(prunedFar>=0){
+    (function mark(n){ if(!n) return; if(n.id===prunedFar){ (function all(m){ if(!m) return; prunedIds.add(m.id); all(m.left); all(m.right);})(n); } else { mark(n.left); mark(n.right);} })(root);
+  }
+
+  (function walk(n){
+    if(!n) return;
+    for(const c of [n.left,n.right]){
+      if(c) edges+=`<line class="edge" x1="${n._px}" y1="${n._py}" x2="${c._px}" y2="${c._py}"/>`;
+    }
+    let cls='tnode';
+    if(prunedIds.has(n.id)) cls+=' pruned';
+    else if(bestPt===n.point.join(',')) cls+=' bestpt';
+    else if(n.id===curId) cls+=' current';
+    nodes+=`<g class="${cls}"><circle cx="${n._px}" cy="${n._py}" r="15"/>`+
+           `<text x="${n._px}" y="${n._py-1}">${n.point[0]},${n.point[1]}</text>`+
+           `<text x="${n._px}" y="${n._py+9}" font-size="7" fill="${n.axis===0?'#58a6ff':'#ffa657'}">${n.axis===0?'[x]':'[y]'}</text></g>`;
+    walk(n.left); walk(n.right);
+  })(root);
+
+  svg.setAttribute('viewBox',`0 0 360 ${Math.max(260, 44+(treeHeight(root))*46)}`);
+  svg.innerHTML = edges+nodes;
+}
+
+// ===== stats + log =====
+function setStats(state){
+  document.getElementById('s-n').textContent = points.length;
+  document.getElementById('s-h').textContent = root? treeHeight(root):0;
+  document.getElementById('s-visited').textContent = state&&state.visited!==undefined? state.visited:0;
+  document.getElementById('s-pruned').textContent = state&&state.pruned!==undefined? state.pruned:0;
+  document.getElementById('s-best').textContent = state&&state.best? '('+state.best+')':'—';
+  document.getElementById('s-bestd').textContent = state&&state.bestD!==undefined&&isFinite(state.bestD)? state.bestD:'∞';
+}
+function setInfo(msg){ document.getElementById('info').innerHTML=msg; }
+function addLog(msg,cls){ const l=document.getElementById('log'); const d=document.createElement('div'); if(cls)d.className=cls; d.textContent=msg; l.insertBefore(d,l.firstChild); }
+
+// ===== driver =====
+function ensureTree(){
+  if(!root){
+    nodeSeq=0;
+    root=build(points.slice(),0);
+    assignRegions(root, dataMin,dataMin,dataMax,dataMax);
+  }
+}
+
+async function animateBuild(){
+  if(busy) return; busy=true;
+  resetSearchState();
+  recomputeBounds();
+  nodeSeq=0;
+  root=build(points.slice(),0);
+  assignRegions(root, dataMin,dataMin,dataMax,dataMax);
+  setInfo(`Built balanced tree: <span class="hl">${points.length}</span> points, height <span class="hl">${treeHeight(root)}</span>. Splits alternate <span style="color:var(--blue)">x</span> / <span style="color:var(--orange)">y</span>.`);
+  addLog(`build: ${points.length} pts, height ${treeHeight(root)}`, 'visit');
+  renderPlane(null); renderTree(null); setStats(null);
+  busy=false;
+}
+
+function prepNN(){
+  ensureTree();
+  recomputeBounds();
+  assignRegions(root, dataMin,dataMin,dataMax,dataMax);
+  computeNNSteps();
+  stepIdx=0;
+}
+
+async function animateNN(){
+  if(busy) return;
+  prepNN(); busy=true;
+  document.getElementById('log').innerHTML='';
+  addLog(`nearest query for q=(${query})`, 'visit');
+  while(stepIdx<steps.length){
+    applyStep(steps[stepIdx]); stepIdx++;
+    await sleep(speedMs());
+  }
+  busy=false;
+}
+
+function stepNN(){
+  if(busy) return;
+  if(stepIdx===0){ prepNN(); document.getElementById('log').innerHTML=''; addLog(`nearest query for q=(${query})`,'visit'); }
+  if(stepIdx<steps.length){ applyStep(steps[stepIdx]); stepIdx++; }
+}
+
+function applyStep(s){
+  renderPlane(s); renderTree(s); setStats(s); setInfo(s.msg.replace(/best/g,'<span class="hl">best</span>'));
+  if(s.type==='prune') addLog(s.msg,'prune');
+  else if(s.type==='keep') addLog(s.msg,'keep');
+  else if(s.type==='visit') addLog(s.msg,'visit');
+  else addLog(s.msg);
+}
+
+function resetSearchState(){ clearTimeout(timer); steps=[]; stepIdx=0; }
+function resetAll(){
+  if(busy) return;
+  resetSearchState(); root=null;
+  recomputeBounds();
+  document.getElementById('log').innerHTML='';
+  renderPlane(null); renderTree(null); setStats(null);
+  setInfo('Press <span class="hl">Build Tree</span>, then <span class="hl">Nearest Query</span> (or <span class="hl">Step</span>).');
+}
+
+function loadCustom(){
+  const pt = document.getElementById('ptsInput').value.trim();
+  const q  = document.getElementById('queryInput').value.trim();
+  if(pt){
+    const parsed = pt.split(/\s+/).map(tok=>tok.split(',').map(Number)).filter(p=>p.length===2&&p.every(v=>!isNaN(v)));
+    if(parsed.length){ points = parsed; }
+  }
+  if(q){
+    const qp = q.replace(/[^0-9.,\- ]/g,'').split(',').map(Number);
+    if(qp.length===2 && qp.every(v=>!isNaN(v))) query=qp;
+  }
+  resetAll();
+}
+
+function randomPoints(){
+  const n = 6 + Math.floor(Math.random()*6);
+  points = Array.from({length:n},()=>[Math.floor(Math.random()*20), Math.floor(Math.random()*20)]);
+  query = [Math.floor(Math.random()*20), Math.floor(Math.random()*20)];
+  document.getElementById('ptsInput').value = points.map(p=>p.join(',')).join(' ');
+  document.getElementById('queryInput').value = query.join(',');
+  resetAll();
+}
+
+// ===== init =====
+document.getElementById('ptsInput').value = points.map(p=>p.join(',')).join(' ');
+document.getElementById('queryInput').value = query.join(',');
+recomputeBounds();
+renderPlane(null); renderTree(null); setStats(null);
+</script>
+</body>
+</html>
