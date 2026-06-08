@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Minkowski Sum of Convex Polygons — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  }
+  .badge b { color: var(--green); }
+
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--muted); margin: 0 0 12px; font-weight: 600;
+  }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  button {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  button:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { border-color: var(--green); color: var(--green); }
+  button.primary:hover:not(:disabled) { background: rgba(63,185,80,0.12); }
+
+  .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+  select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-family: inherit; font-size: 13px;
+  }
+  input[type="range"] { width: 130px; accent-color: var(--blue); }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .stat .label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 16px; font-weight: 600; margin-top: 2px; font-family: ui-monospace, monospace; }
+
+  .info {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 13px; line-height: 1.6;
+  }
+  .info .op { color: var(--blue); font-weight: 600; }
+  .info .cplx { color: var(--yellow); font-family: ui-monospace, monospace; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+  td.c { font-family: ui-monospace, monospace; }
+  .c-green { color: var(--green); } .c-yellow { color: var(--yellow); } .c-red { color: var(--red); }
+
+  .log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; height: 160px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 11px;
+  }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(48,54,61,0.4); color: var(--muted); }
+  .log div:last-child { color: var(--text); }
+
+  svg { width: 100%; height: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; display: block; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  .grid-line { stroke: #1c2230; stroke-width: 1; }
+  .axis { stroke: #2a313d; stroke-width: 1.5; }
+  .polyA { fill: rgba(88,166,255,0.18); stroke: var(--blue); stroke-width: 2; }
+  .polyB { fill: rgba(188,140,255,0.18); stroke: var(--purple); stroke-width: 2; }
+  .polyS { fill: rgba(63,185,80,0.14); stroke: var(--green); stroke-width: 2.5; }
+  .polyCO { fill: rgba(255,166,87,0.16); stroke: var(--orange); stroke-width: 2; stroke-dasharray: 5 4; }
+  .vtx { fill: var(--text); }
+  .edgeActive { stroke: var(--yellow); stroke-width: 4; }
+  .ptCloud { fill: rgba(139,148,158,0.5); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Minkowski Sum of Convex Polygons</h1>
+    <div class="sub">A &oplus; B = { a + b : a &isin; A, b &isin; B } &mdash; built by merging edge vectors in angular order</div>
+  </div>
+  <div class="badges">
+    <span class="badge">Convex &oplus; Convex: <b>O(n + m)</b></span>
+    <span class="badge">Naive all-pairs: O(nm log nm)</span>
+    <span class="badge">Output: &le; n + m vertices</span>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: controls + info -->
+  <section>
+    <div class="panel">
+      <h2>Controls</h2>
+      <div class="toggle-row">
+        <label for="example">Example:</label>
+        <select id="example" onchange="loadExample()">
+          <option value="tri-sq">Triangle &oplus; Square</option>
+          <option value="sq-sq">Square &oplus; Square</option>
+          <option value="tri-tri">Triangle &oplus; Triangle</option>
+          <option value="penta-tri">Pentagon &oplus; Triangle</option>
+        </select>
+      </div>
+      <div class="toggle-row">
+        <label><input type="checkbox" id="showCloud" onchange="render()"> Show all-pairs cloud (a+b)</label>
+      </div>
+      <div class="toggle-row">
+        <label><input type="checkbox" id="cspace" onchange="toggleCspace()"> C-space mode: inflate B by &minus;A</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="startBtn" onclick="start()">Build &#9654;</button>
+        <button id="stepBtn" onclick="stepForward()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+      <div class="toggle-row">
+        <label>Speed:</label>
+        <span style="color:var(--muted);font-size:11px">slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <span style="color:var(--muted);font-size:11px">fast</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Live Stats</h2>
+      <div class="stats">
+        <div class="stat"><div class="label">A vertices</div><div class="value" id="sAn">0</div></div>
+        <div class="stat"><div class="label">B vertices</div><div class="value" id="sBn">0</div></div>
+        <div class="stat"><div class="label">Sum edges built</div><div class="value" id="sEdges">0</div></div>
+        <div class="stat"><div class="label">Pointer i / j</div><div class="value" id="sIJ">0 / 0</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Current Operation</h2>
+      <div class="info" id="info">
+        Press <span class="op">Build</span> to merge the edge vectors of A and B by polar angle,
+        or <span class="op">Step</span> one edge at a time.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Big-O</h2>
+      <table>
+        <tr><th>Operation</th><th>Time</th></tr>
+        <tr><td>Convex &oplus; convex (merge)</td><td class="c c-green">O(n + m)</td></tr>
+        <tr><td>A &oplus; {point} (translate)</td><td class="c c-green">O(n)</td></tr>
+        <tr><td>Not pre-sorted by angle</td><td class="c c-yellow">O(n log n + m log m)</td></tr>
+        <tr><td>Naive all-pairs + hull</td><td class="c c-yellow">O(nm log nm)</td></tr>
+        <tr><td>Non-convex (decompose)</td><td class="c c-red">O(n&sup2; m&sup2;)</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- RIGHT: visualization + log -->
+  <section>
+    <div class="panel">
+      <h2>Visualization</h2>
+      <svg id="view" viewBox="0 0 720 460" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--blue)"></i> A (polygon)</span>
+        <span><i class="swatch" style="background:var(--purple)"></i> B (polygon)</span>
+        <span><i class="swatch" style="background:var(--green)"></i> A &oplus; B (sum)</span>
+        <span><i class="swatch" style="background:var(--orange)"></i> C-space: B &oplus; (&minus;A)</span>
+        <span><i class="swatch" style="background:var(--yellow)"></i> active edge being merged</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Operation Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+// ===================== geometry primitives =====================
+const add = (a,b) => ({x:a.x+b.x, y:a.y+b.y});
+const sub = (a,b) => ({x:a.x-b.x, y:a.y-b.y});
+const cross = (a,b) => a.x*b.y - a.y*b.x;
+
+function reorder(p){
+  let k=0;
+  for(let i=1;i<p.length;i++){
+    if(p[i].y<p[k].y || (p[i].y===p[k].y && p[i].x<p[k].x)) k=i;
+  }
+  return p.slice(k).concat(p.slice(0,k));
+}
+
+// Produce the merge steps for A (+) B. Returns {sumVerts, steps}.
+function minkowskiSteps(A,B){
+  let a=reorder(A.slice()), b=reorder(B.slice());
+  a=a.concat([a[0],a[1]]);
+  b=b.concat([b[0],b[1]]);
+  const steps=[];
+  const res=[];
+  let i=0,j=0;
+  while(i<a.length-2 || j<b.length-2){
+    const v=add(a[i],b[j]);
+    res.push(v);
+    const ea=sub(a[i+1],a[i]);
+    const eb=sub(b[j+1],b[j]);
+    const c=cross(ea,eb);
+    let took, ai=i, bj=j;
+    if(c>0){ took='A'; i++; }
+    else if(c<0){ took='B'; j++; }
+    else { took='AB'; i++; j++; }
+    steps.push({vert:v, took, i:ai, j:bj, ni:i, nj:j,
+                edgeA:{from:a[ai],to:a[ai+1]}, edgeB:{from:b[bj],to:b[bj+1]}});
+  }
+  return {sumVerts:res, steps};
+}
+
+function reflect(p){
+  return p.slice().reverse().map(q=>({x:-q.x,y:-q.y}));
+}
+
+// ===================== example data =====================
+const EXAMPLES = {
+  'tri-sq':   { A:[{x:0,y:0},{x:2,y:0},{x:0,y:2}],
+                B:[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] },
+  'sq-sq':    { A:[{x:0,y:0},{x:2,y:0},{x:2,y:2},{x:0,y:2}],
+                B:[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}] },
+  'tri-tri':  { A:[{x:0,y:0},{x:2,y:0},{x:1,y:2}],
+                B:[{x:0,y:0},{x:1,y:0},{x:0,y:1}] },
+  'penta-tri':{ A:[{x:0,y:0},{x:2,y:0},{x:3,y:1.5},{x:1.5,y:3},{x:-0.5,y:1.5}],
+                B:[{x:0,y:0},{x:1,y:0},{x:0,y:1}] },
+};
+
+// ===================== state =====================
+let A=[], B=[], sumVerts=[], steps=[], stepIdx=0;
+let running=false, timer=null, cspaceMode=false;
+let coObstacle=null;
+
+function getSpeed(){ return 1100 - document.getElementById('speed').value*100; }
+
+// ===================== coordinate transform =====================
+// world coords -> svg pixels. Auto-fit all geometry with margin, flip Y.
+function fit(allPts){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  allPts.forEach(p=>{ minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);
+                      maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y); });
+  if(!isFinite(minX)){ minX=-1;minY=-1;maxX=1;maxY=1; }
+  const pad=1.0;
+  minX-=pad;minY-=pad;maxX+=pad;maxY+=pad;
+  const W=700,H=440;
+  const s=Math.min(W/(maxX-minX), H/(maxY-minY));
+  const drawW=(maxX-minX)*s, drawH=(maxY-minY)*s;
+  const offX=10+(W-drawW)/2, offY=10+(H-drawH)/2;
+  return {
+    minX,minY,maxX,maxY,s,
+    tx:p=>({ X: offX + (p.x-minX)*s, Y: offY + (maxY-p.y)*s })
+  };
+}
+
+// ===================== rendering =====================
+function polyPath(pts, T){
+  if(pts.length===0) return '';
+  return pts.map((p,i)=>{const q=T.tx(p); return (i===0?'M':'L')+q.X.toFixed(1)+','+q.Y.toFixed(1);}).join(' ')+' Z';
+}
+
+function render(){
+  const svg=document.getElementById('view');
+  const showCloud=document.getElementById('showCloud').checked;
+
+  // gather points to fit
+  let pts=A.concat(B);
+  const partialSum = steps.slice(0,stepIdx).map(s=>s.vert);
+  if(stepIdx>=steps.length && steps.length) pts=pts.concat(sumVerts);
+  else pts=pts.concat(partialSum);
+  if(cspaceMode && coObstacle) pts=pts.concat(coObstacle);
+  // all-pairs cloud
+  const cloud=[];
+  if(showCloud){ A.forEach(a=>B.forEach(b=>cloud.push(add(a,b)))); pts=pts.concat(cloud); }
+
+  const T=fit(pts);
+  let g='';
+
+  // grid
+  for(let gx=Math.ceil(T.minX); gx<=Math.floor(T.maxX); gx++){
+    const a=T.tx({x:gx,y:T.minY}), b=T.tx({x:gx,y:T.maxY});
+    g+=`<line class="grid-line" x1="${a.X}" y1="${a.Y}" x2="${b.X}" y2="${b.Y}"/>`;
+  }
+  for(let gy=Math.ceil(T.minY); gy<=Math.floor(T.maxY); gy++){
+    const a=T.tx({x:T.minX,y:gy}), b=T.tx({x:T.maxX,y:gy});
+    g+=`<line class="grid-line" x1="${a.X}" y1="${a.Y}" x2="${b.X}" y2="${b.Y}"/>`;
+  }
+  // axes
+  if(T.minX<=0 && T.maxX>=0){ const a=T.tx({x:0,y:T.minY}),b=T.tx({x:0,y:T.maxY});
+    g+=`<line class="axis" x1="${a.X}" y1="${a.Y}" x2="${b.X}" y2="${b.Y}"/>`; }
+  if(T.minY<=0 && T.maxY>=0){ const a=T.tx({x:T.minX,y:0}),b=T.tx({x:T.maxX,y:0});
+    g+=`<line class="axis" x1="${a.X}" y1="${a.Y}" x2="${b.X}" y2="${b.Y}"/>`; }
+
+  // all-pairs cloud
+  if(showCloud){
+    cloud.forEach(p=>{const q=T.tx(p); g+=`<circle class="ptCloud" cx="${q.X}" cy="${q.Y}" r="3"/>`;});
+  }
+
+  // sum (full or partial)
+  if(stepIdx>=steps.length && steps.length){
+    g+=`<path class="polyS" d="${polyPath(sumVerts,T)}"/>`;
+  } else if(partialSum.length>=2){
+    // open polyline for partial build
+    g+=`<polyline points="${partialSum.map(p=>{const q=T.tx(p);return q.X.toFixed(1)+','+q.Y.toFixed(1);}).join(' ')}" fill="none" stroke="var(--green)" stroke-width="2.5"/>`;
+  }
+  // partial sum vertices
+  partialSum.forEach(p=>{const q=T.tx(p); g+=`<circle cx="${q.X}" cy="${q.Y}" r="3.5" fill="var(--green)"/>`;});
+
+  // C-space inflated obstacle
+  if(cspaceMode && coObstacle){
+    g+=`<path class="polyCO" d="${polyPath(coObstacle,T)}"/>`;
+  }
+
+  // A and B
+  g+=`<path class="polyA" d="${polyPath(A,T)}"/>`;
+  g+=`<path class="polyB" d="${polyPath(B,T)}"/>`;
+
+  // active edge highlight
+  if(stepIdx>0 && stepIdx<=steps.length){
+    const st=steps[stepIdx-1];
+    if(st.took==='A' || st.took==='AB'){
+      const f=T.tx(st.edgeA.from), t=T.tx(st.edgeA.to);
+      g+=`<line class="edgeActive" x1="${f.X}" y1="${f.Y}" x2="${t.X}" y2="${t.Y}"/>`;
+    }
+    if(st.took==='B' || st.took==='AB'){
+      const f=T.tx(st.edgeB.from), t=T.tx(st.edgeB.to);
+      g+=`<line class="edgeActive" x1="${f.X}" y1="${f.Y}" x2="${t.X}" y2="${t.Y}"/>`;
+    }
+  }
+
+  // vertex dots for A, B
+  A.forEach(p=>{const q=T.tx(p); g+=`<circle class="vtx" cx="${q.X}" cy="${q.Y}" r="3"/>`;});
+  B.forEach(p=>{const q=T.tx(p); g+=`<circle class="vtx" cx="${q.X}" cy="${q.Y}" r="3"/>`;});
+
+  svg.innerHTML=g;
+
+  // stats
+  document.getElementById('sAn').textContent=A.length;
+  document.getElementById('sBn').textContent=B.length;
+  document.getElementById('sEdges').textContent=Math.min(stepIdx,steps.length);
+  const st = stepIdx>0 && stepIdx<=steps.length ? steps[stepIdx-1] : null;
+  document.getElementById('sIJ').textContent = st ? (st.ni+' / '+st.nj) : '0 / 0';
+}
+
+// ===================== controls =====================
+function setInfo(op,msg,cplx){
+  document.getElementById('info').innerHTML =
+    `<span class="op">${op}</span> &mdash; ${msg} <span class="cplx">${cplx||''}</span>`;
+}
+function addLog(msg){
+  const log=document.getElementById('log');
+  const d=document.createElement('div'); d.textContent=msg; log.appendChild(d);
+  log.scrollTop=log.scrollHeight;
+}
+
+function loadExample(){
+  const key=document.getElementById('example').value;
+  A=EXAMPLES[key].A.map(p=>({...p}));
+  B=EXAMPLES[key].B.map(p=>({...p}));
+  reset();
+}
+
+function toggleCspace(){
+  cspaceMode=document.getElementById('cspace').checked;
+  if(cspaceMode){
+    // inflate B by reflected A: CO = B (+) (-A)
+    const r=minkowskiSteps(B, reflect(A));
+    coObstacle=r.sumVerts;
+    addLog('C-space: built B ⊕ (−A) — robot A becomes a point');
+    setInfo('C-space','Obstacle B inflated by the reflected robot −A. The robot shrinks to a point.','O(n + m)');
+  }else{
+    coObstacle=null;
+  }
+  render();
+}
+
+function prepare(){
+  const r=minkowskiSteps(A,B);
+  sumVerts=r.sumVerts; steps=r.steps; stepIdx=0;
+}
+
+function start(){
+  if(steps.length===0) prepare();
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  addLog('Build started — merging '+A.length+' + '+B.length+' edge vectors by angle');
+  run();
+}
+function run(){
+  if(!running || stepIdx>=steps.length){ finish(); return; }
+  doStep();
+  timer=setTimeout(run, getSpeed());
+}
+function stepForward(){
+  if(steps.length===0) prepare();
+  if(stepIdx<steps.length){ doStep(); }
+  else finish();
+}
+function doStep(){
+  const st=steps[stepIdx];
+  stepIdx++;
+  let who = st.took==='A'?'edge of A':(st.took==='B'?'edge of B':'collinear edges of A & B (fused)');
+  setInfo('Merge edge '+stepIdx,
+    'cross(edgeA, edgeB) decided: append the '+who+'. New sum vertex ('+st.vert.x+', '+st.vert.y+').',
+    'O(1) per edge');
+  addLog('step '+stepIdx+': take '+st.took+' → vertex ('+st.vert.x+','+st.vert.y+'), i='+st.ni+' j='+st.nj);
+  render();
+}
+function finish(){
+  running=false;
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+  if(stepIdx>=steps.length && steps.length){
+    setInfo('Done','A ⊕ B complete: a convex polygon with '+sumVerts.length+
+      ' vertices (≤ n + m). Every edge is parallel to an edge of A or B.','O(n + m)');
+    addLog('✓ sum complete — '+sumVerts.length+' vertices');
+  }
+  render();
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); steps=[]; sumVerts=[]; stepIdx=0;
+  document.getElementById('log').innerHTML='';
+  setInfo('Ready','Press Build to merge edge vectors by polar angle, or Step one at a time.','O(n + m)');
+  if(cspaceMode) toggleCspace(); else render();
+  addLog('loaded example: '+document.getElementById('example').value);
+}
+
+// ===================== init =====================
+loadExample();
+</script>
+</body>
+</html>
