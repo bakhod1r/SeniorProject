@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Merkle Tree — Visual Animation</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+      --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;max-width:820px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.b1{color:var(--green);border-color:var(--green)}
+.badge.b2{color:var(--blue);border-color:var(--blue)}
+.badge.b3{color:var(--purple);border-color:var(--purple)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.9rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+input[type=text],input[type=number]{padding:8px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.9rem}
+input[type=text]{width:360px}
+input[type=number]{width:70px}
+label{color:var(--muted);font-size:.85rem}
+.speed-control{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.speed-control input[type=range]{width:140px;accent-color:var(--blue)}
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 20px;display:flex;gap:24px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1180px;margin-bottom:14px}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:1180px;min-height:420px;overflow:auto;margin-bottom:14px}
+svg{display:block;margin:0 auto}
+.node rect{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .25s}
+.node.path rect{fill:var(--purple);stroke:var(--purple)}
+.node.sibling rect{fill:var(--yellow);stroke:var(--yellow)}
+.node.changed rect{fill:var(--red);stroke:var(--red)}
+.node.root-ok rect{fill:var(--green);stroke:var(--green)}
+.node.target rect{fill:var(--orange);stroke:var(--orange)}
+.node text{fill:var(--text);text-anchor:middle;font-family:monospace}
+.node.path text,.node.sibling text,.node.changed text,.node.root-ok text,.node.target text{fill:var(--bg);font-weight:700}
+.node .lbl{font-size:.62rem;fill:var(--muted)}
+.node.path .lbl,.node.sibling .lbl,.node.changed .lbl,.node.root-ok .lbl,.node.target .lbl{fill:var(--bg)}
+.node .hash{font-size:.74rem;font-weight:700}
+.edge{stroke:var(--border);stroke-width:1.5;fill:none}
+.edge.active{stroke:var(--purple);stroke-width:2.5}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px;width:100%;max-width:1180px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6}
+.step-info .hl{color:var(--yellow)}
+.step-info .ok{color:var(--green);font-weight:700}
+.step-info .bad{color:var(--red);font-weight:700}
+.bigo,.log{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1180px;margin-bottom:14px}
+.bigo h3,.log h3{color:var(--blue);margin-bottom:8px;font-size:1rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600}
+td.c{font-family:monospace;color:var(--green)}
+.log-box{max-height:160px;overflow-y:auto;font-family:monospace;font-size:.8rem;line-height:1.5}
+.log-line{padding:2px 0;border-bottom:1px solid rgba(48,54,61,.4)}
+.log-line .t{color:var(--muted)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:6px;text-align:center;max-width:820px}
+</style>
+</head>
+<body>
+<h1>Merkle Tree (Hash Tree)</h1>
+<p class="subtitle">Leaves are hashes of data blocks; each parent hashes its two children. The single root commits to everything. Watch a leaf change ripple up, and an inclusion proof (authentication path) fold up to the root.</p>
+
+<div class="badges">
+<span class="badge b1">Build: O(n)</span>
+<span class="badge b2">Proof / Verify: O(log n)</span>
+<span class="badge b3">Update one leaf: O(log n)</span>
+<span class="badge b2">Memory: O(n)</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="blocksIn" placeholder="Blocks: alice,bob,carol,dave,erin,frank,grace,heidi" value="alice,bob,carol,dave,erin,frank,grace,heidi">
+<button onclick="loadBlocks()">Build Tree</button>
+</div>
+
+<div class="input-control">
+<label>Prove leaf #</label>
+<input type="number" id="proveIdx" value="2" min="0">
+<button onclick="startProve()">Prove Inclusion</button>
+<label style="margin-left:14px">Tamper leaf #</label>
+<input type="number" id="tamperIdx" value="5" min="0">
+<input type="text" id="tamperVal" value="EVE" style="width:120px">
+<button onclick="startTamper()">Tamper</button>
+<button onclick="resetVis()" class="secondary">↺ Clear</button>
+</div>
+
+<div class="controls">
+<button id="stepBtn" onclick="stepForward()">Step ▶</button>
+<button id="playBtn" onclick="playAll()">Play ⏩</button>
+<button id="pauseBtn" onclick="pauseAnim()" class="secondary" disabled>Pause ⏸</button>
+</div>
+
+<div class="speed-control">
+<label>Speed:</label><span style="color:var(--muted);font-size:.8rem">Slow</span>
+<input type="range" id="speed" min="1" max="10" value="6">
+<span style="color:var(--muted);font-size:.8rem">Fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg)"></div>Idle node</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>Target leaf</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>Path (recomputed)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--yellow)"></div>Sibling (proof)</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>Changed</div>
+<div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>Root matches</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Leaves (n)</div><div class="stat-value" id="sLeaves">0</div></div>
+<div><div class="stat-label">Tree height</div><div class="stat-value" id="sHeight">0</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="sOp">-</div></div>
+<div><div class="stat-label">Hashes computed</div><div class="stat-value" id="sHashes">0</div></div>
+<div><div class="stat-label">Root</div><div class="stat-value" id="sRoot">-</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Enter comma-separated blocks and press <span class="hl">Build Tree</span>. Then <span class="hl">Prove Inclusion</span> of a leaf or <span class="hl">Tamper</span> a leaf to see hashes propagate to the root.</div>
+</div>
+
+<div class="bigo">
+<h3>Complexity</h3>
+<table>
+<tr><th>Operation</th><th>Time</th><th>Space</th><th>Notes</th></tr>
+<tr><td>Build tree</td><td class="c">O(n)</td><td class="c">O(n)</td><td>~2n hashes, n leaves + n−1 internal</td></tr>
+<tr><td>Get root</td><td class="c">O(1)</td><td class="c">O(1)</td><td>stored at top</td></tr>
+<tr><td>Generate proof</td><td class="c">O(log n)</td><td class="c">O(log n)</td><td>one sibling per level</td></tr>
+<tr><td>Verify proof</td><td class="c">O(log n)</td><td class="c">O(1)</td><td>fold leaf hash up</td></tr>
+<tr><td>Update one leaf</td><td class="c">O(log n)</td><td class="c">O(1)</td><td>re-hash path only</td></tr>
+<tr><td>Diff two trees</td><td class="c">O(d log n)</td><td class="c">O(d)</td><td>prune matching subtrees (anti-entropy)</td></tr>
+</table>
+</div>
+
+<div class="log">
+<h3>Operation Log</h3>
+<div class="log-box" id="logBox"></div>
+</div>
+
+<p class="footer-note">Toy hash (FNV-1a, 4 hex digits) is used for readability — real Merkle trees use SHA-256 with domain separation (0x00 leaves, 0x01 nodes). Structure and propagation are identical. Variants: Merkle–Patricia trie (Ethereum), sparse Merkle tree, Merkle Mountain Range, Merkle DAG (Git/IPFS).</p>
+
+<script>
+// ---------- toy hash (readable; NOT cryptographic) ----------
+function toyHash(str){
+  let h=0x811c9dc5>>>0;
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return ('0000'+(h>>>0).toString(16)).slice(-4);
+}
+let hashCount=0;
+function hLeaf(block){ hashCount++; return toyHash('L:'+block); }       // domain-separated leaf
+function hNode(l,r){ hashCount++; return toyHash('N:'+l+'|'+r); }       // domain-separated node
+
+// ---------- tree state ----------
+let blocks=[], levels=[], height=0;
+// node id scheme: "level-index". levels[0]=leaves.
+
+function buildTree(){
+  levels=[];
+  let leaves=blocks.map(b=>hLeaf(b));
+  levels.push(leaves);
+  while(levels[levels.length-1].length>1){
+    let cur=levels[levels.length-1], nxt=[];
+    for(let i=0;i<cur.length;i+=2){
+      let r=(i+1<cur.length)?cur[i+1]:cur[i]; // duplicate-last
+      nxt.push(hNode(cur[i],r));
+    }
+    levels.push(nxt);
+  }
+  height=levels.length-1;
+}
+
+function root(){ return levels.length?levels[levels.length-1][0]:'-'; }
+
+// ---------- layout ----------
+const NW=64, NH=40, VGAP=78, HPAD=24;
+function layout(){
+  // compute x positions: leaves evenly spaced, parents centered over children
+  const leafCount=levels[0].length;
+  const slot=Math.max(NW+18, 96);
+  const width=leafCount*slot;
+  const pos={}; // "lvl-idx" -> {x,y}
+  for(let lvl=0;lvl<levels.length;lvl++){
+    const y=HPAD+(levels.length-1-lvl)*VGAP;
+    for(let i=0;i<levels[lvl].length;i++){
+      let x;
+      if(lvl===0){ x=i*slot+slot/2; }
+      else{
+        const lc=pos[(lvl-1)+'-'+(2*i)];
+        const rcIdx=2*i+1;
+        const rc=pos[(lvl-1)+'-'+rcIdx]||lc;
+        x=(lc.x+rc.x)/2;
+      }
+      pos[lvl+'-'+i]={x,y};
+    }
+  }
+  return {pos,width,heightPx:HPAD*2+levels.length*VGAP};
+}
+
+let cls={}; // "lvl-idx" -> class
+let edgeActive={}; // "lvl-idx" child -> bool active edge to parent
+
+function render(){
+  const canvas=document.getElementById('canvas');
+  if(!levels.length){ canvas.innerHTML=''; return; }
+  const {pos,width,heightPx}=layout();
+  let svg=`<svg width="${Math.max(width+HPAD*2,300)}" height="${heightPx}" viewBox="0 0 ${width+HPAD*2} ${heightPx}">`;
+  // edges first
+  for(let lvl=1;lvl<levels.length;lvl++){
+    for(let i=0;i<levels[lvl].length;i++){
+      const p=pos[lvl+'-'+i];
+      for(const c of [2*i,2*i+1]){
+        if(c>=levels[lvl-1].length) continue;
+        const cp=pos[(lvl-1)+'-'+c];
+        const active=edgeActive[(lvl-1)+'-'+c]?'active':'';
+        svg+=`<path class="edge ${active}" d="M ${cp.x+HPAD} ${cp.y} L ${p.x+HPAD} ${p.y+NH}"/>`;
+      }
+    }
+  }
+  // nodes
+  for(let lvl=0;lvl<levels.length;lvl++){
+    for(let i=0;i<levels[lvl].length;i++){
+      const {x,y}=pos[lvl+'-'+i];
+      const c=cls[lvl+'-'+i]||'';
+      const label= lvl===0 ? ('"'+blocks[i]+'"') : (lvl===levels.length-1?'ROOT':'H');
+      svg+=`<g class="node ${c}">
+        <rect x="${x+HPAD-NW/2}" y="${y}" width="${NW}" height="${NH}" rx="6"/>
+        <text class="hash" x="${x+HPAD}" y="${y+18}">${levels[lvl][i]}</text>
+        <text class="lbl" x="${x+HPAD}" y="${y+32}">${label}</text>
+      </g>`;
+    }
+  }
+  svg+='</svg>';
+  canvas.innerHTML=svg;
+  document.getElementById('sLeaves').textContent=levels[0].length;
+  document.getElementById('sHeight').textContent=height;
+  document.getElementById('sHashes').textContent=hashCount;
+  document.getElementById('sRoot').textContent=root();
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML=html; }
+function setOp(op){ document.getElementById('sOp').textContent=op; }
+function addLog(msg){
+  const box=document.getElementById('logBox');
+  const t=new Date().toLocaleTimeString();
+  box.insertAdjacentHTML('afterbegin',`<div class="log-line"><span class="t">${t}</span> ${msg}</div>`);
+}
+
+// ---------- step engine ----------
+let stepQueue=[], qi=0, playing=false, timer=null;
+function loadSteps(steps){ stepQueue=steps; qi=0; document.getElementById('stepBtn').disabled=false; document.getElementById('playBtn').disabled=false; }
+function clearHighlights(){ cls={}; edgeActive={}; }
+function speedMs(){ return 1200-document.getElementById('speed').value*100; }
+
+function stepForward(){
+  if(qi>=stepQueue.length){ pauseAnim(); return; }
+  stepQueue[qi]();
+  qi++;
+  if(qi>=stepQueue.length){ document.getElementById('stepBtn').disabled=true; pauseAnim(); }
+}
+function playAll(){
+  playing=true;
+  document.getElementById('playBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  const tick=()=>{
+    if(!playing||qi>=stepQueue.length){ pauseAnim(); return; }
+    stepForward();
+    timer=setTimeout(tick,speedMs());
+  };
+  tick();
+}
+function pauseAnim(){
+  playing=false; clearTimeout(timer);
+  document.getElementById('playBtn').disabled=(qi>=stepQueue.length);
+  document.getElementById('pauseBtn').disabled=true;
+}
+
+// ---------- PROVE inclusion ----------
+function startProve(){
+  if(!levels.length){ setInfo('Build a tree first.'); return; }
+  pauseAnim(); clearHighlights();
+  let idx=parseInt(document.getElementById('proveIdx').value);
+  if(isNaN(idx)||idx<0||idx>=levels[0].length){ setInfo('<span class="bad">Index out of range.</span>'); return; }
+  setOp('prove('+idx+')'); addLog('Prove inclusion of leaf #'+idx+' ("'+blocks[idx]+'")');
+  const trusted=root();
+  // build authentication path
+  let path=[], j=idx;
+  for(let lvl=0;lvl<levels.length-1;lvl++){
+    let sib=j^1, isRight=(j%2===0);
+    if(sib>=levels[lvl].length) sib=j; // duplicate-last
+    path.push({lvl,sib,isRight,parent:j>>1});
+    j>>=1;
+  }
+  // animation steps: highlight target, then fold up sibling by sibling
+  let steps=[];
+  let running=null;
+  steps.push(()=>{
+    clearHighlights(); cls['0-'+idx]='target';
+    running=levels[0][idx];
+    setInfo(`Start: hash the data block → leaf <span class="hl">${running}</span>. Trusted root = <span class="hl">${trusted}</span>.`);
+    render();
+  });
+  path.forEach((p,k)=>{
+    steps.push(()=>{
+      cls[p.lvl+'-'+p.sib]='sibling';
+      const sibHash=levels[p.lvl][p.sib];
+      const combined = p.isRight ? hNode(running,sibHash) : hNode(sibHash,running);
+      running=combined;
+      cls[(p.lvl+1)+'-'+p.parent]='path';
+      edgeActive[p.lvl+'-'+(p.parent*2)]=true;
+      edgeActive[p.lvl+'-'+(p.parent*2+1)]=true;
+      const side=p.isRight?'right':'left';
+      const order=p.isRight?`H(running · ${sibHash})`:`H(${sibHash} · running)`;
+      setInfo(`Fold level ${k}: sibling <span class="hl">${sibHash}</span> is on the <span class="hl">${side}</span> → ${order}. Running hash → <span class="hl">${running}</span>.`);
+      addLog(`level ${k}: combine with sibling ${sibHash} (${side}) → ${running}`);
+      render();
+    });
+  });
+  steps.push(()=>{
+    const ok=(running===trusted);
+    cls[(levels.length-1)+'-0']= ok?'root-ok':'changed';
+    setInfo(ok
+      ? `Recomputed root <span class="ok">${running}</span> == trusted <span class="ok">${trusted}</span>. <span class="ok">PROOF VALID</span> — leaf #${idx} is included. Folded ${path.length} siblings = O(log n).`
+      : `Recomputed root <span class="bad">${running}</span> != trusted ${trusted}. <span class="bad">PROOF INVALID</span>.`);
+    addLog(ok?('proof VALID for leaf #'+idx+' ('+path.length+' siblings)'):'proof INVALID');
+    render();
+  });
+  loadSteps(steps);
+  // run first step immediately
+  stepForward();
+}
+
+// ---------- TAMPER a leaf ----------
+function startTamper(){
+  if(!levels.length){ setInfo('Build a tree first.'); return; }
+  pauseAnim(); clearHighlights();
+  let idx=parseInt(document.getElementById('tamperIdx').value);
+  let val=document.getElementById('tamperVal').value||'X';
+  if(isNaN(idx)||idx<0||idx>=levels[0].length){ setInfo('<span class="bad">Index out of range.</span>'); return; }
+  const oldRoot=root();
+  setOp('tamper('+idx+')'); addLog('Tamper leaf #'+idx+' → "'+val+'"');
+  let steps=[];
+  steps.push(()=>{
+    clearHighlights();
+    cls['0-'+idx]='target';
+    setInfo(`Attacker changes block #${idx} from <span class="hl">"${blocks[idx]}"</span> to <span class="bad">"${val}"</span>. Old root = <span class="hl">${oldRoot}</span>.`);
+    render();
+  });
+  steps.push(()=>{
+    blocks[idx]=val;
+    levels[0][idx]=hLeaf(val);
+    cls['0-'+idx]='changed';
+    setInfo(`Leaf #${idx} re-hashed → <span class="bad">${levels[0][idx]}</span>. Now propagate the change up the path.`);
+    addLog('leaf #'+idx+' → '+levels[0][idx]);
+    render();
+  });
+  // propagate up
+  let j=idx;
+  for(let lvl=0;lvl<levels.length-1;lvl++){
+    const parent=j>>1, curLvl=lvl;
+    steps.push(()=>{
+      const cur=levels[curLvl];
+      const left=cur[2*parent];
+      const right=(2*parent+1<cur.length)?cur[2*parent+1]:left;
+      const before=levels[curLvl+1][parent];
+      levels[curLvl+1][parent]=hNode(left,right);
+      cls[(curLvl+1)+'-'+parent]='changed';
+      edgeActive[curLvl+'-'+(2*parent)]=true;
+      edgeActive[curLvl+'-'+(2*parent+1)]=true;
+      setInfo(`Re-hash parent at level ${curLvl+1}: H(${left} · ${right}) = <span class="bad">${levels[curLvl+1][parent]}</span> (was ${before}).`);
+      addLog(`level ${curLvl+1}: parent → ${levels[curLvl+1][parent]}`);
+      render();
+    });
+    j=parent;
+  }
+  steps.push(()=>{
+    setInfo(`New root <span class="bad">${root()}</span> != old <span class="hl">${oldRoot}</span>. Anyone holding the trusted root <span class="ok">detects the tamper</span>. Only the O(log n) nodes on the path changed.`);
+    addLog('new root '+root()+' (tamper detected)');
+    render();
+  });
+  loadSteps(steps);
+  stepForward();
+}
+
+// ---------- load / reset ----------
+function loadBlocks(){
+  const raw=document.getElementById('blocksIn').value.split(',').map(s=>s.trim()).filter(s=>s.length);
+  if(!raw.length){ setInfo('<span class="bad">Enter at least one block.</span>'); return; }
+  blocks=raw; hashCount=0;
+  buildTree(); clearHighlights();
+  setOp('build'); addLog('Built tree over '+blocks.length+' blocks, root='+root());
+  setInfo(`Built a Merkle tree over <span class="hl">${blocks.length}</span> blocks. Root <span class="hl">${root()}</span> commits to all of them. Now prove a leaf or tamper one.`);
+  stepQueue=[]; qi=0;
+  document.getElementById('stepBtn').disabled=true;
+  document.getElementById('playBtn').disabled=true;
+  render();
+}
+function resetVis(){
+  clearHighlights(); stepQueue=[]; qi=0; pauseAnim();
+  document.getElementById('stepBtn').disabled=true;
+  setInfo('Highlights cleared. Build, prove, or tamper again.');
+  render();
+}
+
+// ---------- init ----------
+loadBlocks();
+</script>
+</body>
+</html>
