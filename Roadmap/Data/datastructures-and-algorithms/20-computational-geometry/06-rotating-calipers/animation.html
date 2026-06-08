@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotating Calipers — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+  }
+  h1{font-size:1.7rem; color:var(--blue); text-align:center; margin-bottom:4px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:16px; font-size:.95rem;}
+  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.78rem; font-weight:600; border:1px solid var(--border);}
+  .badge.hull{color:var(--yellow);} .badge.sweep{color:var(--green);} .badge.total{color:var(--blue);}
+  .wrap{max-width:1080px; margin:0 auto; display:grid; grid-template-columns:1fr 320px; gap:16px;}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr;}}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+  svg{display:block; width:100%; height:auto; background:#0a0d12; border-radius:10px;}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  button{
+    padding:9px 16px; border:1px solid var(--blue); background:transparent;
+    color:var(--blue); border-radius:8px; cursor:pointer; font-size:.9rem; transition:.2s;
+  }
+  button:hover{background:var(--blue); color:#0d1117;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.mode.active{background:var(--blue); color:#0d1117;}
+  .row{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  label{color:var(--muted); font-size:.85rem;}
+  input[type=range]{accent-color:var(--blue); width:140px;}
+  input[type=text]{
+    padding:8px 12px; border:1px solid var(--border); background:#0a0d12;
+    color:var(--text); border-radius:8px; width:220px; font-size:.85rem;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue);}
+  .stats{display:flex; gap:18px; flex-wrap:wrap; font-size:.85rem;}
+  .stat b{color:var(--text);} .stat span{color:var(--muted);}
+  .info{font-family:'Courier New',monospace; font-size:.85rem; line-height:1.7; min-height:64px;}
+  .info .hl{color:var(--yellow);} .info .ap{color:var(--purple);}
+  table{width:100%; border-collapse:collapse; font-size:.8rem;}
+  th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  td.c-green{color:var(--green);} td.c-yellow{color:var(--yellow);} td.c-blue{color:var(--blue);}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:.78rem; margin-bottom:10px;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .sw{width:14px; height:14px; border-radius:3px; display:inline-block;}
+  .log{height:160px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.76rem; line-height:1.55;}
+  .log div{padding:2px 0; border-bottom:1px solid #1c222b; color:var(--muted);}
+  .log div.new{color:var(--green);}
+  .metric{display:flex; justify-content:space-between; padding:5px 0; font-size:.85rem; border-bottom:1px solid #1c222b;}
+  .metric b{font-family:'Courier New',monospace;}
+  .metric.diam b{color:var(--purple);} .metric.width b{color:var(--orange);} .metric.rect b{color:var(--green);}
+</style>
+</head>
+<body>
+  <h1>Rotating Calipers</h1>
+  <p class="subtitle">Two parallel supporting lines rotate around a convex polygon — antipodal pairs reveal the diameter, width, and minimum-area rectangle</p>
+  <div class="badges">
+    <span class="badge hull">Hull: O(n log n)</span>
+    <span class="badge sweep">Calipers sweep: O(n)</span>
+    <span class="badge total">Total: O(n log n)</span>
+  </div>
+
+  <div class="wrap">
+    <!-- LEFT: visualization -->
+    <div>
+      <div class="panel">
+        <div class="controls">
+          <button id="playBtn" onclick="play()">▶ Play</button>
+          <button id="pauseBtn" onclick="pause()" disabled>❚❚ Pause</button>
+          <button onclick="stepForward()">Step ▸</button>
+          <button onclick="resetAnim()">↺ Reset</button>
+        </div>
+        <div class="controls">
+          <button class="mode active" id="m-diameter" onclick="setMode('diameter')">Diameter</button>
+          <button class="mode" id="m-width" onclick="setMode('width')">Width</button>
+          <button class="mode" id="m-rect" onclick="setMode('rect')">Min Rectangle</button>
+        </div>
+        <div class="row">
+          <label>Speed</label><span style="font-size:.78rem;color:var(--muted)">slow</span>
+          <input type="range" id="speed" min="1" max="10" value="5">
+          <span style="font-size:.78rem;color:var(--muted)">fast</span>
+        </div>
+        <div class="row">
+          <input type="text" id="customInput" placeholder="x,y; x,y; ... (raw points, will be hulled)">
+          <button onclick="loadCustom()">Load</button>
+          <button onclick="randomPoly()">Random</button>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--blue)"></i>Hull edge</span>
+          <span><i class="sw" style="background:var(--yellow)"></i>Caliper jaws</span>
+          <span><i class="sw" style="background:var(--purple)"></i>Antipodal pair</span>
+          <span><i class="sw" style="background:var(--orange)"></i>Current edge</span>
+          <span><i class="sw" style="background:var(--green)"></i>Best result</span>
+        </div>
+        <svg id="svg" viewBox="0 0 560 440"></svg>
+      </div>
+
+      <div class="panel">
+        <h3>Step Info</h3>
+        <div class="stats" style="margin-bottom:10px;">
+          <span class="stat"><span>Hull n:</span> <b id="s-n">0</b></span>
+          <span class="stat"><span>Edge i:</span> <b id="s-i">0</b></span>
+          <span class="stat"><span>Antipodal j:</span> <b id="s-j">0</b></span>
+          <span class="stat"><span>Step:</span> <b id="s-step">0</b>/<b id="s-total">0</b></span>
+          <span class="stat"><span>j advances:</span> <b id="s-adv">0</b></span>
+        </div>
+        <div class="info" id="info">Press <span class="hl">Play</span> to start the rotating-calipers sweep. The base edge (orange) rotates; the antipodal vertex (purple) marches forward only.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: metrics, Big-O, log -->
+    <div>
+      <div class="panel">
+        <h3>Live Metrics</h3>
+        <div class="metric diam"><span>Diameter</span><b id="m-diam-v">—</b></div>
+        <div class="metric width"><span>Width</span><b id="m-width-v">—</b></div>
+        <div class="metric rect"><span>Min Rect Area</span><b id="m-rect-v">—</b></div>
+        <div class="metric"><span>Elongation (D/W)</span><b id="m-elong-v">—</b></div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>Convex hull (preprocess)</td><td class="c-yellow">O(n log n)</td></tr>
+          <tr><td>Diameter sweep</td><td class="c-green">O(n)</td></tr>
+          <tr><td>Width sweep</td><td class="c-green">O(n)</td></tr>
+          <tr><td>Min-area rectangle</td><td class="c-green">O(n)</td></tr>
+          <tr><td>Brute force (all pairs)</td><td class="c-blue">O(n²)</td></tr>
+          <tr><td>Space</td><td class="c-green">O(n)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===================== GEOMETRY =====================
+function cross(o,a,b){ return (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0]); }
+function dist2(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1]; return dx*dx+dy*dy; }
+function elen(a,b){ return Math.hypot(b[0]-a[0], b[1]-a[1]); }
+
+// Monotone-chain convex hull, CCW, no collinear.
+function convexHull(pts){
+  const uniq = [...new Map(pts.map(p=>[p[0]+','+p[1],p])).values()];
+  uniq.sort((p,q)=> p[0]-q[0] || p[1]-q[1]);
+  const n = uniq.length;
+  if(n<3) return uniq;
+  const h=[];
+  for(const p of uniq){
+    while(h.length>=2 && cross(h[h.length-2],h[h.length-1],p)<=0) h.pop();
+    h.push(p);
+  }
+  const low=h.length+1;
+  for(let i=n-2;i>=0;i--){
+    const p=uniq[i];
+    while(h.length>=low && cross(h[h.length-2],h[h.length-1],p)<=0) h.pop();
+    h.push(p);
+  }
+  h.pop();
+  return h;
+}
+
+// Build the animation step list. Each step records the calipers state.
+function buildSteps(hull){
+  const n=hull.length, steps=[];
+  if(n<2) return steps;
+  let bestDiam=0, diamPair=null;
+  let bestWidth=Infinity, widthEdge=null, widthV=null;
+  let bestRect=Infinity, rectEdge=null, rectInfo=null;
+  let j=1, adv=0;
+  for(let i=0;i<n;i++){
+    const ni=(i+1)%n;
+    while(Math.abs(cross(hull[i],hull[ni],hull[(j+1)%n])) > Math.abs(cross(hull[i],hull[ni],hull[j]))){
+      j=(j+1)%n; adv++;
+    }
+    // diameter candidates
+    const d1=dist2(hull[i],hull[j]), d2=dist2(hull[ni],hull[j]);
+    let updatedDiam=false;
+    if(d1>bestDiam){bestDiam=d1; diamPair=[i,j]; updatedDiam=true;}
+    if(d2>bestDiam){bestDiam=d2; diamPair=[ni,j]; updatedDiam=true;}
+    // width candidate (edge i, antipodal j)
+    const h = Math.abs(cross(hull[i],hull[ni],hull[j]))/elen(hull[i],hull[ni]);
+    let updatedW=false;
+    if(h<bestWidth){bestWidth=h; widthEdge=[i,ni]; widthV=j; updatedW=true;}
+    // min-area rectangle for this edge orientation (O(n) projection here)
+    const ex=hull[ni][0]-hull[i][0], ey=hull[ni][1]-hull[i][1];
+    const L=Math.hypot(ex,ey), ux=ex/L, uy=ey/L, nx=-uy, ny=ux;
+    let minU=Infinity,maxU=-Infinity,minN=Infinity,maxN=-Infinity;
+    for(const q of hull){
+      const pu=q[0]*ux+q[1]*uy, pn=q[0]*nx+q[1]*ny;
+      if(pu<minU)minU=pu; if(pu>maxU)maxU=pu;
+      if(pn<minN)minN=pn; if(pn>maxN)maxN=pn;
+    }
+    const area=(maxU-minU)*(maxN-minN);
+    let updatedR=false;
+    if(area<bestRect){bestRect=area; rectEdge=[i,ni];
+      rectInfo={ux,uy,nx,ny,minU,maxU,minN,maxN}; updatedR=true;}
+
+    steps.push({
+      i, ni, j, adv,
+      bestDiam, diamPair:diamPair?[...diamPair]:null, updatedDiam,
+      bestWidth, widthEdge:widthEdge?[...widthEdge]:null, widthV, updatedW,
+      bestRect, rectEdge:rectEdge?[...rectEdge]:null, rectInfo:rectInfo?{...rectInfo}:null, updatedR,
+      desc:`Edge (${i}→${ni}) · antipodal vertex ${j}. `+
+           (updatedDiam?`<span class="hl">New diameter²=${bestDiam.toFixed(0)}.</span> `:``)+
+           (updatedW?`<span class="hl">New min width=${bestWidth.toFixed(2)}.</span> `:``)+
+           (updatedR?`<span class="hl">New min rect area=${bestRect.toFixed(1)}.</span>`:``)
+    });
+  }
+  return steps;
+}
+
+// ===================== STATE =====================
+let rawPts = [[40,40],[300,30],[420,160],[360,360],[120,380],[30,220]];
+let hull=[], steps=[], idx=0, timer=null, running=false, mode='diameter';
+
+// fit polygon to the svg view
+function fitted(){
+  const W=560,H=440,pad=40;
+  if(hull.length===0) return [];
+  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+  for(const p of hull){ minx=Math.min(minx,p[0]);miny=Math.min(miny,p[1]);
+    maxx=Math.max(maxx,p[0]);maxy=Math.max(maxy,p[1]); }
+  const sx=(W-2*pad)/Math.max(1,maxx-minx), sy=(H-2*pad)/Math.max(1,maxy-miny);
+  const s=Math.min(sx,sy);
+  return hull.map(p=>[pad+(p[0]-minx)*s, H-pad-(p[1]-miny)*s]); // flip y
+}
+
+// ===================== RENDER =====================
+function svgEl(tag,attrs){
+  const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  return e;
+}
+function render(step){
+  const svg=document.getElementById('svg'); svg.innerHTML='';
+  const P=fitted(); const n=P.length;
+  if(n===0) return;
+  // polygon outline
+  const poly=svgEl('polygon',{points:P.map(p=>p.join(',')).join(' '),
+    fill:'rgba(88,166,255,0.06)', stroke:'var(--blue)', 'stroke-width':2});
+  svg.appendChild(poly);
+
+  if(step){
+    // current base edge (orange)
+    const a=P[step.i], b=P[step.ni];
+    svg.appendChild(svgEl('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],
+      stroke:'var(--orange)','stroke-width':4}));
+    // antipodal vertex (purple)
+    const jp=P[step.j];
+    svg.appendChild(svgEl('circle',{cx:jp[0],cy:jp[1],r:7,fill:'var(--purple)'}));
+
+    // caliper jaws: line through edge and parallel line through antipodal vertex
+    drawJaw(svg,a,b);                 // base jaw along edge
+    drawParallelJaw(svg,a,b,jp);      // parallel jaw through antipodal vertex
+
+    // mode-specific overlay
+    if(mode==='diameter' && step.diamPair){
+      const u=P[step.diamPair[0]], v=P[step.diamPair[1]];
+      svg.appendChild(svgEl('line',{x1:u[0],y1:u[1],x2:v[0],y2:v[1],
+        stroke:'var(--green)','stroke-width':3,'stroke-dasharray':'2 0'}));
+      mark(svg,u); mark(svg,v);
+    }
+    if(mode==='width' && step.widthEdge){
+      const ea=P[step.widthEdge[0]], eb=P[step.widthEdge[1]], wv=P[step.widthV];
+      svg.appendChild(svgEl('line',{x1:ea[0],y1:ea[1],x2:eb[0],y2:eb[1],
+        stroke:'var(--green)','stroke-width':3}));
+      // foot of perpendicular (approx: project wv onto edge line)
+      const foot=projectFoot(ea,eb,wv);
+      svg.appendChild(svgEl('line',{x1:wv[0],y1:wv[1],x2:foot[0],y2:foot[1],
+        stroke:'var(--orange)','stroke-width':2,'stroke-dasharray':'5 4'}));
+      mark(svg,wv);
+    }
+    if(mode==='rect' && step.rectInfo){
+      drawRect(svg,step);
+    }
+  }
+  // vertex dots + labels
+  P.forEach((p,k)=>{
+    svg.appendChild(svgEl('circle',{cx:p[0],cy:p[1],r:3.5,fill:'var(--blue)'}));
+    const t=svgEl('text',{x:p[0]+7,y:p[1]-7,fill:'var(--muted)','font-size':11}); t.textContent=k;
+    svg.appendChild(t);
+  });
+  updatePanels(step);
+}
+function mark(svg,p){ svg.appendChild(svgEl('circle',{cx:p[0],cy:p[1],r:6,fill:'none',
+  stroke:'var(--green)','stroke-width':2})); }
+function drawJaw(svg,a,b){
+  const [x1,y1,x2,y2]=extend(a,b,260);
+  svg.appendChild(svgEl('line',{x1,y1,x2,y2,stroke:'var(--yellow)','stroke-width':1.5,
+    'stroke-dasharray':'6 5',opacity:.8}));
+}
+function drawParallelJaw(svg,a,b,through){
+  const dx=b[0]-a[0], dy=b[1]-a[1];
+  const p2=[through[0]+dx, through[1]+dy];
+  const [x1,y1,x2,y2]=extend(through,p2,260);
+  svg.appendChild(svgEl('line',{x1,y1,x2,y2,stroke:'var(--yellow)','stroke-width':1.5,
+    'stroke-dasharray':'6 5',opacity:.8}));
+}
+function extend(a,b,len){
+  const dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1;
+  const ux=dx/L, uy=dy/L; const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+  return [mx-ux*len,my-uy*len,mx+ux*len,my+uy*len];
+}
+function projectFoot(a,b,p){
+  const dx=b[0]-a[0], dy=b[1]-a[1], L2=dx*dx+dy*dy||1;
+  const t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L2;
+  return [a[0]+t*dx, a[1]+t*dy];
+}
+function drawRect(svg,step){
+  // reconstruct rect corners in svg space by re-deriving from fitted hull
+  const P=fitted();
+  const r=step.rectInfo;
+  // recompute axes in SVG coords from the rect edge in svg space
+  const a=P[step.rectEdge[0]], b=P[step.rectEdge[1]];
+  let ex=b[0]-a[0], ey=b[1]-a[1]; const L=Math.hypot(ex,ey)||1;
+  const ux=ex/L, uy=ey/L, nx=-uy, ny=ux;
+  let minU=Infinity,maxU=-Infinity,minN=Infinity,maxN=-Infinity;
+  for(const q of P){ const pu=q[0]*ux+q[1]*uy, pn=q[0]*nx+q[1]*ny;
+    if(pu<minU)minU=pu; if(pu>maxU)maxU=pu; if(pn<minN)minN=pn; if(pn>maxN)maxN=pn; }
+  const c=[[minU,minN],[maxU,minN],[maxU,maxN],[minU,maxN]].map(([u,v])=>
+    [u*ux+v*nx, u*uy+v*ny]);
+  svg.appendChild(svgEl('polygon',{points:c.map(p=>p.join(',')).join(' '),
+    fill:'none', stroke:'var(--green)','stroke-width':2.5,'stroke-dasharray':'4 4'}));
+}
+
+// ===================== PANELS =====================
+function fmt(v){ return (v===undefined||v===null||!isFinite(v))?'—':v; }
+function updatePanels(step){
+  document.getElementById('s-n').textContent=hull.length;
+  if(!step){ return; }
+  document.getElementById('s-i').textContent=step.i;
+  document.getElementById('s-j').textContent=step.j;
+  document.getElementById('s-step').textContent=idx;
+  document.getElementById('s-total').textContent=steps.length;
+  document.getElementById('s-adv').textContent=step.adv;
+  document.getElementById('info').innerHTML=step.desc || '...';
+  const diam=Math.sqrt(step.bestDiam);
+  document.getElementById('m-diam-v').textContent=diam.toFixed(2);
+  document.getElementById('m-width-v').textContent=
+    isFinite(step.bestWidth)?step.bestWidth.toFixed(2):'—';
+  document.getElementById('m-rect-v').textContent=
+    isFinite(step.bestRect)?step.bestRect.toFixed(1):'—';
+  const el = (isFinite(step.bestWidth)&&step.bestWidth>0)?(diam/step.bestWidth):NaN;
+  document.getElementById('m-elong-v').textContent=isFinite(el)?el.toFixed(2):'—';
+}
+function addLog(msg){
+  const log=document.getElementById('log');
+  document.querySelectorAll('.log div.new').forEach(d=>d.classList.remove('new'));
+  const d=document.createElement('div'); d.className='new'; d.textContent=msg;
+  log.insertBefore(d, log.firstChild);
+  while(log.children.length>60) log.removeChild(log.lastChild);
+}
+
+// ===================== CONTROLS =====================
+function speed(){ return 1100 - document.getElementById('speed').value*100; }
+function play(){
+  if(steps.length===0) prepare();
+  running=true;
+  document.getElementById('playBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  tick();
+}
+function tick(){
+  if(!running) return;
+  if(idx>=steps.length){ pause(); addLog('Sweep complete — all antipodal pairs visited.'); return; }
+  stepForward();
+  timer=setTimeout(tick, speed());
+}
+function stepForward(){
+  if(steps.length===0) prepare();
+  if(idx>=steps.length){ pause(); return; }
+  const step=steps[idx];
+  render(step);
+  let tag=`i=${step.i} j=${step.j}`;
+  if(mode==='diameter'&&step.updatedDiam) tag+=` ▶ diameter²=${step.bestDiam.toFixed(0)}`;
+  if(mode==='width'&&step.updatedW) tag+=` ▶ width=${step.bestWidth.toFixed(2)}`;
+  if(mode==='rect'&&step.updatedR) tag+=` ▶ rectArea=${step.bestRect.toFixed(1)}`;
+  addLog(tag);
+  idx++;
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('playBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function prepare(){
+  hull=convexHull(rawPts);
+  steps=buildSteps(hull);
+  idx=0;
+  addLog(`Built convex hull: ${rawPts.length} points → ${hull.length} hull vertices (O(n log n)).`);
+  render(null);
+  updatePanels(null);
+  document.getElementById('s-total').textContent=steps.length;
+}
+function resetAnim(){
+  pause(); idx=0;
+  document.getElementById('log').innerHTML='';
+  document.getElementById('m-diam-v').textContent='—';
+  document.getElementById('m-width-v').textContent='—';
+  document.getElementById('m-rect-v').textContent='—';
+  document.getElementById('m-elong-v').textContent='—';
+  prepare();
+}
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('.mode').forEach(b=>b.classList.remove('active'));
+  document.getElementById('m-'+(m==='rect'?'rect':m)).classList.add('active');
+  addLog(`Mode → ${m}.`);
+  if(idx>0 && idx<=steps.length) render(steps[idx-1]); else render(null);
+}
+function loadCustom(){
+  const txt=document.getElementById('customInput').value.trim();
+  if(!txt) return;
+  const pts=txt.split(';').map(s=>s.trim()).filter(Boolean).map(s=>{
+    const [x,y]=s.split(',').map(Number); return [x,y];
+  }).filter(p=>isFinite(p[0])&&isFinite(p[1]));
+  if(pts.length>=3){ rawPts=pts; resetAnim(); }
+  else addLog('Need at least 3 valid points.');
+}
+function randomPoly(){
+  const k=6+Math.floor(Math.random()*6);
+  rawPts=Array.from({length:k},()=>[40+Math.random()*440, 30+Math.random()*380]);
+  document.getElementById('customInput').value=
+    rawPts.map(p=>`${p[0].toFixed(0)},${p[1].toFixed(0)}`).join('; ');
+  resetAnim();
+}
+
+// ===================== INIT =====================
+prepare();
+render(null);
+</script>
+</body>
+</html>
