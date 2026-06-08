@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voronoi &amp; Delaunay — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 16px 22px; border-bottom: 1px solid var(--border);
+    background: var(--surface); display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+
+  main {
+    display: grid; grid-template-columns: 330px 1fr; gap: 16px;
+    padding: 16px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .btn-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px; }
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger  { border-color: var(--red); color: var(--red); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+  button.btn.toggle.on { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  .mode-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .mode-tabs button { flex: 1; }
+
+  .info-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5; min-height: 46px;
+    color: var(--text); margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15); color: var(--blue); padding: 1px 6px;
+    border-radius: 4px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+  }
+
+  .stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .stats-row .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  #vis { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  svg#stage { width: 100%; height: 480px; display: block; background: var(--bg); border-radius: 8px; cursor: crosshair; }
+
+  .cell { stroke: var(--border); stroke-width: 1; fill-opacity: 0.18; transition: fill-opacity 0.2s; }
+  .vedge { stroke: var(--yellow); stroke-width: 1.6; fill: none; }
+  .dedge { stroke: var(--blue); stroke-width: 1.6; fill: none; }
+  .dedge.flip { stroke: var(--red); stroke-width: 3; }
+  .dedge.newdiag { stroke: var(--green); stroke-width: 3; }
+  .circ { fill: none; stroke: var(--purple); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  .circ-center { fill: var(--purple); }
+  .site { stroke: #fff; stroke-width: 1.5; }
+  .site.newest { stroke: var(--green); stroke-width: 2.5; }
+  .site.inside { fill: var(--red); }
+  .vvert { fill: var(--yellow); stroke: #000; stroke-width: 0.6; }
+  .site-label { font-family: "SF Mono", Menlo, monospace; font-size: 11px; fill: var(--text); pointer-events: none; }
+
+  .bigo {
+    width: 100%; border-collapse: collapse; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+  }
+  .bigo th, .bigo td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  .bigo th { color: var(--muted); background: var(--bg); }
+  .bigo td.c { color: var(--green); text-align: center; }
+  .bigo td.c.slow { color: var(--yellow); }
+  .bigo td.c.bad { color: var(--red); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .dot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid; }
+  .dot.l-site { background: var(--blue); border-color:#fff; }
+  .dot.l-vedge { background: transparent; border-color: var(--yellow); }
+  .dot.l-dedge { background: transparent; border-color: var(--blue); }
+  .dot.l-circ { background: transparent; border-color: var(--purple); }
+  .dot.l-vvert { background: var(--yellow); border-color:#000; }
+  .dot.l-inside { background: var(--red); border-color:#fff; }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    max-height: 170px; overflow-y: auto; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.op { color: var(--text); }
+  #log .entry.flip { color: var(--red); }
+  #log .entry.legal { color: var(--green); }
+  #log .entry.test { color: var(--purple); }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px; background: var(--surface);
+    border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Voronoi Diagram &amp; Delaunay Triangulation</h1>
+  <div class="sub">Sites &middot; Voronoi cells &middot; dual Delaunay mesh &middot; empty-circumcircle &middot; incremental insert + edge flip</div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Mode</h2>
+      <div class="mode-tabs">
+        <button class="btn primary" id="modeBuild">Build</button>
+        <button class="btn" id="modeCircle">Empty-Circle</button>
+        <button class="btn" id="modeFlip">Insert + Flip</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Controls</h2>
+      <div class="btn-row">
+        <button class="btn primary" id="btnStep">Step</button>
+        <button class="btn success" id="btnRun">Run</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btnRandom">Random sites</button>
+        <button class="btn toggle" id="btnVoronoi">Voronoi: on</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="120" max="1400" value="650" />
+        <span>Fast</span>
+      </div>
+      <div class="sub" style="margin-top:8px;">Tip: in <b>Insert + Flip</b> mode, click the stage to add a site.</div>
+    </div>
+
+    <div class="control-group">
+      <h2>Big-O</h2>
+      <table class="bigo">
+        <tr><th>Operation</th><th>Cost</th></tr>
+        <tr><td>Voronoi (Fortune)</td><td class="c">O(n log n)</td></tr>
+        <tr><td>Delaunay (incremental)</td><td class="c">O(n log n)*</td></tr>
+        <tr><td>Bowyer–Watson naive</td><td class="c bad">O(n²)</td></tr>
+        <tr><td>in-circle test</td><td class="c">O(1)</td></tr>
+        <tr><td>edge flip</td><td class="c">O(1)</td></tr>
+        <tr><td>output size</td><td class="c">O(n)</td></tr>
+        <tr><td>lower bound</td><td class="c slow">Ω(n log n)</td></tr>
+      </table>
+      <div class="sub" style="margin-top:6px;">*expected, with point location</div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: stage + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="stage" viewBox="0 0 900 480" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Choose a mode and press <code>Step</code> or <code>Run</code>. In <code>Insert + Flip</code> mode you can click to add sites.</div>
+      <div class="stats-row">
+        <div class="stat">Mode: <b id="statMode">Build</b></div>
+        <div class="stat">Sites: <b id="statSites">0</b></div>
+        <div class="stat">Triangles: <b id="statTris">0</b></div>
+        <div class="stat">In-circle tests: <b id="statTests">0</b></div>
+        <div class="stat">Flips: <b id="statFlips">0</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot l-site"></span>site</span>
+        <span><span class="dot l-dedge"></span>Delaunay edge</span>
+        <span><span class="dot l-vedge"></span>Voronoi edge</span>
+        <span><span class="dot l-vvert"></span>Voronoi vertex (circumcenter)</span>
+        <span><span class="dot l-circ"></span>circumcircle</span>
+        <span><span class="dot l-inside"></span>site inside circle (illegal)</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Voronoi / Delaunay visualizer
+//  - Build mode: incremental Bowyer-Watson, one site per Step,
+//                showing dual Voronoi cells.
+//  - Empty-Circle mode: cycle triangles, draw each circumcircle,
+//                test all other sites for the empty-circle property.
+//  - Insert + Flip mode: click/Step to insert a site; show the
+//                in-circle test and an edge flip restoring Delaunay.
+// ============================================================
+
+const SVG = "http://www.w3.org/2000/svg";
+
+// ---------- geometry primitives ----------
+function orient2d(a, b, c) {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+function circumcircle(a, b, c) {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-12) return null;
+  const a2 = a.x * a.x + a.y * a.y, b2 = b.x * b.x + b.y * b.y, c2 = c.x * c.x + c.y * c.y;
+  const ux = (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d;
+  const uy = (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d;
+  const r2 = (a.x - ux) * (a.x - ux) + (a.y - uy) * (a.y - uy);
+  return { x: ux, y: uy, r2, r: Math.sqrt(r2) };
+}
+function inCircle(t, p) {
+  const cc = circumcircle(t.a, t.b, t.c);
+  if (!cc) return false;
+  const dx = p.x - cc.x, dy = p.y - cc.y;
+  return dx * dx + dy * dy < cc.r2 - 1e-6;
+}
+function sameEdge(e, f) {
+  return (e[0] === f[0] && e[1] === f[1]) || (e[0] === f[1] && e[1] === f[0]);
+}
+
+// ---------- a small fixed point set + super-triangle build ----------
+const W = 900, H = 480;
+const M = 1e5;
+const SUPER = [{ x: -M, y: -M, id: "S1", sup: true }, { x: M, y: -M, id: "S2", sup: true }, { x: 0, y: M, id: "S3", sup: true }];
+
+function defaultSites() {
+  return [
+    { x: 200, y: 130 }, { x: 470, y: 110 }, { x: 700, y: 170 },
+    { x: 300, y: 300 }, { x: 560, y: 320 }, { x: 180, y: 380 },
+    { x: 720, y: 360 }, { x: 440, y: 230 },
+  ].map((p, i) => ({ ...p, id: String.fromCharCode(65 + i) }));
+}
+
+const state = {
+  mode: "build",
+  sites: defaultSites(),
+  placed: [],         // sites already inserted in build mode
+  tris: [],           // current triangulation (each: {a,b,c})
+  buildIndex: 0,
+  circIndex: 0,
+  showVoronoi: true,
+  tests: 0,
+  flips: 0,
+  running: false, paused: false, stopped: false, speedMs: 600, done: false,
+  _newest: null, _activeCirc: null, _insideSite: null, _flipEdge: null, _newDiag: null,
+};
+
+const els = {
+  stage: document.getElementById("stage"),
+  info: document.getElementById("info"),
+  log: document.getElementById("log"),
+  speed: document.getElementById("speed"),
+  toast: document.getElementById("toast"),
+  statMode: document.getElementById("statMode"),
+  statSites: document.getElementById("statSites"),
+  statTris: document.getElementById("statTris"),
+  statTests: document.getElementById("statTests"),
+  statFlips: document.getElementById("statFlips"),
+  btnVoronoi: document.getElementById("btnVoronoi"),
+};
+
+// ---------- helpers ----------
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function gate() { while (state.paused && !state.stopped) await sleep(60); }
+async function wait() { await gate(); if (state.stopped) throw new Error("__stop__"); await sleep(state.speedMs); }
+function toast(m) { els.toast.textContent = m; els.toast.classList.add("show"); setTimeout(() => els.toast.classList.remove("show"), 1600); }
+function info(t) { els.info.innerHTML = t; }
+function log(m, k = "") {
+  const d = new Date();
+  const ts = [d.getHours(), d.getMinutes(), d.getSeconds()].map(x => String(x).padStart(2, "0")).join(":");
+  const div = document.createElement("div");
+  div.className = "entry " + k;
+  div.innerHTML = `<span class="ts">[${ts}]</span>${m}`;
+  els.log.appendChild(div);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+
+// ---------- Bowyer-Watson insertion of one point into state.tris ----------
+function insertPoint(p) {
+  const bad = state.tris.filter(t => { state.tests++; return inCircle(t, p); });
+  const boundary = [];
+  for (let i = 0; i < bad.length; i++) {
+    const t = bad[i];
+    const es = [[t.a, t.b], [t.b, t.c], [t.c, t.a]];
+    for (const e of es) {
+      let shared = false;
+      for (let j = 0; j < bad.length; j++) {
+        if (i === j) continue;
+        const u = bad[j];
+        const fs = [[u.a, u.b], [u.b, u.c], [u.c, u.a]];
+        for (const f of fs) if (sameEdge(e, f)) shared = true;
+      }
+      if (!shared) boundary.push(e);
+    }
+  }
+  state.tris = state.tris.filter(t => !bad.includes(t));
+  for (const e of boundary) {
+    // keep CCW
+    let a = e[0], b = e[1], c = p;
+    if (orient2d(a, b, c) < 0) { const tmp = a; a = b; b = tmp; }
+    state.tris.push({ a, b, c });
+  }
+  return bad.length;
+}
+
+function realTriangles() {
+  return state.tris.filter(t => !t.a.sup && !t.b.sup && !t.c.sup);
+}
+
+// ---------- drawing ----------
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function cellColor(i) {
+  const hues = [200, 30, 120, 280, 50, 330, 160, 90, 250, 10];
+  return `hsl(${hues[i % hues.length]}, 70%, 55%)`;
+}
+
+// Build per-site Voronoi cells by clipping the bounding box against
+// perpendicular bisectors (half-plane intersection) — O(n^2) but fine here.
+function voronoiCell(si, sites) {
+  let poly = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }];
+  const p = sites[si];
+  for (let j = 0; j < sites.length; j++) {
+    if (j === si) continue;
+    const q = sites[j];
+    // half-plane: points closer to p than q -> keep side of bisector containing p
+    const nx = q.x - p.x, ny = q.y - p.y;
+    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+    // keep points where (X-m).n <= 0
+    poly = clipHalfPlane(poly, nx, ny, nx * mx + ny * my);
+    if (poly.length === 0) break;
+  }
+  return poly;
+}
+function clipHalfPlane(poly, nx, ny, d) {
+  // keep vertices where nx*x + ny*y <= d
+  const out = [];
+  const inside = pt => nx * pt.x + ny * pt.y <= d + 1e-9;
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i], nxt = poly[(i + 1) % poly.length];
+    const ci = inside(cur), ni = inside(nxt);
+    if (ci) out.push(cur);
+    if (ci !== ni) {
+      const a = nx * cur.x + ny * cur.y - d;
+      const b = nx * nxt.x + ny * nxt.y - d;
+      const t = a / (a - b);
+      out.push({ x: cur.x + t * (nxt.x - cur.x), y: cur.y + t * (nxt.y - cur.y) });
+    }
+  }
+  return out;
+}
+
+function draw() {
+  const svg = els.stage;
+  svg.innerHTML = "";
+
+  const visibleSites = state.mode === "build" ? state.placed : state.sites;
+
+  // 1. Voronoi cells (clipped) for visible sites
+  if (state.showVoronoi && visibleSites.length >= 2) {
+    visibleSites.forEach((s, i) => {
+      const poly = voronoiCell(i, visibleSites);
+      if (poly.length < 3) return;
+      const path = document.createElementNS(SVG, "polygon");
+      path.setAttribute("points", poly.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" "));
+      path.setAttribute("class", "cell");
+      path.setAttribute("fill", cellColor(i));
+      svg.appendChild(path);
+    });
+  }
+
+  const tris = realTriangles();
+
+  // 2. Voronoi edges (dual): connect circumcenters of adjacent triangles
+  if (state.showVoronoi) {
+    for (let i = 0; i < tris.length; i++) {
+      const ci = circumcircle(tris[i].a, tris[i].b, tris[i].c);
+      if (!ci) continue;
+      const edgesI = [[tris[i].a, tris[i].b], [tris[i].b, tris[i].c], [tris[i].c, tris[i].a]];
+      for (let j = i + 1; j < tris.length; j++) {
+        const edgesJ = [[tris[j].a, tris[j].b], [tris[j].b, tris[j].c], [tris[j].c, tris[j].a]];
+        let adj = false;
+        for (const e of edgesI) for (const f of edgesJ) if (sameEdge(e, f)) adj = true;
+        if (adj) {
+          const cj = circumcircle(tris[j].a, tris[j].b, tris[j].c);
+          if (!cj) continue;
+          const ln = document.createElementNS(SVG, "line");
+          ln.setAttribute("x1", clamp(ci.x, -50, W + 50)); ln.setAttribute("y1", clamp(ci.y, -50, H + 50));
+          ln.setAttribute("x2", clamp(cj.x, -50, W + 50)); ln.setAttribute("y2", clamp(cj.y, -50, H + 50));
+          ln.setAttribute("class", "vedge");
+          svg.appendChild(ln);
+        }
+      }
+    }
+  }
+
+  // 3. Delaunay edges
+  const seen = new Set();
+  for (const t of tris) {
+    const es = [[t.a, t.b], [t.b, t.c], [t.c, t.a]];
+    for (const [u, v] of es) {
+      const key = [u.id, v.id].sort().join("-");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let cls = "dedge";
+      if (state._flipEdge && sameEdge([u, v], state._flipEdge)) cls = "dedge flip";
+      if (state._newDiag && sameEdge([u, v], state._newDiag)) cls = "dedge newdiag";
+      const ln = document.createElementNS(SVG, "line");
+      ln.setAttribute("x1", u.x); ln.setAttribute("y1", u.y);
+      ln.setAttribute("x2", v.x); ln.setAttribute("y2", v.y);
+      ln.setAttribute("class", cls);
+      svg.appendChild(ln);
+    }
+  }
+
+  // 4. active circumcircle (empty-circle / flip mode)
+  if (state._activeCirc) {
+    const c = state._activeCirc;
+    const circ = document.createElementNS(SVG, "circle");
+    circ.setAttribute("cx", c.x); circ.setAttribute("cy", c.y); circ.setAttribute("r", c.r);
+    circ.setAttribute("class", "circ");
+    svg.appendChild(circ);
+    const dot = document.createElementNS(SVG, "circle");
+    dot.setAttribute("cx", c.x); dot.setAttribute("cy", c.y); dot.setAttribute("r", 3);
+    dot.setAttribute("class", "circ-center");
+    svg.appendChild(dot);
+  }
+
+  // 5. Voronoi vertices (circumcenters) in build mode
+  if (state.showVoronoi && state.mode === "build") {
+    for (const t of tris) {
+      const c = circumcircle(t.a, t.b, t.c);
+      if (!c || c.x < -50 || c.x > W + 50 || c.y < -50 || c.y > H + 50) continue;
+      const v = document.createElementNS(SVG, "circle");
+      v.setAttribute("cx", c.x); v.setAttribute("cy", c.y); v.setAttribute("r", 3.2);
+      v.setAttribute("class", "vvert");
+      svg.appendChild(v);
+    }
+  }
+
+  // 6. sites
+  visibleSites.forEach(s => {
+    let cls = "site";
+    if (state._newest && s.id === state._newest.id) cls += " newest";
+    if (state._insideSite && s.id === state._insideSite.id) cls += " inside";
+    const c = document.createElementNS(SVG, "circle");
+    c.setAttribute("cx", s.x); c.setAttribute("cy", s.y); c.setAttribute("r", 6);
+    c.setAttribute("class", cls);
+    c.setAttribute("fill", state._insideSite && s.id === state._insideSite.id ? "var(--red)" : "var(--blue)");
+    svg.appendChild(c);
+    const tx = document.createElementNS(SVG, "text");
+    tx.setAttribute("x", s.x + 9); tx.setAttribute("y", s.y - 7);
+    tx.setAttribute("class", "site-label");
+    tx.textContent = s.id;
+    svg.appendChild(tx);
+  });
+
+  els.statMode.textContent = state.mode === "build" ? "Build" : state.mode === "circle" ? "Empty-Circle" : "Insert+Flip";
+  els.statSites.textContent = visibleSites.length;
+  els.statTris.textContent = tris.length;
+  els.statTests.textContent = state.tests;
+  els.statFlips.textContent = state.flips;
+}
+
+// ---------- BUILD MODE ----------
+function initBuild() {
+  state.placed = [];
+  state.tris = [{ a: SUPER[0], b: SUPER[1], c: SUPER[2] }];
+  state.buildIndex = 0;
+  state.done = false;
+}
+async function buildStep() {
+  if (state.buildIndex >= state.sites.length) {
+    state.done = true;
+    info("All sites inserted. The mesh is the <b>Delaunay triangulation</b>; the yellow network is its dual <b>Voronoi diagram</b>.");
+    log("build complete — Delaunay + dual Voronoi shown", "op");
+    return false;
+  }
+  const p = state.sites[state.buildIndex];
+  state._newest = p;
+  state.placed.push(p);
+  info(`Insert site <code>${p.id}</code>: delete every triangle whose circumcircle contains it, then re-triangulate the cavity (Bowyer–Watson).`);
+  draw(); await wait();
+  const removed = insertPoint(p);
+  log(`insert ${p.id}: removed ${removed} bad triangle(s), cavity re-triangulated`, "op");
+  state.buildIndex++;
+  draw();
+  return true;
+}
+
+// ---------- EMPTY-CIRCLE MODE ----------
+function initCircle() {
+  // build full triangulation up front
+  state.placed = state.sites.slice();
+  state.tris = [{ a: SUPER[0], b: SUPER[1], c: SUPER[2] }];
+  for (const p of state.sites) insertPoint(p);
+  state.circIndex = 0;
+  state.done = false;
+}
+async function circleStep() {
+  const tris = realTriangles();
+  if (state.circIndex >= tris.length) {
+    state.done = true;
+    state._activeCirc = null; state._insideSite = null;
+    info("Every triangle's circumcircle is <b>empty</b> of other sites — the empty-circumcircle property holds, so this is Delaunay.");
+    log("all circumcircles verified empty", "legal");
+    draw();
+    return false;
+  }
+  const t = tris[state.circIndex];
+  const cc = circumcircle(t.a, t.b, t.c);
+  state._activeCirc = cc;
+  // test all other sites
+  let inside = null;
+  for (const s of state.sites) {
+    if (s === t.a || s === t.b || s === t.c) continue;
+    state.tests++;
+    const dx = s.x - cc.x, dy = s.y - cc.y;
+    if (dx * dx + dy * dy < cc.r2 - 1e-6) { inside = s; break; }
+  }
+  state._insideSite = inside;
+  if (inside) {
+    info(`Triangle <code>${t.a.id}${t.b.id}${t.c.id}</code>: site <code>${inside.id}</code> is <b style="color:var(--red)">inside</b> the circumcircle → this edge would be illegal (not Delaunay).`);
+    log(`circle(${t.a.id}${t.b.id}${t.c.id}): ${inside.id} INSIDE — illegal`, "flip");
+  } else {
+    info(`Triangle <code>${t.a.id}${t.b.id}${t.c.id}</code>: circumcircle is <b style="color:var(--green)">empty</b>. The empty-circle property holds here.`);
+    log(`circle(${t.a.id}${t.b.id}${t.c.id}): empty — legal`, "legal");
+  }
+  draw(); await wait();
+  state.circIndex++;
+  return true;
+}
+
+// ---------- INSERT + FLIP MODE ----------
+// Demonstrate a single flip on a 4-point quad: B,C currently joined by the
+// "wrong" diagonal; the in-circle test detects it and we flip.
+function initFlip() {
+  state.sites = [
+    { x: 250, y: 130, id: "A" }, { x: 620, y: 150, id: "B" },
+    { x: 300, y: 360, id: "C" }, { x: 650, y: 370, id: "D" },
+  ];
+  state.placed = state.sites.slice();
+  // Start with the NON-Delaunay diagonal A-D (so B is inside circumcircle of A,C,D maybe)
+  state.tris = [];
+  const A = state.sites[0], B = state.sites[1], C = state.sites[2], D = state.sites[3];
+  // quad order A(top-left) B(top-right) D(bottom-right) C(bottom-left)
+  // wrong diagonal: A-D  -> triangles (A,B,D) and (A,D,C)
+  let t1 = { a: A, b: B, c: D }, t2 = { a: A, b: D, c: C };
+  if (orient2d(t1.a, t1.b, t1.c) < 0) [t1.a, t1.b] = [t1.b, t1.a];
+  if (orient2d(t2.a, t2.b, t2.c) < 0) [t2.a, t2.b] = [t2.b, t2.a];
+  state.tris = [t1, t2];
+  state.flipStage = 0;
+  state.done = false;
+  state._flipEdge = null; state._newDiag = null; state._activeCirc = null; state._insideSite = null;
+}
+async function flipStep() {
+  const A = state.sites[0], B = state.sites[1], C = state.sites[2], D = state.sites[3];
+  if (state.flipStage === 0) {
+    // show current diagonal A-D and circumcircle of (A,B,D); test C
+    state._flipEdge = [A, D];
+    state._activeCirc = circumcircle(A, B, D);
+    state.tests++;
+    const isIn = inCircle({ a: A, b: B, c: D }, C);
+    state._insideSite = isIn ? C : null;
+    info(`Current diagonal <code>A–D</code>. In-circle test: is <code>C</code> inside circumcircle of <code>ABD</code>? <b style="color:${isIn ? "var(--red)" : "var(--green)"}">${isIn ? "YES → illegal" : "no"}</b>.`);
+    log(`test C in circumcircle(ABD): ${isIn ? "INSIDE — flip needed" : "outside"}`, "test");
+    draw(); await wait();
+    state.flipStage = isIn ? 1 : 3;
+    return true;
+  }
+  if (state.flipStage === 1) {
+    info(`<b style="color:var(--red)">Flip</b> the illegal diagonal <code>A–D</code> → <code>B–C</code>.`);
+    log("flip diagonal A–D → B–C", "flip");
+    state.flips++;
+    // replace triangles with the other diagonal: (A,B,C) and (B,C,D)
+    let u1 = { a: A, b: B, c: C }, u2 = { a: B, b: C, c: D };
+    if (orient2d(u1.a, u1.b, u1.c) < 0) [u1.a, u1.b] = [u1.b, u1.a];
+    if (orient2d(u2.a, u2.b, u2.c) < 0) [u2.a, u2.b] = [u2.b, u2.a];
+    state.tris = [u1, u2];
+    state._flipEdge = null; state._newDiag = [B, C]; state._activeCirc = null; state._insideSite = null;
+    draw(); await wait();
+    state.flipStage = 2;
+    return true;
+  }
+  if (state.flipStage === 2) {
+    // verify new diagonal B-C is legal: test D in circumcircle(A,B,C)
+    state._activeCirc = circumcircle(A, B, C);
+    state.tests++;
+    const isIn = inCircle({ a: A, b: B, c: C }, D);
+    state._insideSite = isIn ? D : null;
+    info(`Re-check new diagonal <code>B–C</code>: is <code>D</code> inside circumcircle of <code>ABC</code>? <b style="color:var(--green)">no → legal</b>. Now Delaunay.`);
+    log(`verify B–C: D ${isIn ? "inside (unexpected)" : "outside"} — edge legal`, "legal");
+    draw(); await wait();
+    state.flipStage = 3;
+    return true;
+  }
+  state.done = true;
+  state._activeCirc = null; state._newDiag = null; state._insideSite = null;
+  info("Done — the flip restored the empty-circumcircle property. This is the core of Lawson's legalize loop.");
+  draw();
+  return false;
+}
+
+// ---------- step dispatcher ----------
+async function stepOnce() {
+  if (state.done) return false;
+  if (state.mode === "build") return buildStep();
+  if (state.mode === "circle") return circleStep();
+  return flipStep();
+}
+
+// ---------- drivers ----------
+async function doStep() {
+  if (state.running) { toast("Already running…"); return; }
+  if (state.done) { toast("Finished. Reset to restart."); return; }
+  state.running = true; state.stopped = false; state.paused = false;
+  try { await stepOnce(); } catch (e) { if (e.message !== "__stop__") console.error(e); }
+  finally { state.running = false; }
+}
+async function doRun() {
+  if (state.running) { toast("Already running…"); return; }
+  if (state.done) { toast("Finished. Reset to restart."); return; }
+  state.running = true; state.stopped = false; state.paused = false;
+  log("run", "op");
+  try { let more = true; while (more && !state.stopped) more = await stepOnce(); }
+  catch (e) { if (e.message !== "__stop__") console.error(e); else info("Paused/stopped."); }
+  finally { state.running = false; }
+}
+function doReset() {
+  state.stopped = true; state.paused = false;
+  setTimeout(() => {
+    state.tests = 0; state.flips = 0; state.done = false;
+    state._newest = null; state._activeCirc = null; state._insideSite = null;
+    state._flipEdge = null; state._newDiag = null;
+    if (state.mode === "build") initBuild();
+    else if (state.mode === "circle") initCircle();
+    else initFlip();
+    draw();
+    info("Reset. Press <code>Step</code> or <code>Run</code>.");
+    log("reset", "op");
+  }, 80);
+}
+
+function setMode(m) {
+  state.mode = m;
+  document.getElementById("modeBuild").classList.toggle("primary", m === "build");
+  document.getElementById("modeCircle").classList.toggle("primary", m === "circle");
+  document.getElementById("modeFlip").classList.toggle("primary", m === "flip");
+  if (m !== "flip") state.sites = state.sites.length && state.sites[0].id ? state.sites : defaultSites();
+  if (m === "flip") { /* initFlip sets its own sites */ }
+  else if (state.sites.some(s => !s.id) || state.sites.length < 3) state.sites = defaultSites();
+  doReset();
+}
+
+// ---------- events ----------
+document.getElementById("modeBuild").addEventListener("click", () => { state.sites = defaultSites(); setMode("build"); });
+document.getElementById("modeCircle").addEventListener("click", () => { if (state.mode !== "circle" && (state.sites.length < 3 || state.sites.some(s => !s.id))) state.sites = defaultSites(); setMode("circle"); });
+document.getElementById("modeFlip").addEventListener("click", () => setMode("flip"));
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnRun").addEventListener("click", doRun);
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.running) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Press <code>Pause</code> again to resume." : "Resumed.");
+});
+document.getElementById("btnReset").addEventListener("click", doReset);
+document.getElementById("btnRandom").addEventListener("click", () => {
+  if (state.mode === "flip") { toast("Random disabled in Insert+Flip mode"); return; }
+  const n = 6 + Math.floor(Math.random() * 5);
+  state.sites = Array.from({ length: n }, (_, i) => ({
+    x: 80 + Math.random() * (W - 160),
+    y: 70 + Math.random() * (H - 140),
+    id: String.fromCharCode(65 + i),
+  }));
+  doReset();
+});
+els.btnVoronoi.addEventListener("click", () => {
+  state.showVoronoi = !state.showVoronoi;
+  els.btnVoronoi.textContent = "Voronoi: " + (state.showVoronoi ? "on" : "off");
+  els.btnVoronoi.classList.toggle("on", state.showVoronoi);
+  draw();
+});
+els.speed.addEventListener("input", e => { state.speedMs = 1520 - Number(e.target.value); });
+
+// click to add a site (Insert+Flip & build modes)
+els.stage.addEventListener("click", (e) => {
+  if (state.running) { toast("Wait for the run to finish"); return; }
+  if (state.mode === "circle") { toast("Switch to Build/Insert mode to add sites"); return; }
+  const pt = els.stage.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  const m = pt.matrixTransform(els.stage.getScreenCTM().inverse());
+  const id = String.fromCharCode(65 + state.sites.length);
+  if (state.mode === "build") {
+    state.sites.push({ x: m.x, y: m.y, id });
+    log(`added site ${id} at (${m.x.toFixed(0)}, ${m.y.toFixed(0)})`, "op");
+    doReset();
+  } else {
+    // flip mode: just insert into current triangulation live
+    const p = { x: m.x, y: m.y, id };
+    state.sites.push(p); state.placed.push(p);
+    state._newest = p;
+    insertPoint(p);
+    log(`inserted site ${id} live`, "op");
+    draw();
+  }
+});
+
+// ---------- init ----------
+function init() {
+  state.speedMs = 1520 - Number(els.speed.value);
+  els.btnVoronoi.classList.add("on");
+  setMode("build");
+  log("Voronoi/Delaunay visualizer ready.", "legal");
+  info("Build mode: press <code>Step</code> to insert one site at a time and watch the Delaunay mesh and dual Voronoi cells grow.");
+}
+init();
+</script>
+</body>
+</html>
