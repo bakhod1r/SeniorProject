@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSM-Tree — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.9rem;color:var(--blue);margin-bottom:4px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:14px;text-align:center;font-size:.9rem}
+.badges{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.write{color:var(--green);border-color:var(--green)}
+.badge.read{color:var(--yellow);border-color:var(--yellow)}
+.badge.space{color:var(--purple);border-color:var(--purple)}
+.controls{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:6px 13px;border:2px solid var(--blue);background:transparent;color:var(--blue);
+       border-radius:6px;cursor:pointer;font-size:.85rem;font-family:inherit;transition:.2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.green{border-color:var(--green);color:var(--green)}
+button.green:hover:not(:disabled){background:var(--green);color:var(--bg)}
+button.purple{border-color:var(--purple);color:var(--purple)}
+button.purple:hover:not(:disabled){background:var(--purple);color:var(--bg)}
+button.danger{border-color:var(--red);color:var(--red)}
+button.danger:hover:not(:disabled){background:var(--red);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+input[type=text]{padding:6px 10px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.85rem;width:90px;font-family:inherit}
+input[type=text]:focus{outline:none;border-color:var(--blue)}
+input[type=range]{width:120px;accent-color:var(--blue)}
+label{color:var(--muted);font-size:.8rem}
+.toggle{display:flex;gap:6px;align-items:center}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:18px 16px;margin-bottom:12px;width:100%;max-width:1100px;min-height:320px;overflow:auto}
+.layer{margin-bottom:14px}
+.layer-title{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;
+       margin-bottom:5px;display:flex;align-items:center;gap:8px}
+.layer-title .tag{padding:2px 7px;border-radius:8px;font-size:.66rem;border:1px solid var(--border)}
+.tag.mem{color:var(--blue);border-color:var(--blue)}
+.tag.l0{color:var(--orange);border-color:var(--orange)}
+.tag.lvl{color:var(--purple);border-color:var(--purple)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:34px}
+.sstable{display:flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:8px;
+       padding:5px 7px;background:rgba(255,255,255,.02);position:relative;transition:.3s}
+.sstable.flushing{border-color:var(--green);box-shadow:0 0 0 2px rgba(63,185,80,.3)}
+.sstable.merging{border-color:var(--purple);box-shadow:0 0 0 2px rgba(188,140,255,.3)}
+.sstable.skipped{opacity:.35}
+.sst-label{font-size:.62rem;color:var(--muted);margin-right:4px;font-family:monospace}
+.bloom{font-size:.6rem;padding:1px 5px;border-radius:6px;font-family:monospace;border:1px solid var(--border);margin-right:4px}
+.bloom.maybe{color:var(--green);border-color:var(--green)}
+.bloom.no{color:var(--muted);border-color:var(--border)}
+.cell{display:flex;flex-direction:column;align-items:center;min-width:34px;
+       border-radius:6px;padding:3px 6px;font-family:monospace;transition:.3s;
+       background:#1f2630;border:1px solid var(--border)}
+.cell .k{font-weight:700;font-size:.82rem;color:var(--text)}
+.cell .v{font-size:.66rem;color:var(--muted)}
+.cell.inserting{background:rgba(63,185,80,.25);border-color:var(--green)}
+.cell.scanning{background:rgba(210,153,34,.25);border-color:var(--yellow)}
+.cell.found{background:rgba(63,185,80,.4);border-color:var(--green)}
+.cell.tomb{background:rgba(248,81,73,.22);border-color:var(--red)}
+.cell.tomb .v{color:var(--red)}
+.empty-note{color:var(--muted);font-size:.78rem;font-style:italic}
+.legend{display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.74rem;color:var(--muted)}
+.legend-color{width:13px;height:13px;border-radius:3px;border:1px solid var(--border)}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:10px 18px;display:flex;gap:20px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.64rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.05rem;font-weight:700;font-family:monospace;text-align:center}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 18px;width:100%;max-width:1100px;margin-bottom:12px;
+       font-family:monospace;font-size:.84rem;min-height:54px;line-height:1.5}
+.info-panel .highlight{color:var(--yellow);font-weight:600}
+.info-panel .ok{color:var(--green);font-weight:600}
+.info-panel .bad{color:var(--red);font-weight:600}
+.info-panel .blue{color:var(--blue);font-weight:600}
+.panels{display:flex;gap:12px;width:100%;max-width:1100px;flex-wrap:wrap}
+.bigO,.log-box{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 16px;flex:1;min-width:320px}
+.bigO h3,.log-box h3{color:var(--blue);font-size:.9rem;margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600}
+td.c-green{color:var(--green);font-family:monospace}
+td.c-yellow{color:var(--yellow);font-family:monospace}
+td.c-red{color:var(--red);font-family:monospace}
+td.c-blue{color:var(--blue);font-family:monospace}
+#log{font-family:monospace;font-size:.74rem;max-height:200px;overflow-y:auto;line-height:1.6}
+#log div{padding:1px 0;border-bottom:1px solid rgba(48,54,61,.4)}
+.log-w{color:var(--green)}.log-r{color:var(--yellow)}.log-f{color:var(--orange)}
+.log-c{color:var(--purple)}.log-d{color:var(--red)}
+.footer-note{color:var(--muted);font-size:.74rem;margin-top:10px;text-align:center;max-width:780px}
+</style>
+</head>
+<body>
+<h1>LSM-Tree</h1>
+<p class="subtitle">Log-Structured Merge Tree — writes fill the memtable, flush to SSTables, compaction merges levels, reads walk newest-first with bloom filters</p>
+
+<div class="badges">
+  <span class="badge write">Write O(1) amortized · sequential</span>
+  <span class="badge read">Read O(log_T n) · leveled</span>
+  <span class="badge space">Space ~1.1×–2× (compaction)</span>
+</div>
+
+<div class="controls">
+  <input type="text" id="keyInput" placeholder="key" value="x">
+  <input type="text" id="valInput" placeholder="value" value="9">
+  <button class="green" id="putBtn" onclick="doPut()">put</button>
+  <button class="danger" id="delBtn" onclick="doDelete()">delete</button>
+  <button class="read" id="getBtn" onclick="doGet()" style="border-color:var(--yellow);color:var(--yellow)">get</button>
+</div>
+<div class="controls">
+  <button id="flushBtn" onclick="forceFlush()">Force Flush</button>
+  <button class="purple" id="compactBtn" onclick="forceCompact()">Compact</button>
+  <button class="secondary" onclick="runDemo()">Run Demo</button>
+  <button class="secondary" onclick="resetAll()">Reset</button>
+  <span class="toggle"><label>Compaction:</label>
+    <button id="stratBtn" class="secondary" onclick="toggleStrategy()">Leveled</button></span>
+  <span class="toggle"><label>flushAt:</label>
+    <input type="range" id="flushAt" min="2" max="5" value="3" oninput="updateFlushAt()">
+    <span id="flushAtVal" style="font-family:monospace;color:var(--blue)">3</span></span>
+  <span class="toggle"><label>Speed:</label><input type="range" id="speed" min="1" max="10" value="6"></span>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.5)"></div>inserting</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.5)"></div>scanning</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.8)"></div>found</div>
+  <div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.5)"></div>tombstone</div>
+  <div class="legend-item"><div class="legend-color" style="background:var(--purple)"></div>merging</div>
+  <div class="legend-item"><span class="bloom maybe">maybe</span>bloom hit</div>
+  <div class="legend-item"><span class="bloom no">no</span>bloom skip</div>
+</div>
+
+<div class="stats">
+  <div><div class="stat-label">Memtable</div><div class="stat-value" id="sMem">0</div></div>
+  <div><div class="stat-label">SSTables</div><div class="stat-value" id="sSst">0</div></div>
+  <div><div class="stat-label">Live keys</div><div class="stat-value" id="sLive">0</div></div>
+  <div><div class="stat-label">Write Amp</div><div class="stat-value" id="sWA">1.0</div></div>
+  <div><div class="stat-label">Read Amp</div><div class="stat-value" id="sRA">0</div></div>
+  <div><div class="stat-label">Space Amp</div><div class="stat-value" id="sSA">1.0</div></div>
+</div>
+
+<div class="canvas-container" id="canvas"></div>
+
+<div class="info-panel" id="info">
+  Press <span class="highlight">put</span> to add a key, <span class="highlight">delete</span> to write a tombstone,
+  <span class="highlight">get</span> to read newest-first, or <span class="highlight">Run Demo</span> for the guided trace.
+</div>
+
+<div class="panels">
+  <div class="bigO">
+    <h3>Complexity</h3>
+    <table>
+      <tr><th>Operation</th><th>Cost</th><th>Note</th></tr>
+      <tr><td>put / delete</td><td class="c-green">O(1) amortized</td><td>WAL append + memtable</td></tr>
+      <tr><td>flush</td><td class="c-green">O(memtable), seq</td><td>one sequential write</td></tr>
+      <tr><td>get (leveled)</td><td class="c-blue">O(log_T n)</td><td>≤1 SSTable/level</td></tr>
+      <tr><td>get miss (bloom)</td><td class="c-green">≈ O(1) exp.</td><td>skips SSTables</td></tr>
+      <tr><td>get (size-tiered)</td><td class="c-yellow">O(T·log_T n)</td><td>overlapping runs</td></tr>
+      <tr><td>compaction</td><td class="c-yellow">O(S) k-way merge</td><td>background, seq</td></tr>
+      <tr><td>write amp</td><td class="c-yellow">~L·T (leveled)</td><td>~L (size-tiered)</td></tr>
+      <tr><td>space</td><td class="c-blue">O(live × SA)</td><td>obsolete + tombstones</td></tr>
+    </table>
+  </div>
+  <div class="log-box">
+    <h3>Operation Log</h3>
+    <div id="log"></div>
+  </div>
+</div>
+
+<p class="footer-note">Reads check the memtable, then SSTables newest→oldest; each SSTable's bloom filter is consulted first
+(<span style="color:var(--green)">maybe</span> = read its block, <span style="color:var(--muted)">no</span> = skip). A tombstone shadows older values.
+Compaction merges SSTables, keeps newest values, drops tombstones — reclaiming space.</p>
+
+<script>
+// ===================== STATE =====================
+const TOMB = "__TOMB__";
+let memtable = {};        // key -> value (or TOMB)
+let ssts = [];            // index 0 = newest; each = {id, data: sorted [[k,v]]}
+let flushAt = 3;
+let strategy = "leveled"; // or "size-tiered"
+let sstCounter = 0;
+let busy = false;
+// metrics
+let userBytes = 0, diskBytes = 0, lastRA = 0;
+
+function speed(){ return 1100 - document.getElementById('speed').value*100; }
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+// ===================== BLOOM (toy) =====================
+// A deterministic toy "bloom filter": exact membership but we visualize the skip.
+function sstHasKey(sst, key){ return sst.data.some(([k])=>k===key); }
+
+// ===================== CORE OPS =====================
+function memSize(){ return Object.keys(memtable).length; }
+
+async function doPut(){
+  if(busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  const v = document.getElementById('valInput').value.trim() || "0";
+  if(!k) return;
+  await put(k, v);
+}
+async function doDelete(){
+  if(busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  if(!k) return;
+  await put(k, TOMB, true);
+}
+
+async function put(k, v, isDel){
+  busy = true;
+  userBytes += 1;
+  memtable[k] = v;
+  setInfo(isDel
+    ? `<span class="bad">delete(${k})</span> → write a <span class="bad">tombstone</span> into the memtable (WAL append first for durability).`
+    : `<span class="ok">put(${k}, ${v})</span> → append to WAL, insert into the in-memory memtable. No disk seek.`);
+  addLog(isDel?`delete ${k} (tombstone)`:`put ${k}=${v}`, isDel?'log-d':'log-w');
+  render({memInsert:k});
+  await sleep(speed());
+  if(memSize() >= flushAt){ await flush(); }
+  render();
+  busy = false;
+}
+
+async function flush(){
+  const items = Object.entries(memtable).sort((a,b)=>a[0]<b[0]?-1:1);
+  if(items.length===0){ return; }
+  const sst = {id: sstCounter++, data: items, flushing:true};
+  ssts.unshift(sst);              // newest at front
+  diskBytes += items.length;
+  memtable = {};
+  setInfo(`<span class="blue">flush</span> → the full memtable is frozen and written <span class="blue">sequentially</span> as a new immutable SSTable (#${sst.id}) at the top.`);
+  addLog(`flush memtable → SSTable#${sst.id} [${items.map(e=>e[0]).join(',')}]`, 'log-f');
+  render();
+  await sleep(speed()*1.3);
+  sst.flushing = false;
+  render();
+  if(strategy==="leveled") await maybeCompactLeveled();
+}
+
+async function maybeCompactLeveled(){
+  // simple trigger: if >= 3 SSTables, merge the two oldest (visual stand-in for leveling)
+  if(ssts.length >= 4){ await forceCompact(); }
+}
+
+function forceFlush(){ if(busy) return; busy=true; flush().then(()=>{busy=false;render();}); }
+
+async function forceCompact(){
+  if(ssts.length < 2){ setInfo(`Need at least 2 SSTables to compact.`); return; }
+  const wasBusy = busy; busy = true;
+  // mark all merging
+  ssts.forEach(s=>s.merging=true);
+  setInfo(`<span style="color:var(--purple)">compaction</span> → k-way merge of ${ssts.length} SSTables, <span class="ok">newest wins</span> on ties, <span class="bad">tombstones dropped</span> at the bottom level.`);
+  addLog(`compact ${ssts.length} SSTables (newest wins, drop tombstones)`, 'log-c');
+  render();
+  await sleep(speed()*1.4);
+  // merge oldest -> newest so newer overrides
+  const merged = {};
+  for(let i=ssts.length-1;i>=0;i--){ for(const [k,v] of ssts[i].data){ merged[k]=v; } }
+  const live = Object.entries(merged).filter(([,v])=>v!==TOMB).sort((a,b)=>a[0]<b[0]?-1:1);
+  diskBytes += live.length;
+  ssts = [{id: sstCounter++, data: live}];
+  setInfo(`<span style="color:var(--purple)">compaction done</span> → ${ssts[0].data.length} live keys in one SSTable. Obsolete versions and tombstones reclaimed.`);
+  render();
+  busy = wasBusy;
+}
+
+async function doGet(){
+  if(busy) return;
+  const k = document.getElementById('keyInput').value.trim();
+  if(!k) return;
+  busy = true; lastRA = 0;
+  addLog(`get ${k}`, 'log-r');
+  // memtable
+  render({scanMem:true});
+  setInfo(`<span class="highlight">get(${k})</span> → check the memtable first (newest source).`);
+  await sleep(speed());
+  if(k in memtable){
+    const v = memtable[k];
+    await finishGet(k, v, 'memtable');
+    busy=false; return;
+  }
+  // sstables newest..oldest
+  for(let i=0;i<ssts.length;i++){
+    const sst = ssts[i];
+    const maybe = sstHasKey(sst, k);   // toy bloom: exact, but we visualize the skip
+    render({bloomSst:i, bloomMaybe:maybe});
+    setInfo(`SSTable#${sst.id}: bloom filter says <span class="${maybe?'ok':'highlight'}">${maybe?'MAYBE — read its block':'NO — skip (zero disk reads)'}</span>.`);
+    await sleep(speed());
+    if(!maybe){ continue; }
+    lastRA++;
+    render({scanSst:i, scanKey:k});
+    await sleep(speed());
+    const hit = sst.data.find(([kk])=>kk===k);
+    if(hit){ await finishGet(k, hit[1], `SSTable#${sst.id}`); busy=false; return; }
+  }
+  setInfo(`<span class="bad">get(${k}) → NOT FOUND.</span> No source holds the key (bloom filters skipped the rest).`);
+  document.getElementById('sRA').textContent = lastRA;
+  render();
+  busy = false;
+}
+
+async function finishGet(k, v, where){
+  if(v===TOMB){
+    setInfo(`Found a <span class="bad">tombstone</span> for <b>${k}</b> in ${where} → return <span class="bad">NOT FOUND</span> (newest wins; older values shadowed).`);
+    addLog(`  ${k} → tombstone → NOT FOUND (${where})`, 'log-r');
+  } else {
+    setInfo(`Found <b>${k} = <span class="ok">${v}</span></b> in ${where} → return it. <span class="ok">Newest wins</span>; stop here.`);
+    addLog(`  ${k} → ${v} (${where})`, 'log-r');
+  }
+  render({foundKey:k, foundWhere:where});
+  document.getElementById('sRA').textContent = lastRA;
+  await sleep(speed());
+  render();
+}
+
+// ===================== RENDER =====================
+function liveKeyCount(){
+  const m = {};
+  for(let i=ssts.length-1;i>=0;i--){ for(const [k,v] of ssts[i].data) m[k]=v; }
+  for(const k in memtable) m[k]=memtable[k];
+  return Object.values(m).filter(v=>v!==TOMB).length;
+}
+
+function cellHTML(k, v, cls){
+  const tomb = v===TOMB;
+  const disp = tomb ? "✗ del" : v;
+  return `<div class="cell ${cls||''} ${tomb?'tomb':''}"><span class="k">${k}</span><span class="v">${disp}</span></div>`;
+}
+
+function render(hl){
+  hl = hl || {};
+  const c = document.getElementById('canvas');
+  let html = "";
+
+  // Memtable layer
+  html += `<div class="layer"><div class="layer-title"><span class="tag mem">MEMTABLE</span> in RAM · sorted · absorbs writes</div><div class="row">`;
+  const memItems = Object.entries(memtable).sort((a,b)=>a[0]<b[0]?-1:1);
+  if(memItems.length===0){ html += `<span class="empty-note">empty (flushed)</span>`; }
+  else { for(const [k,v] of memItems){
+      let cls = hl.memInsert===k ? 'inserting' : (hl.scanMem ? 'scanning':'');
+      html += cellHTML(k,v,cls);
+  }}
+  html += `</div></div>`;
+
+  // SSTable layers
+  html += `<div class="layer"><div class="layer-title"><span class="tag l0">SSTables</span> on disk · immutable · sorted · newest → oldest (${strategy})</div>`;
+  if(ssts.length===0){ html += `<div class="row"><span class="empty-note">no SSTables yet — keep putting to trigger a flush</span></div>`; }
+  ssts.forEach((sst, i)=>{
+    let scls = sst.flushing?'flushing':(sst.merging?'merging':'');
+    if(hl.scanSst===i) scls += ' scanning-sst';
+    if(hl.bloomSst===i && hl.bloomMaybe===false) scls += ' skipped';
+    let bloomTag = '';
+    if(hl.bloomSst===i){ bloomTag = `<span class="bloom ${hl.bloomMaybe?'maybe':'no'}">${hl.bloomMaybe?'maybe':'no'}</span>`; }
+    html += `<div class="row" style="margin-bottom:4px"><div class="sstable ${scls}"><span class="sst-label">#${sst.id} (${i===0?'newest':'older'})</span>${bloomTag}`;
+    for(const [k,v] of sst.data){
+      let cls = '';
+      if(hl.scanSst===i && hl.scanKey===k) cls='scanning';
+      if(hl.foundKey===k && (hl.foundWhere===`SSTable#${sst.id}`)) cls='found';
+      html += cellHTML(k,v,cls);
+    }
+    html += `</div></div>`;
+  });
+  html += `</div>`;
+
+  c.innerHTML = html;
+
+  // stats
+  document.getElementById('sMem').textContent = memItems.length;
+  document.getElementById('sSst').textContent = ssts.length;
+  document.getElementById('sLive').textContent = liveKeyCount();
+  document.getElementById('sWA').textContent = (userBytes? (diskBytes/userBytes).toFixed(1):'1.0');
+  // space amp: stored entries / live entries
+  let stored = ssts.reduce((a,s)=>a+s.data.length, 0) + memItems.length;
+  let live = Math.max(1, liveKeyCount());
+  document.getElementById('sSA').textContent = (stored/live).toFixed(1);
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function addLog(msg, cls){
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = cls||'';
+  d.textContent = msg;
+  log.prepend(d);
+}
+
+// ===================== CONTROLS =====================
+function updateFlushAt(){
+  flushAt = +document.getElementById('flushAt').value;
+  document.getElementById('flushAtVal').textContent = flushAt;
+}
+function toggleStrategy(){
+  strategy = strategy==="leveled" ? "size-tiered" : "leveled";
+  document.getElementById('stratBtn').textContent = strategy==="leveled"?"Leveled":"Size-Tiered";
+  setInfo(strategy==="leveled"
+    ? `<span class="blue">Leveled</span> compaction: low read/space amplification, higher write amplification — auto-compacts as SSTables accumulate.`
+    : `<span class="highlight">Size-tiered</span> compaction: low write amplification, higher read/space amplification — SSTables accumulate; press Compact manually.`);
+  render();
+}
+function resetAll(){
+  if(busy) return;
+  memtable={}; ssts=[]; sstCounter=0; userBytes=0; diskBytes=0; lastRA=0;
+  document.getElementById('log').innerHTML='';
+  document.getElementById('sRA').textContent='0';
+  setInfo(`Reset. Press <span class="highlight">put</span>, <span class="highlight">delete</span>, <span class="highlight">get</span>, or <span class="highlight">Run Demo</span>.`);
+  render();
+}
+
+async function runDemo(){
+  if(busy) return;
+  resetAll();
+  const steps = [
+    ['b','1'],['d','2'],['a','3'],   // flush
+    ['c','4'],['__del','b'],['d','5'] // flush
+  ];
+  for(const [k,v] of steps){
+    document.getElementById('keyInput').value = (k==='__del'? v : k);
+    if(k==='__del'){ document.getElementById('valInput').value=''; await put(v, TOMB, true); }
+    else { document.getElementById('valInput').value = v; await put(k, v); }
+    await sleep(200);
+  }
+  // reads
+  for(const k of ['b','d','a']){
+    document.getElementById('keyInput').value = k;
+    await doGet();
+    await sleep(300);
+  }
+  setInfo(`Demo done: <b>get(b)</b>=<span class="bad">NOT FOUND</span> (tombstone), <b>get(d)</b>=<span class="ok">5</span> (newest wins over d=2), <b>get(a)</b>=<span class="ok">3</span> (bloom skipped the newer SSTable). Now press <span style="color:var(--purple)">Compact</span>.`);
+}
+
+// ===================== INIT =====================
+render();
+</script>
+</body>
+</html>
