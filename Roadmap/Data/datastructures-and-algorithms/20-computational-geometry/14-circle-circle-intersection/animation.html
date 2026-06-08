@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circle–Circle Intersection — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { font-size: 1.7rem; color: var(--blue); text-align: center; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 16px; text-align: center; font-size: 0.95rem; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+  .badge {
+    padding: 4px 12px; border-radius: 14px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge.green  { color: var(--green);  border-color: var(--green); }
+  .badge.blue   { color: var(--blue);   border-color: var(--blue); }
+  .badge.purple { color: var(--purple); border-color: var(--purple); }
+
+  .layout {
+    display: flex; gap: 16px; width: 100%; max-width: 1180px;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .left  { flex: 1 1 560px; min-width: 340px; }
+  .right { flex: 1 1 360px; min-width: 320px; display: flex; flex-direction: column; gap: 14px; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 1.05rem; }
+
+  svg { width: 100%; height: auto; display: block; background: #0a0d12; border-radius: 10px;
+        border: 1px solid var(--border); touch-action: none; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; }
+  button {
+    padding: 8px 18px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.92rem;
+    transition: all 0.2s;
+  }
+  button:hover { background: var(--blue); color: var(--bg); }
+  button.toggle.active { background: var(--blue); color: var(--bg); }
+
+  .sliders { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; margin-top: 10px; }
+  .sliders label { color: var(--muted); font-size: 0.85rem; }
+  .sliders input[type=range] { width: 100%; accent-color: var(--blue); }
+  .sliders .val { color: var(--text); font-variant-numeric: tabular-nums; font-size: 0.85rem; min-width: 44px; text-align: right; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.mono, .mono { font-family: 'Courier New', monospace; }
+  .o1 { color: var(--green); font-weight: 700; }
+
+  .info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.9rem; }
+  .info-row .k { color: var(--muted); }
+  .info-row .v { font-family: 'Courier New', monospace; color: var(--text); }
+  .relation { font-size: 1.15rem; font-weight: 700; margin: 6px 0 10px; }
+
+  #log {
+    height: 150px; overflow-y: auto; font-family: 'Courier New', monospace;
+    font-size: 0.8rem; line-height: 1.5; background: #0a0d12;
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  }
+  #log div { padding: 1px 0; border-bottom: 1px solid #1b2129; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 0.8rem; }
+  .legend span { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .hint { color: var(--muted); font-size: 0.82rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>Circle–Circle Intersection</h1>
+  <p class="subtitle">Drag the circles. Classification by <span class="mono">d</span> vs <span class="mono">r1+r2</span> / <span class="mono">|r1-r2|</span>, the a/h construction, and the lens area.</p>
+  <div class="badges">
+    <span class="badge green">Classify: O(1)</span>
+    <span class="badge blue">Intersect (a/h): O(1)</span>
+    <span class="badge purple">Lens area: O(1)</span>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="panel">
+        <svg id="canvas" viewBox="0 0 560 460"></svg>
+        <div class="controls">
+          <button id="constructBtn" class="toggle active" onclick="toggleConstruct()">a/h construction</button>
+          <button id="lensBtn" class="toggle active" onclick="toggleLens()">Lens area</button>
+          <button id="radBtn" class="toggle" onclick="toggleRadical()">Radical axis</button>
+          <button onclick="preset('two')">Two points</button>
+          <button onclick="preset('ext')">Ext tangent</button>
+          <button onclick="preset('int')">Int tangent</button>
+          <button onclick="preset('nested')">Nested</button>
+          <button onclick="preset('separate')">Separate</button>
+        </div>
+        <div class="sliders">
+          <label>r1</label><input id="r1" type="range" min="20" max="200" value="120" oninput="onSlider()"><span class="val" id="r1v">120</span>
+          <label>r2</label><input id="r2" type="range" min="20" max="200" value="120" oninput="onSlider()"><span class="val" id="r2v">120</span>
+        </div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--blue)"></i>Circle 1</span>
+          <span><i class="dot" style="background:var(--orange)"></i>Circle 2</span>
+          <span><i class="dot" style="background:var(--green)"></i>Intersection</span>
+          <span><i class="dot" style="background:var(--purple)"></i>Lens</span>
+          <span><i class="dot" style="background:var(--yellow)"></i>a / h</span>
+        </div>
+        <p class="hint">Tip: drag a circle's center dot to move it. Use the sliders to resize.</p>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>Classification &amp; Geometry</h3>
+        <div class="relation" id="relation">—</div>
+        <div class="info-row"><span class="k">d = |c1 - c2|</span><span class="v" id="d">—</span></div>
+        <div class="info-row"><span class="k">r1 + r2</span><span class="v" id="sum">—</span></div>
+        <div class="info-row"><span class="k">|r1 - r2|</span><span class="v" id="diff">—</span></div>
+        <div class="info-row"><span class="k">a = (d²+r1²-r2²)/(2d)</span><span class="v" id="a">—</span></div>
+        <div class="info-row"><span class="k">h = sqrt(r1²-a²)</span><span class="v" id="h">—</span></div>
+        <div class="info-row"><span class="k"># intersection points</span><span class="v" id="npts">—</span></div>
+        <div class="info-row"><span class="k">lens (overlap) area</span><span class="v" id="lens">—</span></div>
+        <div class="info-row"><span class="k">point P+</span><span class="v" id="p1">—</span></div>
+        <div class="info-row"><span class="k">point P-</span><span class="v" id="p2">—</span></div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <thead><tr><th>Operation</th><th>Time</th><th>Note</th></tr></thead>
+          <tbody>
+            <tr><td>Center distance d</td><td class="o1">O(1)</td><td>1 hypot</td></tr>
+            <tr><td>Classify</td><td class="o1">O(1)</td><td>2 comparisons</td></tr>
+            <tr><td>Intersect (a/h)</td><td class="o1">O(1)</td><td>1 sqrt</td></tr>
+            <tr><td>Lens area</td><td class="o1">O(1)</td><td>2 acos</td></tr>
+            <tr><td>Overlap test (no sqrt)</td><td class="o1">O(1)</td><td>d² ≤ (r1+r2)²</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ===== State (SVG pixel coordinates) =====
+  const EPS = 1e-6;
+  let c1 = { x: 210, y: 230 };
+  let c2 = { x: 350, y: 230 };
+  let r1 = 120, r2 = 120;
+  let showConstruct = true, showLens = true, showRadical = false;
+  let dragging = null;
+  let lastRelation = "";
+
+  const svg = document.getElementById('canvas');
+  const NS = "http://www.w3.org/2000/svg";
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // ===== Core math =====
+  function classify(d, r1, r2) {
+    const sum = r1 + r2, diff = Math.abs(r1 - r2);
+    if (d < EPS && diff < EPS) return "Identical";
+    if (d > sum + EPS) return "Separate";
+    if (Math.abs(d - sum) <= EPS) return "Externally Tangent";
+    if (d < diff - EPS) return "One Contains Other";
+    if (Math.abs(d - diff) <= EPS) return "Internally Tangent";
+    return "Two Intersections";
+  }
+
+  function intersect(c1, r1, c2, r2) {
+    const dx = c2.x - c1.x, dy = c2.y - c1.y;
+    const d = Math.hypot(dx, dy);
+    const sum = r1 + r2, diff = Math.abs(r1 - r2);
+    if (d > sum + EPS || d < diff - EPS || (d < EPS && diff < EPS)) {
+      return { d, a: null, h: null, pts: [] };
+    }
+    const a = (d * d + (r1 - r2) * (r1 + r2)) / (2 * d);
+    const h = Math.sqrt(Math.max(0, (r1 - a) * (r1 + a)));
+    const ux = dx / d, uy = dy / d;
+    const fx = c1.x + a * ux, fy = c1.y + a * uy;
+    if (h < EPS) return { d, a, h, foot: { x: fx, y: fy }, ux, uy, pts: [{ x: fx, y: fy }] };
+    return {
+      d, a, h, foot: { x: fx, y: fy }, ux, uy,
+      pts: [{ x: fx - h * uy, y: fy + h * ux }, { x: fx + h * uy, y: fy - h * ux }]
+    };
+  }
+
+  function lensArea(d, r1, r2) {
+    if (d >= r1 + r2 - EPS) return 0;
+    if (d <= Math.abs(r1 - r2) + EPS) { const rm = Math.min(r1, r2); return Math.PI * rm * rm; }
+    const p1 = r1 * r1 * Math.acos((d * d + r1 * r1 - r2 * r2) / (2 * d * r1));
+    const p2 = r2 * r2 * Math.acos((d * d + r2 * r2 - r1 * r1) / (2 * d * r2));
+    const t = (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2);
+    return p1 + p2 - 0.5 * Math.sqrt(Math.max(0, t));
+  }
+
+  function relColor(rel) {
+    if (rel === "Two Intersections") return "var(--green)";
+    if (rel.includes("Tangent")) return "var(--yellow)";
+    if (rel === "Separate") return "var(--muted)";
+    if (rel === "Identical") return "var(--purple)";
+    return "var(--orange)";
+  }
+
+  // ===== Rendering =====
+  function render() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const info = intersect(c1, r1, c2, r2);
+    const rel = classify(info.d, r1, r2);
+
+    // Lens (overlap) fill via SVG clip of the two disks.
+    if (showLens && rel === "Two Intersections") {
+      const clip = el('clipPath', { id: 'clip1' });
+      clip.appendChild(el('circle', { cx: c1.x, cy: c1.y, r: r1 }));
+      svg.appendChild(clip);
+      const lensCircle = el('circle', {
+        cx: c2.x, cy: c2.y, r: r2, fill: 'var(--purple)',
+        'fill-opacity': 0.32, 'clip-path': 'url(#clip1)'
+      });
+      svg.appendChild(lensCircle);
+    } else if (showLens && rel === "One Contains Other") {
+      const inner = (r1 < r2) ? { c: c1, r: r1 } : { c: c2, r: r2 };
+      svg.appendChild(el('circle', { cx: inner.c.x, cy: inner.c.y, r: inner.r, fill: 'var(--purple)', 'fill-opacity': 0.32 }));
+    }
+
+    // Circles.
+    svg.appendChild(el('circle', { cx: c1.x, cy: c1.y, r: r1, fill: 'none', stroke: 'var(--blue)', 'stroke-width': 2 }));
+    svg.appendChild(el('circle', { cx: c2.x, cy: c2.y, r: r2, fill: 'none', stroke: 'var(--orange)', 'stroke-width': 2 }));
+
+    // Line of centers.
+    svg.appendChild(el('line', { x1: c1.x, y1: c1.y, x2: c2.x, y2: c2.y, stroke: 'var(--border)', 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
+
+    // a/h construction.
+    if (showConstruct && info.foot) {
+      // segment a (c1 -> foot)
+      svg.appendChild(el('line', { x1: c1.x, y1: c1.y, x2: info.foot.x, y2: info.foot.y, stroke: 'var(--yellow)', 'stroke-width': 3 }));
+      // segment h (foot -> P+)
+      if (info.pts.length === 2) {
+        svg.appendChild(el('line', { x1: info.foot.x, y1: info.foot.y, x2: info.pts[0].x, y2: info.pts[0].y, stroke: 'var(--yellow)', 'stroke-width': 3, 'stroke-dasharray': '5 3' }));
+      }
+      svg.appendChild(el('circle', { cx: info.foot.x, cy: info.foot.y, r: 3.5, fill: 'var(--yellow)' }));
+    }
+
+    // Radical axis (perpendicular to line of centers, through foot).
+    if (showRadical && info.foot) {
+      const px = -info.uy, py = info.ux; // perpendicular dir
+      const L = 600;
+      svg.appendChild(el('line', {
+        x1: info.foot.x - px * L, y1: info.foot.y - py * L,
+        x2: info.foot.x + px * L, y2: info.foot.y + py * L,
+        stroke: 'var(--red)', 'stroke-width': 1.4, 'stroke-dasharray': '2 4'
+      }));
+    }
+
+    // Intersection points.
+    for (const p of info.pts) {
+      svg.appendChild(el('circle', { cx: p.x, cy: p.y, r: 5.5, fill: 'var(--green)', stroke: '#0a0d12', 'stroke-width': 1.5 }));
+    }
+
+    // Center handles.
+    svg.appendChild(el('circle', { cx: c1.x, cy: c1.y, r: 7, fill: 'var(--blue)', stroke: '#0a0d12', 'stroke-width': 2, cursor: 'grab' }));
+    svg.appendChild(el('circle', { cx: c2.x, cy: c2.y, r: 7, fill: 'var(--orange)', stroke: '#0a0d12', 'stroke-width': 2, cursor: 'grab' }));
+
+    updateInfo(info, rel);
+  }
+
+  function fmt(n) { return (n === null || n === undefined) ? "—" : (Math.round(n * 1000) / 1000).toString(); }
+  function fmtPt(p) { return p ? `(${fmt(p.x)}, ${fmt(p.y)})` : "—"; }
+
+  function updateInfo(info, rel) {
+    const relEl = document.getElementById('relation');
+    relEl.textContent = rel;
+    relEl.style.color = relColor(rel);
+    document.getElementById('d').textContent = fmt(info.d);
+    document.getElementById('sum').textContent = fmt(r1 + r2);
+    document.getElementById('diff').textContent = fmt(Math.abs(r1 - r2));
+    document.getElementById('a').textContent = info.a === null ? "—" : fmt(info.a);
+    document.getElementById('h').textContent = info.h === null ? "—" : fmt(info.h);
+    document.getElementById('npts').textContent = rel === "Identical" ? "∞" : info.pts.length;
+    document.getElementById('lens').textContent = fmt(lensArea(info.d, r1, r2));
+    document.getElementById('p1').textContent = fmtPt(info.pts[0]);
+    document.getElementById('p2').textContent = fmtPt(info.pts[1]);
+
+    if (rel !== lastRelation) {
+      addLog(`Relation -> ${rel} (d=${fmt(info.d)}, r1+r2=${fmt(r1 + r2)}, |r1-r2|=${fmt(Math.abs(r1 - r2))})`);
+      lastRelation = rel;
+    }
+  }
+
+  function addLog(msg) {
+    const log = document.getElementById('log');
+    const div = document.createElement('div');
+    const t = new Date().toLocaleTimeString();
+    div.textContent = `[${t}] ${msg}`;
+    log.insertBefore(div, log.firstChild);
+    while (log.children.length > 60) log.removeChild(log.lastChild);
+  }
+
+  // ===== Interaction =====
+  function svgPoint(evt) {
+    const rect = svg.getBoundingClientRect();
+    const vb = svg.viewBox.baseVal;
+    const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
+    const cy = (evt.touches ? evt.touches[0].clientY : evt.clientY) - rect.top;
+    return { x: cx / rect.width * vb.width, y: cy / rect.height * vb.height };
+  }
+
+  function pickHandle(p) {
+    if (Math.hypot(p.x - c1.x, p.y - c1.y) < 16) return 'c1';
+    if (Math.hypot(p.x - c2.x, p.y - c2.y) < 16) return 'c2';
+    return null;
+  }
+
+  function down(evt) {
+    const p = svgPoint(evt);
+    dragging = pickHandle(p);
+    if (dragging) { evt.preventDefault(); addLog(`Grabbed ${dragging}`); }
+  }
+  function move(evt) {
+    if (!dragging) return;
+    evt.preventDefault();
+    const p = svgPoint(evt);
+    const clamped = { x: Math.max(10, Math.min(550, p.x)), y: Math.max(10, Math.min(450, p.y)) };
+    if (dragging === 'c1') c1 = clamped; else c2 = clamped;
+    render();
+  }
+  function up() { if (dragging) addLog(`Released ${dragging}`); dragging = null; }
+
+  svg.addEventListener('mousedown', down);
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+  svg.addEventListener('touchstart', down, { passive: false });
+  window.addEventListener('touchmove', move, { passive: false });
+  window.addEventListener('touchend', up);
+
+  // ===== Controls =====
+  function onSlider() {
+    r1 = +document.getElementById('r1').value;
+    r2 = +document.getElementById('r2').value;
+    document.getElementById('r1v').textContent = r1;
+    document.getElementById('r2v').textContent = r2;
+    render();
+  }
+  function toggleConstruct() {
+    showConstruct = !showConstruct;
+    document.getElementById('constructBtn').classList.toggle('active', showConstruct);
+    addLog(`a/h construction ${showConstruct ? 'on' : 'off'}`);
+    render();
+  }
+  function toggleLens() {
+    showLens = !showLens;
+    document.getElementById('lensBtn').classList.toggle('active', showLens);
+    addLog(`Lens shading ${showLens ? 'on' : 'off'}`);
+    render();
+  }
+  function toggleRadical() {
+    showRadical = !showRadical;
+    document.getElementById('radBtn').classList.toggle('active', showRadical);
+    addLog(`Radical axis ${showRadical ? 'on' : 'off'}`);
+    render();
+  }
+
+  function setR(a, b) {
+    r1 = a; r2 = b;
+    document.getElementById('r1').value = a; document.getElementById('r2').value = b;
+    document.getElementById('r1v').textContent = a; document.getElementById('r2v').textContent = b;
+  }
+
+  function preset(kind) {
+    const cy = 230;
+    if (kind === 'two')      { c1 = { x: 200, y: cy }; c2 = { x: 360, y: cy }; setR(120, 120); }
+    else if (kind === 'ext') { setR(90, 90); c1 = { x: 190, y: cy }; c2 = { x: 370, y: cy }; }
+    else if (kind === 'int') { setR(150, 60); c1 = { x: 250, y: cy }; c2 = { x: 340, y: cy }; }
+    else if (kind === 'nested') { setR(160, 50); c1 = { x: 280, y: cy }; c2 = { x: 300, y: cy }; }
+    else if (kind === 'separate') { setR(80, 80); c1 = { x: 150, y: cy }; c2 = { x: 410, y: cy }; }
+    addLog(`Preset: ${kind}`);
+    render();
+  }
+
+  // ===== Init =====
+  addLog("Ready. Drag circle centers or use presets.");
+  render();
+</script>
+</body>
+</html>
