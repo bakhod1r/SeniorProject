@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manhattan & Chebyshev Distances — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; max-width: 760px; }
+
+  .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+  .badge { padding: 5px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; border: 1px solid var(--border); }
+  .badge.l1 { color: var(--orange); border-color: var(--orange); }
+  .badge.l2 { color: var(--blue); border-color: var(--blue); }
+  .badge.linf { color: var(--green); border-color: var(--green); }
+
+  .layout { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 1180px; }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .stage { flex: 1 1 540px; min-width: 360px; }
+  .side  { flex: 1 1 360px; min-width: 320px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center; }
+  .controls { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center; }
+  button {
+    padding: 9px 18px;
+    border: 1px solid var(--blue);
+    background: transparent;
+    color: var(--blue);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    transition: all 0.2s;
+  }
+  button:hover { background: var(--blue); color: var(--bg); }
+  button.active { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .speed-control { display: flex; align-items: center; gap: 8px; justify-content: center; margin-bottom: 12px; }
+  .speed-control label { color: var(--muted); font-size: 0.85rem; }
+  input[type="range"] { width: 160px; accent-color: var(--blue); }
+
+  svg { width: 100%; height: auto; display: block; background: #0a0e14; border-radius: 8px; border: 1px solid var(--border); }
+  .gridline { stroke: #1c2330; stroke-width: 1; }
+  .axis { stroke: #3a4452; stroke-width: 1.5; }
+  .axislabel { fill: var(--muted); font-size: 11px; }
+
+  .diamond { fill: rgba(255,166,87,0.14); stroke: var(--orange); stroke-width: 2; }
+  .circle  { fill: rgba(88,166,255,0.10); stroke: var(--blue); stroke-width: 2; stroke-dasharray: 4 3; }
+  .square  { fill: rgba(63,185,80,0.14); stroke: var(--green); stroke-width: 2; }
+
+  .pt { fill: var(--purple); stroke: #fff; stroke-width: 1; }
+  .pt.a { fill: var(--blue); }
+  .pt.b { fill: var(--orange); }
+  .ptlabel { fill: var(--text); font-size: 11px; }
+  .edge { stroke: var(--yellow); stroke-width: 2.5; }
+  .edge.win { stroke: var(--red); stroke-width: 3.5; }
+  .path { stroke: var(--green); stroke-width: 2.5; fill: none; stroke-dasharray: 5 4; }
+
+  .info-panel h3 { color: var(--blue); margin-bottom: 8px; font-size: 1rem; }
+  .step-info { font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.7; color: var(--text); }
+  .step-info .hl { color: var(--yellow); }
+  .step-info .ans { color: var(--green); font-weight: bold; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 6px; }
+  th, td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  .o1 { color: var(--green); }
+  .on { color: var(--yellow); }
+  .on2 { color: var(--red); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 10px 0; font-size: 0.8rem; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-color { width: 14px; height: 14px; border-radius: 3px; }
+
+  .log {
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: #0a0e14;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    height: 140px;
+    overflow-y: auto;
+    margin-top: 10px;
+  }
+  .log div { padding: 1px 0; }
+  .input-control { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+  input[type="text"] {
+    padding: 8px 12px; border: 1px solid var(--border); background: #0a0e14;
+    color: var(--text); border-radius: 8px; width: 280px; font-size: 0.85rem;
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--blue); }
+  .rot-readout { font-family: 'Courier New', monospace; font-size: 0.82rem; color: var(--muted); text-align:center; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+  <h1>Manhattan &amp; Chebyshev Distances</h1>
+  <p class="subtitle">
+    L1 (Manhattan) is a <span style="color:var(--orange)">diamond</span>,
+    L∞ (Chebyshev) is a <span style="color:var(--green)">square</span>.
+    The 45° rotation <code>u = x+y, v = x−y</code> turns the diamond into the square — and turns
+    O(n²) max-Manhattan-distance into an O(n) scan.
+  </p>
+
+  <div class="badges">
+    <span class="badge l1">L1 · |dx|+|dy| · diamond</span>
+    <span class="badge l2">L2 · √(dx²+dy²) · circle</span>
+    <span class="badge linf">L∞ · max(|dx|,|dy|) · square</span>
+  </div>
+
+  <div class="tabs">
+    <button id="tabBalls" class="active" onclick="setMode('balls')">Unit Balls</button>
+    <button id="tabRotate" onclick="setMode('rotate')">45° Rotation</button>
+    <button id="tabMax" onclick="setMode('max')">Max Manhattan (O(n))</button>
+  </div>
+
+  <div class="layout">
+    <div class="panel stage">
+      <div class="input-control" id="maxInputWrap" style="display:none;">
+        <input type="text" id="customInput" placeholder="Points: 1,1; 4,5; 6,2; 2,8">
+        <button onclick="loadCustomInput()">Load</button>
+        <button onclick="generateRandom()">Random</button>
+      </div>
+      <div class="rot-readout" id="rotReadout"></div>
+      <svg id="svg" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="speed-control">
+        <label>Speed</label><span style="color:var(--muted);font-size:.8rem">slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <span style="color:var(--muted);font-size:.8rem">fast</span>
+      </div>
+      <div class="controls">
+        <button id="startBtn" onclick="start()">Start</button>
+        <button id="stepBtn" onclick="stepForward()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background:var(--orange)"></div>L1 diamond</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--blue)"></div>L2 circle</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--green)"></div>L∞ square</div>
+        <div class="legend-item"><div class="legend-color" style="background:var(--red)"></div>winning pair</div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel info-panel" style="margin-bottom:16px;">
+        <h3>What's happening</h3>
+        <div class="step-info" id="stepInfo">
+          Pick a tab. <span class="hl">Unit Balls</span> shows the three metric shapes;
+          <span class="hl">45° Rotation</span> morphs the diamond into a square;
+          <span class="hl">Max Manhattan</span> solves the farthest-pair problem via the rotation.
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <h3 style="color:var(--blue);font-size:1rem;margin-bottom:6px;">Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>L1 / L∞ distance</td><td class="o1">O(1)</td></tr>
+          <tr><td>Rotate a point</td><td class="o1">O(1)</td></tr>
+          <tr><td>Max Manhattan (naive)</td><td class="on2">O(n²)</td></tr>
+          <tr><td>Max Manhattan (rotation)</td><td class="o1">O(n)</td></tr>
+          <tr><td>Min Σ L1 (median)</td><td class="on">O(n log n)</td></tr>
+          <tr><td>Manhattan MST</td><td class="on">O(n log n)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3 style="color:var(--blue);font-size:1rem;margin-bottom:6px;">Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ===== state =====
+  let mode = 'balls';
+  let steps = [];
+  let stepIdx = 0;
+  let running = false;
+  let timer = null;
+  let points = [[1,1],[4,5],[6,2],[2,8]];
+
+  const SVG = document.getElementById('svg');
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // world -> svg coordinate mapping. World origin at center, scale set per-mode.
+  let scale = 22, cx = 240, cy = 240;
+  function wx(x){ return cx + x*scale; }
+  function wy(y){ return cy - y*scale; }
+
+  function el(tag, attrs, text){
+    const e = document.createElementNS(NS, tag);
+    for(const k in attrs) e.setAttribute(k, attrs[k]);
+    if(text!==undefined) e.textContent = text;
+    return e;
+  }
+  function clearSvg(){ while(SVG.firstChild) SVG.removeChild(SVG.firstChild); }
+
+  function drawGrid(){
+    for(let i=-10;i<=10;i++){
+      SVG.appendChild(el('line',{x1:wx(i),y1:wy(-11),x2:wx(i),y2:wy(11),class:'gridline'}));
+      SVG.appendChild(el('line',{x1:wx(-11),y1:wy(i),x2:wx(11),y2:wy(i),class:'gridline'}));
+    }
+    SVG.appendChild(el('line',{x1:wx(-11),y1:wy(0),x2:wx(11),y2:wy(0),class:'axis'}));
+    SVG.appendChild(el('line',{x1:wx(0),y1:wy(-11),x2:wx(0),y2:wy(11),class:'axis'}));
+    SVG.appendChild(el('text',{x:wx(10.2),y:wy(0)-4,class:'axislabel'},'x'));
+    SVG.appendChild(el('text',{x:wx(0)+4,y:wy(10.2),class:'axislabel'},'y'));
+  }
+
+  function log(msg){
+    const l = document.getElementById('log');
+    const d = document.createElement('div');
+    d.textContent = '› ' + msg;
+    l.appendChild(d);
+    l.scrollTop = l.scrollHeight;
+  }
+  function setInfo(html){ document.getElementById('stepInfo').innerHTML = html; }
+  function getDelay(){ return 1150 - document.getElementById('speed').value*100; }
+
+  // ===== MODE: UNIT BALLS =====
+  function ballsSteps(){
+    return [
+      {shape:'l1',  desc:'<span class="hl">L1 diamond</span>: |x|+|y| ≤ r. Taxi distance — corners point along the axes.'},
+      {shape:'l2',  desc:'<span class="hl">L2 circle</span>: x²+y² ≤ r². Euclidean — the round one in the middle.'},
+      {shape:'linf',desc:'<span class="hl">L∞ square</span>: max(|x|,|y|) ≤ r. Chess-king distance — axis-aligned box.'},
+      {shape:'all', desc:'All three nested: <span style="color:var(--orange)">diamond</span> ⊂ <span style="color:var(--blue)">circle</span> ⊂ <span style="color:var(--green)">square</span>. So L∞ ≤ L2 ≤ L1 always.'}
+    ];
+  }
+  function renderBalls(step){
+    scale = 36; cx=240; cy=240;
+    clearSvg(); drawGrid();
+    const r = 5;
+    const showD = step.shape==='l1'||step.shape==='all';
+    const showC = step.shape==='l2'||step.shape==='all';
+    const showS = step.shape==='linf'||step.shape==='all';
+    if(showS) SVG.appendChild(el('rect',{x:wx(-r),y:wy(r),width:2*r*scale,height:2*r*scale,class:'square'}));
+    if(showC) SVG.appendChild(el('circle',{cx:wx(0),cy:wy(0),r:r*scale,class:'circle'}));
+    if(showD){
+      const pts=`${wx(r)},${wy(0)} ${wx(0)},${wy(r)} ${wx(-r)},${wy(0)} ${wx(0)},${wy(-r)}`;
+      SVG.appendChild(el('polygon',{points:pts,class:'diamond'}));
+    }
+    SVG.appendChild(el('circle',{cx:wx(0),cy:wy(0),r:3,class:'pt'}));
+  }
+
+  // ===== MODE: 45 ROTATION =====
+  // animate a diamond morphing into a square via t in [0,1]
+  function rotateSteps(){
+    const s=[];
+    for(let i=0;i<=10;i++) s.push({t:i/10});
+    return s;
+  }
+  function renderRotate(step){
+    scale=30; cx=240; cy=240;
+    clearSvg(); drawGrid();
+    const t = step.t;        // 0 = diamond, 1 = square
+    const r = 4;
+    // The four "diamond" vertices in (x,y): (r,0),(0,r),(-r,0),(0,-r).
+    // After rotation u=x+y, v=x-y they map toward square corners.
+    // Interpolate each diamond vertex toward its rotated image (scaled to fit).
+    const diamond = [[r,0],[0,r],[-r,0],[0,-r]];
+    // rotated coords (u,v) of those vertices, scaled by 1/sqrt2 to keep size comparable
+    const k = 1/Math.SQRT2;
+    const rotated = diamond.map(([x,y])=>[ (x+y)*k, (x-y)*k ]);
+    const pts = diamond.map((d,i)=>{
+      const rx = d[0] + (rotated[i][0]-d[0])*t;
+      const ry = d[1] + (rotated[i][1]-d[1])*t;
+      return `${wx(rx)},${wy(ry)}`;
+    }).join(' ');
+    const cls = t<0.05 ? 'diamond' : (t>0.95 ? 'square' : 'diamond');
+    SVG.appendChild(el('polygon',{points:pts,class:cls,style:'fill:rgba(188,140,255,0.16);stroke:var(--purple);stroke-width:2'}));
+    SVG.appendChild(el('circle',{cx:wx(0),cy:wy(0),r:3,class:'pt'}));
+    document.getElementById('rotReadout').textContent =
+      t===0 ? 'L1 diamond  |x|+|y| ≤ r' :
+      t===1 ? 'L∞ square  max(|u|,|v|) ≤ r   (after u=x+y, v=x−y)' :
+      `morphing… t=${t.toFixed(1)}  (u=x+y, v=x−y)`;
+  }
+
+  // ===== MODE: MAX MANHATTAN =====
+  function maxSteps(){
+    const us = points.map(([x,y])=>x+y);
+    const vs = points.map(([x,y])=>x-y);
+    const minU=Math.min(...us), maxU=Math.max(...us);
+    const minV=Math.min(...vs), maxV=Math.max(...vs);
+    const rangeU=maxU-minU, rangeV=maxV-minV;
+    const ans=Math.max(rangeU,rangeV);
+    const winAxis = rangeU>=rangeV ? 'u' : 'v';
+    // find the winning pair
+    let iU=us.indexOf(minU), jU=us.indexOf(maxU);
+    let iV=vs.indexOf(minV), jV=vs.indexOf(maxV);
+    const s=[];
+    s.push({phase:'pts', desc:`We have <span class="hl">${points.length} points</span>. Goal: largest |dx|+|dy| over all pairs. Naive = O(n²); we use the rotation = O(n).`});
+    s.push({phase:'rot', desc:`Rotate each point: <span class="hl">u = x+y</span>, <span class="hl">v = x−y</span>. Manhattan distance becomes Chebyshev distance in (u,v).`,
+            uvs: points.map(([x,y])=>[x+y,x-y])});
+    s.push({phase:'rangeU', desc:`Range of u = maxU − minU = ${maxU} − ${minU} = <span class="hl">${rangeU}</span>.`,
+            hi:[iU,jU], axis:'u', uvs: points.map(([x,y])=>[x+y,x-y])});
+    s.push({phase:'rangeV', desc:`Range of v = maxV − minV = ${maxV} − ${minV} = <span class="hl">${rangeV}</span>.`,
+            hi:[iV,jV], axis:'v', uvs: points.map(([x,y])=>[x+y,x-y])});
+    s.push({phase:'ans', desc:`Max Manhattan distance = max(${rangeU}, ${rangeV}) = <span class="ans">${ans}</span>. Winning axis: <span class="hl">${winAxis}</span>. Done in O(n).`,
+            win: winAxis==='u'?[iU,jU]:[iV,jV]});
+    return s;
+  }
+  function renderMax(step){
+    scale=20; cx=140; cy=320;   // shift so positive quadrant has room
+    clearSvg(); drawGrid();
+    // draw points
+    points.forEach((p,i)=>{
+      SVG.appendChild(el('circle',{cx:wx(p[0]),cy:wy(p[1]),r:6,class:'pt'}));
+      SVG.appendChild(el('text',{x:wx(p[0])+8,y:wy(p[1])-6,class:'ptlabel'},`P${i}(${p[0]},${p[1]})`));
+    });
+    if(step.win){
+      const [a,b]=step.win;
+      SVG.appendChild(el('line',{x1:wx(points[a][0]),y1:wy(points[a][1]),x2:wx(points[b][0]),y2:wy(points[b][1]),class:'edge win'}));
+    } else if(step.hi){
+      const [a,b]=step.hi;
+      SVG.appendChild(el('line',{x1:wx(points[a][0]),y1:wy(points[a][1]),x2:wx(points[b][0]),y2:wy(points[b][1]),class:'edge'}));
+    }
+    // small readout of rotated coords
+    if(step.uvs){
+      let txt = step.uvs.map((uv,i)=>`P${i}:(u=${uv[0]},v=${uv[1]})`).join('   ');
+      document.getElementById('rotReadout').textContent = txt;
+    } else {
+      document.getElementById('rotReadout').textContent = '';
+    }
+  }
+
+  // ===== generic driver =====
+  function buildSteps(){
+    if(mode==='balls') return ballsSteps();
+    if(mode==='rotate') return rotateSteps();
+    return maxSteps();
+  }
+  function renderStep(step){
+    if(mode==='balls') renderBalls(step);
+    else if(mode==='rotate') renderRotate(step);
+    else renderMax(step);
+    if(step.desc) setInfo(step.desc);
+  }
+
+  function setMode(m){
+    mode=m;
+    document.getElementById('tabBalls').classList.toggle('active', m==='balls');
+    document.getElementById('tabRotate').classList.toggle('active', m==='rotate');
+    document.getElementById('tabMax').classList.toggle('active', m==='max');
+    document.getElementById('maxInputWrap').style.display = (m==='max')?'flex':'none';
+    document.getElementById('rotReadout').textContent = '';
+    reset();
+  }
+
+  function start(){
+    if(steps.length===0) steps=buildSteps();
+    running=true;
+    document.getElementById('startBtn').disabled=true;
+    document.getElementById('pauseBtn').disabled=false;
+    run();
+  }
+  function run(){
+    if(!running || stepIdx>=steps.length){ pause(); return; }
+    renderStep(steps[stepIdx]);
+    if(steps[stepIdx].desc) log(steps[stepIdx].desc.replace(/<[^>]+>/g,''));
+    stepIdx++;
+    timer=setTimeout(run, getDelay());
+  }
+  function stepForward(){
+    if(steps.length===0) steps=buildSteps();
+    if(stepIdx<steps.length){
+      renderStep(steps[stepIdx]);
+      if(steps[stepIdx].desc) log(steps[stepIdx].desc.replace(/<[^>]+>/g,''));
+      stepIdx++;
+    }
+  }
+  function pause(){
+    running=false; clearTimeout(timer);
+    document.getElementById('startBtn').disabled=false;
+    document.getElementById('pauseBtn').disabled=true;
+  }
+  function reset(){
+    pause(); stepIdx=0; steps=[];
+    document.getElementById('log').innerHTML='';
+    // render an initial frame
+    if(mode==='balls') renderBalls({shape:'all'});
+    else if(mode==='rotate') renderRotate({t:0});
+    else renderMax({phase:'pts'});
+    setInfo(
+      mode==='balls' ? 'Three metric unit balls. Press <span class="hl">Start</span> to reveal them one by one.' :
+      mode==='rotate' ? 'The 45° rotation <span class="hl">u=x+y, v=x−y</span> morphs the L1 diamond into the L∞ square. Press <span class="hl">Start</span>.' :
+      'Max Manhattan distance via the rotation. Press <span class="hl">Start</span> or <span class="hl">Step</span>.'
+    );
+  }
+
+  function loadCustomInput(){
+    const raw=document.getElementById('customInput').value.trim();
+    const parts=raw.split(';').map(s=>s.trim()).filter(Boolean);
+    const pts=[];
+    for(const p of parts){
+      const [a,b]=p.split(',').map(s=>parseInt(s.trim()));
+      if(!isNaN(a)&&!isNaN(b)) pts.push([a,b]);
+    }
+    if(pts.length>=2){ points=pts; reset(); log('loaded '+pts.length+' points'); }
+  }
+  function generateRandom(){
+    const n=Math.floor(Math.random()*4)+4;
+    points=Array.from({length:n},()=>[Math.floor(Math.random()*11),Math.floor(Math.random()*11)]);
+    document.getElementById('customInput').value=points.map(p=>p.join(',')).join('; ');
+    reset(); log('random '+n+' points');
+  }
+
+  // init
+  reset();
+</script>
+</body>
+</html>
