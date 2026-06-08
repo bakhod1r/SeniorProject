@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Persistent Segment Tree — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.9rem;color:var(--purple);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:14px;text-align:center;max-width:920px;font-size:.9rem;line-height:1.5}
+.badges{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.t{color:var(--green);border-color:var(--green)}
+.badge.s{color:var(--blue);border-color:var(--blue)}
+.badge.p{color:var(--purple);border-color:var(--purple)}
+.controls,.input-control{display:flex;gap:9px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:7px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.9rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.purple{border-color:var(--purple);color:var(--purple)}
+button.purple:hover:not(:disabled){background:var(--purple);color:var(--bg)}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover{background:var(--surface);color:var(--text)}
+input[type=text],input[type=number]{padding:7px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.9rem}
+input[type=text]{width:300px}
+input[type=number]{width:62px}
+label{color:var(--muted);font-size:.83rem}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:10px 18px;display:flex;gap:22px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1180px;margin-bottom:12px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.legend{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+.canvas-wrap{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:10px;width:100%;max-width:1180px;margin-bottom:12px;overflow:auto}
+svg{display:block;margin:0 auto;background:transparent}
+.info-panel,.bigo{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1180px;margin-bottom:12px}
+.info-panel h3,.bigo h3{color:var(--purple);margin-bottom:8px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.88rem;line-height:1.6;min-height:40px}
+.step-info .hl{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .sh{color:var(--blue);font-weight:600}
+.log{max-height:130px;overflow-y:auto;font-family:monospace;font-size:.78rem;line-height:1.5;color:var(--muted);border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+.log div{padding:1px 0}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+th,td{border:1px solid var(--border);padding:5px 9px;text-align:left}
+th{color:var(--blue);background:var(--bg)}
+td code{color:var(--green)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:6px;text-align:center;max-width:920px;line-height:1.5}
+.vtabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+.vtab{padding:4px 11px;border:2px solid var(--border);border-radius:6px;font-size:.8rem;font-family:monospace;cursor:pointer;color:var(--muted)}
+.vtab.cur{border-color:var(--purple);color:var(--purple)}
+</style>
+</head>
+<body>
+<h1>Persistent Segment Tree</h1>
+<p class="subtitle">Path copying: each update clones only the O(log n) nodes on the root-to-leaf path (<span style="color:var(--green)">green</span>) and shares every other subtree by pointer (<span style="color:var(--blue)">blue</span>). Old versions stay queryable forever. Second mode walks two versions to find the k-th smallest in a range.</p>
+
+<div class="badges">
+<span class="badge t">Update: O(log n)</span>
+<span class="badge t">Query: O(log n)</span>
+<span class="badge s">Pick version: O(1)</span>
+<span class="badge p">Mem / version: O(log n)</span>
+<span class="badge p">Total: O(n + m log n)</span>
+</div>
+
+<div class="input-control">
+<label>Array:</label>
+<input type="text" id="arrIn" value="5,2,7,1,4,3,8,6" placeholder="comma-separated values">
+<button onclick="loadArr()">Load &amp; Build v0</button>
+</div>
+
+<div class="input-control">
+<label>Update — index</label>
+<input type="number" id="uI" value="3" min="0">
+<label>value</label>
+<input type="number" id="uV" value="9">
+<button class="purple" onclick="doUpdate()">+ New version (path copy)</button>
+<button class="secondary" onclick="resetAll()">↺ Reset</button>
+</div>
+
+<div class="input-control">
+<label>K-th smallest in</label> a[
+<input type="number" id="kL" value="1" min="1"> ,
+<input type="number" id="kR" value="6" min="1"> ] ,&nbsp; k =
+<input type="number" id="kK" value="3" min="1">
+<button class="purple" onclick="doKth()">Find k-th (walk 2 versions)</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color"></div>Shared (idle) node</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.22);border-color:var(--green)"></div>Newly copied (this update path)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.22);border-color:var(--blue)"></div>Shared with previous version</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.22);border-color:var(--yellow)"></div>k-th descent: visited</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(188,140,255,.22);border-color:var(--purple)"></div>k-th: answer leaf</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">n</div><div class="stat-value" id="nVal">0</div></div>
+<div><div class="stat-label">log₂ n</div><div class="stat-value" id="logVal">0</div></div>
+<div><div class="stat-label">Versions</div><div class="stat-value" id="verCount">0</div></div>
+<div><div class="stat-label">Total nodes</div><div class="stat-value" id="nodeCount">0</div></div>
+<div><div class="stat-label">Nodes copied (last upd)</div><div class="stat-value" id="copiedCount">0</div></div>
+<div><div class="stat-label">Last result</div><div class="stat-value" id="resVal">-</div></div>
+</div>
+
+<div class="vtabs" id="vtabs"></div>
+
+<div class="canvas-wrap">
+<svg id="svg" width="1160" height="360"></svg>
+</div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Load an array to build version 0, then click <span class="hl">+ New version</span> to watch path copying, or <span class="hl">Find k-th</span> to walk two versions down the value axis.</div>
+<div class="log" id="log"></div>
+</div>
+
+<div class="bigo">
+<h3>Complexity</h3>
+<table>
+<tr><th>Operation</th><th>Time</th><th>New nodes</th><th>Note</th></tr>
+<tr><td>Build v0</td><td><code>O(n)</code></td><td><code>~2n</code></td><td>full tree once</td></tr>
+<tr><td>Update → new version</td><td><code>O(log n)</code></td><td><code>⌈log₂n⌉+1</code></td><td>only the path is copied</td></tr>
+<tr><td>Range query (any version)</td><td><code>O(log n)</code></td><td><code>0</code></td><td>same as ordinary segtree</td></tr>
+<tr><td>Pick / switch version</td><td><code>O(1)</code></td><td><code>0</code></td><td>choose a root</td></tr>
+<tr><td>K-th smallest in range</td><td><code>O(log n)</code></td><td><code>0</code></td><td>walk version[r] &amp; version[l−1]</td></tr>
+<tr><td>Total after m updates</td><td>—</td><td><code>O(n + m log n)</code></td><td>vs naive O(n·m)</td></tr>
+</table>
+</div>
+
+<p class="footer-note">This count tree is built over the <b>value axis</b>: version i is the histogram of the first i elements. k-th descent uses leftCount = version[r].left.cnt − version[l−1].left.cnt to choose a half. Compare with merge-sort tree (O(log²n)), wavelet tree (compact, O(log σ)), and Mo's algorithm (offline).</p>
+
+<script>
+// ===== Persistent count segment tree over the VALUE axis =====
+// Node arena: arrays cnt/lc/rc; node 0 = empty sentinel. Each insert path-copies.
+let cnt=[0], lc=[0], rc=[0];          // arena (index 0 = empty)
+let createdBy=[-1];                    // version index that created node i (-1 = sentinel/shared base)
+let arr=[], uniq=[], D=0, n=0;
+let roots=[0];                         // roots[t] = root node index of version t
+let curVer=0;                          // version currently displayed
+let lastCopied=[];                     // node indices copied by the most recent update
+let kthVisited=new Set(), kthLeaf=-1;  // highlight sets for k-th descent
+
+function alloc(c,l,r,ver){ cnt.push(c); lc.push(l); rc.push(r); createdBy.push(ver); return cnt.length-1; }
+
+function build(lo,hi,ver){
+  if(lo===hi) return alloc(0,0,0,ver);
+  const mid=(lo+hi)>>1;
+  const l=build(lo,mid,ver), r=build(mid+1,hi,ver);
+  return alloc(cnt[l]+cnt[r],l,r,ver);
+}
+
+// insert +1 at value-rank g into version `prev`, tagging new nodes with version `ver`
+function insert(prev,lo,hi,g,ver,copiedOut){
+  if(lo===hi){ const id=alloc(cnt[prev]+1,0,0,ver); copiedOut.push(id); return id; }
+  const mid=(lo+hi)>>1;
+  if(g<=mid){
+    const l=insert(lc[prev],lo,mid,g,ver,copiedOut);
+    const id=alloc(cnt[l]+cnt[rc[prev]],l,rc[prev],ver); copiedOut.push(id); return id; // share right
+  } else {
+    const r=insert(rc[prev],mid+1,hi,g,ver,copiedOut);
+    const id=alloc(cnt[lc[prev]]+cnt[r],lc[prev],r,ver); copiedOut.push(id); return id; // share left
+  }
+}
+
+function rankOf(v){ let lo=0,hi=uniq.length; while(lo<hi){const m=(lo+hi)>>1; if(uniq[m]<v) lo=m+1; else hi=m;} return lo; }
+
+function rebuild(){
+  cnt=[0]; lc=[0]; rc=[0]; createdBy=[-1];
+  n=arr.length;
+  uniq=[...new Set(arr)].sort((a,b)=>a-b);
+  D=uniq.length;
+  // version 0 = empty histogram (full zero tree so subtraction is clean), then one version per prefix
+  roots=[ build(0,D-1,0) ];
+  for(let i=0;i<n;i++){
+    const tmp=[];
+    roots.push( insert(roots[roots.length-1],0,D-1,rankOf(arr[i]),i+1,tmp) );
+  }
+  curVer=roots.length-1;
+  lastCopied=[]; kthVisited=new Set(); kthLeaf=-1;
+  document.getElementById('nVal').textContent=n;
+  document.getElementById('logVal').textContent=Math.max(1,Math.ceil(Math.log2(Math.max(2,D))));
+  refreshStats(); renderTabs(); draw();
+  log(`Built version 0 (empty) + ${n} prefix versions over ${D} distinct values. Each prefix = +1 insert = O(log n) new nodes.`);
+  setInfo(`Built <span class="ok">${roots.length} versions</span> (v0 empty, v1..v${n} = prefixes). Click a version tab to view it, run an <span class="hl">update</span>, or find the <span class="hl">k-th</span>.`);
+}
+
+function loadArr(){
+  const nums=document.getElementById('arrIn').value.split(/[ ,]+/).map(x=>parseInt(x)).filter(x=>!isNaN(x));
+  if(nums.length>0){ arr=nums; rebuild(); }
+}
+
+function refreshStats(){
+  document.getElementById('verCount').textContent=roots.length;
+  document.getElementById('nodeCount').textContent=cnt.length-1;
+  document.getElementById('copiedCount').textContent=lastCopied.length;
+}
+
+function renderTabs(){
+  const t=document.getElementById('vtabs');
+  t.innerHTML=roots.map((r,i)=>{
+    const lbl = i===0 ? 'v0 (empty)' : 'v'+i;
+    return `<div class="vtab ${i===curVer?'cur':''}" onclick="pickVer(${i})">${lbl}</div>`;
+  }).join('');
+}
+function pickVer(i){ curVer=i; lastCopied=[]; kthVisited=new Set(); kthLeaf=-1; renderTabs(); draw();
+  setInfo(`Viewing <span class="hl">version ${i}</span> (root node #${roots[i]}). Reading any version is O(log n) and never mutates it.`); }
+
+// ===== UPDATE: insert one more occurrence of a value into the CURRENT version =====
+function doUpdate(){
+  if(D===0){ setInfo('<span style="color:var(--red)">Load an array first.</span>'); return; }
+  const idx=parseInt(document.getElementById('uI').value);
+  const val=parseInt(document.getElementById('uV').value);
+  if(isNaN(val)){ setInfo('<span style="color:var(--red)">Enter a value.</span>'); return; }
+  // ensure value exists on the axis; if new, rebuild axis with it included
+  if(!uniq.includes(val)){ arr.push(val); rebuild(); }
+  const g = rankOf(val);
+  const ver = roots.length;
+  const copied=[];
+  const newRoot = insert(roots[curVer],0,D-1,g,ver,copied);
+  roots.push(newRoot);
+  lastCopied=copied; curVer=roots.length-1;
+  kthVisited=new Set(); kthLeaf=-1;
+  refreshStats(); renderTabs(); draw();
+  document.getElementById('resVal').textContent='v'+curVer;
+  setInfo(`Inserted value <span class="hl">${val}</span> → created <span class="ok">version ${ver}</span>. Copied <span class="ok">${copied.length}</span> nodes on the root-to-leaf path; every other subtree is <span class="sh">shared by pointer</span> with version ${curVer-0}. That is path copying.`);
+  log(`update(v${ver-1}→v${ver}): inserted ${val} (rank ${g}); ${copied.length} new nodes (= ⌈log₂D⌉+1), rest shared.`);
+}
+
+// ===== K-TH SMALLEST in a[l..r] : walk version[r] and version[l-1] =====
+function doKth(){
+  if(D===0){ setInfo('<span style="color:var(--red)">Load an array first.</span>'); return; }
+  // only prefix versions 0..n are meaningful for k-th (extra updates change the histogram intent)
+  const l=parseInt(document.getElementById('kL').value);
+  const r=parseInt(document.getElementById('kR').value);
+  const k=parseInt(document.getElementById('kK').value);
+  if(isNaN(l)||isNaN(r)||isNaN(k)||l<1||r>n||l>r||k<1||k>(r-l+1)){
+    setInfo('<span style="color:var(--red)">Need 1 ≤ l ≤ r ≤ n and 1 ≤ k ≤ r−l+1.</span>'); return;
+  }
+  let L=roots[l-1], R=roots[r], lo=0, hi=D-1, kk=k;
+  kthVisited=new Set(); kthLeaf=-1;
+  let steps=[];
+  while(lo<hi){
+    kthVisited.add(R); kthVisited.add(L);
+    const mid=(lo+hi)>>1;
+    const leftCnt=cnt[lc[R]]-cnt[lc[L]];
+    if(kk<=leftCnt){
+      steps.push(`[${lo},${mid}] leftCnt=${leftCnt} ≥ k=${kk} → go LEFT`);
+      L=lc[L]; R=lc[R]; hi=mid;
+    } else {
+      steps.push(`leftCnt=${leftCnt} < k=${kk} → k−=${leftCnt}, go RIGHT`);
+      kk-=leftCnt; L=rc[L]; R=rc[R]; lo=mid+1;
+    }
+  }
+  kthVisited.add(R); kthVisited.add(L);
+  kthLeaf=R;
+  const value=uniq[lo];
+  curVer=r; renderTabs();
+  draw();
+  document.getElementById('resVal').textContent=value;
+  setInfo(`k-th descent on a[${l}..${r}] = <span class="sh">version[${r}]</span> − <span class="sh">version[${l-1}]</span>. ${steps.join('; ')}. <span class="ok">${k}-th smallest = ${value}</span> (rank ${lo}).`);
+  log(`kth(l=${l},r=${r},k=${k}) → ${value}  [walked ${steps.length+1} levels, O(log n)]`);
+}
+
+// ===== DRAWING: render the current version's tree, then overlay highlights =====
+function draw(){
+  const svg=document.getElementById('svg');
+  const W=1160, levelH=64;
+  const root=roots[curVer];
+  // gather positions via in-order x assignment over leaves
+  let nodes=[]; // {id, depth, x}
+  let leafX=0;
+  const maxDepth = D<=1?0:Math.ceil(Math.log2(D));
+  function place(id,lo,hi,depth){
+    if(id===0) return null;
+    if(lo===hi){ const x=(leafX+0.5); leafX++; const node={id,depth,x,lo,hi}; nodes.push(node); return node; }
+    const mid=(lo+hi)>>1;
+    const lc2=place(lc[id],lo,mid,depth+1);
+    const rc2=place(rc[id],mid+1,hi,depth+1);
+    let x;
+    if(lc2&&rc2) x=(lc2.x+rc2.x)/2; else if(lc2) x=lc2.x; else if(rc2) x=rc2.x; else { x=(leafX+0.5); leafX++; }
+    const node={id,depth,x,lo,hi,L:lc2,R:rc2}; nodes.push(node); return node;
+  }
+  const placed=place(root,0,D-1,0);
+  const leaves=Math.max(1,leafX);
+  const stepX=Math.min(120,(W-80)/leaves);
+  const offX=40;
+  const totalH=(maxDepth+1)*levelH+50;
+  svg.setAttribute('height', totalH);
+  // map by id for edges
+  const byId={}; nodes.forEach(nd=>byId[nd.id]=nd);
+  let edges='', circles='';
+  nodes.forEach(nd=>{
+    const px=offX+nd.x*stepX, py=30+nd.depth*levelH;
+    [nd.L,nd.R].forEach(ch=>{ if(ch){ const cx=offX+ch.x*stepX, cy=30+ch.depth*levelH;
+      edges+=`<line x1="${px}" y1="${py}" x2="${cx}" y2="${cy}" stroke="#30363d" stroke-width="1.5"/>`; }});
+  });
+  nodes.forEach(nd=>{
+    const px=offX+nd.x*stepX, py=30+nd.depth*levelH;
+    let fill='var(--bg)', stroke='var(--border)', tc='var(--text)';
+    // shared vs newly-copied (relative to last update)
+    const copied = lastCopied.includes(nd.id);
+    if(copied){ fill='rgba(63,185,80,.22)'; stroke='var(--green)'; tc='var(--green)'; }
+    else if(lastCopied.length>0){ fill='rgba(88,166,255,.13)'; stroke='var(--blue)'; tc='var(--blue)'; }
+    if(kthVisited.has(nd.id)){ fill='rgba(210,153,34,.22)'; stroke='var(--yellow)'; tc='var(--yellow)'; }
+    if(nd.id===kthLeaf){ fill='rgba(188,140,255,.3)'; stroke='var(--purple)'; tc='var(--purple)'; }
+    const label = nd.lo===nd.hi ? uniq[nd.lo] : `${nd.lo}-${nd.hi}`;
+    circles+=`<g>
+      <rect x="${px-22}" y="${py-13}" width="44" height="26" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
+      <text x="${px}" y="${py-1}" text-anchor="middle" font-size="10" fill="${tc}" font-family="monospace">${label}</text>
+      <text x="${px}" y="${py+9}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="monospace">c=${cnt[nd.id]}</text>
+    </g>`;
+  });
+  svg.innerHTML=edges+circles+
+    `<text x="${W-12}" y="16" text-anchor="end" font-size="11" fill="var(--muted)" font-family="monospace">version ${curVer} · root #${root}</text>`;
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML=html; }
+function log(msg){ const l=document.getElementById('log'); const d=document.createElement('div'); d.textContent='▸ '+msg; l.prepend(d); }
+function resetAll(){ document.getElementById('log').innerHTML=''; document.getElementById('resVal').textContent='-'; loadArr(); }
+
+loadArr();
+</script>
+</body>
+</html>
