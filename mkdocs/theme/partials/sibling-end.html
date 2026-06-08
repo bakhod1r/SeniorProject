@@ -1,0 +1,33 @@
+{#-
+  End-of-file sibling-page navigation.
+
+  Renders the full set of files in the current topic folder (Levels + Modes) as
+  a labelled grid at the bottom of the article, below the body and above the
+  Material prev/next footer. Driven by ``page.meta.sibling_nav``, populated by
+  ``hooks/sibling_nav.py``; renders nothing on non-topic pages. The left-sidebar
+  twin lives in ``partials/nav.html``.
+-#}
+{%- set sibling_nav = page.meta.get("sibling_nav") if page else none -%}
+{%- if sibling_nav -%}
+  <nav class="sibling-end" aria-label="Pages in this topic">
+    <p class="sibling-end__title">In this topic</p>
+    {%- for group_name, items in [("Levels", sibling_nav.levels), ("Modes", sibling_nav.modes)] -%}
+      {%- if items -%}
+        <div class="sibling-end__group">
+          <span class="sibling-end__label">{{ group_name }}</span>
+          <ul class="sibling-end__list">
+            {%- for item in items -%}
+              <li class="sibling-end__item">
+                {%- if item.current -%}
+                  <span class="sibling-end__link sibling-end__link--active">{{ item.name }}</span>
+                {%- else -%}
+                  <a class="sibling-end__link" href="{{ item.url | url }}">{{ item.name }}</a>
+                {%- endif -%}
+              </li>
+            {%- endfor -%}
+          </ul>
+        </div>
+      {%- endif -%}
+    {%- endfor -%}
+  </nav>
+{%- endif -%}

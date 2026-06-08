@@ -26,3 +26,8 @@
      Built by hooks/read_manifest.py and emitted as a static JSON file. #}
   <link id="sp-read-manifest" rel="prefetch" href="{{ 'sp-read-manifest.json' | url }}">
 {% endblock %}
+
+{% block content %}
+  {{ super() }}
+  {% include "partials/sibling-end.html" %}
+{% endblock %}

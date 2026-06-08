@@ -578,3 +578,81 @@ body,
 [data-md-color-scheme="default"] .sp-report-link:hover {
   text-shadow: none;
 }
+
+/* ================================================================
+   End-of-file sibling-page navigation (partials/sibling-end.html)
+   ---------------------------------------------------------------
+   Mirrors the sidebar Levels/Modes list at the bottom of each topic
+   page. Built from Material custom properties so it tracks all three
+   palettes (slate / default / senior-sepia) without per-scheme rules.
+   ================================================================ */
+.md-content .sibling-end {
+  margin: 3rem 0 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.sibling-end__title {
+  margin: 0 0 0.9rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--light);
+}
+
+.sibling-end__group {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.sibling-end__label {
+  flex: 0 0 4.5rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--light);
+}
+
+.sibling-end__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sibling-end__item {
+  margin: 0;
+  padding: 0;
+}
+
+.sibling-end__link {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-transform: capitalize;
+  color: var(--md-default-fg-color);
+  transition: border-color 125ms, color 125ms, background-color 125ms;
+}
+
+a.sibling-end__link:hover {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.sibling-end__link--active {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+  background-color: var(--md-accent-fg-color--transparent);
+  font-weight: 700;
+  cursor: default;
+}
