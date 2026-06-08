@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minimum Enclosing Circle — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:18px; text-align:center;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:5px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .badge.green{color:var(--green); border-color:var(--green);}
+  .badge.yellow{color:var(--yellow); border-color:var(--yellow);}
+  .badge.blue{color:var(--blue); border-color:var(--blue);}
+  .badge.purple{color:var(--purple); border-color:var(--purple);}
+
+  .layout{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1200px;}
+  .left{flex:1 1 560px; min-width:340px;}
+  .right{flex:1 1 340px; min-width:300px; display:flex; flex-direction:column; gap:14px;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+
+  svg{width:100%; height:auto; background:#0a0e14; border:1px solid var(--border); border-radius:10px; display:block;}
+
+  .controls{display:flex; gap:10px; margin:14px 0; flex-wrap:wrap; justify-content:center;}
+  button{
+    padding:9px 18px; border:1.5px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover{background:var(--blue); color:#0d1117;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.alt{border-color:var(--purple); color:var(--purple);}
+  button.alt:hover{background:var(--purple); color:#0d1117;}
+  button.warn{border-color:var(--red); color:var(--red);}
+  button.warn:hover{background:var(--red); color:#0d1117;}
+
+  .speed-control{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:8px; color:var(--muted);}
+  .speed-control input[type=range]{width:160px; accent-color:var(--blue);}
+
+  .input-control{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:6px;}
+  input[type=text]{
+    padding:9px 14px; border:1.5px solid var(--border); background:#0a0e14; color:var(--text);
+    border-radius:8px; font-size:.9rem; width:280px;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue);}
+
+  .stats{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; color:var(--muted); font-size:.86rem; margin-bottom:10px;}
+  .stats b{color:var(--text);}
+
+  .step-info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7;}
+  .step-info .hl{color:var(--yellow);}
+  .step-info .pt{color:var(--orange);}
+
+  table{width:100%; border-collapse:collapse; font-size:.84rem;}
+  th,td{border:1px solid var(--border); padding:6px 8px; text-align:left;}
+  th{color:var(--muted); font-weight:600;}
+  .c-green{color:var(--green);} .c-yellow{color:var(--yellow);} .c-red{color:var(--red);}
+
+  .legend{display:flex; gap:14px; flex-wrap:wrap; justify-content:center; font-size:.8rem; margin:10px 0;}
+  .legend-item{display:flex; align-items:center; gap:6px;}
+  .swatch{width:14px; height:14px; border-radius:50%; border:1px solid var(--border);}
+
+  .log{height:160px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.8rem; line-height:1.55;}
+  .log div{padding:1px 0; border-bottom:1px solid #1c222b;}
+  .log .ev-out{color:var(--red);} .log .ev-in{color:var(--green);} .log .ev-set{color:var(--purple);} .log .ev-done{color:var(--blue);}
+</style>
+</head>
+<body>
+  <h1>Minimum Enclosing Circle</h1>
+  <p class="subtitle">Welzl's randomized incremental algorithm — the circle adjusts as boundary points are found</p>
+
+  <div class="badges">
+    <span class="badge green">Welzl: expected O(n)</span>
+    <span class="badge yellow">Brute force: O(n³)</span>
+    <span class="badge blue">Determined by 2 or 3 points</span>
+    <span class="badge purple">LP-type, dim 3</span>
+  </div>
+
+  <div class="input-control">
+    <input type="text" id="customInput" placeholder="x,y; x,y; ...  e.g. 40,40; 320,60; 180,260; 180,120">
+    <button onclick="loadCustom()">Load</button>
+    <button class="alt" onclick="randomPoints()">Random</button>
+  </div>
+
+  <div class="speed-control">
+    <span>Slow</span>
+    <input type="range" id="speed" min="1" max="10" value="5">
+    <span>Fast</span>
+  </div>
+
+  <div class="controls">
+    <button id="runBtn" onclick="run()">Run</button>
+    <button id="stepBtn" onclick="stepFwd()">Step</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button class="warn" onclick="reset()">Reset</button>
+  </div>
+
+  <div class="layout">
+    <div class="left panel">
+      <div class="stats">
+        Step: <b id="curStep">0</b>/<b id="totStep">0</b> &nbsp;|&nbsp;
+        Inside tests: <b id="tests">0</b> &nbsp;|&nbsp;
+        Rebuilds: <b id="rebuilds">0</b> &nbsp;|&nbsp;
+        Radius: <b id="radius">—</b>
+      </div>
+      <svg id="canvas" viewBox="0 0 400 320" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <div class="legend-item"><span class="swatch" style="background:var(--blue)"></span>point inside</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--red)"></span>point OUTSIDE (triggers rebuild)</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--orange)"></span>boundary / support point</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--purple); border-radius:3px"></span>current circle</div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>What's happening</h3>
+        <div class="step-info" id="info">Press <span class="hl">Run</span> to watch Welzl process points one at a time, or <span class="hl">Step</span> to advance manually. The circle only rebuilds when a point falls <span class="pt">outside</span>.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Approach</th><th>Time</th><th>Space</th></tr>
+          <tr><td>Inside test</td><td class="c-green">O(1)</td><td>O(1)</td></tr>
+          <tr><td>Circle from 2 pts</td><td class="c-green">O(1)</td><td>O(1)</td></tr>
+          <tr><td>Circumcircle (3 pts)</td><td class="c-green">O(1)</td><td>O(1)</td></tr>
+          <tr><td><b>Welzl (this anim)</b></td><td class="c-green"><b>exp. O(n)</b></td><td>O(n)</td></tr>
+          <tr><td>Brute force</td><td class="c-red">O(n³)–O(n⁴)</td><td>O(1)</td></tr>
+          <tr><td>Megiddo (det.)</td><td class="c-green">O(n)</td><td>O(n)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== geometry =====
+const EPS = 1e-7;
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function inside(c,p){return c && dist(c.c,p)<=c.r+EPS;}
+function from1(a){return {c:{x:a.x,y:a.y}, r:0, support:[a]};}
+function from2(a,b){return {c:{x:(a.x+b.x)/2,y:(a.y+b.y)/2}, r:dist(a,b)/2, support:[a,b]};}
+function from3(a,b,c){
+  const d=2*(a.x*(b.y-c.y)+b.x*(c.y-a.y)+c.x*(a.y-b.y));
+  if(Math.abs(d)<EPS){
+    // collinear: widest diameter pair
+    let cands=[from2(a,b),from2(a,c),from2(b,c)];
+    return cands.reduce((m,x)=>x.r>m.r?x:m);
+  }
+  const a2=a.x*a.x+a.y*a.y, b2=b.x*b.x+b.y*b.y, c2=c.x*c.x+c.y*c.y;
+  const ux=(a2*(b.y-c.y)+b2*(c.y-a.y)+c2*(a.y-b.y))/d;
+  const uy=(a2*(c.x-b.x)+b2*(a.x-c.x)+c2*(b.x-a.x))/d;
+  const center={x:ux,y:uy};
+  return {c:center, r:dist(center,a), support:[a,b,c]};
+}
+
+// ===== state =====
+let points=[];
+let steps=[];
+let stepIdx=0;
+let running=false;
+let timer=null;
+let tests=0, rebuilds=0;
+
+// ===== build animation steps via move-to-front Welzl =====
+function generateSteps(pts){
+  steps=[]; tests=0; rebuilds=0;
+  const p=pts.slice();
+  // deterministic seeded shuffle so the same input always animates the same way
+  let seed=12345;
+  const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff;};
+  for(let i=p.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1)); [p[i],p[j]]=[p[j],p[i]];}
+
+  function snap(circle, focus, considered, msg, kind){
+    steps.push({
+      circle: circle?{c:{...circle.c},r:circle.r,support:circle.support?circle.support.slice():[]}:null,
+      order:p.slice(),
+      focus: focus,            // index in p currently examined
+      considered: considered,  // how many of p processed
+      msg, kind,
+      tests, rebuilds
+    });
+  }
+
+  if(p.length===0){snap(null,-1,0,'No points — empty circle.','done'); return;}
+  let c=from1(p[0]);
+  snap(c,0,1,`Start: circle = single point <span class="pt">P0</span>, r=0.`,'set');
+
+  for(let i=1;i<p.length;i++){
+    tests++;
+    if(inside(c,p[i])){
+      snap(c,i,i+1,`<span class="pt">P${i}</span> is already <span style="color:var(--green)">inside</span> — circle unchanged.`,'in');
+      continue;
+    }
+    rebuilds++;
+    c=from1(p[i]);
+    snap(c,i,i+1,`<span class="pt">P${i}</span> is <span style="color:var(--red)">OUTSIDE</span> — it must be on the boundary. Rebuild with P${i} fixed.`,'out');
+    for(let j=0;j<i;j++){
+      tests++;
+      if(inside(c,p[j])) continue;
+      rebuilds++;
+      c=from2(p[i],p[j]);
+      snap(c,j,i+1,`Forcing <span class="pt">P${i}</span> & <span class="pt">P${j}</span> on boundary → diameter circle.`,'set');
+      for(let k=0;k<j;k++){
+        tests++;
+        if(inside(c,p[k])) continue;
+        rebuilds++;
+        c=from3(p[i],p[j],p[k]);
+        snap(c,k,i+1,`Three on boundary: <span class="pt">P${i}</span>, <span class="pt">P${j}</span>, <span class="pt">P${k}</span> → circumcircle.`,'set');
+      }
+    }
+  }
+  // mark final support points relative to ORIGINAL indices for the done frame
+  snap(c,-1,p.length,`Done. MEC has <b>${c.support.length}</b> boundary point(s), r=${c.r.toFixed(2)}. Everyone else is strictly inside.`,'done');
+  document.getElementById('totStep').textContent=steps.length;
+}
+
+// ===== render =====
+function pointIndexInOrder(step, original){
+  // find which order-position an original point occupies (for coloring)
+  return step.order.findIndex(q=>q.x===original.x && q.y===original.y);
+}
+function render(step){
+  const svg=document.getElementById('canvas');
+  let parts=[];
+  const circle=step.circle;
+  if(circle){
+    parts.push(`<circle cx="${circle.c.x}" cy="${circle.c.y}" r="${Math.max(circle.r,0.5)}"
+      fill="rgba(188,140,255,0.10)" stroke="var(--purple)" stroke-width="1.6"/>`);
+    parts.push(`<circle cx="${circle.c.x}" cy="${circle.c.y}" r="2.4" fill="var(--purple)"/>`);
+  }
+  const support=circle&&circle.support?circle.support:[];
+  step.order.forEach((p,idx)=>{
+    const isSupport=support.some(s=>s.x===p.x&&s.y===p.y);
+    const isFocus=(idx===step.focus);
+    const processed=(idx<step.considered);
+    let color='#3b4654', stroke='none', rad=4;
+    if(isSupport){color='var(--orange)'; rad=6; stroke='#fff';}
+    else if(isFocus){color='var(--red)'; rad=6;}
+    else if(processed){color='var(--blue)';}
+    parts.push(`<circle cx="${p.x}" cy="${p.y}" r="${rad}" fill="${color}"
+      ${stroke!=='none'?`stroke="${stroke}" stroke-width="1"`:''}/>`);
+    parts.push(`<text x="${p.x+6}" y="${p.y-6}" font-size="9" fill="var(--muted)">P${idx}</text>`);
+  });
+  svg.innerHTML=parts.join('');
+  document.getElementById('curStep').textContent=stepIdx+1;
+  document.getElementById('tests').textContent=step.tests;
+  document.getElementById('rebuilds').textContent=step.rebuilds;
+  document.getElementById('radius').textContent=circle?circle.r.toFixed(2):'—';
+  document.getElementById('info').innerHTML=step.msg;
+  addLog(step);
+}
+
+let lastLogged=-1;
+function addLog(step){
+  if(stepIdx===lastLogged) return;
+  lastLogged=stepIdx;
+  const log=document.getElementById('log');
+  const cls = step.kind==='out'?'ev-out':step.kind==='in'?'ev-in':step.kind==='done'?'ev-done':'ev-set';
+  const div=document.createElement('div');
+  div.className=cls;
+  div.innerHTML=`[${String(stepIdx+1).padStart(2,'0')}] ${step.msg.replace(/<[^>]+>/g,'')}`;
+  log.appendChild(div);
+  log.scrollTop=log.scrollHeight;
+}
+
+// ===== controls =====
+function getSpeed(){return 1200 - document.getElementById('speed').value*110;}
+function ensureSteps(){if(steps.length===0) generateSteps(points);}
+
+function run(){
+  ensureSteps();
+  running=true;
+  document.getElementById('runBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  tick();
+}
+function tick(){
+  if(!running||stepIdx>=steps.length){pause(); return;}
+  render(steps[stepIdx]);
+  stepIdx++;
+  timer=setTimeout(tick,getSpeed());
+}
+function stepFwd(){
+  ensureSteps();
+  if(stepIdx<steps.length){render(steps[stepIdx]); stepIdx++;}
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('runBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); stepIdx=0; steps=[]; lastLogged=-1;
+  document.getElementById('log').innerHTML='';
+  document.getElementById('curStep').textContent='0';
+  document.getElementById('totStep').textContent='0';
+  document.getElementById('tests').textContent='0';
+  document.getElementById('rebuilds').textContent='0';
+  document.getElementById('radius').textContent='—';
+  document.getElementById('info').innerHTML='Press <span class="hl">Run</span> to watch Welzl process points one at a time, or <span class="hl">Step</span> to advance manually. The circle only rebuilds when a point falls <span class="pt">outside</span>.';
+  renderInitial();
+}
+function renderInitial(){
+  const svg=document.getElementById('canvas');
+  let parts=points.map((p,i)=>
+    `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#3b4654"/>`+
+    `<text x="${p.x+6}" y="${p.y-6}" font-size="9" fill="var(--muted)">P${i}</text>`);
+  svg.innerHTML=parts.join('');
+}
+
+function loadCustom(){
+  const raw=document.getElementById('customInput').value.trim();
+  const pts=[];
+  raw.split(';').forEach(pair=>{
+    const m=pair.split(',').map(s=>parseFloat(s.trim()));
+    if(m.length===2 && !isNaN(m[0]) && !isNaN(m[1])){
+      pts.push({x:Math.max(15,Math.min(385,m[0])), y:Math.max(15,Math.min(305,m[1]))});
+    }
+  });
+  if(pts.length>0){points=pts; reset();}
+}
+function randomPoints(){
+  const n=6+Math.floor(Math.random()*7); // 6..12
+  points=Array.from({length:n},()=>({
+    x:25+Math.random()*350, y:25+Math.random()*270
+  }));
+  document.getElementById('customInput').value=points.map(p=>`${p.x.toFixed(0)},${p.y.toFixed(0)}`).join('; ');
+  reset();
+}
+
+// ===== init =====
+points=[{x:40,y:40},{x:320,y:60},{x:180,y:280},{x:60,y:240},{x:300,y:230},{x:180,y:140}];
+document.getElementById('customInput').value=points.map(p=>`${p.x},${p.y}`).join('; ');
+renderInitial();
+</script>
+</body>
+</html>
