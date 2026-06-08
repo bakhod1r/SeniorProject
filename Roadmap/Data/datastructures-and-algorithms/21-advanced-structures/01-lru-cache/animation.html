@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LRU Cache Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); margin-bottom: 6px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 18px; font-size: 0.85rem; }
+
+  .container { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 18px; }
+  .main-area { display: flex; flex-direction: column; gap: 16px; }
+  .side-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.95rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="number"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; width: 64px; font-family: inherit; }
+  .controls label { color: var(--muted); font-size: 0.85rem; }
+  button { background: var(--green); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: background 0.2s; }
+  button:hover { filter: brightness(1.12); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.search { background: var(--blue); }
+  button.danger { background: var(--red); }
+  button.secondary { background: var(--border); color: var(--text); }
+
+  /* hash map column */
+  .layout { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: start; }
+  .map-col { display: flex; flex-direction: column; gap: 4px; }
+  .map-title { color: var(--muted); font-size: 0.78rem; margin-bottom: 4px; }
+  .map-row { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; font-size: 0.78rem; }
+  .map-row .mkey { color: var(--purple); font-weight: bold; min-width: 30px; }
+  .map-row .marrow { color: var(--orange); }
+  .map-row .mptr { color: var(--green); }
+  .map-row.highlight { border-color: var(--blue); background: #11203a; }
+
+  /* DLL row */
+  .dll-title { color: var(--muted); font-size: 0.78rem; margin-bottom: 8px; }
+  .dll-wrap { overflow-x: auto; padding-bottom: 8px; }
+  .dll { display: flex; align-items: center; gap: 2px; min-height: 96px; }
+  .lru-node {
+    position: relative; min-width: 64px; height: 64px; border-radius: 8px;
+    border: 2px solid var(--border); background: #21262d;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 0.82rem; transition: all 0.45s ease; flex-shrink: 0;
+  }
+  .lru-node .nk { color: var(--purple); font-weight: bold; }
+  .lru-node .nv { color: var(--text); font-size: 0.72rem; }
+  .lru-node.sentinel { background: #1b1f24; border-style: dashed; color: var(--muted); min-width: 48px; }
+  .lru-node.sentinel .nk { color: var(--muted); font-size: 0.7rem; }
+  .lru-node.moving   { border-color: var(--blue);   background: #11203a; transform: translateY(-10px) scale(1.08); box-shadow: 0 0 14px rgba(88,166,255,0.5); }
+  .lru-node.inserting{ border-color: var(--green);  background: #112b18; box-shadow: 0 0 14px rgba(63,185,80,0.5); }
+  .lru-node.found    { border-color: var(--green);  background: #112b18; }
+  .lru-node.evicting { border-color: var(--red);    background: #2b1416; opacity: 0; transform: scale(0.6); }
+  .lru-node.scanning { border-color: var(--yellow); background: #2b2410; }
+  .dll-arrow { color: var(--border); font-size: 1.1rem; flex-shrink: 0; }
+  .ptr-label { font-size: 0.66rem; color: var(--muted); text-align: center; margin-top: 4px; }
+  .ptr-label.head { color: var(--blue); }
+  .ptr-label.tail { color: var(--orange); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.72rem; color: var(--muted); margin-top: 10px; }
+  .legend span::before { content: '\25CF'; margin-right: 4px; }
+  .legend .l-mru::before { color: var(--blue); }
+  .legend .l-new::before { color: var(--green); }
+  .legend .l-evict::before { color: var(--red); }
+  .legend .l-lru::before { color: var(--orange); }
+
+  .info-panel { min-height: 64px; }
+  .info-op { font-weight: bold; color: var(--blue); font-size: 0.9rem; }
+  .info-msg { color: var(--text); font-size: 0.82rem; margin: 6px 0; line-height: 1.4; }
+  .info-cplx { color: var(--green); font-size: 0.78rem; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; text-align: center; }
+  .stat .val { font-size: 1.2rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+
+  .bigo-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .bigo-table th, .bigo-table td { padding: 5px 8px; border: 1px solid var(--border); text-align: center; }
+  .bigo-table th { background: #21262d; color: var(--blue); }
+  .bigo-table .best { color: var(--green); }
+  .bigo-table .worst { color: var(--yellow); }
+
+  .log-area { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; max-height: 170px; overflow-y: auto; font-size: 0.76rem; line-height: 1.5; }
+  .log-entry { border-bottom: 1px solid #21262d; padding: 2px 0; }
+  .op-get { color: var(--blue); }
+  .op-put { color: var(--green); }
+  .op-evict { color: var(--red); }
+  .op-info { color: var(--orange); }
+  .op-miss { color: var(--yellow); }
+</style>
+</head>
+<body>
+
+<h1>LRU Cache Visualization</h1>
+<p class="subtitle">Hash Map + Doubly Linked List | get moves a node to the front, put evicts the tail on overflow</p>
+
+<div class="container">
+  <div class="main-area">
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls">
+        <label>Key:</label>
+        <input type="number" id="keyInput" placeholder="1" value="1">
+        <label>Val:</label>
+        <input type="number" id="valInput" placeholder="10" value="10">
+        <button class="search" id="btnGet" onclick="doGet()">get(key)</button>
+        <button id="btnPut" onclick="doPut()">put(key, val)</button>
+        <button class="secondary" id="btnSample" onclick="loadSample()">Load Demo</button>
+        <button class="secondary" id="btnScan" onclick="runScan()">Scan Demo</button>
+        <button class="danger" id="btnReset" onclick="doReset()">Reset</button>
+      </div>
+      <div class="controls" style="margin-top:10px">
+        <label>Capacity:</label>
+        <input type="number" id="capInput" value="4" min="1" max="8">
+        <button class="secondary" onclick="applyCapacity()">Set Capacity</button>
+        <label style="margin-left:10px">Speed:</label>
+        <input type="number" id="speedInput" value="600" min="120" max="1600" step="100" style="width:74px">
+        <label>ms</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Cache State</h3>
+      <div class="layout">
+        <div class="map-col">
+          <div class="map-title">Hash Map (key &rarr; node)</div>
+          <div id="mapContainer"></div>
+        </div>
+        <div>
+          <div class="dll-title">Doubly Linked List &mdash; <span style="color:var(--blue)">front = most recent</span>, <span style="color:var(--orange)">tail = least recent</span></div>
+          <div class="dll-wrap">
+            <div class="dll" id="dllContainer"></div>
+          </div>
+          <div class="legend">
+            <span class="l-mru">moving to front (just used)</span>
+            <span class="l-new">newly inserted</span>
+            <span class="l-evict">evicting (LRU)</span>
+            <span class="l-lru">least recently used</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel info-panel">
+      <h3>Last Operation</h3>
+      <div class="info-op" id="infoOp">Ready.</div>
+      <div class="info-msg" id="infoMsg">Load the demo, or insert a key and value, then press get/put.</div>
+      <div class="info-cplx" id="infoCplx"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statSize">0</div><div class="lbl">Size</div></div>
+        <div class="stat"><div class="val" id="statCap">4</div><div class="lbl">Capacity</div></div>
+        <div class="stat"><div class="val" id="statHits">0</div><div class="lbl">Hits</div></div>
+        <div class="stat"><div class="val" id="statMiss">0</div><div class="lbl">Misses</div></div>
+        <div class="stat"><div class="val" id="statRatio">0%</div><div class="lbl">Hit Ratio</div></div>
+        <div class="stat"><div class="val" id="statEvict">0</div><div class="lbl">Evictions</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="bigo-table">
+        <tr><th>Operation</th><th>Avg</th><th>Worst</th></tr>
+        <tr><td>get(key)</td><td class="best">O(1)</td><td class="worst">O(n)*</td></tr>
+        <tr><td>put(key,v)</td><td class="best">O(1)</td><td class="worst">O(n)*</td></tr>
+        <tr><td>evict LRU</td><td class="best">O(1)</td><td class="best">O(1)</td></tr>
+        <tr><td>move to front</td><td class="best">O(1)</td><td class="best">O(1)</td></tr>
+        <tr><td>space</td><td colspan="2" class="best">O(capacity)</td></tr>
+      </table>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:6px">* worst case only from hash-map collisions; the linked-list work is always O(1).</div>
+    </div>
+
+    <div class="panel">
+      <h3>How It Works</h3>
+      <div style="font-size:0.76rem;color:var(--muted);line-height:1.5">
+        The <b style="color:var(--purple)">hash map</b> points at <b>nodes</b> in the
+        <b>doubly linked list</b>, giving O(1) lookup. The list orders entries by use:
+        <b style="color:var(--blue)">front</b> is most recent, <b style="color:var(--orange)">tail</b> is least recent.
+        A <b style="color:var(--blue)">get</b> moves the node to the front. A
+        <b style="color:var(--green)">put</b> that overflows capacity evicts the
+        <b style="color:var(--orange)">tail</b> node.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- model ----------
+let capacity = 4;
+let map = new Map();          // key -> node object
+let order = [];               // array of node objects, index 0 = MRU ... last = LRU
+let hits = 0, misses = 0, evictions = 0;
+let busy = false;
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function speed(){ return parseInt(document.getElementById('speedInput').value) || 600; }
+
+function makeNode(key, value){ return { key, value }; }
+
+// ---------- rendering ----------
+function render(opts){
+  opts = opts || {};
+  renderDLL(opts);
+  renderMap(opts);
+  renderStats();
+}
+
+function renderDLL(opts){
+  const c = document.getElementById('dllContainer');
+  c.innerHTML = '';
+
+  // dummy head
+  c.appendChild(sentinel('HEAD', 'head'));
+  c.appendChild(arrow());
+
+  order.forEach((node, i) => {
+    const el = document.createElement('div');
+    let cls = 'lru-node';
+    if (opts.movingKey === node.key) cls += ' moving';
+    if (opts.insertKey === node.key) cls += ' inserting';
+    if (opts.foundKey === node.key) cls += ' found';
+    if (opts.evictKey === node.key) cls += ' evicting';
+    if (opts.scanKey === node.key) cls += ' scanning';
+    el.className = cls;
+    el.innerHTML = '<div class="nk">' + node.key + '</div><div class="nv">val ' + node.value + '</div>';
+    const lbl = document.createElement('div');
+    if (i === 0) { lbl.className = 'ptr-label head'; lbl.textContent = 'MRU'; }
+    else if (i === order.length - 1) { lbl.className = 'ptr-label tail'; lbl.textContent = 'LRU'; }
+    else { lbl.className = 'ptr-label'; lbl.textContent = ' '; }
+    const col = document.createElement('div');
+    col.style.display = 'flex'; col.style.flexDirection = 'column'; col.style.alignItems = 'center';
+    col.appendChild(el); col.appendChild(lbl);
+    c.appendChild(col);
+    c.appendChild(arrow());
+  });
+
+  // dummy tail
+  c.appendChild(sentinel('TAIL', 'tail'));
+}
+
+function sentinel(text, kind){
+  const el = document.createElement('div');
+  el.className = 'lru-node sentinel';
+  el.innerHTML = '<div class="nk">' + text + '</div>';
+  return el;
+}
+function arrow(){
+  const a = document.createElement('div');
+  a.className = 'dll-arrow';
+  a.innerHTML = '⇄'; // double arrow (doubly linked)
+  return a;
+}
+
+function renderMap(opts){
+  opts = opts || {};
+  const c = document.getElementById('mapContainer');
+  c.innerHTML = '';
+  // show map entries in key order for stability
+  const keys = [...map.keys()].sort((a,b)=>a-b);
+  if (keys.length === 0){
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--muted);font-size:0.74rem;padding:4px';
+    empty.textContent = '(empty)';
+    c.appendChild(empty);
+    return;
+  }
+  keys.forEach(k => {
+    const node = map.get(k);
+    const row = document.createElement('div');
+    row.className = 'map-row' + (opts.highlightKey === k ? ' highlight' : '');
+    row.innerHTML = '<span class="mkey">' + k + '</span>' +
+                    '<span class="marrow">&rarr;</span>' +
+                    '<span class="mptr">node(' + node.value + ')</span>';
+    c.appendChild(row);
+  });
+}
+
+function renderStats(){
+  document.getElementById('statSize').textContent = order.length;
+  document.getElementById('statCap').textContent = capacity;
+  document.getElementById('statHits').textContent = hits;
+  document.getElementById('statMiss').textContent = misses;
+  document.getElementById('statEvict').textContent = evictions;
+  const total = hits + misses;
+  document.getElementById('statRatio').textContent = total ? Math.round(100*hits/total) + '%' : '0%';
+}
+
+function setInfo(op, msg, cplx){
+  document.getElementById('infoOp').textContent = op;
+  document.getElementById('infoMsg').innerHTML = msg;
+  document.getElementById('infoCplx').textContent = cplx || '';
+}
+
+function addLog(msg, cls){
+  const area = document.getElementById('logArea');
+  const e = document.createElement('div');
+  e.className = 'log-entry';
+  e.innerHTML = '<span class="' + cls + '">' + msg + '</span>';
+  area.prepend(e);
+  if (area.children.length > 60) area.removeChild(area.lastChild);
+}
+
+function setButtons(disabled){
+  ['btnGet','btnPut','btnSample','btnScan','btnReset'].forEach(id => {
+    document.getElementById(id).disabled = disabled;
+  });
+}
+
+// ---------- operations ----------
+async function doGet(){
+  if (busy) return;
+  const key = parseInt(document.getElementById('keyInput').value);
+  if (isNaN(key)) return;
+  busy = true; setButtons(true);
+  await getOp(key);
+  busy = false; setButtons(false);
+}
+
+async function getOp(key){
+  setInfo('get(' + key + ')', 'Looking up key <b>' + key + '</b> in the hash map…', 'O(1) hash lookup');
+  render({ highlightKey: key });
+  await sleep(speed());
+
+  if (!map.has(key)){
+    misses++;
+    setInfo('get(' + key + ') → MISS', 'Key <b>' + key + '</b> is not in the cache. Returns -1.', 'O(1)');
+    addLog('get(' + key + ') → MISS (returns -1)', 'op-miss');
+    render();
+    return -1;
+  }
+
+  hits++;
+  const node = map.get(key);
+  // highlight found
+  setInfo('get(' + key + ') → HIT', 'Found node for key <b>' + key + '</b> (value ' + node.value + '). It counts as a use, so promote it to the front.', 'O(1)');
+  render({ highlightKey: key, foundKey: key });
+  await sleep(speed());
+
+  // move to front
+  await moveToFront(key, 'get');
+  addLog('get(' + key + ') → ' + node.value + ' (moved to front)', 'op-get');
+  return node.value;
+}
+
+async function moveToFront(key, source){
+  const idx = order.findIndex(n => n.key === key);
+  if (idx <= 0){ render(); return; } // already MRU or absent
+  const node = order[idx];
+  // animate the move
+  render({ movingKey: key });
+  await sleep(speed());
+  order.splice(idx, 1);
+  order.unshift(node);
+  setInfo(source + ': move to front',
+    'Unlinked node <b>' + key + '</b> and re-inserted it right behind HEAD &mdash; it is now most recently used. Pure pointer rewiring.',
+    'O(1) move-to-front');
+  render({ movingKey: key });
+  await sleep(speed());
+  render();
+}
+
+async function doPut(){
+  if (busy) return;
+  const key = parseInt(document.getElementById('keyInput').value);
+  const val = parseInt(document.getElementById('valInput').value);
+  if (isNaN(key) || isNaN(val)) return;
+  busy = true; setButtons(true);
+  await putOp(key, val);
+  busy = false; setButtons(false);
+}
+
+async function putOp(key, val){
+  setInfo('put(' + key + ', ' + val + ')', 'Checking whether key <b>' + key + '</b> already exists…', 'O(1) hash lookup');
+  render({ highlightKey: key });
+  await sleep(speed());
+
+  if (map.has(key)){
+    const node = map.get(key);
+    node.value = val;
+    setInfo('put(' + key + ', ' + val + ') → update', 'Key exists. Updated its value to <b>' + val + '</b>, now promote it to the front.', 'O(1)');
+    render({ highlightKey: key, foundKey: key });
+    await sleep(speed());
+    await moveToFront(key, 'put');
+    addLog('put(' + key + ', ' + val + ') → updated + moved to front', 'op-put');
+    return;
+  }
+
+  // new key: insert at front
+  const node = makeNode(key, val);
+  map.set(key, node);
+  order.unshift(node);
+  setInfo('put(' + key + ', ' + val + ') → insert', 'New key. Created a node, added it behind HEAD (most recent), and stored key → node in the map.', 'O(1) insert at front');
+  render({ insertKey: key, highlightKey: key });
+  addLog('put(' + key + ', ' + val + ') → inserted at front', 'op-put');
+  await sleep(speed());
+  render();
+
+  // overflow? evict LRU (tail)
+  if (order.length > capacity){
+    await evictLRU();
+  }
+}
+
+async function evictLRU(){
+  const victim = order[order.length - 1];
+  setInfo('evict LRU', 'Size (' + order.length + ') exceeds capacity (' + capacity + '). The node just before TAIL — key <b>' + victim.key + '</b> — is the least recently used. Evict it.', 'O(1) eviction');
+  render({ evictKey: victim.key });
+  await sleep(speed() + 150);
+  order.pop();
+  map.delete(victim.key);
+  evictions++;
+  addLog('evicted key ' + victim.key + ' (least recently used)', 'op-evict');
+  setInfo('evicted ' + victim.key, 'Unlinked the tail node and deleted its key from the hash map. Cache is back at capacity.', 'O(1)');
+  render();
+  await sleep(speed());
+}
+
+// ---------- demos ----------
+async function loadSample(){
+  if (busy) return;
+  busy = true; setButtons(true);
+  doResetState();
+  render();
+  addLog('--- demo: fill, hit, evict ---', 'op-info');
+  const steps = [
+    ['put', 1, 10], ['put', 2, 20], ['put', 3, 30], ['put', 4, 40],
+    ['get', 1, null], ['put', 5, 50], ['get', 2, null], ['put', 6, 60]
+  ];
+  for (const [op, k, v] of steps){
+    document.getElementById('keyInput').value = k;
+    if (v !== null) document.getElementById('valInput').value = v;
+    if (op === 'put') await putOp(k, v); else await getOp(k);
+    await sleep(220);
+  }
+  setInfo('demo complete', 'Notice get(1) promoted key 1, so key 2 sank to the tail and was the first evicted by put(5). LRU in action.', '');
+  busy = false; setButtons(false);
+}
+
+async function runScan(){
+  if (busy) return;
+  busy = true; setButtons(true);
+  doResetState();
+  render();
+  addLog('--- demo: hot set then sequential scan ---', 'op-info');
+  // build a hot working set
+  for (const [k,v] of [[1,10],[2,20],[3,30],[4,40]]){
+    document.getElementById('keyInput').value = k; document.getElementById('valInput').value = v;
+    await putOp(k, v); await sleep(160);
+  }
+  setInfo('hot set loaded', 'Keys 1–4 form the working set. Now a one-pass scan of fresh keys 90+ will flood the cache…', '');
+  await sleep(700);
+  for (let k = 91; k <= 95; k++){
+    document.getElementById('keyInput').value = k; document.getElementById('valInput').value = k*10;
+    await putOp(k, k*10); await sleep(160);
+  }
+  setInfo('scan flushed the cache', 'The one-time scan evicted the entire hot set (keys 1–4). This is LRU’s classic weakness: sequential flooding. Scan-resistant variants (2Q, ARC, segmented LRU) fix it.', '');
+  addLog('scan evicted the hot working set (LRU weakness)', 'op-info');
+  busy = false; setButtons(false);
+}
+
+// ---------- controls ----------
+function applyCapacity(){
+  if (busy) return;
+  const c = parseInt(document.getElementById('capInput').value);
+  if (isNaN(c) || c < 1) return;
+  capacity = Math.min(c, 8);
+  document.getElementById('capInput').value = capacity;
+  // trim if needed
+  while (order.length > capacity){
+    const victim = order.pop();
+    map.delete(victim.key);
+    evictions++;
+  }
+  addLog('capacity set to ' + capacity, 'op-info');
+  render();
+}
+
+function doResetState(){
+  map = new Map();
+  order = [];
+  hits = 0; misses = 0; evictions = 0;
+}
+
+function doReset(){
+  if (busy) return;
+  doResetState();
+  document.getElementById('logArea').innerHTML = '';
+  setInfo('Reset.', 'Cache cleared. Capacity = ' + capacity + '.', '');
+  addLog('cache reset (capacity ' + capacity + ')', 'op-info');
+  render();
+}
+
+// ---------- init ----------
+render();
+setInfo('Ready.', 'Press <b>Load Demo</b> to watch fill / hit / evict, or <b>Scan Demo</b> to see LRU’s sequential-flooding weakness.', '');
+</script>
+</body>
+</html>
