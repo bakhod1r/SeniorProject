@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Count-Min Sketch — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:18px; text-align:center; max-width:780px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border); background:var(--surface);}
+  .badge.g{color:var(--green);border-color:var(--green);}
+  .badge.y{color:var(--yellow);border-color:var(--yellow);}
+  .badge.b{color:var(--blue);border-color:var(--blue);}
+  .badge.p{color:var(--purple);border-color:var(--purple);}
+
+  .layout{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1180px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:16px;}
+  .left{flex:2 1 560px; min-width:340px;}
+  .right{flex:1 1 320px; min-width:300px;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;}
+  input[type="text"]{
+    padding:9px 12px; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    border-radius:8px; font-size:.95rem; width:130px;
+  }
+  input[type="text"]:focus{outline:none;border-color:var(--blue);}
+  button{
+    padding:9px 16px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.9rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.alt{border-color:var(--purple); color:var(--purple);}
+  button.alt:hover:not(:disabled){background:var(--purple); color:var(--bg);}
+  button.warn{border-color:var(--red); color:var(--red);}
+  button.warn:hover:not(:disabled){background:var(--red); color:var(--bg);}
+
+  .speed{display:flex; align-items:center; gap:8px; margin-bottom:14px; color:var(--muted); font-size:.85rem;}
+  .speed input[type="range"]{accent-color:var(--blue); width:130px;}
+
+  .toggle{display:flex; align-items:center; gap:8px; margin-bottom:14px; color:var(--muted); font-size:.85rem;}
+
+  /* grid */
+  .grid-wrap{overflow-x:auto; padding:10px 0;}
+  table.grid{border-collapse:separate; border-spacing:5px; margin:0 auto;}
+  table.grid td, table.grid th{text-align:center;}
+  th.colh{color:var(--muted); font-size:.7rem; font-weight:600; padding-bottom:2px;}
+  td.rowlabel{color:var(--muted); font-size:.78rem; text-align:right; padding-right:8px; white-space:nowrap;}
+  .cell{
+    width:46px; height:40px; border-radius:8px; background:var(--bg); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:1rem;
+    transition:all .25s ease; position:relative;
+  }
+  .cell.zero{color:var(--muted); font-weight:500;}
+  .cell.updating{background:rgba(63,185,80,.22); border-color:var(--green); color:var(--green); transform:translateY(-3px);}
+  .cell.reading{background:rgba(88,166,255,.18); border-color:var(--blue); color:var(--blue);}
+  .cell.minpick{background:rgba(210,153,34,.25); border-color:var(--yellow); color:var(--yellow); box-shadow:0 0 0 2px var(--yellow);}
+  .cell.collision{outline:2px dashed var(--red); outline-offset:1px;}
+
+  /* result row */
+  .resultbar{display:flex; gap:14px; flex-wrap:wrap; margin-top:14px; align-items:center; justify-content:center;}
+  .chip{background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:.9rem;}
+  .chip b{color:var(--blue);}
+  .chip .est{color:var(--yellow);}
+  .chip .true{color:var(--green);}
+  .chip .over{color:var(--red);}
+
+  /* legend */
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin:12px 0; justify-content:center;}
+  .legend-item{display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--muted);}
+  .sw{width:14px; height:14px; border-radius:4px; display:inline-block;}
+
+  /* info & tables */
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+  .stepinfo{font-family:'Courier New',monospace; font-size:.85rem; line-height:1.7; color:var(--text); min-height:60px;}
+  .stepinfo .hl{color:var(--yellow);}
+  .stepinfo .ok{color:var(--green);}
+  .stepinfo .bad{color:var(--red);}
+
+  table.info{width:100%; border-collapse:collapse; font-size:.82rem; margin-top:6px;}
+  table.info td, table.info th{border:1px solid var(--border); padding:6px 8px; text-align:left;}
+  table.info th{color:var(--muted); font-weight:600;}
+  .mono{font-family:'Courier New',monospace;}
+  .c-green{color:var(--green);} .c-yellow{color:var(--yellow);} .c-blue{color:var(--blue);} .c-red{color:var(--red);} .c-purple{color:var(--purple);}
+
+  .log{background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; height:170px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.78rem; line-height:1.55;}
+  .log div{padding:1px 0; border-bottom:1px solid rgba(48,54,61,.4);}
+  .stat{display:flex; gap:18px; flex-wrap:wrap; color:var(--muted); font-size:.85rem; margin-bottom:10px;}
+  .stat b{color:var(--text);}
+</style>
+</head>
+<body>
+  <h1>Count-Min Sketch</h1>
+  <p class="subtitle">A d × w grid of counters with d hash functions. <b>Update:</b> add 1 to one cell per row. <b>Query:</b> take the <b>minimum</b> across rows. Estimate is an <b>overcount, never an undercount</b>.</p>
+  <div class="badges">
+    <span class="badge g">Update O(d)</span>
+    <span class="badge b">Query O(d)</span>
+    <span class="badge p">Space O(d·w)</span>
+    <span class="badge y">Error ≤ eps·N</span>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: grid + controls -->
+    <div class="left">
+      <div class="panel">
+        <div class="controls">
+          <input type="text" id="keyInput" placeholder="item (e.g. cat)" value="cat">
+          <button id="addBtn" onclick="doAdd()">Add (+1)</button>
+          <button id="consBtn" class="alt" onclick="doConservative()">Conservative Add</button>
+          <button id="qBtn" onclick="doQuery()">Query (min)</button>
+        </div>
+        <div class="controls">
+          <button onclick="streamDemo()">Run Demo Stream</button>
+          <button class="warn" onclick="resetSketch()">Reset</button>
+          <label class="toggle" style="margin:0;"><input type="checkbox" id="autoQ" checked> auto-query after add</label>
+        </div>
+        <div class="speed">
+          <span>Slow</span>
+          <input type="range" id="speed" min="1" max="10" value="6">
+          <span>Fast</span>
+        </div>
+
+        <div class="stat">
+          <span>d (rows): <b id="sD">3</b></span>
+          <span>w (cols): <b id="sW">7</b></span>
+          <span>N (total updates): <b id="sN">0</b></span>
+          <span>distinct seen: <b id="sDistinct">0</b></span>
+        </div>
+
+        <div class="grid-wrap">
+          <table class="grid" id="grid"></table>
+        </div>
+
+        <div class="legend">
+          <span class="legend-item"><span class="sw" style="background:rgba(63,185,80,.5);border:1px solid var(--green);"></span>updating cell</span>
+          <span class="legend-item"><span class="sw" style="background:rgba(88,166,255,.4);border:1px solid var(--blue);"></span>read cell</span>
+          <span class="legend-item"><span class="sw" style="background:rgba(210,153,34,.5);border:1px solid var(--yellow);"></span>min (the estimate)</span>
+          <span class="legend-item"><span class="sw" style="outline:2px dashed var(--red);"></span>collision</span>
+        </div>
+
+        <div class="resultbar" id="resultbar"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: info, big-o, log -->
+    <div class="right">
+      <div class="panel">
+        <h3>What's happening</h3>
+        <div class="stepinfo" id="stepinfo">Type an item and press <span class="hl">Add</span>. Each row hashes the item to one column and increments that cell. <span class="hl">Query</span> reads the d cells and takes the minimum.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity & Error</h3>
+        <table class="info">
+          <tr><th>Operation</th><th>Cost</th></tr>
+          <tr><td>Update (add 1 per row)</td><td class="mono c-green">O(d)</td></tr>
+          <tr><td>Query (min across rows)</td><td class="mono c-blue">O(d)</td></tr>
+          <tr><td>Merge (add two grids)</td><td class="mono c-purple">O(d·w)</td></tr>
+          <tr><td>Space (the grid)</td><td class="mono c-purple">O(d·w)</td></tr>
+          <tr><td>Error (overcount)</td><td class="mono c-yellow">≤ eps·N</td></tr>
+          <tr><td>Width w</td><td class="mono">ceil(e/eps)</td></tr>
+          <tr><td>Depth d</td><td class="mono">ceil(ln(1/δ))</td></tr>
+          <tr><td>Guarantee</td><td class="mono c-green">f ≤ est, never below</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== CONFIG =====
+let D = 3, W = 7;
+let table = [];           // D x W counters
+let truth = {};           // exact counts for comparison
+let N = 0;
+let busy = false;
+
+// D simple, independent-ish hash functions (multiplicative) so the demo is reproducible.
+const SEEDS = [2654435761, 40503, 2246822519, 3266489917, 668265263, 374761393, 1274126177, 197915231];
+function hashRow(key, row){
+  let h = 2166136261 ^ (SEEDS[row % SEEDS.length] >>> 0);
+  for(let i=0;i<key.length;i++){
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+    h = (h + SEEDS[(row+1) % SEEDS.length]) >>> 0;
+  }
+  return h % W;
+}
+function cols(key){ const c=[]; for(let r=0;r<D;r++) c.push(hashRow(key,r)); return c; }
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function speed(){ return 1100 - document.getElementById('speed').value*100; }
+
+function initTable(){
+  table = Array.from({length:D},()=>new Array(W).fill(0));
+  truth = {}; N = 0;
+  renderGrid();
+  updateStats();
+  document.getElementById('resultbar').innerHTML = '';
+}
+
+function renderGrid(highlights, collisionSet){
+  highlights = highlights || {};      // "r,c" -> class
+  collisionSet = collisionSet || new Set(); // "r,c"
+  const g = document.getElementById('grid');
+  let html = '<tr><td></td>';
+  for(let c=0;c<W;c++) html += `<th class="colh">col ${c}</th>`;
+  html += '</tr>';
+  for(let r=0;r<D;r++){
+    html += `<tr><td class="rowlabel">row ${r}<br>h${r}()</td>`;
+    for(let c=0;c<W;c++){
+      const key = r+','+c;
+      let cls = 'cell' + (table[r][c]===0 ? ' zero':'');
+      if(highlights[key]) cls += ' ' + highlights[key];
+      if(collisionSet.has(key)) cls += ' collision';
+      html += `<td><div class="${cls}" id="cell-${r}-${c}">${table[r][c]}</div></td>`;
+    }
+    html += '</tr>';
+  }
+  g.innerHTML = html;
+}
+
+function updateStats(){
+  document.getElementById('sD').textContent = D;
+  document.getElementById('sW').textContent = W;
+  document.getElementById('sN').textContent = N;
+  document.getElementById('sDistinct').textContent = Object.keys(truth).length;
+}
+
+function setInfo(html){ document.getElementById('stepinfo').innerHTML = html; }
+function addLog(msg){
+  const l = document.getElementById('log');
+  const d = document.createElement('div');
+  d.innerHTML = msg;
+  l.prepend(d);
+}
+
+// detect whether a cell holds more than just this key's true count (collision)
+function collisionAt(key, r, c){
+  // collision if some OTHER key also maps to (r,c)
+  for(const other in truth){
+    if(other===key) continue;
+    if(hashRow(other,r)===c) return true;
+  }
+  return false;
+}
+
+// ===== ADD (plain) =====
+async function doAdd(){
+  if(busy) return;
+  const key = document.getElementById('keyInput').value.trim();
+  if(!key) return;
+  busy = true; disable(true);
+  const cs = cols(key);
+  truth[key] = (truth[key]||0)+1; N++;
+  setInfo(`<b>Add "${escapeHtml(key)}"</b>: hashing into each row → columns [${cs.join(', ')}]. Incrementing one cell per row (+1).`);
+  for(let r=0;r<D;r++){
+    table[r][cs[r]]++;
+    const hl = {}; hl[r+','+cs[r]] = 'updating';
+    renderGrid(hl);
+    addLog(`<span class="c-green">ADD</span> "${escapeHtml(key)}" → row ${r}, col ${cs[r]} now = ${table[r][cs[r]]}`);
+    await sleep(speed());
+  }
+  renderGrid();
+  updateStats();
+  disable(false); busy = false;
+  if(document.getElementById('autoQ').checked) await doQuery(true);
+}
+
+// ===== CONSERVATIVE ADD =====
+async function doConservative(){
+  if(busy) return;
+  const key = document.getElementById('keyInput').value.trim();
+  if(!key) return;
+  busy = true; disable(true);
+  const cs = cols(key);
+  // current estimate
+  let m = Infinity;
+  for(let r=0;r<D;r++) m = Math.min(m, table[r][cs[r]]);
+  if(m===Infinity) m = 0;
+  const target = m + 1;
+  truth[key] = (truth[key]||0)+1; N++;
+  setInfo(`<b>Conservative Add "${escapeHtml(key)}"</b>: current estimate = <span class="hl">${m}</span>, so target = ${target}. Raise each cell only up to max(cell, ${target}) — already-tall cells are left alone.`);
+  for(let r=0;r<D;r++){
+    const before = table[r][cs[r]];
+    table[r][cs[r]] = Math.max(before, target);
+    const raised = table[r][cs[r]] !== before;
+    const hl = {}; hl[r+','+cs[r]] = 'updating';
+    renderGrid(hl);
+    addLog(`<span class="c-purple">CONS</span> "${escapeHtml(key)}" → row ${r}, col ${cs[r]}: ${before} → ${table[r][cs[r]]}${raised?'':' (unchanged)'}`);
+    await sleep(speed());
+  }
+  renderGrid();
+  updateStats();
+  disable(false); busy = false;
+  if(document.getElementById('autoQ').checked) await doQuery(true);
+}
+
+// ===== QUERY (min) =====
+async function doQuery(chained){
+  if(busy && !chained) return;
+  const key = document.getElementById('keyInput').value.trim();
+  if(!key) return;
+  if(!chained){ busy = true; disable(true); }
+  const cs = cols(key);
+  setInfo(`<b>Query "${escapeHtml(key)}"</b>: read the d cells at columns [${cs.join(', ')}] and take the <span class="hl">minimum</span>.`);
+
+  // highlight read cells + collisions
+  const hl = {}; const collisionSet = new Set();
+  for(let r=0;r<D;r++){
+    hl[r+','+cs[r]] = 'reading';
+    if(collisionAt(key,r,cs[r])) collisionSet.add(r+','+cs[r]);
+  }
+  renderGrid(hl, collisionSet);
+  await sleep(speed());
+
+  // find min
+  let min = Infinity, minRow = -1;
+  for(let r=0;r<D;r++){ if(table[r][cs[r]] < min){ min = table[r][cs[r]]; minRow = r; } }
+  if(min===Infinity) min = 0;
+  hl[minRow+','+cs[minRow]] = 'minpick';
+  renderGrid(hl, collisionSet);
+
+  const trueCount = truth[key] || 0;
+  const over = min - trueCount;
+  const collided = collisionSet.size>0;
+  addLog(`<span class="c-yellow">QUERY</span> "${escapeHtml(key)}" → cells [${cs.map((c,r)=>table[r][c]).join(', ')}] → min = <b>${min}</b> (row ${minRow})`);
+  setInfo(`<b>Estimate("${escapeHtml(key)}") = <span class="hl">${min}</span></b> (min of row cells [${cs.map((c,r)=>table[r][c]).join(', ')}]).<br>` +
+          `True count = <span class="ok">${trueCount}</span>. Overcount = <span class="${over>0?'bad':'ok'}">${over}</span>.<br>` +
+          (collided ? `<span class="bad">Collisions present</span> in some rows — taking the MIN picks the least-polluted cell.` :
+                      `<span class="ok">No collisions</span> on the read cells — estimate is exact.`) +
+          `<br><span class="ok">Guarantee:</span> estimate ≥ true (overcount only, never under).`);
+
+  // result chip
+  const rb = document.getElementById('resultbar');
+  rb.innerHTML = `<div class="chip"><b>${escapeHtml(key)}</b> &nbsp; est=<span class="est">${min}</span> &nbsp; true=<span class="true">${trueCount}</span> &nbsp; over=<span class="over">+${over}</span></div>`;
+
+  await sleep(speed());
+  renderGrid(); // clear highlights but keep result chip
+  if(!chained){ disable(false); busy = false; }
+}
+
+// ===== DEMO STREAM =====
+async function streamDemo(){
+  if(busy) return;
+  const stream = ['cat','cat','dog','cat','bird','dog','cat','fox','dog'];
+  addLog(`<span class="c-blue">DEMO</span> stream: ${stream.join(' ')}`);
+  for(const item of stream){
+    document.getElementById('keyInput').value = item;
+    await doAdd();
+    await sleep(120);
+  }
+  // show a query on a never-inserted but colliding-ish key
+  document.getElementById('keyInput').value = 'cat';
+  await doQuery();
+  addLog(`<span class="c-blue">DEMO</span> done. Try querying an unseen key (e.g. "zzz") to see a collision overcount.`);
+}
+
+function disable(b){
+  ['addBtn','consBtn','qBtn'].forEach(id=>document.getElementById(id).disabled=b);
+}
+function resetSketch(){
+  if(busy) return;
+  document.getElementById('log').innerHTML = '';
+  initTable();
+  setInfo('Sketch reset. All cells are 0. Add items to populate the grid.');
+  addLog('<span class="c-red">RESET</span> grid cleared.');
+}
+function escapeHtml(s){ return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// ===== INIT =====
+initTable();
+addLog('<span class="c-blue">READY</span> d=3 rows, w=7 cols. Add items; query takes the min across rows.');
+</script>
+</body>
+</html>
