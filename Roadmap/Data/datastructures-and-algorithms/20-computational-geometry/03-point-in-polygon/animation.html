@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Point-in-Polygon (Ray Casting) — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); text-align:center; margin-bottom:6px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:18px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-blue{color:var(--blue); border-color:var(--blue);}
+
+  .layout{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1100px;}
+  .left{flex:1 1 540px; min-width:340px;}
+  .right{flex:1 1 360px; min-width:320px; display:flex; flex-direction:column; gap:16px;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .panel h3{color:var(--blue); margin-bottom:10px; font-size:1rem;}
+
+  svg{width:100%; height:auto; background:#0a0e14; border:1px solid var(--border); border-radius:12px; display:block; touch-action:none;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:14px 0;}
+  button{
+    padding:9px 18px; border:2px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .25s;
+  }
+  button:hover{background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.active{background:var(--blue); color:var(--bg);}
+
+  .speed-control{display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:8px;}
+  .speed-control label,.speed-control span{color:var(--muted); font-size:.85rem;}
+  input[type="range"]{width:160px; accent-color:var(--blue);}
+
+  .modes{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:8px;}
+  .modes select{background:#0a0e14; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:7px 10px;}
+
+  .verdict{font-size:1.15rem; font-weight:700; text-align:center; padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid var(--border);}
+  .v-in{color:var(--green); border-color:var(--green);}
+  .v-out{color:var(--red); border-color:var(--red);}
+  .v-bd{color:var(--yellow); border-color:var(--yellow);}
+  .v-idle{color:var(--muted);}
+
+  .stats{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin-bottom:10px;}
+  .stat{text-align:center;}
+  .stat .lbl{color:var(--muted); font-size:.72rem;}
+  .stat .val{color:var(--blue); font-size:1.25rem; font-weight:700;}
+  .parity{font-family:'Courier New',monospace;}
+
+  .step-info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7; min-height:54px;}
+  .step-info .hl{color:var(--yellow);}
+  .step-info .in{color:var(--green);}
+  .step-info .out{color:var(--red);}
+
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{border:1px solid var(--border); padding:6px 8px; text-align:left;}
+  th{color:var(--muted); font-weight:600;}
+  .c-o1{color:var(--green); font-weight:700;}
+  .c-on{color:var(--yellow); font-weight:700;}
+  .c-olog{color:var(--blue); font-weight:700;}
+
+  .log{height:150px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.8rem; line-height:1.6;}
+  .log div{padding:2px 4px; border-bottom:1px solid #1d242c;}
+  .log .cross{color:var(--green);}
+  .log .skip{color:var(--muted);}
+  .log .info{color:var(--blue);}
+
+  .legend{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin:10px 0; font-size:.8rem;}
+  .legend-item{display:flex; align-items:center; gap:6px;}
+  .swatch{width:14px; height:14px; border-radius:3px;}
+  .hint{color:var(--muted); font-size:.78rem; text-align:center; margin-top:6px;}
+</style>
+</head>
+<body>
+  <h1>Point-in-Polygon — Ray Casting</h1>
+  <p class="subtitle">Drag the query point. A horizontal ray counts edge crossings — odd = inside, even = outside.</p>
+
+  <div class="badges">
+    <span class="badge b-yellow">Query: O(n)</span>
+    <span class="badge b-blue">Convex: O(log n)</span>
+    <span class="badge b-green">Space: O(1)</span>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="panel">
+        <h3>Polygon &amp; Ray</h3>
+        <svg id="svg" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="legend">
+          <div class="legend-item"><span class="swatch" style="background:var(--blue)"></span>polygon edge</div>
+          <div class="legend-item"><span class="swatch" style="background:var(--yellow)"></span>edge being tested</div>
+          <div class="legend-item"><span class="swatch" style="background:var(--green)"></span>counted crossing</div>
+          <div class="legend-item"><span class="swatch" style="background:var(--purple)"></span>query point</div>
+          <div class="legend-item"><span class="swatch" style="background:var(--orange)"></span>horizontal ray</div>
+        </div>
+        <p class="hint">Drag the purple point anywhere. Use Step to walk edges one at a time, or Run to animate.</p>
+      </div>
+
+      <div class="modes">
+        <label style="color:var(--muted);font-size:.85rem;">Shape:</label>
+        <select id="shapeSel">
+          <option value="square">Square (convex)</option>
+          <option value="concave" selected>Concave (arrow)</option>
+          <option value="star">Star (concave)</option>
+          <option value="hexagon">Hexagon (convex)</option>
+        </select>
+      </div>
+
+      <div class="speed-control">
+        <label>Speed:</label><span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5"><span>Fast</span>
+      </div>
+
+      <div class="controls">
+        <button id="runBtn" onclick="run()">Run</button>
+        <button id="stepBtn" onclick="step()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>Verdict</h3>
+        <div id="verdict" class="verdict v-idle">— press Run or Step —</div>
+        <div class="stats">
+          <div class="stat"><div class="lbl">Edge</div><div class="val" id="edgeNum">0 / 0</div></div>
+          <div class="stat"><div class="lbl">Crossings</div><div class="val" id="crossCount">0</div></div>
+          <div class="stat"><div class="lbl">Parity</div><div class="val parity" id="parity">EVEN</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>What's happening</h3>
+        <div class="step-info" id="stepInfo">
+          The ray starts at the point and goes right. For each edge we test
+          <span class="hl">(ay&gt;py) != (by&gt;py)</span> and whether the crossing is to the right of the point.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Method</th><th>Per query</th><th>Space</th></tr>
+          <tr><td>Ray casting (any polygon)</td><td class="c-on">O(n)</td><td class="c-o1">O(1)</td></tr>
+          <tr><td>Winding number</td><td class="c-on">O(n)</td><td class="c-o1">O(1)</td></tr>
+          <tr><td>Convex, binary search</td><td class="c-olog">O(log n)</td><td class="c-on">O(n)</td></tr>
+          <tr><td>Trapezoidal map (many q)</td><td class="c-olog">O(log n)</td><td class="c-on">O(n)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== coordinate system: SVG 600x420, math y points up so we flip for drawing =====
+const W = 600, H = 420;
+const svg = document.getElementById('svg');
+
+// Shapes in SVG coordinates (y down). Query point also in SVG coords.
+const SHAPES = {
+  square:   [[140,120],[460,120],[460,320],[140,320]],
+  concave:  [[120,210],[300,90],[300,160],[480,160],[480,260],[300,260],[300,330]],
+  star:     starPoints(300,210,140,60,5),
+  hexagon:  hexPoints(300,210,150)
+};
+
+function starPoints(cx,cy,R,r,points){
+  const pts=[];
+  for(let i=0;i<points*2;i++){
+    const rad = (i%2===0)?R:r;
+    const a = Math.PI/2 + i*Math.PI/points;     // start at top
+    pts.push([cx+rad*Math.cos(a), cy-rad*Math.sin(a)]);
+  }
+  return pts;
+}
+function hexPoints(cx,cy,R){
+  const pts=[];
+  for(let i=0;i<6;i++){
+    const a = Math.PI/6 + i*Math.PI/3;
+    pts.push([cx+R*Math.cos(a), cy-R*Math.sin(a)]);
+  }
+  return pts;
+}
+
+let poly = SHAPES.concave.map(p=>p.slice());
+let query = {x:300, y:210};
+
+// animation state
+let steps = [];
+let stepIdx = 0;
+let running = false;
+let timer = null;
+
+// ===== build the list of animation steps for current query =====
+function buildSteps(){
+  steps = [];
+  const n = poly.length;
+  let inside = false;
+  let crossings = 0;
+  const px = query.x, py = query.y;
+
+  // boundary detection first
+  let onEdge = -1;
+  for(let i=0;i<n;i++){
+    const a = poly[i], b = poly[(i+1)%n];
+    if(onSegment(px,py,a[0],a[1],b[0],b[1])){ onEdge = i; break; }
+  }
+
+  for(let i=0, j=n-1; i<n; j=i, i++){
+    const a = poly[i], b = poly[j];
+    const straddle = (a[1] > py) !== (b[1] > py);
+    let xcross = null, counted = false;
+    if(straddle){
+      xcross = a[0] + (py - a[1])/(b[1]-a[1])*(b[0]-a[0]);
+      if(xcross > px){ counted = true; crossings++; inside = !inside; }
+    }
+    steps.push({
+      edge:i, prev:j, a, b, straddle, xcross, counted,
+      crossings, inside, py, px
+    });
+  }
+  steps.push({final:true, crossings, inside, onEdge, px, py});
+}
+
+function onSegment(px,py,ax,ay,bx,by){
+  const eps = 0.8; // pixels
+  const cr = (bx-ax)*(py-ay) - (by-ay)*(px-ax);
+  if(Math.abs(cr) > eps* Math.hypot(bx-ax,by-ay)) return false;
+  if(px < Math.min(ax,bx)-eps || px > Math.max(ax,bx)+eps) return false;
+  if(py < Math.min(ay,by)-eps || py > Math.max(ay,by)+eps) return false;
+  return true;
+}
+
+// ===== rendering =====
+function render(activeEdge=-1, st=null){
+  let s = '';
+  // ray (drawn first, behind)
+  if(st || activeEdge>=0 || stepIdx>0){
+    s += `<line x1="${query.x}" y1="${query.y}" x2="${W}" y2="${query.y}" stroke="var(--orange)" stroke-width="2" stroke-dasharray="6 4"/>`;
+  }
+  // polygon edges
+  const n = poly.length;
+  for(let i=0;i<n;i++){
+    const a = poly[i], b = poly[(i+1)%n];
+    let color = 'var(--blue)', wdt = 2.5;
+    if(i===activeEdge){ color='var(--yellow)'; wdt=4; }
+    s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${color}" stroke-width="${wdt}"/>`;
+  }
+  // crossing markers up to current step
+  if(steps.length){
+    for(let k=0;k<=Math.min(stepIdx, steps.length-1);k++){
+      const stp = steps[k];
+      if(stp && stp.counted){
+        s += `<circle cx="${stp.xcross}" cy="${query.y}" r="6" fill="var(--green)"/>`;
+      } else if(stp && stp.straddle && stp.xcross!==null && stp.xcross<=query.x){
+        s += `<circle cx="${stp.xcross}" cy="${query.y}" r="5" fill="none" stroke="var(--muted)" stroke-width="1.5"/>`;
+      }
+    }
+  }
+  // vertices
+  for(let i=0;i<n;i++){
+    s += `<circle cx="${poly[i][0]}" cy="${poly[i][1]}" r="3.5" fill="var(--border)" stroke="var(--blue)" stroke-width="1.5"/>`;
+  }
+  // query point
+  s += `<circle cx="${query.x}" cy="${query.y}" r="9" fill="var(--purple)" stroke="#fff" stroke-width="2"/>`;
+  s += `<text x="${query.x+13}" y="${query.y-10}" fill="var(--purple)" font-size="13" font-family="monospace">P</text>`;
+  svg.innerHTML = s;
+}
+
+// ===== controls =====
+function getDelay(){ return 1100 - document.getElementById('speed').value*100; }
+
+function setVerdict(){
+  const last = steps[steps.length-1];
+  const vd = document.getElementById('verdict');
+  if(last.onEdge>=0){ vd.className='verdict v-bd'; vd.textContent='BOUNDARY (on an edge)'; }
+  else if(last.inside){ vd.className='verdict v-in'; vd.textContent='INSIDE  ✓  (odd crossings)'; }
+  else { vd.className='verdict v-out'; vd.textContent='OUTSIDE  ✗  (even crossings)'; }
+}
+
+function updateStats(st){
+  document.getElementById('edgeNum').textContent =
+    (st.final? poly.length : st.edge+1) + ' / ' + poly.length;
+  document.getElementById('crossCount').textContent = st.crossings;
+  const par = document.getElementById('parity');
+  par.textContent = (st.crossings%2===1) ? 'ODD' : 'EVEN';
+  par.style.color = (st.crossings%2===1) ? 'var(--green)' : 'var(--red)';
+}
+
+function describe(st){
+  const info = document.getElementById('stepInfo');
+  if(st.final){
+    info.innerHTML = st.inside
+      ? `Done. <span class="in">${st.crossings} crossings → ODD → INSIDE</span>.`
+      : `Done. <span class="out">${st.crossings} crossings → EVEN → OUTSIDE</span>.`;
+    return;
+  }
+  const e = `edge ${st.edge}→${st.prev}`;
+  if(!st.straddle){
+    info.innerHTML = `${e}: <span class="hl">(ay&gt;py) != (by&gt;py)</span> is false — does not straddle the ray (or is horizontal). <span class="out">skip</span>.`;
+  } else if(st.counted){
+    info.innerHTML = `${e}: straddles, crossing x=${st.xcross.toFixed(1)} &gt; px=${st.px.toFixed(1)} — <span class="in">COUNT</span>. Toggle parity.`;
+  } else {
+    info.innerHTML = `${e}: straddles, but crossing x=${st.xcross.toFixed(1)} ≤ px=${st.px.toFixed(1)} (to the left) — <span class="out">not counted</span>.`;
+  }
+}
+
+function logStep(st){
+  const log = document.getElementById('log');
+  let cls='skip', msg='';
+  if(st.final){ cls='info'; msg=`verdict: ${st.inside?'INSIDE':'OUTSIDE'} (${st.crossings} crossings)`; }
+  else if(st.counted){ cls='cross'; msg=`edge ${st.edge}: CROSS @x=${st.xcross.toFixed(1)} → crossings=${st.crossings}`; }
+  else if(st.straddle){ cls='skip'; msg=`edge ${st.edge}: straddles but left of P → skip`; }
+  else { cls='skip'; msg=`edge ${st.edge}: no straddle → skip`; }
+  const d=document.createElement('div'); d.className=cls; d.textContent=msg;
+  log.appendChild(d); log.scrollTop = log.scrollHeight;
+}
+
+function step(){
+  if(steps.length===0){ buildSteps(); document.getElementById('log').innerHTML=''; }
+  if(stepIdx >= steps.length){ return; }
+  const st = steps[stepIdx];
+  render(st.final? -1 : st.edge, st);
+  updateStats(st);
+  describe(st);
+  logStep(st);
+  if(st.final){ setVerdict(); }
+  stepIdx++;
+}
+
+function run(){
+  if(steps.length===0){ buildSteps(); document.getElementById('log').innerHTML=''; }
+  running = true;
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  tick();
+}
+function tick(){
+  if(!running || stepIdx>=steps.length){ pause(); return; }
+  step();
+  timer = setTimeout(tick, getDelay());
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('runBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause();
+  steps=[]; stepIdx=0;
+  document.getElementById('log').innerHTML='';
+  document.getElementById('edgeNum').textContent='0 / '+poly.length;
+  document.getElementById('crossCount').textContent='0';
+  const par=document.getElementById('parity'); par.textContent='EVEN'; par.style.color='var(--red)';
+  const vd=document.getElementById('verdict'); vd.className='verdict v-idle'; vd.textContent='— press Run or Step —';
+  document.getElementById('stepInfo').innerHTML=
+    'The ray starts at the point and goes right. For each edge we test <span class="hl">(ay&gt;py) != (by&gt;py)</span> and whether the crossing is to the right of the point.';
+  render();
+}
+
+// ===== dragging the query point =====
+let dragging=false;
+function svgPoint(evt){
+  const rect = svg.getBoundingClientRect();
+  const cx = (evt.touches? evt.touches[0].clientX : evt.clientX) - rect.left;
+  const cy = (evt.touches? evt.touches[0].clientY : evt.clientY) - rect.top;
+  return { x: cx / rect.width * W, y: cy / rect.height * H };
+}
+function startDrag(evt){
+  const p = svgPoint(evt);
+  if(Math.hypot(p.x-query.x, p.y-query.y) < 24){ dragging=true; evt.preventDefault(); }
+}
+function moveDrag(evt){
+  if(!dragging) return;
+  const p = svgPoint(evt);
+  query.x = Math.max(4, Math.min(W-4, p.x));
+  query.y = Math.max(4, Math.min(H-4, p.y));
+  reset();
+  evt.preventDefault();
+}
+function endDrag(){ dragging=false; }
+svg.addEventListener('mousedown', startDrag);
+window.addEventListener('mousemove', moveDrag);
+window.addEventListener('mouseup', endDrag);
+svg.addEventListener('touchstart', startDrag, {passive:false});
+window.addEventListener('touchmove', moveDrag, {passive:false});
+window.addEventListener('touchend', endDrag);
+
+// ===== shape switch =====
+document.getElementById('shapeSel').addEventListener('change', e=>{
+  poly = SHAPES[e.target.value].map(p=>p.slice());
+  // place query roughly at centroid
+  let sx=0, sy=0; poly.forEach(p=>{sx+=p[0]; sy+=p[1];});
+  query = {x: sx/poly.length, y: sy/poly.length};
+  reset();
+});
+
+// ===== init =====
+reset();
+</script>
+</body>
+</html>
