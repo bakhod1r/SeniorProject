@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closest Pair of Points — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+  }
+  h1{font-size:1.7rem; color:var(--blue); text-align:center; margin-bottom:4px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:14px; font-size:.95rem;}
+  .badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.78rem; font-weight:600; border:1px solid var(--border);}
+  .b-bf{color:var(--red); border-color:var(--red);}
+  .b-dc{color:var(--green); border-color:var(--green);}
+  .b-sl{color:var(--yellow); border-color:var(--yellow);}
+  .b-rg{color:var(--purple); border-color:var(--purple);}
+  .wrap{max-width:1000px; margin:0 auto; display:flex; flex-direction:column; gap:14px;}
+  .row{display:flex; gap:14px; flex-wrap:wrap;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .grow{flex:1; min-width:300px;}
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;}
+  button{
+    padding:9px 18px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .input-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center;}
+  input[type=text]{
+    padding:9px 14px; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    border-radius:8px; font-size:.9rem; width:300px;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue);}
+  .speed{display:flex; align-items:center; gap:8px; justify-content:center; color:var(--muted); font-size:.85rem;}
+  input[type=range]{width:160px; accent-color:var(--blue);}
+  svg{display:block; width:100%; height:auto; background:var(--bg); border-radius:8px; border:1px solid var(--border);}
+  .stats{display:flex; gap:22px; flex-wrap:wrap; justify-content:center; font-size:.85rem;}
+  .stat b{color:var(--blue);}
+  h3{color:var(--blue); font-size:1rem; margin-bottom:8px;}
+  .info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7;}
+  .info .hl{color:var(--yellow);}
+  table{width:100%; border-collapse:collapse; font-size:.83rem;}
+  th,td{padding:6px 8px; text-align:left; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  .o1{color:var(--green);} .ologn{color:var(--blue);} .onlogn{color:var(--yellow);} .on2{color:var(--red);}
+  .log{height:150px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.8rem; line-height:1.55;}
+  .log div{padding:1px 0; border-bottom:1px solid rgba(255,255,255,.04);}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; font-size:.8rem; margin-top:6px;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .dot{width:11px; height:11px; border-radius:50%; display:inline-block;}
+</style>
+</head>
+<body>
+  <h1>Closest Pair of Points</h1>
+  <p class="subtitle">Divide &amp; Conquer — median split, the 2&delta; strip, and the bounded comparisons</p>
+  <div class="badges">
+    <span class="badge b-bf">Brute force O(n²)</span>
+    <span class="badge b-dc">Divide &amp; Conquer O(n log n)</span>
+    <span class="badge b-sl">Sweep line O(n log n)</span>
+    <span class="badge b-rg">Randomized grid O(n) exp</span>
+  </div>
+
+  <div class="wrap">
+    <div class="panel">
+      <div class="input-row">
+        <input type="text" id="customInput" placeholder="x,y; x,y; ...  e.g. 1,3; 2,7; 3,1; 5,5">
+        <button onclick="loadInput()">Load</button>
+        <button onclick="randomPoints()">Random</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="controls">
+        <button id="startBtn" onclick="start()">Start</button>
+        <button id="stepBtn" onclick="stepForward()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+      <div class="speed">
+        <label>Speed:</label><span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5"><span>Fast</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="stats">
+        <div class="stat">Step: <b><span id="curStep">0</span>/<span id="totStep">0</span></b></div>
+        <div class="stat">delta: <b id="delta">∞</b></div>
+        <div class="stat">Comparisons: <b id="cmp">0</b></div>
+        <div class="stat">Recursion depth: <b id="depth">0</b></div>
+        <div class="stat">Points: <b id="npts">0</b></div>
+      </div>
+      <svg id="svg" viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--blue)"></i>point</span>
+        <span><i class="dot" style="background:var(--purple)"></i>median line</span>
+        <span><i class="dot" style="background:var(--orange)"></i>strip (|x−mid|&lt;δ)</span>
+        <span><i class="dot" style="background:var(--yellow)"></i>comparing</span>
+        <span><i class="dot" style="background:var(--green)"></i>closest pair</span>
+        <span><i class="dot" style="background:var(--red)"></i>active region</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="panel grow">
+        <h3>What's happening</h3>
+        <div class="info" id="info">Press <span class="hl">Start</span> to run the divide-and-conquer
+          closest-pair algorithm, or <span class="hl">Step</span> to advance one step at a time.</div>
+      </div>
+      <div class="panel grow">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Approach</th><th>Time</th><th>Space</th></tr>
+          <tr><td>Brute force</td><td class="on2">O(n²)</td><td class="o1">O(1)</td></tr>
+          <tr><td>Divide &amp; conquer</td><td class="onlogn">O(n log n)</td><td class="ologn">O(n)</td></tr>
+          <tr><td>Sweep line</td><td class="onlogn">O(n log n)</td><td class="ologn">O(n)</td></tr>
+          <tr><td>Randomized grid</td><td class="o1">O(n) exp</td><td class="ologn">O(n)</td></tr>
+          <tr><td>Strip scan / point</td><td class="o1">O(1) (≤7)</td><td class="o1">—</td></tr>
+          <tr><td>Lower bound</td><td class="onlogn">Ω(n log n)</td><td>—</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+// ---------- data ----------
+let points = [];
+let steps = [];
+let curIdx = 0;
+let running = false;
+let timer = null;
+
+// view transform (data -> svg)
+const PAD = 40, W = 900, H = 460;
+let minX=0,maxX=1,minY=0,maxY=1;
+
+function computeBounds(){
+  minX = Math.min(...points.map(p=>p.x));
+  maxX = Math.max(...points.map(p=>p.x));
+  minY = Math.min(...points.map(p=>p.y));
+  maxY = Math.max(...points.map(p=>p.y));
+  if(maxX===minX){maxX+=1;minX-=1;}
+  if(maxY===minY){maxY+=1;minY-=1;}
+}
+function sx(x){return PAD + (x-minX)/(maxX-minX)*(W-2*PAD);}
+function sy(y){return H-PAD - (y-minY)/(maxY-minY)*(H-2*PAD);}
+function sw(dx){return dx/(maxX-minX)*(W-2*PAD);} // scale an x-width
+
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+
+// ---------- step generation: divide & conquer ----------
+let cmpCount=0, maxDepth=0;
+
+function gen(){
+  steps=[]; cmpCount=0; maxDepth=0;
+  let px=[...points].sort((a,b)=>a.x-b.x || a.y-b.y);
+  pushStep({desc:`Sorted ${px.length} points by x. Beginning divide & conquer.`,
+            highlights:{}, delta:Infinity, depth:0});
+  const res = rec(px,0,px.length,0);
+  pushStep({desc:`Done. Closest pair distance = ${res.d.toFixed(4)}.`,
+            highlights:{}, delta:res.d, depth:0,
+            pair:[res.p,res.q], finalPair:true});
+  document.getElementById('totStep').textContent=steps.length;
+}
+
+function pushStep(s){
+  s.cmp = cmpCount;
+  s.maxDepth = maxDepth;
+  steps.push(s);
+}
+
+function rec(px,lo,hi,depth){
+  maxDepth=Math.max(maxDepth,depth);
+  const n=hi-lo;
+  if(n<=3){
+    pushStep({desc:`Base case: brute force on ${n} point(s) (depth ${depth}).`,
+              highlights:rangeHL(px,lo,hi,'active'), delta:Infinity, depth});
+    let best={d:Infinity,p:null,q:null};
+    for(let i=lo;i<hi;i++)for(let j=i+1;j<hi;j++){
+      cmpCount++;
+      const d=dist(px[i],px[j]);
+      pushStep({desc:`compare (${fmt(px[i])}) vs (${fmt(px[j])}) -> ${d.toFixed(3)}`,
+                highlights:Object.assign(rangeHL(px,lo,hi,'active'),hlPts(px,[px[i],px[j]],'cmp')),
+                delta:best.d, depth, line:[px[i],px[j]]});
+      if(d<best.d) best={d,p:px[i],q:px[j]};
+    }
+    return best;
+  }
+  const mid=lo+(n>>1);
+  const midX=px[mid].x;
+  pushStep({desc:`Split at rank ${mid} -> median line x=${midX.toFixed(2)} (depth ${depth}).`,
+            highlights:rangeHL(px,lo,hi,'active'), delta:Infinity, depth, midX});
+  const L=rec(px,lo,mid,depth+1);
+  const R=rec(px,mid,hi,depth+1);
+  let best = L.d<=R.d?L:R;
+  const delta=best.d;
+  pushStep({desc:`delta = min(left ${L.d.toFixed(3)}, right ${R.d.toFixed(3)}) = ${delta.toFixed(3)}.`,
+            highlights:rangeHL(px,lo,hi,'active'), delta, depth, midX, pair:[best.p,best.q]});
+
+  // build strip
+  const strip=[];
+  for(let i=lo;i<hi;i++) if(Math.abs(px[i].x-midX)<delta) strip.push(px[i]);
+  strip.sort((a,b)=>a.y-b.y);
+  pushStep({desc:`Strip: ${strip.length} point(s) within delta=${delta.toFixed(3)} of the line. Sorted by y.`,
+            highlights:stripHL(px,strip), delta, depth, midX, stripDelta:delta,
+            pair:[best.p,best.q]});
+
+  for(let i=0;i<strip.length;i++){
+    for(let j=i+1;j<strip.length && (strip[j].y-strip[i].y)<delta; j++){
+      cmpCount++;
+      const d=dist(strip[i],strip[j]);
+      pushStep({desc:`strip compare (${fmt(strip[i])}) vs (${fmt(strip[j])}) -> ${d.toFixed(3)} (dy<δ)`,
+                highlights:Object.assign(stripHL(px,strip), hlPts(px,[strip[i],strip[j]],'cmp')),
+                delta:best.d, depth, midX, stripDelta:best.d, line:[strip[i],strip[j]],
+                pair:[best.p,best.q]});
+      if(d<best.d){ best={d,p:strip[i],q:strip[j]}; }
+    }
+  }
+  return best;
+}
+
+// Highlights are keyed by point COORDINATE so they render correctly
+// regardless of array position.
+function fmt(p){return p.x+","+p.y;}
+function key(p){return p.x+"|"+p.y;}
+function hlPts(px,pts,cls){const o={};pts.forEach(p=>o[key(p)]=cls);return o;}
+function stripHL(px,strip){const o={};strip.forEach(p=>o[key(p)]='strip');return o;}
+function rangeHL(px,lo,hi,cls){const o={};for(let i=lo;i<hi;i++)o[key(px[i])]=cls;return o;}
+
+// ---------- rendering ----------
+function render(step){
+  const svg=document.getElementById('svg');
+  let s='';
+  // axes frame
+  s+=`<rect x="${PAD}" y="${PAD}" width="${W-2*PAD}" height="${H-2*PAD}" fill="none" stroke="var(--border)"/>`;
+  // strip band
+  if(step.midX!==undefined && step.stripDelta!==undefined && isFinite(step.stripDelta)){
+    const x0=sx(step.midX-step.stripDelta), x1=sx(step.midX+step.stripDelta);
+    s+=`<rect x="${x0}" y="${PAD}" width="${x1-x0}" height="${H-2*PAD}" fill="var(--orange)" opacity="0.12"/>`;
+  }
+  // median line
+  if(step.midX!==undefined){
+    const lx=sx(step.midX);
+    s+=`<line x1="${lx}" y1="${PAD}" x2="${lx}" y2="${H-PAD}" stroke="var(--purple)" stroke-width="2" stroke-dasharray="6 4"/>`;
+  }
+  // comparison line
+  if(step.line){
+    s+=`<line x1="${sx(step.line[0].x)}" y1="${sy(step.line[0].y)}" x2="${sx(step.line[1].x)}" y2="${sy(step.line[1].y)}" stroke="var(--yellow)" stroke-width="1.5"/>`;
+  }
+  // closest pair line
+  if(step.pair && step.pair[0] && step.pair[1]){
+    const c = step.finalPair?'var(--green)':'rgba(63,185,80,.55)';
+    s+=`<line x1="${sx(step.pair[0].x)}" y1="${sy(step.pair[0].y)}" x2="${sx(step.pair[1].x)}" y2="${sy(step.pair[1].y)}" stroke="${c}" stroke-width="${step.finalPair?3:2}"/>`;
+  }
+  // points
+  const H2=step.highlights||{};
+  points.forEach(p=>{
+    let cls=H2[key(p)];
+    let fill='var(--blue)', r=5;
+    if(cls==='active'){fill='var(--red)'; r=5;}
+    if(cls==='strip'){fill='var(--orange)'; r=6;}
+    if(cls==='cmp'){fill='var(--yellow)'; r=7;}
+    // closest pair endpoints
+    if(step.pair && step.pair[0] && step.pair[1] &&
+       (key(step.pair[0])===key(p)||key(step.pair[1])===key(p))){
+      fill=step.finalPair?'var(--green)':'#6bcb77'; r=7;
+    }
+    s+=`<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="${r}" fill="${fill}" stroke="#000" stroke-width="0.5"/>`;
+  });
+  svg.innerHTML=s;
+
+  document.getElementById('curStep').textContent=curIdx+1;
+  document.getElementById('delta').textContent=isFinite(step.delta)?step.delta.toFixed(4):'∞';
+  document.getElementById('cmp').textContent=step.cmp;
+  document.getElementById('depth').textContent=step.maxDepth;
+  document.getElementById('info').innerHTML=step.desc;
+  addLog(step.desc);
+}
+
+let lastLogged=-1;
+function addLog(msg){
+  if(curIdx===lastLogged) return;
+  lastLogged=curIdx;
+  const log=document.getElementById('log');
+  const d=document.createElement('div');
+  d.textContent=`#${curIdx+1}  ${msg.replace(/<[^>]+>/g,'')}`;
+  log.appendChild(d);
+  log.scrollTop=log.scrollHeight;
+}
+
+// ---------- controls ----------
+function speedMs(){return 1100 - document.getElementById('speed').value*100;}
+function start(){
+  if(steps.length===0) gen();
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  run();
+}
+function run(){
+  if(!running||curIdx>=steps.length){pause();return;}
+  render(steps[curIdx]); curIdx++;
+  timer=setTimeout(run,speedMs());
+}
+function stepForward(){
+  if(steps.length===0) gen();
+  if(curIdx<steps.length){render(steps[curIdx]);curIdx++;}
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); curIdx=0; steps=[]; lastLogged=-1;
+  document.getElementById('curStep').textContent='0';
+  document.getElementById('totStep').textContent='0';
+  document.getElementById('delta').textContent='∞';
+  document.getElementById('cmp').textContent='0';
+  document.getElementById('depth').textContent='0';
+  document.getElementById('log').innerHTML='';
+  document.getElementById('info').innerHTML=
+    'Press <span class="hl">Start</span> to run the algorithm, or <span class="hl">Step</span> to advance one step.';
+  renderInitial();
+}
+function renderInitial(){
+  computeBounds();
+  document.getElementById('npts').textContent=points.length;
+  const svg=document.getElementById('svg');
+  let s=`<rect x="${PAD}" y="${PAD}" width="${W-2*PAD}" height="${H-2*PAD}" fill="none" stroke="var(--border)"/>`;
+  points.forEach(p=>{ s+=`<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="5" fill="var(--blue)" stroke="#000" stroke-width="0.5"/>`;});
+  svg.innerHTML=s;
+}
+function loadInput(){
+  const raw=document.getElementById('customInput').value;
+  const pts=[];
+  raw.split(/[;\n]/).forEach(tok=>{
+    const m=tok.split(',').map(s=>parseFloat(s.trim()));
+    if(m.length>=2 && !isNaN(m[0]) && !isNaN(m[1])) pts.push({x:m[0],y:m[1]});
+  });
+  if(pts.length>=2){ points=pts; reset(); }
+}
+function randomPoints(){
+  const n=Math.floor(Math.random()*8)+8; // 8-15
+  points=Array.from({length:n},()=>({
+    x:Math.round(Math.random()*40), y:Math.round(Math.random()*40)
+  }));
+  // de-dup roughly to avoid too many identical
+  document.getElementById('customInput').value=points.map(p=>`${p.x},${p.y}`).join('; ');
+  reset();
+}
+
+// ---------- init ----------
+points=[{x:1,y:3},{x:2,y:7},{x:3,y:1},{x:5,y:5},{x:6,y:8},{x:7,y:2},{x:8,y:6},{x:9,y:4}];
+document.getElementById('customInput').value=points.map(p=>`${p.x},${p.y}`).join('; ');
+renderInitial();
+</script>
+</body>
+</html>
