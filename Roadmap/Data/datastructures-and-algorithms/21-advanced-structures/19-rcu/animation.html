@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RCU (Read-Copy-Update) — Visual Animation</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:2rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:18px;text-align:center;max-width:900px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.8rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.warn{color:var(--yellow);border-color:var(--yellow)}
+.controls{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center;max-width:1100px}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.92rem}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+input[type=text]{padding:8px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.9rem;width:120px}
+.speed-control{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem}
+.world{display:flex;flex-direction:column;gap:14px;width:100%;max-width:1100px;margin-bottom:16px}
+.ptr-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.ptr-label{font-family:monospace;color:var(--blue);font-weight:700;font-size:1rem}
+.ptr-arrow{font-family:monospace;color:var(--orange);font-size:1.3rem}
+.ptr-target{font-family:monospace;color:var(--purple);font-weight:700}
+.versions{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+.version{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;min-width:300px;transition:all .4s;position:relative}
+.version.current{border-color:var(--green);box-shadow:0 0 0 2px rgba(63,185,80,.25)}
+.version.building{border-color:var(--yellow);background:rgba(210,153,34,.08)}
+.version.retired{border-color:var(--muted);opacity:.85}
+.version.reclaiming{border-color:var(--red);opacity:.3;transform:scale(.9)}
+.version h3{font-family:monospace;font-size:.9rem;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.version .vtag{color:var(--text)}
+.version .state{font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid var(--border);color:var(--muted)}
+.version.current .state{color:var(--green);border-color:var(--green)}
+.version.building .state{color:var(--yellow);border-color:var(--yellow)}
+.version.retired .state{color:var(--orange);border-color:var(--orange)}
+.nodes{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.node{min-width:54px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--border);border-radius:6px;font-family:monospace;transition:all .3s}
+.node .nval{font-size:1rem;font-weight:700;color:var(--text)}
+.node.changed{border-color:var(--yellow);background:rgba(210,153,34,.18)}
+.node.changed .nval{color:var(--yellow)}
+.node-arrow{color:var(--muted);font-family:monospace}
+.readers-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1100px;margin-bottom:16px}
+.readers-panel h3{color:var(--blue);font-size:.9rem;margin-bottom:10px}
+.readers{display:flex;gap:14px;flex-wrap:wrap}
+.reader{border:2px solid var(--border);border-radius:8px;padding:8px 12px;font-family:monospace;font-size:.82rem;min-width:150px;transition:all .3s}
+.reader.on-old{border-color:var(--orange);background:rgba(255,166,87,.12)}
+.reader.on-new{border-color:var(--green);background:rgba(63,185,80,.12)}
+.reader.done{border-color:var(--muted);opacity:.45}
+.reader .rname{font-weight:700;color:var(--blue)}
+.reader .rsub{color:var(--muted);font-size:.74rem}
+.stats{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.stat-label{color:var(--muted);font-size:.7rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.gp-bar-wrap{width:100%;max-width:1100px;margin-bottom:16px}
+.gp-bar-track{height:14px;background:var(--bg);border:2px solid var(--border);border-radius:8px;overflow:hidden}
+.gp-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--yellow),var(--green));transition:width .2s linear}
+.gp-bar-label{font-size:.75rem;color:var(--muted);margin-top:4px;font-family:monospace}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 20px;width:100%;max-width:1100px;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:6px;font-size:1rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6}
+.step-info .hl{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+.state-table{width:100%;max-width:1100px;margin-bottom:16px;border-collapse:collapse;font-size:.84rem}
+.state-table th,.state-table td{border:1px solid var(--border);padding:6px 10px;text-align:left;font-family:monospace}
+.state-table th{background:var(--surface);color:var(--blue)}
+.log-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 18px;width:100%;max-width:1100px;margin-bottom:16px;max-height:200px;overflow-y:auto}
+.log-panel h3{color:var(--blue);font-size:.9rem;margin-bottom:8px}
+.log-line{font-family:monospace;font-size:.8rem;line-height:1.5;color:var(--muted);border-left:3px solid var(--border);padding-left:8px;margin-bottom:3px}
+.log-line.pub{border-color:var(--purple);color:var(--text)}
+.log-line.gp{border-color:var(--yellow)}
+.log-line.reclaim{border-color:var(--red)}
+.log-line.read{border-color:var(--green)}
+.footer-note{color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;max-width:900px}
+code{background:var(--bg);padding:1px 5px;border-radius:4px;color:var(--orange);font-size:.85em}
+</style>
+</head>
+<body>
+<h1>RCU — Read-Copy-Update</h1>
+<p class="subtitle">Readers traverse the version they <b>subscribed</b> to with no lock. A writer <b>copies</b> the data, modifies the copy, and atomically <b>swaps the pointer</b> (publish). The old version is <b>reclaimed</b> only after a <b>grace period</b> — once every pre-existing reader has finished. No reader ever sees freed memory.</p>
+
+<div class="badges">
+<span class="badge best">Reader: O(1), lock-free</span>
+<span class="badge warn">Writer: copy + grace period</span>
+<span class="badge space">Old + new coexist during GP</span>
+<span class="badge best">Publish = release · Subscribe = acquire</span>
+</div>
+
+<div class="controls">
+<span class="speed-control">value:</span>
+<input type="text" id="newVal" value="99" placeholder="new tail value">
+<button onclick="addReaderOld()">+ Reader (subscribe now)</button>
+<button id="btnWrite" onclick="startWrite()">Writer: copy → modify → publish</button>
+<button id="btnGP" onclick="runGracePeriod()" disabled>Run grace period → reclaim</button>
+<button onclick="resetAll()" class="secondary">&#8635; Reset</button>
+<span class="speed-control">speed
+<input type="range" id="speed" min="1" max="5" value="3" style="width:90px">
+</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.18);border-color:var(--green)"></div>Current version (published)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.18);border-color:var(--yellow)"></div>Writer building copy</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(255,166,87,.18);border-color:var(--orange)"></div>Retired (old) version / reader on old</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.25);border-color:var(--red)"></div>Reclaiming (freed)</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Current version</div><div class="stat-value" id="sCur">V1</div></div>
+<div><div class="stat-label">Live versions</div><div class="stat-value" id="sLive">1</div></div>
+<div><div class="stat-label">Readers on old</div><div class="stat-value" id="sOld">0</div></div>
+<div><div class="stat-label">Readers on new</div><div class="stat-value" id="sNew">0</div></div>
+<div><div class="stat-label">Publishes</div><div class="stat-value" id="sPub">0</div></div>
+<div><div class="stat-label">Reclaimed</div><div class="stat-value" id="sReclaim">0</div></div>
+</div>
+
+<div class="gp-bar-wrap">
+  <div class="gp-bar-track"><div class="gp-bar-fill" id="gpFill"></div></div>
+  <div class="gp-bar-label" id="gpLabel">Grace period idle — old version cannot be freed until every pre-existing reader exits.</div>
+</div>
+
+<div class="world">
+  <div class="ptr-panel">
+    <span class="ptr-label">gPtr</span>
+    <span class="ptr-arrow">&#9472;&#9472;&#9658;</span>
+    <span class="ptr-target" id="ptrTarget">V1 (current)</span>
+    <span style="color:var(--muted);font-size:.8rem;margin-left:auto">one atomic pointer; readers <code>Load()</code>, writer <code>Store()</code></span>
+  </div>
+  <div class="versions" id="versions"></div>
+</div>
+
+<div class="readers-panel">
+  <h3>Readers (each pinned to the version it subscribed to)</h3>
+  <div class="readers" id="readers"><span style="color:var(--muted);font-size:.85rem">No active readers. Click "+ Reader" to subscribe one to the current version.</span></div>
+</div>
+
+<table class="state-table" id="stateTable">
+  <thead><tr><th>Version</th><th>Contents</th><th>State</th><th>Readers referencing</th></tr></thead>
+  <tbody id="stateBody"></tbody>
+</table>
+
+<div class="info-panel">
+  <h3>Trace</h3>
+  <div class="step-info" id="info">Add one or more readers, then click <span class="hl">Writer</span>. Watch the writer copy the list, modify the copy, and swap <code>gPtr</code>. Readers that subscribed earlier keep traversing the <span class="hl">old</span> version; new reads pick up the <span class="hl">new</span> one. Then run the <span class="hl">grace period</span> to reclaim the old version safely.</div>
+</div>
+
+<div class="log-panel">
+  <h3>Event log</h3>
+  <div id="log"></div>
+</div>
+
+<p class="footer-note">RCU = near-zero read cost. The price: writers copy (copy-on-write), publish one pointer (release ordering), and defer freeing the old version until a grace period passes (no use-after-free). Used heavily in the Linux kernel for routing tables, the dcache, and read-mostly config.</p>
+
+<script>
+let busy = false;
+let versionSeq = 1;
+let publishCount = 0;
+let reclaimCount = 0;
+let pointerVersionId = 1;            // which version gPtr currently points at
+let readerSeq = 0;
+
+// Each version: {id, items:[], state:'current'|'building'|'retired'|'reclaiming', changedIdx:-1}
+let versions = [];
+// Each reader: {id, name, versionId, done:false}
+let readers = [];
+
+function speedMs(){ const s = parseInt(document.getElementById('speed').value); return 700 - (s-1)*120; }
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+function initState(){
+  versions = [{id:1, items:[10,20,30], state:'current', changedIdx:-1}];
+  versionSeq = 1; pointerVersionId = 1; publishCount = 0; reclaimCount = 0;
+  readers = []; readerSeq = 0;
+}
+
+function curVersion(){ return versions.find(v => v.id === pointerVersionId); }
+function liveVersions(){ return versions.filter(v => v.state !== 'reclaiming'); }
+
+function log(msg, cls){
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + (cls||'');
+  line.textContent = msg;
+  el.prepend(line);
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+
+function readersOf(versionId){ return readers.filter(r => r.versionId === versionId && !r.done); }
+
+function render(){
+  // pointer
+  document.getElementById('ptrTarget').textContent = 'V' + pointerVersionId + ' (current)';
+
+  // versions
+  const vEl = document.getElementById('versions');
+  vEl.innerHTML = versions.map(v => {
+    const stateName = v.state === 'current' ? 'CURRENT' :
+                      v.state === 'building' ? 'BUILDING (private)' :
+                      v.state === 'retired' ? 'RETIRED — awaiting GP' : 'RECLAIMING';
+    const nodes = v.items.map((val,i) => {
+      const cls = (i === v.changedIdx) ? 'node changed' : 'node';
+      const arrow = (i < v.items.length-1) ? '<span class="node-arrow">&#8594;</span>' : '';
+      return `<div class="${cls}"><span class="nval">${val}</span></div>${arrow}`;
+    }).join('');
+    return `<div class="version ${v.state}">
+      <h3><span class="vtag">V${v.id}</span><span class="state">${stateName}</span></h3>
+      <div class="nodes">${nodes || '<span style="color:var(--muted)">(empty)</span>'}</div>
+    </div>`;
+  }).join('');
+
+  // readers
+  const rEl = document.getElementById('readers');
+  if(readers.length === 0){
+    rEl.innerHTML = '<span style="color:var(--muted);font-size:.85rem">No active readers. Click "+ Reader" to subscribe one to the current version.</span>';
+  } else {
+    rEl.innerHTML = readers.map(r => {
+      let cls = 'reader';
+      if(r.done) cls += ' done';
+      else if(r.versionId === pointerVersionId) cls += ' on-new';
+      else cls += ' on-old';
+      const status = r.done ? 'exited (quiescent)' :
+                     (r.versionId === pointerVersionId ? 'reading current' : 'reading OLD (safe)');
+      return `<div class="${cls}"><span class="rname">${r.name}</span><br>
+              <span class="rsub">subscribed to V${r.versionId}</span><br>
+              <span class="rsub">${status}</span></div>`;
+    }).join('');
+  }
+
+  // stats
+  document.getElementById('sCur').textContent = 'V' + pointerVersionId;
+  document.getElementById('sLive').textContent = liveVersions().length;
+  document.getElementById('sOld').textContent = readers.filter(r=>!r.done && r.versionId !== pointerVersionId).length;
+  document.getElementById('sNew').textContent = readers.filter(r=>!r.done && r.versionId === pointerVersionId).length;
+  document.getElementById('sPub').textContent = publishCount;
+  document.getElementById('sReclaim').textContent = reclaimCount;
+
+  // state table
+  const body = document.getElementById('stateBody');
+  body.innerHTML = versions.map(v => {
+    const refs = readersOf(v.id).map(r=>r.name).join(', ') || '—';
+    const stateName = v.state === 'current' ? 'current' :
+                      v.state === 'building' ? 'building' :
+                      v.state === 'retired' ? 'retired (GP pending)' : 'reclaimed';
+    return `<tr><td>V${v.id}</td><td>[${v.items.join(', ')}]</td><td>${stateName}</td><td>${refs}</td></tr>`;
+  }).join('');
+}
+
+function addReaderOld(){
+  if(busy) return;
+  readerSeq++;
+  const name = 'R' + readerSeq;
+  readers.push({id: readerSeq, name, versionId: pointerVersionId, done:false});
+  log(`${name} rcu_read_lock(); p = Load(gPtr) = V${pointerVersionId}  (subscribe)`, 'read');
+  setInfo(`<span class="hl">${name}</span> subscribed to <span class="hl">V${pointerVersionId}</span>. It will traverse that exact version for its whole critical section — even if a writer publishes a new version meanwhile.`);
+  render();
+}
+
+async function startWrite(){
+  if(busy) return;
+  busy = true;
+  document.getElementById('btnWrite').disabled = true;
+  const raw = document.getElementById('newVal').value.trim();
+  const val = parseInt(raw);
+  const tail = isNaN(val) ? (10*(versionSeq+1)) : val;
+
+  const old = curVersion();
+  log(`Writer: lock(writeMu); old = Load(gPtr) = V${old.id}`, '');
+  setInfo(`Writer takes the writer lock and reads the current pointer: <span class="hl">old = V${old.id}</span>. It will NOT mutate V${old.id} in place (readers are using it).`);
+  await sleep(speedMs());
+
+  // 1. COPY
+  versionSeq++;
+  const newId = versionSeq;
+  const newItems = old.items.slice();        // copy-on-write
+  const newVersion = {id:newId, items:newItems, state:'building', changedIdx:-1};
+  versions.push(newVersion);
+  log(`Writer: new = copy(V${old.id})  → V${newId} (private, not yet visible)`, '');
+  setInfo(`<span class="hl">COPY</span>: writer allocates <span class="hl">V${newId}</span> as a copy of V${old.id}. It is private — <code>gPtr</code> still points at V${old.id}, so readers are undisturbed.`);
+  render();
+  await sleep(speedMs());
+
+  // 2. MODIFY the copy
+  newVersion.items.push(tail);
+  newVersion.changedIdx = newVersion.items.length - 1;
+  log(`Writer: modify(new): append ${tail} to V${newId}`, '');
+  setInfo(`<span class="hl">MODIFY</span>: writer appends <span class="hl">${tail}</span> to the copy V${newId}. The original V${old.id} is still pristine for its readers.`);
+  render();
+  await sleep(speedMs());
+
+  // 3. PUBLISH (atomic swap)
+  newVersion.state = 'current';
+  old.state = 'retired';
+  pointerVersionId = newId;
+  publishCount++;
+  log(`Writer: Store(gPtr, V${newId})  ← PUBLISH (release). gPtr: V${old.id} → V${newId}`, 'pub');
+  setInfo(`<span class="ok">PUBLISH</span>: one atomic <code>Store(gPtr, V${newId})</code> with release ordering swaps the pointer. New reads now subscribe to <span class="ok">V${newId}</span>; readers already on <span class="hl">V${old.id}</span> keep using it safely. V${old.id} is now <span class="hl">retired</span> — but cannot be freed yet.`);
+  render();
+  await sleep(speedMs());
+
+  const oldReaders = readersOf(old.id);
+  if(oldReaders.length > 0){
+    log(`V${old.id} retired but still referenced by ${oldReaders.map(r=>r.name).join(', ')} → grace period required before free`, 'gp');
+    setInfo(`Writer unlocked. <span class="hl">V${old.id}</span> is retired, still read by <span class="hl">${oldReaders.map(r=>r.name).join(', ')}</span>. Click <span class="hl">Run grace period</span> to wait for them to exit, then reclaim V${old.id}. Freeing now would be a <span class="bad">use-after-free</span>.`);
+    document.getElementById('btnGP').disabled = false;
+  } else {
+    log(`V${old.id} retired with no readers; grace period can complete immediately`, 'gp');
+    setInfo(`<span class="hl">V${old.id}</span> retired and no reader references it. Click <span class="hl">Run grace period</span> to reclaim it (it will complete at once).`);
+    document.getElementById('btnGP').disabled = false;
+  }
+  busy = false;
+  render();
+}
+
+async function runGracePeriod(){
+  if(busy) return;
+  busy = true;
+  document.getElementById('btnGP').disabled = true;
+  document.getElementById('btnWrite').disabled = true;
+
+  const retired = versions.filter(v => v.state === 'retired');
+  if(retired.length === 0){
+    setInfo('No retired version awaiting reclamation.');
+    busy = false; document.getElementById('btnWrite').disabled = false;
+    return;
+  }
+
+  log(`synchronize_rcu(): grace period BEGINS — wait until every pre-existing reader passes a quiescent state`, 'gp');
+  setInfo(`<span class="hl">GRACE PERIOD</span> begins. We must wait until every reader that subscribed before the publish exits its read-side section (a quiescent state). Readers on the new version don't matter; only pre-existing readers of retired versions hold things up.`);
+
+  const fill = document.getElementById('gpFill');
+  const gpLabel = document.getElementById('gpLabel');
+  fill.style.width = '0%';
+
+  // Drain pre-existing readers of retired versions one at a time as the bar fills.
+  const blockingReaders = readers.filter(r => !r.done && retired.some(v=>v.id===r.versionId));
+  const steps = 100;
+  const totalBlockers = blockingReaders.length;
+  let exited = 0;
+
+  for(let s=1; s<=steps; s++){
+    fill.style.width = s + '%';
+    // exit readers progressively
+    const shouldHaveExited = Math.floor((s/steps) * totalBlockers);
+    while(exited < shouldHaveExited && exited < totalBlockers){
+      const r = blockingReaders[exited];
+      r.done = true;
+      log(`${r.name} rcu_read_unlock()  → quiescent (was on V${r.versionId})`, 'read');
+      exited++;
+      render();
+    }
+    gpLabel.textContent = `Grace period in progress… ${exited}/${totalBlockers} pre-existing reader(s) have reached a quiescent state.`;
+    await sleep(Math.max(6, speedMs()/14));
+  }
+  // ensure all blockers exited
+  blockingReaders.forEach(r => { if(!r.done){ r.done = true; } });
+  render();
+
+  log(`Grace period ENDS — all pre-existing readers exited. Retired versions are now unreferenced.`, 'gp');
+  gpLabel.textContent = 'Grace period complete — old version(s) provably unreferenced. Reclaiming.';
+  setInfo(`<span class="ok">Grace period complete.</span> Every pre-existing reader has exited, so the retired version(s) are provably unreferenced. Now <code>free()</code> is safe — no reader can touch freed memory.`);
+  await sleep(speedMs());
+
+  // Reclaim
+  for(const v of retired){
+    v.state = 'reclaiming';
+    reclaimCount++;
+    log(`free(V${v.id})  ← RECLAIM (safe; no use-after-free)`, 'reclaim');
+    render();
+    await sleep(speedMs());
+  }
+  // remove reclaimed versions and finished readers after a beat
+  versions = versions.filter(v => v.state !== 'reclaiming');
+  readers = readers.filter(r => !r.done);
+  fill.style.width = '0%';
+  gpLabel.textContent = 'Grace period idle — old version cannot be freed until every pre-existing reader exits.';
+  setInfo(`<span class="ok">Reclaimed.</span> Only the current version remains live. Readers ran lock-free the entire time and never saw freed memory. That is RCU: cheap reads, deferred safe reclamation.`);
+  busy = false;
+  document.getElementById('btnWrite').disabled = false;
+  render();
+}
+
+function resetAll(){
+  if(busy) return;
+  initState();
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('gpFill').style.width = '0%';
+  document.getElementById('gpLabel').textContent = 'Grace period idle — old version cannot be freed until every pre-existing reader exits.';
+  document.getElementById('btnGP').disabled = true;
+  document.getElementById('btnWrite').disabled = false;
+  setInfo('Reset. Add readers, then run a writer to see copy → modify → publish, followed by a grace period before reclaim.');
+  log('Initialized: gPtr → V1 = [10, 20, 30]', '');
+  render();
+}
+
+initState();
+log('Initialized: gPtr → V1 = [10, 20, 30]', '');
+render();
+</script>
+</body>
+</html>
