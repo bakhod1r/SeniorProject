@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>van Emde Boas Tree — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;padding:20px;
+    display:flex;flex-direction:column;align-items:center;
+  }
+  h1{font-size:1.9rem;color:var(--blue);margin-bottom:6px;text-align:center;}
+  .subtitle{color:var(--muted);margin-bottom:18px;text-align:center;}
+  .badges{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px;}
+  .badge{padding:5px 12px;border-radius:20px;font-size:.8rem;font-weight:600;border:1px solid var(--border);}
+  .b-time{color:var(--green);border-color:var(--green);}
+  .b-space{color:var(--orange);border-color:var(--orange);}
+  .b-minmax{color:var(--blue);border-color:var(--blue);}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:18px;margin-bottom:16px;width:100%;max-width:980px;}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center;}
+  input[type="number"]{padding:9px 12px;border:1px solid var(--border);background:var(--bg);
+    color:var(--text);border-radius:8px;font-size:.95rem;width:90px;}
+  input[type="number"]:focus{outline:none;border-color:var(--blue);}
+  button{padding:9px 18px;border:1px solid var(--blue);background:transparent;color:var(--blue);
+    border-radius:8px;cursor:pointer;font-size:.9rem;transition:all .2s;}
+  button:hover:not(:disabled){background:var(--blue);color:var(--bg);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.warn{border-color:var(--purple);color:var(--purple);}
+  button.warn:hover:not(:disabled){background:var(--purple);color:var(--bg);}
+  .speed{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem;}
+  .speed input{accent-color:var(--blue);}
+
+  .vizwrap{display:flex;flex-direction:column;gap:14px;align-items:center;}
+  .node{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:10px 12px;}
+  .node-title{font-size:.78rem;color:var(--muted);margin-bottom:6px;font-family:'Courier New',monospace;}
+  .minmax{display:flex;gap:8px;margin-bottom:8px;}
+  .mm{font-size:.75rem;font-family:'Courier New',monospace;padding:3px 8px;border-radius:6px;
+    border:1px solid var(--border);}
+  .mm.min{color:var(--blue);border-color:var(--blue);}
+  .mm.max{color:var(--orange);border-color:var(--orange);}
+
+  .summary-row,.cluster-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+  .cell{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);border-radius:6px;font-size:.85rem;font-family:'Courier New',monospace;
+    background:var(--surface);transition:all .25s;position:relative;}
+  .cell .sub{position:absolute;bottom:-15px;font-size:.6rem;color:var(--muted);}
+  .cell.present{background:#1f3b2a;border-color:var(--green);color:var(--green);font-weight:700;}
+  .cell.scanning{background:#3a3414;border-color:var(--yellow);color:var(--yellow);}
+  .cell.path{background:#13314f;border-color:var(--blue);color:var(--blue);box-shadow:0 0 8px var(--blue);}
+  .cell.found{background:#1f3b2a;border-color:var(--green);color:var(--green);box-shadow:0 0 10px var(--green);}
+  .cell.inserting{background:#2c1f3f;border-color:var(--purple);color:var(--purple);box-shadow:0 0 8px var(--purple);}
+
+  .clusters{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .cluster{border:1px dashed var(--border);border-radius:8px;padding:8px;min-width:150px;}
+  .cluster.active{border-color:var(--blue);box-shadow:0 0 10px rgba(88,166,255,.4);}
+  .cluster.summary{border-color:var(--purple);}
+  .clbl{font-size:.7rem;color:var(--muted);text-align:center;margin-bottom:6px;font-family:'Courier New',monospace;}
+
+  .info{font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;}
+  .info .hl{color:var(--yellow);}
+  .info .ok{color:var(--green);}
+  .info .acc{color:var(--blue);}
+
+  table{border-collapse:collapse;width:100%;font-size:.85rem;}
+  th,td{border:1px solid var(--border);padding:7px 10px;text-align:left;}
+  th{color:var(--muted);font-weight:600;}
+  .cx-1{color:var(--green);} .cx-llu{color:var(--blue);} .cx-u{color:var(--orange);}
+
+  .log{height:140px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.8rem;
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;}
+  .log div{padding:2px 0;border-bottom:1px solid #21262d;color:var(--muted);}
+  .log div.last{color:var(--text);}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-size:.78rem;color:var(--muted);}
+  .legend span{display:flex;align-items:center;gap:5px;}
+  .sw{width:14px;height:14px;border-radius:4px;border:1px solid var(--border);}
+  h3{color:var(--blue);font-size:1rem;margin-bottom:10px;}
+</style>
+</head>
+<body>
+  <h1>van Emde Boas Tree</h1>
+  <p class="subtitle">Recursive summary + clusters · high/low bit split · O(log log u) path</p>
+  <div class="badges">
+    <span class="badge b-time">insert / member / successor: O(log log u)</span>
+    <span class="badge b-minmax">min / max: O(1)</span>
+    <span class="badge b-space">space: O(u)</span>
+  </div>
+
+  <!-- Controls -->
+  <div class="panel">
+    <div class="controls">
+      <label style="color:var(--muted);font-size:.85rem;">u = 16 (clusters of 4)</label>
+      <input type="number" id="val" min="0" max="15" placeholder="0-15" value="6">
+      <button onclick="doInsert()">Insert</button>
+      <button class="warn" onclick="doSuccessor()">Successor</button>
+      <button onclick="doMember()">Member</button>
+      <button onclick="resetTree()">Reset</button>
+      <div class="speed">
+        <span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <span>Fast</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visualization -->
+  <div class="panel">
+    <div class="vizwrap" id="viz"></div>
+  </div>
+
+  <!-- Legend -->
+  <div class="panel">
+    <div class="legend">
+      <span><span class="sw" style="background:#1f3b2a;border-color:var(--green);"></span>present</span>
+      <span><span class="sw" style="background:#3a3414;border-color:var(--yellow);"></span>scanning</span>
+      <span><span class="sw" style="background:#13314f;border-color:var(--blue);"></span>recursion path</span>
+      <span><span class="sw" style="background:#2c1f3f;border-color:var(--purple);"></span>inserting</span>
+      <span><span class="sw" style="background:#1f3b2a;border-color:var(--green);box-shadow:0 0 6px var(--green);"></span>found</span>
+    </div>
+  </div>
+
+  <!-- Info panel -->
+  <div class="panel">
+    <h3>Operation</h3>
+    <div class="info" id="info">Insert keys, then run <span class="acc">Successor</span> to watch the high/low split recurse into exactly one cluster (or the summary) — the O(log log u) path.</div>
+  </div>
+
+  <!-- Big-O table -->
+  <div class="panel">
+    <h3>Complexity</h3>
+    <table>
+      <tr><th>Operation</th><th>Time</th><th>Why</th></tr>
+      <tr><td>min() / max()</td><td class="cx-1">O(1)</td><td>stored aside on the node</td></tr>
+      <tr><td>member(x)</td><td class="cx-llu">O(log log u)</td><td>one cluster per recursion level</td></tr>
+      <tr><td>insert(x)</td><td class="cx-llu">O(log log u)</td><td>one recursive call (min-aside trick)</td></tr>
+      <tr><td>successor(x)</td><td class="cx-llu">O(log log u)</td><td>one cluster, or summary + O(1) min read</td></tr>
+      <tr><td>delete(x)</td><td class="cx-llu">O(log log u)</td><td>second recursion only on O(1) empty-cluster path</td></tr>
+      <tr><td>space</td><td class="cx-u">O(u)</td><td>O(n) with hashed clusters / y-fast trie</td></tr>
+    </table>
+    <p style="margin-top:8px;font-size:.82rem;color:var(--muted);">Recurrence: <span style="color:var(--blue);">T(u) = T(&radic;u) + O(1) = O(log log u)</span>. For u = 16: &radic;16 = 4, so log log 16 = 2 levels.</p>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+<script>
+// ---------- model: vEB over u=16 (one recursion level visualized) ----------
+const U = 16, S = 4; // sqrt(16) = 4
+function high(x){ return Math.floor(x / S); }
+function low(x){ return x % S; }
+function index(h,l){ return h*S + l; }
+
+// root holds min/max aside; clusters[i] is a tiny set {min,max,present[]}; summary tracks non-empty clusters
+let root;
+function newCluster(){ return {min:-1, max:-1, present:[false,false,false,false]}; }
+function newTree(){
+  return {
+    min:-1, max:-1,
+    summary:{min:-1,max:-1,present:[false,false,false,false]},
+    clusters:[newCluster(),newCluster(),newCluster(),newCluster()]
+  };
+}
+
+let busy=false;
+function sleepMs(){ const v=+document.getElementById('speed').value; return 1100 - v*95; }
+function sleep(){ return new Promise(r=>setTimeout(r, sleepMs())); }
+
+function log(msg, last){
+  const el=document.getElementById('log');
+  [...el.querySelectorAll('.last')].forEach(d=>d.classList.remove('last'));
+  const d=document.createElement('div'); d.innerHTML=msg; if(last) d.classList.add('last');
+  el.appendChild(d); el.scrollTop=el.scrollHeight;
+}
+function setInfo(html){ document.getElementById('info').innerHTML=html; }
+
+// ---------- rendering ----------
+function render(hl){
+  hl = hl || {};
+  const viz=document.getElementById('viz');
+  const minTxt = root.min<0 ? 'NIL' : root.min;
+  const maxTxt = root.max<0 ? 'NIL' : root.max;
+
+  // summary cells
+  let summaryCells='';
+  for(let i=0;i<S;i++){
+    let cls='cell';
+    if(root.summary.present[i]) cls+=' present';
+    if(hl.summaryScan===i) cls+=' scanning';
+    if(hl.summaryPath===i) cls+=' path';
+    summaryCells+=`<div class="${cls}">${i}<span class="sub">cl${i}</span></div>`;
+  }
+
+  // cluster boxes
+  let clusterBoxes='';
+  for(let c=0;c<S;c++){
+    let cls='cluster';
+    if(hl.activeCluster===c) cls+=' active';
+    let cells='';
+    for(let l=0;l<S;l++){
+      const key=index(c,l);
+      let cc='cell';
+      if(root.clusters[c].present[l]) cc+=' present';
+      if(hl.scan && hl.scan.c===c && hl.scan.l===l) cc+=' scanning';
+      if(hl.path && hl.path.c===c && hl.path.l===l) cc+=' path';
+      if(hl.found && hl.found.c===c && hl.found.l===l) cc+=' found';
+      if(hl.insert && hl.insert.c===c && hl.insert.l===l) cc+=' inserting';
+      cells+=`<div class="${cc}">${key}<span class="sub">l${l}</span></div>`;
+    }
+    const cmin = root.clusters[c].min<0?'NIL':root.clusters[c].min;
+    const cmax = root.clusters[c].max<0?'NIL':root.clusters[c].max;
+    clusterBoxes+=`<div class="${cls}"><div class="clbl">cluster[${c}] &nbsp; keys ${c*S}..${c*S+S-1}<br>min ${cmin} · max ${cmax}</div><div class="cluster-row">${cells}</div></div>`;
+  }
+
+  viz.innerHTML=`
+    <div class="node" style="border-color:var(--blue);">
+      <div class="node-title">vEB(u=16) &nbsp; high(x)=x/4 &nbsp; low(x)=x%4</div>
+      <div class="minmax">
+        <span class="mm min">min = ${minTxt}</span>
+        <span class="mm max">max = ${maxTxt}</span>
+      </div>
+    </div>
+    <div class="cluster summary"><div class="clbl">summary: vEB(4) — which clusters are non-empty</div><div class="summary-row">${summaryCells}</div></div>
+    <div class="clusters">${clusterBoxes}</div>
+  `;
+}
+
+// ---------- operations ----------
+async function doInsert(){
+  if(busy) return;
+  const x = parseInt(document.getElementById('val').value);
+  if(isNaN(x)||x<0||x>=U){ setInfo('<span style="color:var(--red);">Enter a key in 0..15.</span>'); return; }
+  if(member(x)){ setInfo(`Key <span class="hl">${x}</span> already present (this demo models a set).`); return; }
+  busy=true;
+  const h=high(x), l=low(x);
+  setInfo(`Insert <span class="acc">${x}</span>: split &rarr; high=${h}, low=${l}.`);
+  log(`insert(${x}): high=${h}, low=${l}`, true);
+  render({path:{c:h,l:l}, activeCluster:h});
+  await sleep();
+
+  const wasEmpty = root.clusters[h].min<0;
+  if(wasEmpty){
+    setInfo(`cluster[${h}] is <span class="hl">empty</span> &rarr; insert ${h} into the <span style="color:var(--purple);">summary</span> (the ONLY recursive call), then set cluster min/max directly in O(1).`);
+    root.summary.present[h]=true;
+    if(root.summary.min<0||h<root.summary.min) root.summary.min=h;
+    if(h>root.summary.max) root.summary.max=h;
+    render({summaryPath:h, insert:{c:h,l:l}, activeCluster:h});
+    await sleep();
+    root.clusters[h].present[l]=true;
+    root.clusters[h].min=l; root.clusters[h].max=l;
+  } else {
+    setInfo(`cluster[${h}] non-empty &rarr; recurse into it (one recursive call).`);
+    root.clusters[h].present[l]=true;
+    if(l<root.clusters[h].min) root.clusters[h].min=l;
+    if(l>root.clusters[h].max) root.clusters[h].max=l;
+    render({insert:{c:h,l:l}, activeCluster:h});
+    await sleep();
+  }
+  // update root min/max (aside)
+  if(root.min<0||x<root.min) root.min=x;
+  if(x>root.max) root.max=x;
+  render({found:{c:h,l:l}});
+  log(`  &rarr; stored. root.min=${root.min}, root.max=${root.max}`, true);
+  setInfo(`Inserted <span class="ok">${x}</span>. One recursive call total &rArr; O(log log u).`);
+  busy=false;
+}
+
+function member(x){
+  if(x===root.min||x===root.max) return true;
+  const h=high(x), l=low(x);
+  return root.clusters[h].present[l];
+}
+
+async function doMember(){
+  if(busy) return;
+  const x=parseInt(document.getElementById('val').value);
+  if(isNaN(x)||x<0||x>=U){ setInfo('<span style="color:var(--red);">Enter a key in 0..15.</span>'); return; }
+  busy=true;
+  setInfo(`member(<span class="acc">${x}</span>): check min/max aside, else recurse into cluster[${high(x)}].`);
+  log(`member(${x})`, true);
+  render({path:{c:high(x),l:low(x)}, activeCluster:high(x)});
+  await sleep();
+  const present=member(x);
+  if(present) render({found:{c:high(x),l:low(x)}});
+  setInfo(present?`<span class="ok">${x} is present.</span>`:`<span style="color:var(--red);">${x} is NOT present.</span>`);
+  log(`  &rarr; ${present}`, true);
+  busy=false;
+}
+
+async function doSuccessor(){
+  if(busy) return;
+  const x=parseInt(document.getElementById('val').value);
+  if(isNaN(x)||x<0||x>=U){ setInfo('<span style="color:var(--red);">Enter a key in 0..15.</span>'); return; }
+  busy=true;
+  const h=high(x), l=low(x);
+  log(`successor(${x}): high=${h}, low=${l}`, true);
+
+  // case A: x < min
+  if(root.min>=0 && x<root.min){
+    setInfo(`x=${x} &lt; min=${root.min} &rArr; successor is the aside <span class="acc">min = ${root.min}</span> (O(1)).`);
+    render({found:{c:high(root.min),l:low(root.min)}});
+    log(`  &rarr; min=${root.min}`, true);
+    busy=false; return;
+  }
+
+  // case B1: stay in cluster[h] if it has something past l
+  setInfo(`successor(${x}): high=${h}, low=${l}. Check cluster[${h}].max for anything past low=${l}.`);
+  render({path:{c:h,l:l}, activeCluster:h});
+  await sleep();
+
+  const cmax=root.clusters[h].max;
+  if(cmax>=0 && l<cmax){
+    setInfo(`cluster[${h}].max = ${cmax} &gt; low=${l} &rArr; answer is inside this cluster (one recursive call).`);
+    // scan inside cluster for first present > l
+    let off=-1;
+    for(let ll=l+1;ll<S;ll++){
+      render({scan:{c:h,l:ll}, activeCluster:h});
+      await sleep();
+      if(root.clusters[h].present[ll]){ off=ll; break; }
+    }
+    const ans=index(h,off);
+    render({found:{c:h,l:off}});
+    setInfo(`Found inside cluster[${h}]: low=${off} &rArr; successor = index(${h},${off}) = <span class="ok">${ans}</span>.`);
+    log(`  &rarr; stayed in cluster[${h}], answer=${ans}`, true);
+    busy=false; return;
+  }
+
+  // case B2: jump via summary to next non-empty cluster
+  setInfo(`Nothing past low=${l} in cluster[${h}] &rArr; ask the <span style="color:var(--purple);">summary</span> for the next non-empty cluster after ${h}.`);
+  await sleep();
+  let succC=-1;
+  for(let cc=h+1;cc<S;cc++){
+    render({summaryScan:cc, activeCluster:h});
+    await sleep();
+    if(root.summary.present[cc]){ succC=cc; break; }
+  }
+  if(succC<0){
+    setInfo(`No later non-empty cluster &rArr; successor(${x}) = <span style="color:var(--red);">NIL</span>.`);
+    render({});
+    log(`  &rarr; NIL`, true);
+    busy=false; return;
+  }
+  setInfo(`summary.successor(${h}) = <span class="acc">${succC}</span> &rArr; read cluster[${succC}].min in O(1).`);
+  render({summaryPath:succC, activeCluster:succC});
+  await sleep();
+  const off=root.clusters[succC].min;
+  const ans=index(succC,off);
+  render({found:{c:succC,l:off}});
+  setInfo(`successor = index(${succC}, ${off}) = <span class="ok">${ans}</span>. Path: split &rarr; one summary recursion &rarr; O(1) min read = O(log log u).`);
+  log(`  &rarr; jumped to cluster[${succC}], answer=${ans}`, true);
+  busy=false;
+}
+
+function resetTree(){
+  if(busy) return;
+  root=newTree();
+  [2,3,9,13].forEach(k=>{ // seed example
+    const h=high(k), l=low(k);
+    root.clusters[h].present[l]=true;
+    if(root.clusters[h].min<0||l<root.clusters[h].min) root.clusters[h].min=l;
+    if(l>root.clusters[h].max) root.clusters[h].max=l;
+    root.summary.present[h]=true;
+    if(root.summary.min<0||h<root.summary.min) root.summary.min=h;
+    if(h>root.summary.max) root.summary.max=h;
+    if(root.min<0||k<root.min) root.min=k;
+    if(k>root.max) root.max=k;
+  });
+  document.getElementById('log').innerHTML='';
+  log('reset: seeded {2, 3, 9, 13}', true);
+  setInfo('Seeded with <span class="acc">{2, 3, 9, 13}</span>. Try <span class="hl">successor(7)</span> &rarr; jumps via summary to cluster[3], answer 13.');
+  render({});
+}
+
+// init
+resetTree();
+</script>
+</body>
+</html>
