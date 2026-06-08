@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweep Line (Plane Sweep) — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+  }
+  h1{font-size:1.7rem;color:var(--blue);text-align:center;margin-bottom:4px;}
+  .subtitle{color:var(--muted);text-align:center;margin-bottom:16px;font-size:.95rem;}
+  .badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;}
+  .badge{padding:4px 12px;border-radius:14px;font-size:.8rem;font-weight:600;border:1px solid var(--border);}
+  .badge.bo{color:var(--purple);border-color:var(--purple);}
+  .badge.simple{color:var(--green);border-color:var(--green);}
+  .badge.naive{color:var(--red);border-color:var(--red);}
+  .wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+  .row{display:flex;gap:14px;flex-wrap:wrap;}
+  .panel{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;
+  }
+  .stage{flex:2;min-width:420px;}
+  .side{flex:1;min-width:240px;display:flex;flex-direction:column;gap:14px;}
+  h3{color:var(--blue);font-size:1rem;margin-bottom:8px;}
+  svg{width:100%;height:auto;background:#0a0e14;border-radius:8px;display:block;}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:10px;}
+  button{
+    padding:8px 16px;border:1.5px solid var(--blue);background:transparent;color:var(--blue);
+    border-radius:7px;cursor:pointer;font-size:.9rem;transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue);color:var(--bg);}
+  button:disabled{opacity:.35;cursor:not-allowed;}
+  .speed{display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:8px;color:var(--muted);font-size:.85rem;}
+  .speed input[type=range]{width:140px;accent-color:var(--blue);}
+  .stats{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:.85rem;margin-bottom:8px;}
+  .stats b{color:var(--text);}
+  /* event queue / status lists */
+  .qlist,.slist{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;}
+  .qitem,.sitem{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:.82rem;
+    font-family:'Courier New',monospace;background:#0a0e14;
+  }
+  .qitem.done{opacity:.35;text-decoration:line-through;}
+  .qitem.current{border-color:var(--yellow);background:rgba(210,153,34,.12);color:var(--yellow);}
+  .qitem.intersection{border-color:var(--red);color:var(--red);}
+  .sitem.active{border-color:var(--green);background:rgba(63,185,80,.10);}
+  .sitem.testing{border-color:var(--yellow);background:rgba(210,153,34,.12);color:var(--yellow);}
+  .tag{font-size:.7rem;padding:1px 6px;border-radius:8px;border:1px solid currentColor;}
+  .info{font-family:'Courier New',monospace;font-size:.85rem;line-height:1.7;min-height:60px;}
+  .info .hl{color:var(--yellow);}
+  table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  th,td{border:1px solid var(--border);padding:5px 8px;text-align:left;}
+  th{color:var(--muted);font-weight:600;}
+  .cx{color:var(--purple);font-weight:600;}
+  .log{font-family:'Courier New',monospace;font-size:.78rem;max-height:150px;overflow-y:auto;line-height:1.6;}
+  .log div{padding:1px 0;border-bottom:1px solid rgba(48,54,61,.4);}
+  .legend{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:.78rem;color:var(--muted);margin-bottom:8px;}
+  .legend span{display:flex;align-items:center;gap:5px;}
+  .sw{width:13px;height:13px;border-radius:3px;display:inline-block;}
+  textarea{width:100%;background:#0a0e14;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:'Courier New',monospace;font-size:.8rem;resize:vertical;}
+</style>
+</head>
+<body>
+  <h1>Sweep Line (Plane Sweep)</h1>
+  <p class="subtitle">A vertical line sweeps left→right; events drive a status structure; intersections are detected when neighbors meet.</p>
+  <div class="badges">
+    <span class="badge simple">Simple sweep: O(n log n)</span>
+    <span class="badge bo">Bentley–Ottmann: O((n + k) log n)</span>
+    <span class="badge naive">Naive all-pairs: O(n²)</span>
+  </div>
+
+  <div class="wrap">
+    <div class="row">
+      <!-- STAGE -->
+      <div class="panel stage">
+        <h3>Plane &amp; Sweep Line</h3>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--blue)"></i>segment</span>
+          <span><i class="sw" style="background:var(--green)"></i>active (in status)</span>
+          <span><i class="sw" style="background:var(--yellow)"></i>being tested</span>
+          <span><i class="sw" style="background:var(--red)"></i>intersection</span>
+          <span><i class="sw" style="background:var(--orange)"></i>sweep line</span>
+        </div>
+        <svg id="svg" viewBox="0 0 600 360" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="stats" style="margin-top:10px;">
+          Sweep x: <b id="sx">—</b> &nbsp;|&nbsp; Events: <b id="evCount">0</b>
+          &nbsp;|&nbsp; Active: <b id="acCount">0</b> &nbsp;|&nbsp;
+          Intersections (k): <b id="kCount" class="cx">0</b>
+          &nbsp;|&nbsp; Neighbor tests: <b id="testCount">0</b>
+        </div>
+        <div class="controls">
+          <button id="startBtn" onclick="start()">▶ Run</button>
+          <button id="stepBtn" onclick="stepForward()">⏭ Step</button>
+          <button id="pauseBtn" onclick="pause()" disabled>⏸ Pause</button>
+          <button id="resetBtn" onclick="reset()">↺ Reset</button>
+          <button onclick="randomize()">🎲 Random</button>
+        </div>
+        <div class="speed">
+          <span>Slow</span>
+          <input type="range" id="speed" min="1" max="10" value="5">
+          <span>Fast</span>
+        </div>
+        <details>
+          <summary style="cursor:pointer;color:var(--muted);font-size:.85rem;">Custom segments (x1,y1,x2,y2 per line)</summary>
+          <textarea id="customInput" rows="4">40,60,560,300
+40,300,560,60
+40,180,560,180
+260,40,260,320</textarea>
+          <button style="margin-top:6px;" onclick="loadCustom()">Load</button>
+        </details>
+      </div>
+
+      <!-- SIDE -->
+      <div class="side">
+        <div class="panel">
+          <h3>Event Queue (sorted by x)</h3>
+          <div class="qlist" id="qlist"></div>
+        </div>
+        <div class="panel">
+          <h3>Status Structure (y-order)</h3>
+          <div class="slist" id="slist"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="panel" style="flex:1;min-width:280px;">
+        <h3>What's happening</h3>
+        <div class="info" id="info">Press <span class="hl">Run</span> to start the sweep, or <span class="hl">Step</span> to advance one event at a time. The orange vertical line is the sweep line; it stops only at events.</div>
+      </div>
+      <div class="panel" style="flex:1;min-width:280px;">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Cost</th></tr>
+          <tr><td>Sort all events</td><td style="color:var(--yellow)">O(n log n)</td></tr>
+          <tr><td>Status insert / delete / neighbor</td><td style="color:var(--green)">O(log n)</td></tr>
+          <tr><td>Event-queue extract-min / insert</td><td style="color:var(--green)">O(log n)</td></tr>
+          <tr><td>Bentley–Ottmann (report all)</td><td class="cx">O((n + k) log n)</td></tr>
+          <tr><td>Naive all-pairs baseline</td><td style="color:var(--red)">O(n²)</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+// ---------- geometry ----------
+function orient(ax,ay,bx,by,cx,cy){ return (bx-ax)*(cy-ay)-(by-ay)*(cx-ax); }
+function segIntersect(s,t){
+  const d1=orient(t.x1,t.y1,t.x2,t.y2,s.x1,s.y1);
+  const d2=orient(t.x1,t.y1,t.x2,t.y2,s.x2,s.y2);
+  const d3=orient(s.x1,s.y1,s.x2,s.y2,t.x1,t.y1);
+  const d4=orient(s.x1,s.y1,s.x2,s.y2,t.x2,t.y2);
+  if(((d1>0)!==(d2>0))&&((d3>0)!==(d4>0))){
+    const den=(s.x2-s.x1)*(t.y2-t.y1)-(s.y2-s.y1)*(t.x2-t.x1);
+    if(den===0) return null;
+    const ua=((t.x2-t.x1)*(s.y1-t.y1)-(t.y2-t.y1)*(s.x1-t.x1))/den;
+    return {x:s.x1+ua*(s.x2-s.x1), y:s.y1+ua*(s.y2-s.y1)};
+  }
+  return null;
+}
+// y of segment s at sweep position x (for status ordering)
+function yAt(s,x){
+  if(s.x2===s.x1) return (s.y1+s.y2)/2;
+  const t=(x-s.x1)/(s.x2-s.x1);
+  return s.y1+t*(s.y2-s.y1);
+}
+
+// ---------- state ----------
+let segs=[];          // normalized segments {x1,y1,x2,y2,id}
+let steps=[];         // precomputed animation steps
+let idx=0;
+let running=false, timer=null;
+
+const COLORS=['#58a6ff','#bc8cff','#ffa657','#3fb950','#d29922','#79c0ff','#ff7b72','#a5d6ff'];
+
+function parseInput(text){
+  const out=[];
+  text.trim().split('\n').forEach((line,i)=>{
+    const p=line.split(',').map(s=>parseFloat(s.trim()));
+    if(p.length===4 && p.every(v=>!isNaN(v))){
+      let [x1,y1,x2,y2]=p;
+      if(x1>x2||(x1===x2&&y1>y2)){ [x1,y1,x2,y2]=[x2,y2,x1,y1]; }
+      out.push({x1,y1,x2,y2,id:out.length});
+    }
+  });
+  return out;
+}
+
+// Build the sweep-line steps (event-model, neighbor tests against active list).
+function buildSteps(){
+  steps=[]; let k=0, tests=0;
+  const events=[];
+  segs.forEach(s=>{
+    events.push({x:s.x1,kind:'L',id:s.id});
+    events.push({x:s.x2,kind:'R',id:s.id});
+  });
+  events.sort((a,b)=> a.x!==b.x ? a.x-b.x : (a.kind==='L'? -1:1));
+
+  const active=[];           // ids, kept sorted by yAt(x)
+  const found=[];            // {x,y} intersections
+  const seenPair=new Set();
+
+  function snapshot(desc, currentEventIdx, testing, queueState){
+    steps.push({
+      sweepX: queueState.sweepX,
+      active: active.slice(),
+      found: found.slice(),
+      queue: queueState.queue.map(e=>({...e})),
+      curEvent: currentEventIdx,
+      testing: testing? testing.slice():[],
+      k, tests, desc
+    });
+  }
+
+  // Pre-compute remaining-queue display as we go
+  const remaining = events.map((e,i)=>({...e,origIndex:i,done:false}));
+
+  for(let ei=0; ei<events.length; ei++){
+    const e=events[ei];
+    remaining[ei].done=true;
+    const qState={sweepX:e.x, queue:remaining};
+
+    if(e.kind==='L'){
+      // insert into active in y-order at x
+      // test against neighbors (here: all active, highlighting the closest)
+      const testedIds=[];
+      for(const j of active){
+        testedIds.push(j);
+        const pair=[Math.min(e.id,j),Math.max(e.id,j)].join('-');
+        if(!seenPair.has(pair)){
+          seenPair.add(pair);
+          tests++;
+          const ip=segIntersect(segs[e.id],segs[j]);
+          if(ip){ k++; found.push(ip); }
+        }
+      }
+      active.push(e.id);
+      active.sort((a,b)=> yAt(segs[a],e.x)-yAt(segs[b],e.x));
+      snapshot(`Insert s${e.id} (left endpoint). Test against ${testedIds.length} active neighbour(s).`, ei, [e.id,...testedIds], qState);
+    } else {
+      const pos=active.indexOf(e.id);
+      if(pos>=0) active.splice(pos,1);
+      snapshot(`Remove s${e.id} (right endpoint). Its former neighbours become adjacent.`, ei, [e.id], qState);
+    }
+  }
+  // final
+  steps.push({
+    sweepX: 600, active:[], found:found.slice(),
+    queue: remaining, curEvent:-1, testing:[], k, tests,
+    desc:`Sweep complete. Found ${k} intersection(s) with ${tests} neighbour test(s) (naive all-pairs would be ${segs.length*(segs.length-1)/2}).`
+  });
+}
+
+// ---------- rendering ----------
+const svg=document.getElementById('svg');
+function el(tag,attrs){
+  const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  return e;
+}
+
+function render(step){
+  svg.innerHTML='';
+  // grid
+  for(let gx=0;gx<=600;gx+=60){ svg.appendChild(el('line',{x1:gx,y1:0,x2:gx,y2:360,stroke:'#161b22','stroke-width':1})); }
+  for(let gy=0;gy<=360;gy+=60){ svg.appendChild(el('line',{x1:0,y1:gy,x2:600,y2:gy,stroke:'#161b22','stroke-width':1})); }
+
+  // segments
+  segs.forEach(s=>{
+    let color=COLORS[s.id%COLORS.length], w=2.5, op=0.55;
+    if(step.active.includes(s.id)){ color='var(--green)'; op=1; w=3.5; }
+    if(step.testing && step.testing.includes(s.id)){ color='var(--yellow)'; op=1; w=4; }
+    svg.appendChild(el('line',{x1:s.x1,y1:s.y1,x2:s.x2,y2:s.y2,stroke:color,'stroke-width':w,'stroke-opacity':op,'stroke-linecap':'round'}));
+    // label near left endpoint
+    svg.appendChild(el('text',{x:s.x1-2,y:s.y1-4,fill:color,'font-size':11,'font-family':'monospace'})).textContent='s'+s.id;
+  });
+
+  // intersections found so far
+  (step.found||[]).forEach(p=>{
+    svg.appendChild(el('circle',{cx:p.x,cy:p.y,r:5,fill:'none',stroke:'var(--red)','stroke-width':2}));
+    svg.appendChild(el('circle',{cx:p.x,cy:p.y,r:2,fill:'var(--red)'}));
+  });
+
+  // sweep line
+  const sx=step.sweepX;
+  svg.appendChild(el('line',{x1:sx,y1:0,x2:sx,y2:360,stroke:'var(--orange)','stroke-width':2.5,'stroke-dasharray':'6 4'}));
+  svg.appendChild(el('polygon',{points:`${sx-5},6 ${sx+5},6 ${sx},14`,fill:'var(--orange)'}));
+
+  // panels
+  renderQueue(step);
+  renderStatus(step);
+
+  document.getElementById('sx').textContent = Math.round(sx);
+  document.getElementById('evCount').textContent = step.queue.length;
+  document.getElementById('acCount').textContent = step.active.length;
+  document.getElementById('kCount').textContent = step.k;
+  document.getElementById('testCount').textContent = step.tests;
+  document.getElementById('info').innerHTML = step.desc.replace(/s(\d+)/g,'<span class="hl">s$1</span>');
+}
+
+function renderQueue(step){
+  const box=document.getElementById('qlist'); box.innerHTML='';
+  step.queue.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.className='qitem'+(e.done?' done':'')+(i===step.curEvent?' current':'')+(e.kind==='X'?' intersection':'');
+    const kindLabel = e.kind==='L'?'OPEN':e.kind==='R'?'CLOSE':'CROSS';
+    d.innerHTML=`<span>x=${Math.round(e.x)} · s${e.id}</span><span class="tag">${kindLabel}</span>`;
+    box.appendChild(d);
+  });
+}
+
+function renderStatus(step){
+  const box=document.getElementById('slist'); box.innerHTML='';
+  if(step.active.length===0){
+    const d=document.createElement('div'); d.className='sitem'; d.style.color='var(--muted)';
+    d.textContent='(empty — line crosses nothing)'; box.appendChild(d); return;
+  }
+  // top-to-bottom in y means ascending y; SVG y grows downward, so show ascending y
+  const ordered=step.active.slice().sort((a,b)=>yAt(segs[a],step.sweepX)-yAt(segs[b],step.sweepX));
+  ordered.forEach(id=>{
+    const d=document.createElement('div');
+    d.className='sitem active'+(step.testing && step.testing.includes(id)?' testing':'');
+    d.innerHTML=`<span>s${id}</span><span class="tag">y≈${Math.round(yAt(segs[id],step.sweepX))}</span>`;
+    box.appendChild(d);
+  });
+}
+
+function addLog(step){
+  const log=document.getElementById('log');
+  const d=document.createElement('div');
+  d.textContent=`[x=${Math.round(step.sweepX)}] ${step.desc}`;
+  log.insertBefore(d,log.firstChild);
+}
+
+// ---------- controls ----------
+function speedMs(){ return 1200 - document.getElementById('speed').value*100; }
+
+function start(){
+  if(steps.length===0) buildSteps();
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  loop();
+}
+function loop(){
+  if(!running||idx>=steps.length){ pause(); return; }
+  render(steps[idx]); addLog(steps[idx]); idx++;
+  timer=setTimeout(loop,speedMs());
+}
+function stepForward(){
+  if(steps.length===0) buildSteps();
+  if(idx<steps.length){ render(steps[idx]); addLog(steps[idx]); idx++; }
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause(); idx=0; steps=[];
+  document.getElementById('log').innerHTML='';
+  buildSteps();
+  render({sweepX:0,active:[],found:[],queue:steps[0]?steps[0].queue.map(e=>({...e,done:false})):[],curEvent:-1,testing:[],k:0,tests:0,
+    desc:'Ready. Press Run or Step. The sweep line starts at the far left.'});
+  idx=0;
+}
+function loadCustom(){
+  const t=document.getElementById('customInput').value;
+  const parsed=parseInput(t);
+  if(parsed.length>0){ segs=parsed; reset(); }
+}
+function randomize(){
+  segs=[];
+  const n=4+Math.floor(Math.random()*4);
+  for(let i=0;i<n;i++){
+    let x1=30+Math.random()*250, y1=30+Math.random()*300;
+    let x2=300+Math.random()*270, y2=30+Math.random()*300;
+    if(x1>x2){[x1,y1,x2,y2]=[x2,y2,x1,y1];}
+    segs.push({x1,y1,x2,y2,id:i});
+  }
+  document.getElementById('customInput').value=segs.map(s=>`${Math.round(s.x1)},${Math.round(s.y1)},${Math.round(s.x2)},${Math.round(s.y2)}`).join('\n');
+  reset();
+}
+
+// ---------- init ----------
+segs=parseInput(document.getElementById('customInput').value);
+reset();
+</script>
+</body>
+</html>
