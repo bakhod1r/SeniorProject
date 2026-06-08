@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concurrent Hash Map — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:1.9rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:14px;text-align:center;max-width:880px;font-size:.92rem;line-height:1.5}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.b1{color:var(--green);border-color:var(--green)}
+.badge.b2{color:var(--blue);border-color:var(--blue)}
+.badge.b3{color:var(--purple);border-color:var(--purple)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.92rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+button.warn{border-color:var(--orange);color:var(--orange)}
+button.warn:hover:not(:disabled){background:var(--orange);color:var(--bg)}
+input[type=text]{padding:8px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.9rem;width:160px}
+input[type=text]:focus{outline:none;border-color:var(--blue)}
+label.spd{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem}
+input[type=range]{accent-color:var(--blue)}
+
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 20px;display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;width:100%;max-width:1080px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+
+.lanes{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;width:100%;max-width:1080px}
+.lane{background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:8px 12px;min-width:150px;text-align:center}
+.lane h4{font-size:.8rem;color:var(--muted);margin-bottom:6px;font-family:monospace}
+.lane .tstate{font-family:monospace;font-size:.82rem;min-height:2.6em;display:flex;align-items:center;justify-content:center;line-height:1.3}
+.lane.run{border-color:var(--green)}
+.lane.wait{border-color:var(--yellow)}
+.lane.cas{border-color:var(--blue)}
+
+.tables{display:flex;gap:30px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1080px;margin-bottom:16px}
+.tablebox{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 18px;flex:1;min-width:320px}
+.tablebox h3{color:var(--blue);font-size:.92rem;margin-bottom:10px;font-family:monospace;text-align:center}
+.tablebox.newtable{opacity:.55}
+.tablebox.newtable.active{opacity:1;border-color:var(--purple)}
+.bucket{display:flex;align-items:center;gap:6px;margin-bottom:7px;font-family:monospace;font-size:.82rem}
+.bidx{width:34px;color:var(--muted);text-align:right;flex-shrink:0}
+.lock{width:22px;height:22px;border-radius:5px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;background:var(--bg)}
+.lock.held{border-color:var(--red);background:rgba(248,81,73,.2);color:var(--red)}
+.lock.casing{border-color:var(--blue);background:rgba(88,166,255,.2);color:var(--blue)}
+.chain{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:26px;flex:1}
+.node{padding:3px 8px;border:2px solid var(--border);border-radius:5px;background:var(--bg);transition:all .25s}
+.node.fresh{border-color:var(--green);background:rgba(63,185,80,.2);color:var(--green)}
+.arrow{color:var(--muted)}
+.bucket.touched .bidx{color:var(--yellow);font-weight:700}
+.fwd{padding:3px 8px;border:2px dashed var(--orange);border-radius:5px;color:var(--orange);background:rgba(255,166,87,.12);font-size:.78rem}
+
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1080px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6}
+.step-info .hl{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .err{color:var(--red);font-weight:600}
+
+.bigo{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1080px;margin-bottom:14px}
+.bigo h3{color:var(--blue);margin-bottom:8px;font-size:.95rem}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th,td{border:1px solid var(--border);padding:6px 10px;text-align:left}
+th{color:var(--muted);font-weight:600}
+.c-green{color:var(--green);font-weight:700}
+.c-yellow{color:var(--yellow);font-weight:700}
+.c-blue{color:var(--blue);font-weight:700}
+
+.log{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1080px;margin-bottom:14px;max-height:200px;overflow-y:auto}
+.log h3{color:var(--blue);margin-bottom:8px;font-size:.95rem}
+.log-line{font-family:monospace;font-size:.8rem;padding:2px 0;border-bottom:1px solid rgba(48,54,61,.5);color:var(--muted)}
+.log-line .t{color:var(--purple)}
+.log-line .g{color:var(--green)}
+.log-line .y{color:var(--yellow)}
+.log-line .b{color:var(--blue)}
+.log-line .o{color:var(--orange)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:4px;text-align:center;max-width:880px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>Concurrent Hash Map</h1>
+<p class="subtitle">Per-bucket locking + CAS (Java 8 style). Threads inserting into <em>different</em> buckets run in parallel; threads hitting the <em>same</em> bucket serialize. Watch a lock-free CAS install into an empty bucket, a <code>synchronized</code>-on-head insert into a populated one, and a cooperative concurrent resize that transfers buckets behind <code>ForwardingNode</code> markers.</p>
+
+<div class="badges">
+<span class="badge b1">get: lock-free O(1)</span>
+<span class="badge b2">put: CAS or sync-head</span>
+<span class="badge b3">resize: cooperative</span>
+<span class="badge b1">tree-bin &gt; 8 → O(log n)</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="keyIn" placeholder="key (e.g. alice)">
+<button onclick="manualPut()">put(key)</button>
+<button onclick="spawnParallel()" class="secondary">Spawn 3 parallel puts</button>
+<button onclick="startResize()" class="warn">Trigger resize</button>
+<button onclick="resetAll()" class="secondary">↺ Reset</button>
+</div>
+
+<div class="input-control">
+<label class="spd">Speed <span>slow</span>
+<input type="range" id="spd" min="1" max="10" value="6"><span>fast</span></label>
+<button id="autoBtn" onclick="toggleAuto()">▶ Auto demo</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color"></div>Idle bucket</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.2);border-color:var(--blue)"></div>CAS in progress (lock-free)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.2);border-color:var(--red)"></div>Lock held (sync on head)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.2);border-color:var(--green)"></div>Freshly inserted node</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(255,166,87,.12);border-color:var(--orange)"></div>ForwardingNode (resizing)</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Buckets</div><div class="stat-value" id="sCap">8</div></div>
+<div><div class="stat-label">Entries</div><div class="stat-value" id="sSize">0</div></div>
+<div><div class="stat-label">Load factor</div><div class="stat-value" id="sLoad">0.00</div></div>
+<div><div class="stat-label">CAS ops</div><div class="stat-value" id="sCas">0</div></div>
+<div><div class="stat-label">Locks taken</div><div class="stat-value" id="sLock">0</div></div>
+<div><div class="stat-label">State</div><div class="stat-value" id="sState">idle</div></div>
+</div>
+
+<div class="lanes" id="lanes"></div>
+
+<div class="tables">
+  <div class="tablebox" id="oldBox">
+    <h3>table (old / current)</h3>
+    <div id="oldBuckets"></div>
+  </div>
+  <div class="tablebox newtable" id="newBox">
+    <h3>nextTable (resize target, 2× size)</h3>
+    <div id="newBuckets"></div>
+  </div>
+</div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Press <span class="hl">Auto demo</span>, or type a key and <span class="hl">put</span>. Empty bucket → lock-free <span class="hl">CAS</span>. Occupied bucket → <span class="hl">synchronized</span> on the first node. At load factor &gt; 0.75 the map resizes by cooperatively transferring buckets to a 2× table.</div>
+</div>
+
+<div class="bigo">
+<h3>Complexity</h3>
+<table>
+<tr><th>Operation</th><th>Avg</th><th>Worst (chain)</th><th>Worst (tree-bin)</th><th>Sync cost</th></tr>
+<tr><td>get(k)</td><td class="c-green">O(1)</td><td class="c-yellow">O(n)</td><td class="c-blue">O(log n)</td><td class="c-green">lock-free</td></tr>
+<tr><td>put(k) — empty bucket</td><td class="c-green">O(1)</td><td class="c-green">O(1)</td><td class="c-green">O(1)</td><td class="c-blue">1 CAS</td></tr>
+<tr><td>put(k) — populated</td><td class="c-green">O(1)</td><td class="c-yellow">O(n)</td><td class="c-blue">O(log n)</td><td class="c-yellow">sync(head)</td></tr>
+<tr><td>remove(k)</td><td class="c-green">O(1)</td><td class="c-yellow">O(n)</td><td class="c-blue">O(log n)</td><td class="c-yellow">sync(head)</td></tr>
+<tr><td>resize</td><td class="c-yellow">O(n) total</td><td class="c-yellow">O(n)</td><td class="c-yellow">O(n)</td><td class="c-green">cooperative</td></tr>
+<tr><td>size()</td><td class="c-green">O(cells)</td><td class="c-green">O(cells)</td><td class="c-green">O(cells)</td><td class="c-green">striped, approx</td></tr>
+</table>
+</div>
+
+<div class="log">
+<h3>Operation Log</h3>
+<div id="logBox"></div>
+</div>
+
+<p class="footer-note">Reads (<code>get</code>) are always lock-free: nodes' fields are volatile, so a reader sees a consistent value with no lock — even during resize, where it follows the <code>ForwardingNode</code> into the new table. Inserts into distinct buckets never contend; only same-bucket inserts serialize on the head node.</p>
+
+<script>
+// ===== State =====
+let CAP = 8;
+let table = [];        // each: array of node-keys (chain), or 'FWD' string when forwarded
+let nextTable = null;  // during resize
+let size = 0;
+let casCount = 0, lockCount = 0;
+let busy = false;
+let resizing = false;
+let autoTimer = null;
+const THRESHOLD = 0.75;
+const SAMPLE = ['alice','bob','carol','dave','erin','frank','grace','heidi','ivan','judy','mallory','niaj','olivia','peggy','rupert','sybil','trent','victor','walter','xena'];
+let sampleIdx = 0;
+
+function speed(){ return 1100 - document.getElementById('spd').value*100; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function hashKey(k){ let h=2166136261; for(let i=0;i<k.length;i++){ h^=k.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0); }
+function idxFor(k,cap){ return hashKey(k)&(cap-1); }
+
+function initTable(){
+  table=[]; for(let i=0;i<CAP;i++) table.push([]);
+  nextTable=null; size=0; casCount=0; lockCount=0; resizing=false;
+}
+
+// ===== Rendering =====
+function bucketHTML(arr, bi, highlight){
+  let lockCls = '';
+  if(highlight && highlight.bi===bi){
+    if(highlight.type==='cas') lockCls='casing';
+    else if(highlight.type==='lock') lockCls='held';
+  }
+  let lockSym = lockCls==='held' ? '🔒' : (lockCls==='casing' ? 'cas' : '');
+  let chain;
+  if(arr==='FWD'){
+    chain = `<span class="fwd">→ ForwardingNode → nextTable</span>`;
+  } else {
+    if(arr.length===0){ chain = `<span class="arrow">∅</span>`; }
+    else {
+      chain = arr.map((k,i)=>{
+        const fresh = (highlight && highlight.bi===bi && highlight.fresh===k) ? 'fresh':'';
+        return `<span class="node ${fresh}">${k}</span>` + (i<arr.length-1?'<span class="arrow">→</span>':'');
+      }).join('');
+    }
+  }
+  const tcls = (highlight && highlight.bi===bi) ? 'touched':'';
+  return `<div class="bucket ${tcls}"><span class="bidx">[${bi}]</span><span class="lock ${lockCls}">${lockSym}</span><span class="chain">${chain}</span></div>`;
+}
+
+function render(highlight){
+  const oldEl=document.getElementById('oldBuckets');
+  oldEl.innerHTML = table.map((arr,bi)=>bucketHTML(arr,bi,highlight && highlight.table==='old'?highlight:null)).join('');
+  const newBox=document.getElementById('newBox');
+  if(nextTable){
+    newBox.classList.add('active');
+    document.getElementById('newBuckets').innerHTML =
+      nextTable.map((arr,bi)=>bucketHTML(arr,bi,highlight && highlight.table==='new'?highlight:null)).join('');
+  } else {
+    newBox.classList.remove('active');
+    document.getElementById('newBuckets').innerHTML = '<div class="bucket"><span class="chain"><span class="arrow">— no resize in progress —</span></span></div>';
+  }
+  document.getElementById('sCap').textContent = CAP;
+  document.getElementById('sSize').textContent = size;
+  document.getElementById('sLoad').textContent = (size/CAP).toFixed(2);
+  document.getElementById('sCas').textContent = casCount;
+  document.getElementById('sLock').textContent = lockCount;
+  document.getElementById('sState').textContent = resizing ? 'resizing' : (busy?'busy':'idle');
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function addLog(html){
+  const box=document.getElementById('logBox');
+  const d=document.createElement('div'); d.className='log-line'; d.innerHTML=html;
+  box.insertBefore(d, box.firstChild);
+  while(box.children.length>60) box.removeChild(box.lastChild);
+}
+
+// ===== Thread lanes =====
+function setLanes(states){
+  const el=document.getElementById('lanes');
+  el.innerHTML = states.map(s=>{
+    const cls = s.state==='run'?'run':(s.state==='wait'?'wait':(s.state==='cas'?'cas':''));
+    return `<div class="lane ${cls}"><h4>Thread ${s.id}</h4><div class="tstate">${s.msg}</div></div>`;
+  }).join('');
+}
+function clearLanes(){ document.getElementById('lanes').innerHTML=''; }
+
+// ===== Core put (animated, single thread) =====
+async function doPut(key, threadId){
+  const bi = idxFor(key, CAP);
+  const arr = table[bi];
+
+  if(arr==='FWD'){
+    addLog(`<span class="o">[fwd]</span> bucket ${bi} forwarded — redirecting <span class="b">${key}</span> to nextTable`);
+    // forward into new table
+    const nbi = idxFor(key, CAP*2);
+    nextTable[nbi].push(key);
+    return;
+  }
+
+  if(arr.length===0){
+    // lock-free CAS fast path
+    casCount++;
+    render({table:'old',bi,type:'cas'});
+    addLog(`<span class="t">T${threadId}</span> bucket ${bi} empty → <span class="b">CAS</span> install <span class="g">${key}</span> (lock-free)`);
+    setInfo(`Thread ${threadId}: bucket <span class="hl">[${bi}]</span> is empty → <span class="ok">CAS</span> a node in with no lock. If the CAS lost a race it would retry.`);
+    await sleep(speed());
+    arr.push(key); size++;
+    render({table:'old',bi,type:'cas',fresh:key});
+    await sleep(speed()*0.5);
+  } else {
+    // synchronized on first node
+    lockCount++;
+    render({table:'old',bi,type:'lock'});
+    addLog(`<span class="t">T${threadId}</span> bucket ${bi} occupied → <span class="y">synchronized</span> on head, append <span class="g">${key}</span>`);
+    setInfo(`Thread ${threadId}: bucket <span class="hl">[${bi}]</span> occupied → <span class="err">synchronized</span> on the first node, walk chain, append. Only same-bucket threads contend here.`);
+    await sleep(speed());
+    arr.push(key); size++;
+    render({table:'old',bi,type:'lock',fresh:key});
+    await sleep(speed()*0.5);
+    if(arr.length>8){
+      addLog(`<span class="y">[treeify]</span> bucket ${bi} chain &gt; 8 → red-black tree (O(log n))`);
+    }
+  }
+  render();
+}
+
+// ===== Single manual put =====
+async function manualPut(){
+  if(busy) return;
+  let key=document.getElementById('keyIn').value.trim();
+  if(!key){ key=SAMPLE[sampleIdx++%SAMPLE.length]; }
+  busy=true; clearLanes();
+  await doPut(key, 1);
+  document.getElementById('keyIn').value='';
+  busy=false; render();
+  if(!resizing && size/CAP>THRESHOLD){ await startResize(); }
+}
+
+// ===== Parallel puts into (likely) different buckets =====
+async function spawnParallel(){
+  if(busy) return;
+  busy=true;
+  // pick 3 keys that hash to distinct buckets if possible
+  const keys=[];
+  let tries=0;
+  while(keys.length<3 && tries<60){
+    const k=SAMPLE[(sampleIdx++)%SAMPLE.length]+(Math.floor(Math.random()*90)+10);
+    const bi=idxFor(k,CAP);
+    if(!keys.some(x=>idxFor(x,CAP)===bi)) keys.push(k);
+    tries++;
+  }
+  setLanes(keys.map((k,i)=>({id:i+1,state:'run',msg:`put(<b>${k}</b>)<br/>→ bucket [${idxFor(k,CAP)}]`})));
+  setInfo(`Three threads put keys hashing to <span class="hl">distinct buckets</span> → they run <span class="ok">fully in parallel</span>, each taking only its own bucket's CAS/lock. No cross-thread waiting.`);
+  addLog(`<span class="t">spawn</span> 3 parallel puts: ${keys.map(k=>`<span class="b">${k}</span>[${idxFor(k,CAP)}]`).join(', ')}`);
+  await sleep(speed());
+  // animate them "simultaneously": apply all, then render
+  for(const k of keys){
+    const bi=idxFor(k,CAP);
+    if(table[bi]==='FWD'){ continue; }
+    if(table[bi].length===0){ casCount++; } else { lockCount++; }
+    table[bi].push(k); size++;
+  }
+  setLanes(keys.map((k,i)=>({id:i+1,state:'cas',msg:`✓ inserted <b>${k}</b><br/>into [${idxFor(k,CAP)}]`})));
+  render();
+  await sleep(speed()*1.4);
+  clearLanes();
+  busy=false; render();
+  if(!resizing && size/CAP>THRESHOLD){ await startResize(); }
+}
+
+// ===== Cooperative concurrent resize =====
+async function startResize(){
+  if(resizing) return;
+  if(busy && document.getElementById('autoBtn').textContent.includes('Stop')){ /* allow during auto */ }
+  resizing=true;
+  const oldCap=CAP, newCap=CAP*2;
+  nextTable=[]; for(let i=0;i<newCap;i++) nextTable.push([]);
+  addLog(`<span class="o">[RESIZE]</span> load ${ (size/CAP).toFixed(2) } &gt; ${THRESHOLD} → allocate nextTable size ${newCap}, transfer cooperatively`);
+  setInfo(`<span class="hl">Resize started.</span> Doubling ${oldCap}→${newCap}. Buckets are transferred one at a time; each transferred bucket's old slot becomes a <span style="color:var(--orange)">ForwardingNode</span>. Reads/writes hitting it are redirected to nextTable — no stop-the-world pause, no lost keys.`);
+  render();
+  await sleep(speed());
+
+  for(let bi=0; bi<oldCap; bi++){
+    const arr = table[bi];
+    // highlight bucket being moved
+    setLanes([{id:'helper',state:'run',msg:`transferring bucket <b>[${bi}]</b>`}]);
+    if(arr!=='FWD' && arr.length>0){
+      for(const k of arr){
+        const nbi = idxFor(k, newCap); // split: low/high based on new high bit
+        nextTable[nbi].push(k);
+      }
+      addLog(`<span class="o">[transfer]</span> bucket ${bi} → split into nextTable buckets, then install ForwardingNode`);
+    } else {
+      addLog(`<span class="o">[transfer]</span> bucket ${bi} empty → ForwardingNode`);
+    }
+    table[bi]='FWD';
+    render({table:'old',bi,type:'cas'});
+    await sleep(speed()*0.8);
+  }
+
+  // promote
+  CAP=newCap; table=nextTable; nextTable=null; resizing=false;
+  clearLanes();
+  addLog(`<span class="g">[RESIZE done]</span> nextTable promoted to current; capacity now ${CAP}`);
+  setInfo(`<span class="ok">Resize complete.</span> nextTable promoted to the live table (capacity ${CAP}). Every key was findable in exactly one table at every instant during the transfer.`);
+  render();
+  await sleep(speed());
+}
+
+// ===== Auto demo =====
+async function autoStep(){
+  if(busy||resizing) return;
+  const r=Math.random();
+  if(r<0.6){ await manualPut(); }
+  else { await spawnParallel(); }
+}
+function toggleAuto(){
+  const btn=document.getElementById('autoBtn');
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; btn.textContent='▶ Auto demo'; return; }
+  btn.textContent='⏸ Stop auto';
+  autoTimer=setInterval(async()=>{
+    if(busy||resizing) return;
+    await autoStep();
+  }, 400);
+}
+
+function resetAll(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('autoBtn').textContent='▶ Auto demo'; }
+  CAP=8; initTable(); busy=false; sampleIdx=0;
+  document.getElementById('logBox').innerHTML='';
+  clearLanes();
+  setInfo('Reset. Press <span class="hl">Auto demo</span> or <span class="hl">put</span> a key. Empty bucket → lock-free CAS; occupied → synchronized-on-head; load &gt; 0.75 → cooperative resize.');
+  render();
+}
+
+// ===== Init =====
+initTable();
+render();
+</script>
+</body>
+</html>
