@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skip List — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 { font-size: 1.9rem; color: var(--blue); margin-bottom: 6px; text-align: center; }
+  .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; font-size: 0.95rem; }
+
+  .badges { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; justify-content: center; }
+  .badge {
+    padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .badge.green { color: var(--green); border-color: var(--green); }
+  .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+  .badge.red { color: var(--red); border-color: var(--red); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 16px;
+    width: 100%;
+    max-width: 1080px;
+  }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; }
+  .controls .group {
+    display: flex; gap: 8px; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+  }
+  .group-label { color: var(--muted); font-size: 0.78rem; margin-right: 2px; }
+
+  input[type="number"] {
+    width: 76px; padding: 8px 10px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); border-radius: 8px; font-size: 0.95rem;
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); }
+
+  button {
+    padding: 8px 16px; border: 1px solid var(--blue); background: transparent;
+    color: var(--blue); border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+  button:hover:not(:disabled) { background: var(--blue); color: var(--bg); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.green { border-color: var(--green); color: var(--green); }
+  button.green:hover:not(:disabled) { background: var(--green); color: var(--bg); }
+  button.red { border-color: var(--red); color: var(--red); }
+  button.red:hover:not(:disabled) { background: var(--red); color: var(--bg); }
+  button.purple { border-color: var(--purple); color: var(--purple); }
+  button.purple:hover:not(:disabled) { background: var(--purple); color: var(--bg); }
+
+  .speed { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.82rem; }
+  .speed input[type="range"] { width: 120px; accent-color: var(--blue); }
+
+  /* Skip list grid */
+  #viz { overflow-x: auto; padding-bottom: 8px; }
+  .grid { display: flex; flex-direction: column; gap: 6px; min-width: max-content; margin: 0 auto; }
+  .row { display: flex; align-items: center; gap: 0; }
+  .row-label {
+    width: 56px; flex-shrink: 0; color: var(--muted); font-size: 0.78rem;
+    text-align: right; padding-right: 10px; font-family: 'Courier New', monospace;
+  }
+  .cell {
+    width: 56px; flex-shrink: 0; height: 38px; display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .nodebox {
+    width: 44px; height: 34px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700; border: 2px solid var(--border); background: #1c2330;
+    color: var(--text); transition: all 0.25s; z-index: 2;
+  }
+  .nodebox.head { color: var(--muted); font-size: 0.75rem; border-color: var(--blue); }
+  .nodebox.current { border-color: var(--blue); box-shadow: 0 0 12px var(--blue); transform: scale(1.12); }
+  .nodebox.scanning { border-color: var(--yellow); background: #2a2410; box-shadow: 0 0 10px var(--yellow); }
+  .nodebox.found { border-color: var(--green); background: #102413; box-shadow: 0 0 14px var(--green); transform: scale(1.18); }
+  .nodebox.notfound { border-color: var(--red); background: #2a1213; box-shadow: 0 0 12px var(--red); }
+  .nodebox.newnode { border-color: var(--green); background: #102413; box-shadow: 0 0 14px var(--green); }
+  .nodebox.update { border-color: var(--purple); background: #1e1630; }
+  .edge {
+    position: absolute; top: 50%; left: 50%; height: 2px; background: var(--border);
+    z-index: 1; transform: translateY(-50%);
+  }
+  .edge.traverse { background: var(--blue); height: 3px; box-shadow: 0 0 6px var(--blue); }
+  .cell.empty .edge { background: transparent; }
+  .arrowhead {
+    position: absolute; top: 50%; right: -1px; transform: translateY(-50%);
+    width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+    border-left: 6px solid var(--border); z-index: 1;
+  }
+  .edge.traverse + .arrowhead { border-left-color: var(--blue); }
+
+  /* Coin panel */
+  .coins { display: flex; gap: 8px; align-items: center; min-height: 44px; flex-wrap: wrap; }
+  .coin {
+    width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.8rem; border: 2px solid var(--border);
+    animation: flip 0.4s ease;
+  }
+  .coin.heads { border-color: var(--green); color: var(--green); background: #102413; }
+  .coin.tails { border-color: var(--orange); color: var(--orange); background: #2a1d0d; }
+  @keyframes flip { from { transform: rotateY(90deg) scale(0.5); } to { transform: rotateY(0) scale(1); } }
+
+  /* Info + log + bigO */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 1080px; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+  .info h3, .logwrap h3, .bigo h3 { color: var(--blue); font-size: 1rem; margin-bottom: 10px; }
+  #info {
+    font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.7;
+    min-height: 80px; color: var(--text);
+  }
+  #info .hl { color: var(--yellow); font-weight: 700; }
+  #info .ok { color: var(--green); font-weight: 700; }
+  #info .bad { color: var(--red); font-weight: 700; }
+
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; color: var(--muted); font-size: 0.82rem; }
+  .stats b { color: var(--text); }
+
+  #log { font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.6; max-height: 200px; overflow-y: auto; }
+  #log .line { padding: 2px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+  #log .line:last-child { color: var(--text); }
+
+  table.bigo { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  table.bigo th, table.bigo td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  table.bigo th { color: var(--muted); font-weight: 600; }
+  .c-green { color: var(--green); font-weight: 700; }
+  .c-yellow { color: var(--yellow); font-weight: 700; }
+  .c-red { color: var(--red); font-weight: 700; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; font-size: 0.8rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+  <h1>Skip List</h1>
+  <p class="subtitle">A sorted, multi-level linked list — search rides express lanes and transfers down; insert flips coins to pick a level.</p>
+
+  <div class="badges">
+    <span class="badge green">Search O(log n) expected</span>
+    <span class="badge green">Insert / Delete O(log n) expected</span>
+    <span class="badge yellow">Space O(n)</span>
+    <span class="badge red">Worst case O(n)</span>
+  </div>
+
+  <!-- Controls -->
+  <div class="panel">
+    <div class="controls">
+      <div class="group">
+        <span class="group-label">value</span>
+        <input type="number" id="valInput" value="15" min="0" max="99">
+        <button class="green" id="insertBtn" onclick="doInsert()">Insert</button>
+        <button id="searchBtn" onclick="doSearch()">Search</button>
+        <button class="red" id="deleteBtn" onclick="doDelete()">Delete</button>
+      </div>
+      <div class="group">
+        <button class="purple" onclick="randomFill()">Random Fill</button>
+        <button onclick="resetList()">Reset</button>
+      </div>
+      <div class="group speed">
+        <span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <span>Fast</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--blue)"></i>current node</span>
+    <span><i class="dot" style="background:var(--yellow)"></i>scanning right</span>
+    <span><i class="dot" style="background:var(--green)"></i>found / new node</span>
+    <span><i class="dot" style="background:var(--red)"></i>not found</span>
+    <span><i class="dot" style="background:var(--purple)"></i>update[] predecessor</span>
+  </div>
+
+  <!-- Visualization -->
+  <div class="panel">
+    <div id="viz"><div class="grid" id="grid"></div></div>
+  </div>
+
+  <!-- Coin flips -->
+  <div class="panel">
+    <h3 style="color:var(--blue);font-size:1rem;margin-bottom:10px;">Random Level — Coin Flips (p = 0.5)</h3>
+    <div class="coins" id="coins"><span style="color:var(--muted);font-size:0.85rem;">Insert a value to watch the coin flips pick its level.</span></div>
+  </div>
+
+  <!-- Info + Log -->
+  <div class="two-col">
+    <div class="panel info">
+      <h3>What's happening</h3>
+      <div id="info">Press <span class="hl">Insert</span>, <span class="hl">Search</span>, or <span class="hl">Delete</span>. Search moves <span class="hl">right</span> while the next node &lt; target, then drops <span class="hl">down</span> a level.</div>
+      <div class="stats">
+        <span>Elements: <b id="statSize">0</b></span>
+        <span>Levels: <b id="statLevels">1</b></span>
+        <span>Steps: <b id="statSteps">0</b></span>
+        <span>log&#8322; n: <b id="statLogN">0</b></span>
+      </div>
+    </div>
+    <div class="panel logwrap">
+      <h3>Operation Log</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <!-- Big-O -->
+  <div class="panel bigo" style="max-width:1080px;">
+    <h3>Complexity</h3>
+    <table class="bigo">
+      <tr><th>Operation</th><th>Expected</th><th>Worst Case</th><th>Note</th></tr>
+      <tr><td>Search</td><td class="c-green">O(log n)</td><td class="c-red">O(n)</td><td>worst case astronomically improbable</td></tr>
+      <tr><td>Insert</td><td class="c-green">O(log n)</td><td class="c-red">O(n)</td><td>descent + O(level) splice</td></tr>
+      <tr><td>Delete</td><td class="c-green">O(log n)</td><td class="c-red">O(n)</td><td>descent + unlink per level</td></tr>
+      <tr><td>Min</td><td class="c-green">O(1)</td><td class="c-green">O(1)</td><td>head.forward[0]</td></tr>
+      <tr><td>Range [lo,hi]</td><td class="c-yellow">O(log n + k)</td><td class="c-red">O(n)</td><td>descend, then walk base list</td></tr>
+      <tr><td>Space</td><td class="c-yellow">O(n)</td><td class="c-red">O(n log n)</td><td>~2n pointers at p=0.5</td></tr>
+    </table>
+  </div>
+
+<script>
+// ===================== Skip List model =====================
+const MAX_LEVEL = 6;   // visual cap
+const P = 0.5;
+let busy = false;
+
+function makeNode(value, height) {
+  return { value, forward: new Array(height).fill(null) };
+}
+
+let sl;
+function freshList() {
+  sl = { head: makeNode(-Infinity, MAX_LEVEL), level: 1, size: 0 };
+}
+freshList();
+
+function randomLevelFlips() {
+  // returns {level, flips: ['H','H','T',...]}
+  let lvl = 1;
+  const flips = [];
+  while (Math.random() < P && lvl < MAX_LEVEL) {
+    flips.push('H');
+    lvl++;
+  }
+  flips.push('T'); // the stop
+  return { level: lvl, flips };
+}
+
+// ordered list of node objects on level 0 (for layout columns)
+function baseNodes() {
+  const out = [];
+  let x = sl.head.forward[0];
+  while (x) { out.push(x); x = x.forward[0]; }
+  return out;
+}
+
+// ===================== Rendering =====================
+function speedMs() { return 1150 - document.getElementById('speed').value * 100; }
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function logLine(msg) {
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = 'line';
+  d.textContent = msg;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setInfo(html) { document.getElementById('info').innerHTML = html; }
+
+function updateStats(steps) {
+  document.getElementById('statSize').textContent = sl.size;
+  document.getElementById('statLevels').textContent = sl.level;
+  if (steps !== undefined) document.getElementById('statSteps').textContent = steps;
+  const n = sl.size;
+  document.getElementById('statLogN').textContent = n > 0 ? Math.max(1, Math.ceil(Math.log2(n))) : 0;
+}
+
+// highlights: { nodeRef: 'current'|'scanning'|'found'|'notfound'|'newnode'|'update' }
+// traverseEdges: Set of "value@level" strings whose outgoing edge at that level is lit
+function render(highlights = new Map(), traverse = new Set()) {
+  const cols = baseNodes();           // ordered base nodes
+  // column index map: head is column -1 (its own cell)
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  // for each level from top (sl.level-1) down to 0, build a row
+  for (let lvl = sl.level - 1; lvl >= 0; lvl--) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const label = document.createElement('div');
+    label.className = 'row-label';
+    label.textContent = 'L' + lvl;
+    row.appendChild(label);
+
+    // head cell
+    row.appendChild(cellFor(sl.head, lvl, highlights, traverse, cols, -1));
+
+    // one cell per base column
+    for (let c = 0; c < cols.length; c++) {
+      row.appendChild(cellFor(cols[c], lvl, highlights, traverse, cols, c));
+    }
+    grid.appendChild(row);
+  }
+}
+
+function cellFor(node, lvl, highlights, traverse, cols, colIndex) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  // Does this node participate at this level?
+  const participates = (node === sl.head) ? (lvl < sl.level) : (lvl < node.forward.length);
+
+  if (participates) {
+    const box = document.createElement('div');
+    box.className = 'nodebox';
+    if (node === sl.head) { box.classList.add('head'); box.textContent = 'HEAD'; }
+    else box.textContent = node.value;
+    const h = highlights.get(node);
+    if (h) box.classList.add(h);
+    cell.appendChild(box);
+
+    // outgoing edge at this level toward node.forward[lvl]
+    const fwd = node.forward[lvl];
+    if (fwd) {
+      // distance in columns to the target node
+      const targetCol = cols.indexOf(fwd);
+      const startCol = colIndex; // -1 for head
+      const span = targetCol - startCol; // number of cells to cross
+      const edge = document.createElement('div');
+      edge.className = 'edge';
+      const key = (node === sl.head ? 'HEAD' : node.value) + '@' + lvl;
+      if (traverse.has(key)) edge.classList.add('traverse');
+      // each cell is 56px wide; edge starts at center of this box (~50%) and reaches center of target
+      edge.style.width = (span * 56 - 6) + 'px';
+      cell.appendChild(edge);
+      const ah = document.createElement('div');
+      ah.className = 'arrowhead';
+      ah.style.left = (span * 56 - 8) + 'px';
+      ah.style.right = 'auto';
+      if (traverse.has(key)) ah.style.borderLeftColor = 'var(--blue)';
+      cell.appendChild(ah);
+    }
+  } else {
+    cell.classList.add('empty');
+  }
+  return cell;
+}
+
+// ===================== Operations (animated) =====================
+async function doSearch() {
+  if (busy) return;
+  const v = parseInt(document.getElementById('valInput').value);
+  if (isNaN(v)) return;
+  busy = true; lockUI(true);
+  logLine('search(' + v + ')');
+  let steps = 0;
+  let x = sl.head;
+  const hl = new Map(); const tr = new Set();
+  hl.set(x, 'current');
+  setInfo('Start at <span class="hl">HEAD</span>, top level <span class="hl">L' + (sl.level-1) + '</span>.');
+  render(hl, tr); updateStats(steps); await sleep(speedMs());
+
+  for (let i = sl.level - 1; i >= 0; i--) {
+    while (x.forward[i] && x.forward[i].value < v) {
+      // move right
+      const key = (x === sl.head ? 'HEAD' : x.value) + '@' + i;
+      tr.add(key);
+      const nxt = x.forward[i];
+      hl.clear(); hl.set(nxt, 'scanning');
+      steps++;
+      setInfo('L' + i + ': next is <span class="hl">' + nxt.value + '</span> &lt; ' + v + ' → move <span class="hl">RIGHT</span>.');
+      render(hl, tr); updateStats(steps);
+      await sleep(speedMs());
+      x = nxt;
+      hl.clear(); hl.set(x, 'current');
+      render(hl, tr); await sleep(speedMs() * 0.4);
+    }
+    if (i > 0) {
+      const nv = x.forward[i] ? x.forward[i].value : 'NULL';
+      setInfo('L' + i + ': next is <span class="hl">' + nv + '</span> ≥ ' + v + ' (or NULL) → drop <span class="hl">DOWN</span> to L' + (i-1) + '.');
+      render(hl, tr); await sleep(speedMs());
+    }
+  }
+  // step off bottom
+  const cand = x.forward[0];
+  hl.clear();
+  if (cand && cand.value === v) {
+    hl.set(cand, 'found');
+    render(hl, tr); updateStats(steps);
+    setInfo('Step to forward[0] = <span class="ok">' + v + '</span>. <span class="ok">FOUND</span> in ' + steps + ' steps.');
+    logLine('  found ' + v + ' (' + steps + ' steps)');
+  } else {
+    if (cand) hl.set(cand, 'notfound'); else hl.set(x, 'notfound');
+    render(hl, tr); updateStats(steps);
+    setInfo('Step to forward[0] = <span class="bad">' + (cand ? cand.value : 'NULL') + '</span> ≠ ' + v + '. <span class="bad">NOT FOUND</span>.');
+    logLine('  ' + v + ' not found (' + steps + ' steps)');
+  }
+  await sleep(speedMs() * 2);
+  render(); busy = false; lockUI(false);
+}
+
+async function doInsert() {
+  if (busy) return;
+  const v = parseInt(document.getElementById('valInput').value);
+  if (isNaN(v)) return;
+  busy = true; lockUI(true);
+  logLine('insert(' + v + ')');
+
+  // descent recording update[]
+  const update = new Array(MAX_LEVEL).fill(sl.head);
+  let x = sl.head; let steps = 0;
+  const hl = new Map(); const tr = new Set();
+  hl.set(x, 'current');
+  setInfo('Insert <span class="hl">' + v + '</span>: descend recording the <span class="hl">update[]</span> predecessor at each level.');
+  render(hl, tr); updateStats(steps); await sleep(speedMs());
+
+  for (let i = sl.level - 1; i >= 0; i--) {
+    while (x.forward[i] && x.forward[i].value < v) {
+      const key = (x === sl.head ? 'HEAD' : x.value) + '@' + i;
+      tr.add(key);
+      x = x.forward[i]; steps++;
+      hl.clear(); hl.set(x, 'scanning');
+      setInfo('L' + i + ': ' + x.value + ' &lt; ' + v + ' → move RIGHT.');
+      render(hl, tr); updateStats(steps); await sleep(speedMs() * 0.8);
+    }
+    update[i] = x;
+    hl.clear(); hl.set(x, 'update');
+    setInfo('L' + i + ': record update[' + i + '] = <span style="color:var(--purple)">' + (x===sl.head?'HEAD':x.value) + '</span>, drop down.');
+    render(hl, tr); await sleep(speedMs() * 0.7);
+  }
+
+  // duplicate check
+  if (x.forward[0] && x.forward[0].value === v) {
+    hl.clear(); hl.set(x.forward[0], 'notfound');
+    setInfo('<span class="bad">' + v + ' already present</span> — duplicates ignored (set semantics).');
+    logLine('  ' + v + ' already present, ignored');
+    render(hl, tr); await sleep(speedMs() * 2);
+    render(); busy = false; lockUI(false); return;
+  }
+
+  // coin flips for level
+  const { level: lvl, flips } = randomLevelFlips();
+  await animateCoins(flips, lvl);
+
+  // raise list level if needed
+  if (lvl > sl.level) {
+    for (let i = sl.level; i < lvl; i++) update[i] = sl.head;
+    sl.level = lvl;
+  }
+  // splice
+  const node = makeNode(v, lvl);
+  for (let i = 0; i < lvl; i++) {
+    node.forward[i] = update[i].forward[i];
+    update[i].forward[i] = node;
+  }
+  sl.size++;
+  const hl2 = new Map(); hl2.set(node, 'newnode');
+  setInfo('Spliced <span class="ok">' + v + '</span> into levels 0..' + (lvl-1) + ' (height ' + lvl + '). No rotations needed.');
+  logLine('  inserted ' + v + ' at height ' + lvl);
+  render(hl2); updateStats(steps);
+  await sleep(speedMs() * 2);
+  render(); busy = false; lockUI(false);
+}
+
+async function doDelete() {
+  if (busy) return;
+  const v = parseInt(document.getElementById('valInput').value);
+  if (isNaN(v)) return;
+  busy = true; lockUI(true);
+  logLine('delete(' + v + ')');
+
+  const update = new Array(MAX_LEVEL).fill(sl.head);
+  let x = sl.head; let steps = 0;
+  const hl = new Map(); const tr = new Set();
+  for (let i = sl.level - 1; i >= 0; i--) {
+    while (x.forward[i] && x.forward[i].value < v) {
+      tr.add((x === sl.head ? 'HEAD' : x.value) + '@' + i);
+      x = x.forward[i]; steps++;
+      hl.clear(); hl.set(x, 'scanning');
+      render(hl, tr); updateStats(steps); await sleep(speedMs() * 0.7);
+    }
+    update[i] = x;
+    hl.clear(); hl.set(x, 'update');
+    render(hl, tr); await sleep(speedMs() * 0.5);
+  }
+  const target = x.forward[0];
+  if (!target || target.value !== v) {
+    setInfo('<span class="bad">' + v + ' not present</span> — nothing to delete.');
+    logLine('  ' + v + ' not found, no deletion');
+    if (target) { hl.clear(); hl.set(target, 'notfound'); render(hl, tr); }
+    await sleep(speedMs() * 2);
+    render(); busy = false; lockUI(false); return;
+  }
+  hl.clear(); hl.set(target, 'notfound');
+  setInfo('Found <span class="bad">' + v + '</span>. Unlink it at each level it occupies (height ' + target.forward.length + ').');
+  render(hl, tr); await sleep(speedMs() * 1.3);
+
+  for (let i = 0; i < sl.level; i++) {
+    if (update[i].forward[i] !== target) break;
+    update[i].forward[i] = target.forward[i];
+  }
+  while (sl.level > 1 && sl.head.forward[sl.level - 1] === null) sl.level--;
+  sl.size--;
+  logLine('  deleted ' + v);
+  setInfo('Unlinked <span class="bad">' + v + '</span>. Locality: only its predecessors at its own levels changed.');
+  render(); updateStats(steps);
+  await sleep(speedMs());
+  busy = false; lockUI(false);
+}
+
+async function animateCoins(flips, lvl) {
+  const box = document.getElementById('coins');
+  box.innerHTML = '';
+  for (let k = 0; k < flips.length; k++) {
+    const c = document.createElement('div');
+    c.className = 'coin ' + (flips[k] === 'H' ? 'heads' : 'tails');
+    c.textContent = flips[k];
+    box.appendChild(c);
+    setInfo('Flip #' + (k+1) + ': <span class="' + (flips[k]==='H'?'ok':'hl') + '">' +
+      (flips[k] === 'H' ? 'HEADS → promote, level now ' + (k+2) : 'TAILS → stop') + '</span>');
+    await sleep(speedMs() * 1.1);
+  }
+  const lbl = document.createElement('span');
+  lbl.style.cssText = 'margin-left:10px;color:var(--green);font-weight:700;';
+  lbl.textContent = '→ height ' + lvl;
+  box.appendChild(lbl);
+  await sleep(speedMs());
+}
+
+// ===================== UI helpers =====================
+function lockUI(on) {
+  ['insertBtn','searchBtn','deleteBtn'].forEach(id => document.getElementById(id).disabled = on);
+}
+
+function resetList() {
+  if (busy) return;
+  freshList();
+  document.getElementById('coins').innerHTML = '<span style="color:var(--muted);font-size:0.85rem;">Insert a value to watch the coin flips pick its level.</span>';
+  document.getElementById('log').innerHTML = '';
+  setInfo('List reset. Press <span class="hl">Insert</span> to add elements.');
+  render(); updateStats(0);
+}
+
+function randomFill() {
+  if (busy) return;
+  freshList();
+  const vals = new Set();
+  while (vals.size < 9) vals.add(Math.floor(Math.random() * 60) + 1);
+  for (const v of vals) {
+    const { level: lvl } = randomLevelFlips();
+    if (lvl > sl.level) sl.level = lvl;
+  }
+  // re-insert properly (deterministic splice) — simplest: clear and insert each
+  freshList();
+  for (const v of vals) silentInsert(v);
+  logLine('random fill: ' + [...vals].sort((a,b)=>a-b).join(', '));
+  setInfo('Filled with ' + vals.size + ' random values. Try a <span class="hl">Search</span>.');
+  render(); updateStats(0);
+}
+
+function silentInsert(v) {
+  const update = new Array(MAX_LEVEL).fill(sl.head);
+  let x = sl.head;
+  for (let i = sl.level - 1; i >= 0; i--) {
+    while (x.forward[i] && x.forward[i].value < v) x = x.forward[i];
+    update[i] = x;
+  }
+  if (x.forward[0] && x.forward[0].value === v) return;
+  const { level: lvl } = randomLevelFlips();
+  if (lvl > sl.level) { for (let i = sl.level; i < lvl; i++) update[i] = sl.head; sl.level = lvl; }
+  const node = makeNode(v, lvl);
+  for (let i = 0; i < lvl; i++) { node.forward[i] = update[i].forward[i]; update[i].forward[i] = node; }
+  sl.size++;
+}
+
+// ===================== Init =====================
+[12, 6, 19, 3, 9, 17, 21, 25].forEach(silentInsert);
+render(); updateStats(0);
+logLine('initialized with 8 elements');
+</script>
+</body>
+</html>
