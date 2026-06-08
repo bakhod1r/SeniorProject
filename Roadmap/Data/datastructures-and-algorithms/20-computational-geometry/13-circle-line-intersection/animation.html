@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circle&ndash;Line Intersection &mdash; Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); text-align:center; margin-bottom:6px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:18px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:5px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-purple{color:var(--purple); border-color:var(--purple);}
+
+  .layout{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1180px;}
+  .left{flex:1 1 560px; min-width:340px;}
+  .right{flex:1 1 380px; min-width:320px; display:flex; flex-direction:column; gap:16px;}
+
+  .stage-wrap{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px;}
+  svg{width:100%; height:auto; display:block; background:#0a0e14; border-radius:8px; touch-action:none;}
+  .grid-line{stroke:#1b2230; stroke-width:1;}
+  .axis{stroke:#283042; stroke-width:1.5;}
+  .circle{fill:rgba(88,166,255,.07); stroke:var(--blue); stroke-width:2.5;}
+  .center-dot{fill:var(--blue); stroke:#0a0e14; stroke-width:2;}
+  .line-seg{stroke:var(--orange); stroke-width:4; stroke-linecap:round;}
+  .line-ext{stroke:#3a4254; stroke-width:1.5; stroke-dasharray:5 5;}
+  .perp{stroke:var(--purple); stroke-width:2; stroke-dasharray:4 4;}
+  .foot-dot{fill:var(--purple); stroke:#0a0e14; stroke-width:2;}
+  .chord{stroke:var(--yellow); stroke-width:3;}
+  .hit-pt{fill:var(--green); stroke:#0a0e14; stroke-width:2;}
+  .hit-glow{fill:var(--green); opacity:.18;}
+  .tan-pt{fill:var(--yellow); stroke:#0a0e14; stroke-width:2;}
+  .tan-glow{fill:var(--yellow); opacity:.2;}
+  .handle{cursor:grab; stroke:#0a0e14; stroke-width:2;}
+  .handle:active{cursor:grabbing;}
+  .ptlabel{fill:var(--muted); font-size:12px; font-family:'Courier New',monospace;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:14px 0 4px;}
+  button{
+    padding:9px 16px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover{background:var(--blue); color:#0a0e14;}
+  button.alt{border-color:var(--purple); color:var(--purple);}
+  button.alt:hover{background:var(--purple); color:#0a0e14;}
+  .rrow{display:flex; gap:10px; align-items:center; justify-content:center; margin-top:8px; color:var(--muted); font-size:.85rem;}
+  .rrow input[type=range]{accent-color:var(--blue); width:160px;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+  .verdict{font-size:1.15rem; font-weight:700; margin-bottom:10px;}
+  .v-secant{color:var(--green);} .v-tangent{color:var(--yellow);}
+  .v-miss{color:var(--muted);} .v-diam{color:var(--purple);} .v-degen{color:var(--red);}
+
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  td.mono,code{font-family:'Courier New',monospace;}
+  .ok{color:var(--green); font-weight:700;}
+  .warn{color:var(--yellow); font-weight:700;}
+  .bad{color:var(--red); font-weight:700;}
+
+  .calc{font-family:'Courier New',monospace; font-size:.82rem; line-height:1.7; color:var(--text);}
+  .calc .hl{color:var(--yellow);}
+  .muted{color:var(--muted);}
+
+  .bigo td:last-child{font-family:'Courier New',monospace; color:var(--green);}
+  .log{height:140px; overflow-y:auto; background:#0a0e14; border:1px solid var(--border);
+       border-radius:8px; padding:10px; font-family:'Courier New',monospace; font-size:.78rem; line-height:1.6;}
+  .log div{color:var(--muted);} .log div:last-child{color:var(--text);}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0 0; font-size:.8rem;}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dot{width:12px; height:12px; border-radius:50%; display:inline-block;}
+</style>
+</head>
+<body>
+  <h1>Circle&ndash;Line Intersection</h1>
+  <p class="subtitle">Drag the orange line endpoints. Watch the perpendicular foot, the half-chord, and the 0/1/2 points update live.</p>
+
+  <div class="badges">
+    <span class="badge b-green">Single test: O(1)</span>
+    <span class="badge b-yellow">Ray vs n circles: O(n)</span>
+    <span class="badge b-purple">With broad-phase: ~O(log n)</span>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="stage-wrap">
+        <svg id="stage" viewBox="0 0 600 440" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="controls">
+        <button onclick="presetSecant()">Secant (2)</button>
+        <button class="alt" onclick="presetTangent()">Tangent (1)</button>
+        <button onclick="presetMiss()">Miss (0)</button>
+        <button class="alt" onclick="presetDiameter()">Diameter</button>
+        <button onclick="randomize()">Random</button>
+        <button onclick="toggleExtend()" id="extBtn">Show Line</button>
+      </div>
+      <div class="rrow">
+        <label>radius r:</label>
+        <input type="range" id="rSlider" min="30" max="180" value="110">
+        <span id="rVal">110</span>
+      </div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--blue)"></i>Circle (centre C)</span>
+        <span><i class="dot" style="background:var(--orange)"></i>Line A&rarr;B</span>
+        <span><i class="dot" style="background:var(--purple)"></i>Foot F (perp.)</span>
+        <span><i class="dot" style="background:var(--yellow)"></i>Half-chord / tangent</span>
+        <span><i class="dot" style="background:var(--green)"></i>Intersection point</span>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>Result</h3>
+        <div class="verdict" id="verdict">&mdash;</div>
+        <div class="calc" id="calc"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Distance Test &amp; Discriminant</h3>
+        <table>
+          <tbody id="testBody"></tbody>
+        </table>
+        <p class="muted" style="margin-top:8px; font-size:.78rem;">
+          Count = sign of <code>r&sup2; &minus; d&sup2;</code> (same as the discriminant <code>&Delta;</code>):
+          <span class="muted">d&gt;r</span> &rarr; 0, <span class="warn">d=r</span> &rarr; 1, <span class="ok">d&lt;r</span> &rarr; 2.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity Reference</h3>
+        <table class="bigo">
+          <thead><tr><th>Operation</th><th>Time</th></tr></thead>
+          <tbody>
+            <tr><td>distance C&rarr;line (count)</td><td>O(1)</td></tr>
+            <tr><td>foot + half-chord (points)</td><td>O(1)</td></tr>
+            <tr><td>quadratic / discriminant</td><td>O(1)</td></tr>
+            <tr><td>ray vs n circles (naive)</td><td>O(n)</td></tr>
+            <tr><td>ray vs n circles (BVH)</td><td>~O(log n)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== Coordinate model =====
+// SVG coords (y grows downward). Circle centre is the SVG centre.
+const W = 600, H = 440;
+const stage = document.getElementById("stage");
+const EPS = 0.6; // pixel-scale tolerance for the tangent band
+
+let C = { x: W/2, y: H/2 };   // circle centre (fixed)
+let r = 110;                  // radius (slider)
+let A = { x: 90,  y: 120 };   // line endpoint A
+let B = { x: 510, y: 320 };   // line endpoint B
+let showExtend = false;
+let dragging = null;
+
+// ----- math helpers (plain SVG frame; distances are symmetric so frame is fine) -----
+function sub(p,q){ return {x:p.x-q.x, y:p.y-q.y}; }
+function add(p,q){ return {x:p.x+q.x, y:p.y+q.y}; }
+function scale(p,s){ return {x:p.x*s, y:p.y*s}; }
+function dot(p,q){ return p.x*q.x + p.y*q.y; }
+function norm(p){ return Math.hypot(p.x, p.y); }
+
+// ===== rendering =====
+function gridLines(){
+  let s = "";
+  for(let x=0;x<=W;x+=40) s+=`<line class="grid-line" x1="${x}" y1="0" x2="${x}" y2="${H}"/>`;
+  for(let y=0;y<=H;y+=40) s+=`<line class="grid-line" x1="0" y1="${y}" x2="${W}" y2="${y}"/>`;
+  return s;
+}
+function extendLine(a,b){
+  const d = sub(b,a);
+  if(norm(d) < 1e-6) return "";
+  const far = 2000;
+  const x1 = a.x - d.x*far, y1 = a.y - d.y*far;
+  const x2 = b.x + d.x*far, y2 = b.y + d.y*far;
+  return `<line class="line-ext" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+}
+function handle(id,p){
+  return `<circle class="handle" data-id="${id}" cx="${p.x}" cy="${p.y}" r="9" fill="${'#ffa657'}"/>
+          <text class="ptlabel" x="${p.x+12}" y="${p.y-10}">${id}</text>`;
+}
+
+function render(res){
+  let s = gridLines();
+
+  // circle
+  s += `<circle class="circle" cx="${C.x}" cy="${C.y}" r="${r}"/>`;
+
+  // infinite line (optional)
+  if(showExtend) s += extendLine(A,B);
+
+  // perpendicular from C to foot F
+  if(res.foot){
+    s += `<line class="perp" x1="${C.x}" y1="${C.y}" x2="${res.foot.x}" y2="${res.foot.y}"/>`;
+  }
+
+  // chord (between the two intersection points)
+  if(res.kind==="secant" || res.kind==="diameter"){
+    s += `<line class="chord" x1="${res.P1.x}" y1="${res.P1.y}" x2="${res.P2.x}" y2="${res.P2.y}"/>`;
+  }
+
+  // the visible segment A-B
+  s += `<line class="line-seg" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
+
+  // centre + foot dots
+  s += `<circle class="center-dot" cx="${C.x}" cy="${C.y}" r="5"/>`;
+  s += `<text class="ptlabel" x="${C.x+9}" y="${C.y-9}">C</text>`;
+  if(res.foot){
+    s += `<circle class="foot-dot" cx="${res.foot.x}" cy="${res.foot.y}" r="5"/>`;
+    s += `<text class="ptlabel" x="${res.foot.x+8}" y="${res.foot.y+16}">F</text>`;
+  }
+
+  // intersection points
+  if(res.kind==="secant" || res.kind==="diameter"){
+    for(const P of [res.P1,res.P2]){
+      s += `<circle class="hit-glow" cx="${P.x}" cy="${P.y}" r="14"/>`;
+      s += `<circle class="hit-pt"   cx="${P.x}" cy="${P.y}" r="6.5"/>`;
+    }
+  } else if(res.kind==="tangent"){
+    s += `<circle class="tan-glow" cx="${res.foot.x}" cy="${res.foot.y}" r="14"/>`;
+    s += `<circle class="tan-pt"   cx="${res.foot.x}" cy="${res.foot.y}" r="6.5"/>`;
+  }
+
+  // handles
+  s += handle("A",A);
+  s += handle("B",B);
+
+  stage.innerHTML = s;
+  attachHandles();
+}
+
+// ===== the core computation =====
+function classify(){
+  const dir = sub(B,A);
+  const len2 = dot(dir,dir);
+  if(len2 < 1e-6){
+    return {kind:"degen", d:null, foot:null};
+  }
+  const t = dot(sub(C,A),dir) / len2;
+  const foot = add(A, scale(dir,t));   // foot of perpendicular
+  const d = norm(sub(C,foot));         // distance centre -> line
+  const u = scale(dir, 1/Math.sqrt(len2));
+
+  let kind, P1=null, P2=null;
+  if(d > r + EPS){
+    kind = "miss";
+  } else if(Math.abs(d - r) <= EPS){
+    kind = "tangent";
+  } else {
+    const h = Math.sqrt(Math.max(0, r*r - d*d));
+    P1 = add(foot, scale(u, h));
+    P2 = sub(foot, scale(u, h));
+    kind = (d <= EPS) ? "diameter" : "secant";
+  }
+  return {kind, d, r, foot, P1, P2, h: Math.sqrt(Math.max(0,r*r-d*d)), len2, dir};
+}
+
+// ===== UI update =====
+const verdictEl = document.getElementById("verdict");
+const calcEl = document.getElementById("calc");
+const testBody = document.getElementById("testBody");
+const logEl = document.getElementById("log");
+
+function update(logMsg){
+  const res = classify();
+  render(res);
+
+  const map = {
+    secant:  ["v-secant", "SECANT &mdash; 2 intersection points"],
+    diameter:["v-diam",   "DIAMETER &mdash; 2 points (line through centre)"],
+    tangent: ["v-tangent","TANGENT &mdash; 1 point (d = r)"],
+    miss:    ["v-miss",   "MISS &mdash; 0 points (d &gt; r)"],
+    degen:   ["v-degen",  "DEGENERATE &mdash; A = B is not a line"]
+  };
+  const [vc,vt] = map[res.kind];
+  verdictEl.className = "verdict "+vc;
+  verdictEl.innerHTML = vt;
+
+  // distance / discriminant table
+  if(res.kind==="degen"){
+    testBody.innerHTML = `<tr><td class="mono">A == B</td><td class="bad">no line</td></tr>`;
+    calcEl.innerHTML = `<span class="muted">Move A or B apart to form a line.</span>`;
+  } else {
+    const d = res.d, R = res.r;
+    const rem = R*R - d*d;
+    const dCls = d > R+EPS ? "bad" : Math.abs(d-R)<=EPS ? "warn" : "ok";
+    const cmp  = d > R+EPS ? "d &gt; r" : Math.abs(d-R)<=EPS ? "d = r" : "d &lt; r";
+    testBody.innerHTML =
+      `<tr><td class="mono">d = dist(C, line)</td><td class="mono ${dCls}">${d.toFixed(2)} px</td></tr>` +
+      `<tr><td class="mono">r (radius)</td><td class="mono">${R.toFixed(2)} px</td></tr>` +
+      `<tr><td class="mono">compare</td><td class="${dCls}">${cmp}</td></tr>` +
+      `<tr><td class="mono">r&sup2; &minus; d&sup2; (&prop; &Delta;)</td><td class="mono ${dCls}">${rem.toFixed(1)}</td></tr>` +
+      `<tr><td class="mono">half-chord h</td><td class="mono">${(rem>0?Math.sqrt(rem):0).toFixed(2)} px</td></tr>`;
+
+    let calc = "";
+    calc += `<span class="muted">foot F = </span>(${res.foot.x.toFixed(0)}, ${res.foot.y.toFixed(0)})<br>`;
+    if(res.kind==="secant" || res.kind==="diameter"){
+      calc += `h = &radic;(r&sup2; &minus; d&sup2;) = <span class="hl">${res.h.toFixed(2)}</span><br>`;
+      calc += `<span class="muted">P&#8321; = F + h&middot;&ucirc; = </span>(${res.P1.x.toFixed(0)}, ${res.P1.y.toFixed(0)})<br>`;
+      calc += `<span class="muted">P&#8322; = F &minus; h&middot;&ucirc; = </span>(${res.P2.x.toFixed(0)}, ${res.P2.y.toFixed(0)})`;
+      if(res.kind==="diameter") calc += `<br><span class="hl">d &asymp; 0 &rarr; chord is a diameter</span>`;
+    } else if(res.kind==="tangent"){
+      calc += `<span class="hl">d &asymp; r &rarr; h = 0</span>, the two points merge at F.`;
+    } else {
+      calc += `<span class="hl">r&sup2; &minus; d&sup2; &lt; 0 &rarr; &radic; undefined &rarr; no point.</span>`;
+    }
+    calcEl.innerHTML = calc;
+  }
+
+  if(logMsg){ addLog(`${logMsg} &rarr; ${res.kind}`); }
+}
+
+function addLog(msg){
+  const div = document.createElement("div");
+  const ts = new Date().toLocaleTimeString();
+  div.innerHTML = `[${ts}] ${msg}`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ===== dragging =====
+function svgPoint(evt){
+  const rect = stage.getBoundingClientRect();
+  const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX);
+  const cy = (evt.touches ? evt.touches[0].clientY : evt.clientY);
+  return {
+    x: Math.max(8, Math.min(W-8, (cx-rect.left)/rect.width*W)),
+    y: Math.max(8, Math.min(H-8, (cy-rect.top)/rect.height*H))
+  };
+}
+function attachHandles(){
+  stage.querySelectorAll(".handle").forEach(h=>{
+    h.addEventListener("mousedown", startDrag);
+    h.addEventListener("touchstart", startDrag, {passive:false});
+  });
+}
+function startDrag(e){
+  e.preventDefault();
+  dragging = e.target.getAttribute("data-id");
+}
+function moveDrag(e){
+  if(!dragging) return;
+  e.preventDefault();
+  const p = svgPoint(e);
+  if(dragging==="A"){ A = {x:Math.round(p.x), y:Math.round(p.y)}; }
+  else if(dragging==="B"){ B = {x:Math.round(p.x), y:Math.round(p.y)}; }
+  update();
+}
+function endDrag(){
+  if(dragging){ addLog(`moved ${dragging}`); dragging=null; update(); }
+}
+window.addEventListener("mousemove", moveDrag);
+window.addEventListener("touchmove", moveDrag, {passive:false});
+window.addEventListener("mouseup", endDrag);
+window.addEventListener("touchend", endDrag);
+
+// ===== radius slider =====
+const rSlider = document.getElementById("rSlider");
+const rVal = document.getElementById("rVal");
+rSlider.addEventListener("input", ()=>{
+  r = parseInt(rSlider.value);
+  rVal.textContent = r;
+  update();
+});
+
+// ===== presets =====
+function presetSecant(){
+  A = {x:90, y:160}; B = {x:510, y:280}; r = 110;
+  rSlider.value = r; rVal.textContent = r;
+  update("preset: secant");
+}
+function presetTangent(){
+  // place a horizontal line exactly r below the centre
+  r = 110; rSlider.value = r; rVal.textContent = r;
+  const y = Math.round(C.y - r);
+  A = {x:90, y}; B = {x:510, y};
+  update("preset: tangent");
+}
+function presetMiss(){
+  r = 90; rSlider.value = r; rVal.textContent = r;
+  A = {x:90, y:60}; B = {x:510, y:90};
+  update("preset: miss");
+}
+function presetDiameter(){
+  r = 120; rSlider.value = r; rVal.textContent = r;
+  A = {x:90, y:C.y}; B = {x:510, y:C.y}; // horizontal through centre
+  update("preset: diameter");
+}
+function randomize(){
+  const rnd = (lo,hi)=> Math.round(lo + Math.random()*(hi-lo));
+  A = {x:rnd(40,W-40), y:rnd(40,H-40)};
+  B = {x:rnd(40,W-40), y:rnd(40,H-40)};
+  r = rnd(40,160); rSlider.value = r; rVal.textContent = r;
+  update("randomize");
+}
+function toggleExtend(){
+  showExtend = !showExtend;
+  document.getElementById("extBtn").textContent = showExtend ? "Hide Line" : "Show Line";
+  update();
+}
+
+// ===== init =====
+addLog("ready &mdash; drag A or B, change r, or pick a preset");
+update();
+</script>
+</body>
+</html>
