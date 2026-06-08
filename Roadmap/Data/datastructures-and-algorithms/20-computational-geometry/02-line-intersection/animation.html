@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Line &amp; Segment Intersection — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); text-align:center; margin-bottom:6px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:18px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:5px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-purple{color:var(--purple); border-color:var(--purple);}
+
+  .layout{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1180px;}
+  .left{flex:1 1 560px; min-width:340px;}
+  .right{flex:1 1 380px; min-width:320px; display:flex; flex-direction:column; gap:16px;}
+
+  .stage-wrap{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px;}
+  svg{width:100%; height:auto; display:block; background:#0a0e14; border-radius:8px; touch-action:none;}
+  .grid-line{stroke:#1b2230; stroke-width:1;}
+  .axis{stroke:#283042; stroke-width:1.5;}
+  .seg1{stroke:var(--blue); stroke-width:4; stroke-linecap:round;}
+  .seg2{stroke:var(--orange); stroke-width:4; stroke-linecap:round;}
+  .handle{cursor:grab; stroke:#0a0e14; stroke-width:2;}
+  .handle:active{cursor:grabbing;}
+  .hit-pt{fill:var(--green); stroke:#0a0e14; stroke-width:2;}
+  .hit-glow{fill:var(--green); opacity:.18;}
+  .extend{stroke:#3a4254; stroke-width:1.5; stroke-dasharray:5 5;}
+  .ptlabel{fill:var(--muted); font-size:12px; font-family:'Courier New',monospace;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:14px 0 4px;}
+  button{
+    padding:9px 16px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover{background:var(--blue); color:#0a0e14;}
+  button.alt{border-color:var(--purple); color:var(--purple);}
+  button.alt:hover{background:var(--purple); color:#0a0e14;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+  .verdict{font-size:1.15rem; font-weight:700; margin-bottom:10px;}
+  .v-cross{color:var(--green);} .v-touch{color:var(--yellow);}
+  .v-parallel{color:var(--red);} .v-collinear{color:var(--purple);} .v-none{color:var(--muted);}
+
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  td.mono,code{font-family:'Courier New',monospace;}
+  .o-pos{color:var(--green); font-weight:700;}
+  .o-neg{color:var(--red); font-weight:700;}
+  .o-zero{color:var(--yellow); font-weight:700;}
+
+  .calc{font-family:'Courier New',monospace; font-size:.82rem; line-height:1.7; color:var(--text);}
+  .calc .hl{color:var(--yellow);}
+  .muted{color:var(--muted);}
+
+  .bigo td:last-child{font-family:'Courier New',monospace; color:var(--green);}
+  .log{height:150px; overflow-y:auto; background:#0a0e14; border:1px solid var(--border);
+       border-radius:8px; padding:10px; font-family:'Courier New',monospace; font-size:.78rem; line-height:1.6;}
+  .log div{color:var(--muted);} .log div:last-child{color:var(--text);}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0 0; font-size:.8rem;}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dot{width:12px; height:12px; border-radius:50%; display:inline-block;}
+</style>
+</head>
+<body>
+  <h1>Line &amp; Segment Intersection</h1>
+  <p class="subtitle">Drag the endpoints — watch the orientation tests and the intersection point update live.</p>
+
+  <div class="badges">
+    <span class="badge b-green">Pair test: O(1)</span>
+    <span class="badge b-yellow">All-pairs brute: O(n²)</span>
+    <span class="badge b-purple">Sweep line: O((n+k) log n)</span>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="stage-wrap">
+        <svg id="stage" viewBox="0 0 600 440" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="controls">
+        <button onclick="presetCross()">Crossing X</button>
+        <button onclick="presetTouch()">T-Junction</button>
+        <button class="alt" onclick="presetParallel()">Parallel</button>
+        <button class="alt" onclick="presetCollinear()">Collinear</button>
+        <button onclick="randomize()">Random</button>
+        <button onclick="toggleExtend()" id="extBtn">Show Lines</button>
+      </div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--blue)"></i>Segment 1 (P1→P2)</span>
+        <span><i class="dot" style="background:var(--orange)"></i>Segment 2 (P3→P4)</span>
+        <span><i class="dot" style="background:var(--green)"></i>Intersection point</span>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>Result</h3>
+        <div class="verdict" id="verdict">—</div>
+        <div class="calc" id="calc"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Orientation Tests</h3>
+        <table>
+          <thead><tr><th>Test</th><th>cross</th><th>sign</th><th>meaning</th></tr></thead>
+          <tbody id="orientBody"></tbody>
+        </table>
+        <p class="muted" style="margin-top:8px; font-size:.78rem;">
+          Proper crossing &hArr; <code>o1≠o2</code> AND <code>o3≠o4</code>. A zero sign means an endpoint lies on the other line (boundary case).
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity Reference</h3>
+        <table class="bigo">
+          <thead><tr><th>Operation</th><th>Time</th></tr></thead>
+          <tbody>
+            <tr><td>cross / orientation</td><td>O(1)</td></tr>
+            <tr><td>do 2 segments intersect</td><td>O(1)</td></tr>
+            <tr><td>compute the point (Cramer)</td><td>O(1)</td></tr>
+            <tr><td>all-pairs brute force</td><td>O(n²)</td></tr>
+            <tr><td>all intersections (sweep)</td><td>O((n+k) log n)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== Coordinate model =====
+// We keep logical points in SVG coordinates (y grows downward in SVG).
+// Cross products are computed in a y-up math frame so "left/right" reads naturally.
+const W = 600, H = 440;
+const stage = document.getElementById("stage");
+
+let pts = {
+  P1:{x:120,y:330}, P2:{x:480,y:120},   // segment 1 (blue)
+  P3:{x:120,y:120}, P4:{x:480,y:330}    // segment 2 (orange)
+};
+let showExtend = false;
+let dragging = null;
+
+// ----- math helpers (y-up frame: flip y so up is positive) -----
+function mx(p){ return p.x; }
+function my(p){ return H - p.y; }          // flip for math
+function cross(a,b,c){                       // (b-a) x (c-a)
+  return (mx(b)-mx(a))*(my(c)-my(a)) - (my(b)-my(a))*(mx(c)-mx(a));
+}
+function sgn(v){ return v>0?1 : v<0?-1 : 0; }
+
+// ===== rendering =====
+function gridLines(){
+  let s = "";
+  for(let x=0;x<=W;x+=40) s+=`<line class="grid-line" x1="${x}" y1="0" x2="${x}" y2="${H}"/>`;
+  for(let y=0;y<=H;y+=40) s+=`<line class="grid-line" x1="0" y1="${y}" x2="${W}" y2="${y}"/>`;
+  s+=`<line class="axis" x1="0" y1="${H/2}" x2="${W}" y2="${H/2}"/>`;
+  s+=`<line class="axis" x1="${W/2}" y1="0" x2="${W/2}" y2="${H}"/>`;
+  return s;
+}
+function extendLine(a,b){
+  // draw the infinite supporting line clipped to the box
+  const dx=b.x-a.x, dy=b.y-a.y;
+  if(dx===0 && dy===0) return "";
+  const far=2000;
+  const x1=a.x-dx*far, y1=a.y-dy*far, x2=b.x+dx*far, y2=b.y+dy*far;
+  return `<line class="extend" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+}
+function handle(id,p,color){
+  return `<circle class="handle" data-id="${id}" cx="${p.x}" cy="${p.y}" r="9" fill="${color}"/>
+          <text class="ptlabel" x="${p.x+12}" y="${p.y-10}">${id}</text>`;
+}
+
+function render(res){
+  let s = gridLines();
+  if(showExtend){
+    s += extendLine(pts.P1,pts.P2);
+    s += extendLine(pts.P3,pts.P4);
+  }
+  s += `<line class="seg1" x1="${pts.P1.x}" y1="${pts.P1.y}" x2="${pts.P2.x}" y2="${pts.P2.y}"/>`;
+  s += `<line class="seg2" x1="${pts.P3.x}" y1="${pts.P3.y}" x2="${pts.P4.x}" y2="${pts.P4.y}"/>`;
+  if(res && res.point){
+    s += `<circle class="hit-glow" cx="${res.point.x}" cy="${res.point.y}" r="16"/>`;
+    s += `<circle class="hit-pt"   cx="${res.point.x}" cy="${res.point.y}" r="7"/>`;
+  }
+  s += handle("P1",pts.P1,"#58a6ff");
+  s += handle("P2",pts.P2,"#58a6ff");
+  s += handle("P3",pts.P3,"#ffa657");
+  s += handle("P4",pts.P4,"#ffa657");
+  stage.innerHTML = s;
+  attachHandles();
+}
+
+// ===== the core computation =====
+function classify(){
+  const {P1,P2,P3,P4}=pts;
+  const o1=cross(P1,P2,P3), o2=cross(P1,P2,P4);
+  const o3=cross(P3,P4,P1), o4=cross(P3,P4,P2);
+  const d1={x:mx(P2)-mx(P1), y:my(P2)-my(P1)};
+  const d2={x:mx(P4)-mx(P3), y:my(P4)-my(P3)};
+  const den = d1.x*d2.y - d1.y*d2.x;   // d1 x d2
+
+  let kind, point=null, t=null;
+  if(den===0){
+    // parallel or collinear
+    if(o1!==0){ kind="parallel"; }
+    else { kind="collinear"; }
+  } else {
+    const e={x:mx(P3)-mx(P1), y:my(P3)-my(P1)};
+    t = (e.x*d2.y - e.y*d2.x)/den;
+    const u = (e.x*d1.y - e.y*d1.x)/den;
+    const within = (t>=0&&t<=1&&u>=0&&u<=1);
+    // intersection in math frame, then convert y back to svg
+    const ix = mx(P1)+t*d1.x;
+    const iy = my(P1)+t*d1.y;
+    point = {x:ix, y:H-iy};
+    if(within){
+      // detect "touch": an endpoint exactly on the other segment
+      const touch = (sgn(o1)*sgn(o2)===0)||(sgn(o3)*sgn(o4)===0);
+      kind = touch ? "touch" : "cross";
+    } else {
+      kind = "none";
+      point = null; // lines cross but outside the segments — don't draw a hit
+    }
+  }
+  return {o1,o2,o3,o4,den,t,kind,point,d1,d2};
+}
+
+// ===== UI update =====
+const verdictEl = document.getElementById("verdict");
+const calcEl = document.getElementById("calc");
+const orientBody = document.getElementById("orientBody");
+const logEl = document.getElementById("log");
+
+function oCell(v){
+  const sv=sgn(v);
+  const cls = sv>0?"o-pos":sv<0?"o-neg":"o-zero";
+  const word = sv>0?"left (+1)":sv<0?"right (−1)":"collinear (0)";
+  return {cls, word, sv};
+}
+
+function update(logMsg){
+  const r = classify();
+  render(r);
+
+  // orientation table
+  const rows = [
+    ["o1 = cross(P1,P2,P3)", r.o1],
+    ["o2 = cross(P1,P2,P4)", r.o2],
+    ["o3 = cross(P3,P4,P1)", r.o3],
+    ["o4 = cross(P3,P4,P2)", r.o4],
+  ];
+  orientBody.innerHTML = rows.map(([label,v])=>{
+    const c=oCell(v);
+    return `<tr><td class="mono">${label}</td><td class="mono">${v}</td>
+            <td class="${c.cls}">${c.sv>0?"+":""}${c.sv}</td>
+            <td class="${c.cls}">${c.word}</td></tr>`;
+  }).join("");
+
+  // verdict + calc
+  const map = {
+    cross:["v-cross","CROSS — segments intersect"],
+    touch:["v-touch","TOUCH — boundary / endpoint contact"],
+    parallel:["v-parallel","PARALLEL — no intersection"],
+    collinear:["v-collinear","COLLINEAR — same supporting line"],
+    none:["v-none","NO INTERSECTION (lines may cross outside)"]
+  };
+  const [vc,vt]=map[r.kind];
+  verdictEl.className = "verdict "+vc;
+  verdictEl.textContent = vt;
+
+  let calc = "";
+  calc += `straddle 1: o1·o2 = ${r.o1*r.o2 < 0 ? '<span class="hl">opposite ✓</span>' : 'same ✗'}<br>`;
+  calc += `straddle 2: o3·o4 = ${r.o3*r.o4 < 0 ? '<span class="hl">opposite ✓</span>' : 'same ✗'}<br>`;
+  calc += `<span class="muted">det = d1 × d2 = </span>${r.den}`;
+  if(r.den===0){
+    calc += ` <span class="hl">(zero → parallel/coincident)</span>`;
+  } else if(r.t!==null){
+    calc += `<br><span class="muted">t = </span>${r.t.toFixed(3)}`;
+    if(r.point){
+      // recover logical-ish coords for display (grid units of 40px)
+      const gx=((r.point.x-W/2)/40).toFixed(2);
+      const gy=((H/2-r.point.y)/40).toFixed(2);
+      calc += `<br><span class="muted">point ≈ </span><span class="hl">(${gx}, ${gy})</span> grid units`;
+    } else {
+      calc += ` <span class="muted">(outside [0,1] → segments miss)</span>`;
+    }
+  }
+  calcEl.innerHTML = calc;
+
+  if(logMsg){ addLog(`${logMsg} → ${r.kind}`); }
+}
+
+function addLog(msg){
+  const d=document.createElement("div");
+  const ts=new Date().toLocaleTimeString();
+  d.textContent=`[${ts}] ${msg}`;
+  logEl.appendChild(d);
+  logEl.scrollTop=logEl.scrollHeight;
+}
+
+// ===== dragging =====
+function svgPoint(evt){
+  const r=stage.getBoundingClientRect();
+  const cx=(evt.touches?evt.touches[0].clientX:evt.clientX);
+  const cy=(evt.touches?evt.touches[0].clientY:evt.clientY);
+  return { x:Math.max(8,Math.min(W-8,(cx-r.left)/r.width*W)),
+           y:Math.max(8,Math.min(H-8,(cy-r.top)/r.height*H)) };
+}
+function attachHandles(){
+  stage.querySelectorAll(".handle").forEach(h=>{
+    h.addEventListener("mousedown", startDrag);
+    h.addEventListener("touchstart", startDrag, {passive:false});
+  });
+}
+function startDrag(e){
+  e.preventDefault();
+  dragging = e.target.getAttribute("data-id");
+}
+function moveDrag(e){
+  if(!dragging) return;
+  e.preventDefault();
+  const p=svgPoint(e);
+  pts[dragging].x=Math.round(p.x);
+  pts[dragging].y=Math.round(p.y);
+  update();
+}
+function endDrag(){
+  if(dragging){ addLog(`moved ${dragging}`); dragging=null; update(); }
+}
+window.addEventListener("mousemove",moveDrag);
+window.addEventListener("touchmove",moveDrag,{passive:false});
+window.addEventListener("mouseup",endDrag);
+window.addEventListener("touchend",endDrag);
+
+// ===== presets =====
+function presetCross(){
+  pts={P1:{x:120,y:330},P2:{x:480,y:120},P3:{x:120,y:120},P4:{x:480,y:330}};
+  update("preset: crossing X");
+}
+function presetTouch(){
+  // P3 endpoint sits on segment 1
+  pts={P1:{x:120,y:240},P2:{x:480,y:240},P3:{x:300,y:240},P4:{x:300,y:80}};
+  update("preset: T-junction");
+}
+function presetParallel(){
+  pts={P1:{x:120,y:300},P2:{x:480,y:160},P3:{x:120,y:360},P4:{x:480,y:220}};
+  update("preset: parallel");
+}
+function presetCollinear(){
+  pts={P1:{x:120,y:300},P2:{x:300,y:200},P3:{x:240,y:233},P4:{x:480,y:100}};
+  update("preset: collinear overlap");
+}
+function randomize(){
+  const r=()=>({x:40+Math.round(Math.random()*(W-80)), y:40+Math.round(Math.random()*(H-80))});
+  pts={P1:r(),P2:r(),P3:r(),P4:r()};
+  update("randomize");
+}
+function toggleExtend(){
+  showExtend=!showExtend;
+  document.getElementById("extBtn").textContent = showExtend?"Hide Lines":"Show Lines";
+  update();
+}
+
+// ===== init =====
+addLog("ready — drag any endpoint, or pick a preset");
+update();
+</script>
+</body>
+</html>
