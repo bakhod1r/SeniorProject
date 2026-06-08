@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hash Array Mapped Trie (HAMT) — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);
+    min-height:100vh;padding:18px;line-height:1.5;
+  }
+  h1{font-size:1.7rem;color:var(--blue);text-align:center;margin-bottom:4px;}
+  .subtitle{color:var(--muted);text-align:center;margin-bottom:14px;font-size:.95rem;}
+  .badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;}
+  .badge{padding:4px 10px;border-radius:14px;font-size:.78rem;border:1px solid var(--border);background:var(--surface);}
+  .badge.g{color:var(--green);border-color:var(--green);}
+  .badge.y{color:var(--yellow);border-color:var(--yellow);}
+  .badge.b{color:var(--blue);border-color:var(--blue);}
+  .badge.p{color:var(--purple);border-color:var(--purple);}
+  .wrap{max-width:1100px;margin:0 auto;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:880px){.grid{grid-template-columns:1fr;}}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;}
+  .panel h3{color:var(--blue);font-size:1rem;margin-bottom:10px;}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  input[type=text]{
+    padding:8px 12px;border:1px solid var(--border);background:var(--bg);color:var(--text);
+    border-radius:8px;font-size:.95rem;width:120px;
+  }
+  input[type=text]:focus{outline:none;border-color:var(--blue);}
+  button{
+    padding:8px 16px;border:1px solid var(--blue);background:transparent;color:var(--blue);
+    border-radius:8px;cursor:pointer;font-size:.9rem;transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue);color:var(--bg);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.alt{border-color:var(--green);color:var(--green);}
+  button.alt:hover:not(:disabled){background:var(--green);color:var(--bg);}
+  button.warn{border-color:var(--red);color:var(--red);}
+  button.warn:hover:not(:disabled){background:var(--red);color:var(--bg);}
+  .speed{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem;margin-bottom:8px;}
+  .speed input{accent-color:var(--blue);}
+
+  /* Hash bit strip */
+  .hashstrip{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0;font-family:'Courier New',monospace;}
+  .bitchunk{display:flex;gap:2px;padding:4px;border:1px solid var(--border);border-radius:6px;}
+  .bitchunk.cur{border-color:var(--yellow);background:rgba(210,153,34,.12);}
+  .bit{width:18px;height:24px;display:flex;align-items:center;justify-content:center;
+    border-radius:4px;background:var(--bg);font-size:.85rem;color:var(--muted);}
+  .bit.one{background:var(--blue);color:var(--bg);font-weight:bold;}
+  .chunklabel{font-size:.72rem;color:var(--muted);text-align:center;margin-top:2px;}
+
+  /* bitmap row */
+  .bitmaprow{display:flex;flex-wrap:wrap;gap:2px;margin:6px 0;font-family:'Courier New',monospace;}
+  .slot{width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);border-radius:3px;font-size:.6rem;color:var(--muted);background:var(--bg);}
+  .slot.set{background:var(--purple);color:var(--bg);border-color:var(--purple);}
+  .slot.target{outline:2px solid var(--yellow);}
+  .slot.below{box-shadow:inset 0 -3px 0 var(--green);}
+
+  /* tree svg */
+  #treeArea{width:100%;overflow:auto;min-height:300px;background:var(--bg);border-radius:8px;}
+  svg{display:block;}
+  .nodebox{fill:var(--surface);stroke:var(--border);stroke-width:1.5;}
+  .nodebox.path{stroke:var(--yellow);stroke-width:3;}
+  .nodebox.copied{stroke:var(--green);stroke-width:3;}
+  .nodebox.shared{stroke:var(--blue);stroke-dasharray:4 3;}
+  .leafbox{fill:#1c2333;stroke:var(--purple);stroke-width:1.5;}
+  .leafbox.new{stroke:var(--green);stroke-width:3;}
+  .edge{stroke:var(--border);stroke-width:1.5;fill:none;}
+  .edge.path{stroke:var(--yellow);stroke-width:2.5;}
+  .nlabel{fill:var(--text);font-size:11px;font-family:'Courier New',monospace;}
+  .nmuted{fill:var(--muted);font-size:9px;font-family:'Courier New',monospace;}
+
+  .info{font-family:'Courier New',monospace;font-size:.9rem;min-height:64px;}
+  .info .hl{color:var(--yellow);}
+  .info .ok{color:var(--green);}
+  .info .no{color:var(--red);}
+
+  table{width:100%;border-collapse:collapse;font-size:.85rem;}
+  th,td{border:1px solid var(--border);padding:6px 8px;text-align:left;}
+  th{background:var(--bg);color:var(--blue);}
+  td .c1{color:var(--green);} td .clog{color:var(--yellow);} td .cn{color:var(--red);}
+  .log{height:150px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.8rem;
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;}
+  .log div{padding:1px 0;border-bottom:1px solid #1c222c;}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;margin-bottom:8px;}
+  .legend span{display:flex;align-items:center;gap:5px;}
+  .sw{width:13px;height:13px;border-radius:3px;display:inline-block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hash Array Mapped Trie (HAMT)</h1>
+  <p class="subtitle">Hash → 5-bit chunks → bitmap + popcount → dense child array → immutable insert (path copying)</p>
+  <div class="badges">
+    <span class="badge b">get: O(log₃₂ n)</span>
+    <span class="badge g">insert: O(log₃₂ n)</span>
+    <span class="badge y">delete: O(log₃₂ n)</span>
+    <span class="badge p">space: O(n)</span>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="controls">
+          <input type="text" id="keyIn" placeholder="key" value="apple">
+          <button class="alt" onclick="doInsert()">Insert</button>
+          <button onclick="doGet()">Get</button>
+          <button class="warn" onclick="resetAll()">Reset</button>
+        </div>
+        <div class="controls">
+          <button onclick="seedDemo()">Load demo keys</button>
+          <button onclick="stepNext()" id="stepBtn">Step ▶</button>
+          <button onclick="autoRun()" id="autoBtn">Auto ▶▶</button>
+        </div>
+        <div class="speed">
+          <label>Speed</label><span>slow</span>
+          <input type="range" id="speed" min="1" max="10" value="6"><span>fast</span>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--yellow)"></i>path / current chunk</span>
+          <span><i class="sw" style="background:var(--green)"></i>copied / new</span>
+          <span><i class="sw" style="background:var(--blue)"></i>shared</span>
+          <span><i class="sw" style="background:var(--purple)"></i>leaf / set slot</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>1 · Hash of key, sliced into 5-bit chunks</h3>
+        <div id="hashLabel" class="nmuted" style="margin-bottom:6px;"></div>
+        <div class="hashstrip" id="hashStrip"></div>
+      </div>
+
+      <div class="panel">
+        <h3>2 · Bitmap + popcount at the current node</h3>
+        <div class="nmuted">Slots 0..31 — purple = present. Target slot outlined; green underline = slots counted by popcount (below target).</div>
+        <div class="bitmaprow" id="bitmapRow"></div>
+        <div id="popInfo" class="info" style="min-height:auto;margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h3>3 · Trie (insert copies only the path; rest is shared)</h3>
+        <div id="treeArea"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Info</h3>
+        <div class="info" id="info">Press <span class="hl">Insert</span> with a key, then <span class="hl">Step ▶</span> to walk the algorithm one stage at a time.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Big-O</h3>
+    <table>
+      <tr><th>Operation</th><th>Time</th><th>Extra space / update</th><th>Note</th></tr>
+      <tr><td>get(key)</td><td class="c1">O(log₃₂ n)</td><td class="c1">O(1)</td><td>~6 hops for 10⁹ keys</td></tr>
+      <tr><td>insert(key,val)</td><td class="c1">O(log₃₂ n)</td><td class="clog">O(log₃₂ n)</td><td>copies path, shares rest</td></tr>
+      <tr><td>delete(key)</td><td class="c1">O(log₃₂ n)</td><td class="clog">O(log₃₂ n)</td><td>collapses single-child nodes</td></tr>
+      <tr><td>popcount index</td><td class="c1">O(1)</td><td class="c1">O(1)</td><td>one hardware instruction</td></tr>
+      <tr><td>whole-map memory</td><td>—</td><td class="c1">O(n)</td><td>bitmap+popcount, no 32-wide waste</td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+/* ============ HAMT model (5-bit chunks, immutable) ============ */
+const BITS = 5, MASK = (1<<BITS)-1;
+
+// 32-bit string hash (deterministic, fits in 32 bits)
+function hashKey(k){
+  let h = 2166136261 >>> 0;          // FNV-1a
+  for(let i=0;i<k.length;i++){
+    h ^= k.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function chunk(h, d){ return (h >>> (d*BITS)) & MASK; }
+function popcountBelow(bitmap, slot){
+  let m = ((1<<slot)-1) >>> 0, c = 0, x = (bitmap & m) >>> 0;
+  while(x){ x &= x-1; c++; }
+  return c;
+}
+function isSet(bitmap, slot){ return (bitmap & (1<<slot)) !== 0; }
+
+let nodeCounter = 0;
+function newLeaf(h,k,v){ return {id:++nodeCounter, leaf:true, hash:h, key:k, value:v}; }
+function newInternal(bitmap, children){ return {id:++nodeCounter, leaf:false, bitmap:bitmap>>>0, children:children}; }
+
+// Immutable insert. Returns {root, copied:Set(ids), newLeafId}
+function insert(root, h, k, v){
+  const copied = new Set();
+  let newLeafId = null;
+  function go(n, depth){
+    if(n==null){ const l=newLeaf(h,k,v); newLeafId=l.id; return l; }
+    if(n.leaf){
+      if(n.key===k){ const l=newLeaf(h,k,v); newLeafId=l.id; return l; }
+      // split: place existing leaf into a fresh internal, then insert new
+      let inner = newInternal(0,[]);
+      inner = go2(inner, n.hash, n.key, n.value, depth);
+      return go2(inner, h, k, v, depth, true);
+    }
+    const s = chunk(h, depth);
+    const i = popcountBelow(n.bitmap, s);
+    const cp = newInternal(n.bitmap, n.children.slice());
+    copied.add(cp.id);
+    if(!isSet(n.bitmap, s)){
+      const l=newLeaf(h,k,v); newLeafId=l.id;
+      cp.bitmap = (n.bitmap | (1<<s))>>>0;
+      cp.children = n.children.slice(0,i).concat([l], n.children.slice(i));
+    } else {
+      cp.children = n.children.slice();
+      cp.children[i] = go(n.children[i], depth+1);
+    }
+    return cp;
+  }
+  // helper used during split (builds without marking 'copied', as these are brand-new)
+  function go2(n, hh, kk, vv, depth, mark){
+    const s = chunk(hh, depth);
+    const i = popcountBelow(n.bitmap, s);
+    if(!isSet(n.bitmap, s)){
+      const l=newLeaf(hh,kk,vv); if(mark) newLeafId=l.id;
+      const bm=(n.bitmap|(1<<s))>>>0;
+      const ch=n.children.slice(0,i).concat([l], n.children.slice(i));
+      return newInternal(bm, ch);
+    } else {
+      const ch=n.children.slice();
+      ch[i]=go2(ch[i], hh, kk, vv, depth+1, mark);
+      return newInternal(n.bitmap, ch);
+    }
+  }
+  const r = go(root, 0);
+  return {root:r, copied, newLeafId};
+}
+
+function get(root, h, k){
+  let n=root, depth=0;
+  while(n!=null){
+    if(n.leaf) return n.key===k ? n.value : undefined;
+    const s=chunk(h,depth);
+    if(!isSet(n.bitmap,s)) return undefined;
+    n=n.children[popcountBelow(n.bitmap,s)];
+    depth++;
+  }
+  return undefined;
+}
+
+/* ============ App state ============ */
+let root = null;
+let prevRoot = null;       // for shared-node coloring
+let copiedIds = new Set();
+let newLeafId = null;
+
+/* ============ rendering: hash strip ============ */
+function renderHash(h, curDepth){
+  document.getElementById('hashLabel').textContent =
+    h===null ? '' : 'hash = '+(h>>>0)+'  (0x'+(h>>>0).toString(16)+')';
+  const strip = document.getElementById('hashStrip');
+  if(h===null){ strip.innerHTML=''; return; }
+  // build 32-bit string, show as 7 chunks of 5 bits (low chunk = depth 0) from low to high
+  let html='';
+  const nChunks = Math.ceil(32/BITS);
+  for(let d=0; d<nChunks; d++){
+    const c = chunk(h,d);
+    let bits='';
+    for(let b=BITS-1;b>=0;b--){
+      const on=(c>>b)&1;
+      bits+='<div class="bit '+(on?'one':'')+'">'+on+'</div>';
+    }
+    html+='<div><div class="bitchunk '+(d===curDepth?'cur':'')+'">'+bits+'</div>'+
+          '<div class="chunklabel">d='+d+' → '+c+'</div></div>';
+  }
+  strip.innerHTML=html;
+}
+
+/* ============ rendering: bitmap row ============ */
+function renderBitmap(bitmap, targetSlot){
+  const row=document.getElementById('bitmapRow');
+  if(bitmap===null){ row.innerHTML=''; document.getElementById('popInfo').textContent=''; return; }
+  let html='';
+  for(let s=0;s<32;s++){
+    let cls='slot';
+    if(isSet(bitmap,s)) cls+=' set';
+    if(s===targetSlot) cls+=' target';
+    if(targetSlot!=null && s<targetSlot && isSet(bitmap,s)) cls+=' below';
+    html+='<div class="'+cls+'">'+s+'</div>';
+  }
+  row.innerHTML=html;
+  if(targetSlot!=null){
+    const idx=popcountBelow(bitmap,targetSlot);
+    const present=isSet(bitmap,targetSlot);
+    document.getElementById('popInfo').innerHTML=
+      'target slot = <span class="hl">'+targetSlot+'</span> · present? '+
+      (present?'<span class="ok">yes</span>':'<span class="no">no</span>')+
+      ' · denseIndex = popcount(bitmap &amp; (1&lt;&lt;'+targetSlot+')-1) = <span class="hl">'+idx+'</span>';
+  }
+}
+
+/* ============ rendering: tree (SVG) ============ */
+function renderTree(highlightPath){
+  const area=document.getElementById('treeArea');
+  if(root==null){ area.innerHTML='<div style="color:var(--muted);padding:20px">empty map</div>'; return; }
+  highlightPath = highlightPath || new Set();
+  // layout: assign x by in-order leaf count, y by depth
+  const levelGap=78, nodeW=64, nodeH=34, hGap=14;
+  let leafX=0;
+  const positions=new Map();
+  function layout(n, depth){
+    if(n==null) return {minX:leafX, maxX:leafX};
+    if(n.leaf){
+      const x=leafX*(nodeW+hGap);
+      positions.set(n.id,{x, y:depth*levelGap, node:n});
+      leafX++;
+      return {minX:x, maxX:x};
+    }
+    let minX=Infinity, maxX=-Infinity;
+    for(const c of n.children){
+      const r=layout(c, depth+1);
+      minX=Math.min(minX,r.minX); maxX=Math.max(maxX,r.maxX);
+    }
+    const x=(minX+maxX)/2;
+    positions.set(n.id,{x, y:depth*levelGap, node:n});
+    return {minX, maxX};
+  }
+  layout(root,0);
+  let maxX=0, maxY=0;
+  positions.forEach(p=>{ maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); });
+  const W=maxX+nodeW+40, H=maxY+nodeH+40;
+  let svg='<svg width="'+Math.max(W,300)+'" height="'+Math.max(H,200)+'">';
+  // edges
+  function edges(n){
+    if(n==null||n.leaf) return;
+    const p=positions.get(n.id);
+    for(const c of n.children){
+      const cp=positions.get(c.id);
+      const onPath = highlightPath.has(n.id)&&highlightPath.has(c.id);
+      svg+='<path class="edge'+(onPath?' path':'')+'" d="M'+(p.x+nodeW/2)+','+(p.y+nodeH)+
+           ' C'+(p.x+nodeW/2)+','+(p.y+nodeH+30)+' '+(cp.x+nodeW/2)+','+(cp.y-20)+' '+
+           (cp.x+nodeW/2)+','+cp.y+'"/>';
+      edges(c);
+    }
+  }
+  edges(root);
+  // nodes
+  positions.forEach((p)=>{
+    const n=p.node;
+    if(n.leaf){
+      let cls='leafbox'+(n.id===newLeafId?' new':'');
+      svg+='<rect class="'+cls+'" x="'+p.x+'" y="'+p.y+'" width="'+nodeW+'" height="'+nodeH+'" rx="6"/>';
+      svg+='<text class="nlabel" x="'+(p.x+6)+'" y="'+(p.y+15)+'">'+esc(n.key)+'</text>';
+      svg+='<text class="nmuted" x="'+(p.x+6)+'" y="'+(p.y+27)+'">='+n.value+'</text>';
+    } else {
+      let cls='nodebox';
+      if(copiedIds.has(n.id)) cls+=' copied';
+      else if(prevRoot && existsIn(prevRoot, n.id)) cls+=' shared';
+      if(highlightPath.has(n.id)) cls+=' path';
+      svg+='<rect class="'+cls+'" x="'+p.x+'" y="'+p.y+'" width="'+nodeW+'" height="'+nodeH+'" rx="6"/>';
+      svg+='<text class="nlabel" x="'+(p.x+6)+'" y="'+(p.y+15)+'">node</text>';
+      svg+='<text class="nmuted" x="'+(p.x+6)+'" y="'+(p.y+27)+'">pop='+countBits(n.bitmap)+'</text>';
+    }
+  });
+  svg+='</svg>';
+  area.innerHTML=svg;
+}
+function countBits(b){ let c=0; b=b>>>0; while(b){b&=b-1;c++;} return c; }
+function existsIn(n, id){
+  if(n==null) return false;
+  if(n.id===id) return true;
+  if(n.leaf) return false;
+  for(const c of n.children) if(existsIn(c,id)) return true;
+  return false;
+}
+function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+/* ============ stepping engine ============ */
+let steps=[], stepIdx=0, autoTimer=null;
+
+function buildInsertSteps(key){
+  const h=hashKey(key);
+  const path=[];          // ids visited
+  const stepList=[];
+  // simulate walk for narration on the CURRENT root
+  let n=root, depth=0;
+  stepList.push({kind:'hash', h, depth:0,
+    msg:'hash("'+key+'") = '+h+'. Read it 5 bits at a time, depth 0 first.'});
+  while(n!=null && !n.leaf){
+    const s=chunk(h,depth);
+    path.push(n.id);
+    stepList.push({kind:'bitmap', h, depth, node:n, slot:s,
+      msg:'At depth '+depth+': chunk = '+s+'. '+
+          (isSet(n.bitmap,s)
+            ? 'slot '+s+' present → denseIndex = '+popcountBelow(n.bitmap,s)+', descend.'
+            : 'slot '+s+' empty → new leaf goes here.')});
+    if(!isSet(n.bitmap,s)){ n=null; break; }
+    n=n.children[popcountBelow(n.bitmap,s)];
+    depth++;
+  }
+  if(n && n.leaf){
+    path.push(n.id);
+    stepList.push({kind:'leaf', h, depth, node:n,
+      msg: n.key===key ? 'reached leaf "'+n.key+'" with same key → overwrite value.'
+                       : 'reached leaf "'+n.key+'" (different key) → split into a deeper node.'});
+  }
+  // final commit step
+  stepList.push({kind:'commit', h, key, path:new Set(path),
+    msg:'Commit: copy only the '+(path.length)+' node(s) on the path; share everything else. Old version stays valid.'});
+  return {h, stepList, key};
+}
+
+let pendingInsert=null;
+function doInsert(){
+  const key=document.getElementById('keyIn').value.trim();
+  if(!key) return;
+  stopAuto();
+  pendingInsert=buildInsertSteps(key);
+  steps=pendingInsert.stepList; stepIdx=0;
+  copiedIds=new Set(); newLeafId=null;
+  renderHash(pendingInsert.h, 0);
+  renderBitmap(null,null);
+  setInfo('Ready to insert <span class="hl">"'+esc(key)+'"</span>. Press <span class="hl">Step ▶</span> or <span class="hl">Auto ▶▶</span>.');
+  log('insert("'+key+'") prepared — hash='+pendingInsert.h);
+}
+
+function stepNext(){
+  if(!pendingInsert){ doInsert(); return; }
+  if(stepIdx>=steps.length){ return; }
+  const st=steps[stepIdx++];
+  applyStep(st);
+}
+
+function applyStep(st){
+  if(st.kind==='hash'){
+    renderHash(st.h, 0); renderBitmap(null,null);
+    setInfo(st.msg); renderTree();
+  } else if(st.kind==='bitmap'){
+    renderHash(st.h, st.depth);
+    renderBitmap(st.node.bitmap, st.slot);
+    setInfo(st.msg);
+    renderTree(new Set([st.node.id]));
+  } else if(st.kind==='leaf'){
+    renderHash(st.h, st.depth);
+    renderBitmap(null,null);
+    setInfo(st.msg);
+    renderTree(new Set([st.node.id]));
+  } else if(st.kind==='commit'){
+    // actually perform the immutable insert now
+    prevRoot=root;
+    const res=insert(root, st.h, st.key, get(root,st.h,st.key)===undefined?valFor(st.key):valFor(st.key));
+    root=res.root; copiedIds=res.copied; newLeafId=res.newLeafId;
+    renderHash(st.h, null);
+    renderBitmap(null,null);
+    setInfo('<span class="ok">'+st.msg+'</span> Green = copied path nodes &amp; new leaf; blue dashed = shared.');
+    renderTree(st.path);
+    log('committed insert("'+st.key+'") — copied '+copiedIds.size+' node(s)');
+    pendingInsert=null;
+  }
+}
+let valSeq=10;
+function valFor(k){ return (Math.abs(hashKey(k))%90)+10; }
+
+function autoRun(){
+  if(!pendingInsert){ doInsert(); }
+  if(autoTimer){ stopAuto(); return; }
+  document.getElementById('autoBtn').textContent='Pause ⏸';
+  const tick=()=>{
+    if(stepIdx>=steps.length){ stopAuto(); return; }
+    stepNext();
+    autoTimer=setTimeout(tick, 1150 - document.getElementById('speed').value*100);
+  };
+  tick();
+}
+function stopAuto(){
+  if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; }
+  document.getElementById('autoBtn').textContent='Auto ▶▶';
+}
+
+function doGet(){
+  stopAuto();
+  const key=document.getElementById('keyIn').value.trim();
+  if(!key) return;
+  const h=hashKey(key);
+  copiedIds=new Set(); newLeafId=null;
+  // walk and highlight
+  const path=new Set(); let n=root, depth=0, found=undefined;
+  renderHash(h,0);
+  while(n!=null){
+    if(n.leaf){ path.add(n.id); found = n.key===key?n.value:undefined; break; }
+    const s=chunk(h,depth);
+    path.add(n.id);
+    if(!isSet(n.bitmap,s)){ renderBitmap(n.bitmap,s); break; }
+    n=n.children[popcountBelow(n.bitmap,s)]; depth++;
+  }
+  renderTree(path);
+  if(found!==undefined){
+    setInfo('get("'+esc(key)+'") = <span class="ok">'+found+'</span> in '+depth+' hop(s).');
+    log('get("'+key+'") → '+found);
+  } else {
+    setInfo('get("'+esc(key)+'") = <span class="no">not found</span>.');
+    log('get("'+key+'") → not found');
+  }
+}
+
+function seedDemo(){
+  resetAll();
+  const keys=['apple','banana','cherry','date','fig','grape','kiwi','lemon'];
+  for(const k of keys){
+    const h=hashKey(k);
+    const res=insert(root,h,k,valFor(k));
+    root=res.root;
+  }
+  copiedIds=new Set(); newLeafId=null; prevRoot=null;
+  renderTree();
+  setInfo('Loaded '+keys.length+' demo keys. Now Insert a new key step-by-step to see path copying.');
+  log('loaded demo: '+keys.join(', '));
+}
+
+function resetAll(){
+  stopAuto();
+  root=null; prevRoot=null; copiedIds=new Set(); newLeafId=null;
+  steps=[]; stepIdx=0; pendingInsert=null;
+  renderHash(null,null); renderBitmap(null,null); renderTree();
+  setInfo('Map reset. Insert a key to begin.');
+  log('reset');
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML=html; }
+function log(msg){
+  const l=document.getElementById('log');
+  const d=document.createElement('div');
+  d.textContent='› '+msg;
+  l.prepend(d);
+}
+
+/* init */
+seedDemo();
+</script>
+</body>
+</html>
