@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convex Hull (Monotone Chain) — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:20px; text-align:center;}
+  .badges{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .badge.b1{color:var(--green);}  .badge.b2{color:var(--yellow);}
+  .badge.b3{color:var(--purple);} .badge.b4{color:var(--orange);}
+
+  .layout{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1180px;}
+  .left{flex:1 1 560px; min-width:340px;}
+  .right{flex:1 1 360px; min-width:320px; display:flex; flex-direction:column; gap:16px;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+
+  svg{background:#0a0d12; border:1px solid var(--border); border-radius:12px; width:100%; height:auto; display:block;}
+
+  .controls{display:flex; gap:10px; margin:14px 0; flex-wrap:wrap; justify-content:center;}
+  button{
+    padding:9px 18px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; margin-bottom:12px;}
+  .row label{color:var(--muted); font-size:.9rem;}
+  input[type=range]{accent-color:var(--blue); width:140px;}
+  input[type=text]{
+    padding:8px 12px; border:1px solid var(--border); background:#0a0d12; color:var(--text);
+    border-radius:8px; font-size:.9rem; width:260px;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue);}
+
+  .stats{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; color:var(--muted); font-size:.88rem; margin-bottom:6px;}
+  .stats b{color:var(--text);}
+
+  .info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7; min-height:96px;}
+  .info .hl{color:var(--yellow);}
+  .info .ccw{color:var(--green);}  .info .cw{color:var(--red);}  .info .col{color:var(--purple);}
+
+  table{width:100%; border-collapse:collapse; font-size:.82rem;}
+  th,td{border:1px solid var(--border); padding:6px 8px; text-align:left;}
+  th{color:var(--muted); font-weight:600;}
+  .o1{color:var(--green);} .onlogn{color:var(--blue);} .onh{color:var(--yellow);} .on2{color:var(--red);}
+
+  .legend{display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0; font-size:.8rem;}
+  .legend span{display:flex; align-items:center; gap:6px;}
+  .dot{width:13px; height:13px; border-radius:50%; display:inline-block;}
+
+  #log{height:150px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.78rem; line-height:1.6;}
+  #log div{padding:1px 0; border-bottom:1px solid #21262d;}
+  #log .pop{color:var(--red);} #log .push{color:var(--green);} #log .keep{color:var(--blue);}
+  #log .phase{color:var(--orange); font-weight:600;}
+</style>
+</head>
+<body>
+  <h1>Convex Hull — Andrew's Monotone Chain</h1>
+  <p class="subtitle">Sort by (x, y), sweep twice, pop non-left turns using the cross-product orientation test.</p>
+
+  <div class="badges">
+    <span class="badge b1">orient: O(1)</span>
+    <span class="badge b2">monotone chain: O(n log n)</span>
+    <span class="badge b3">space: O(n)</span>
+    <span class="badge b4">lower bound: &Omega;(n log n)</span>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="panel">
+        <h3>Point Plane</h3>
+        <svg id="svg" viewBox="0 0 600 440" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+
+      <div class="controls">
+        <button id="startBtn" onclick="start()">Run</button>
+        <button id="stepBtn" onclick="stepForward()">Step</button>
+        <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+      </div>
+
+      <div class="row">
+        <input type="text" id="customInput" placeholder="x,y; x,y; ...  e.g. 1,1; 5,2; 3,6">
+        <button onclick="loadCustom()">Load</button>
+        <button onclick="randomPoints()">Random</button>
+      </div>
+      <div class="row">
+        <label>Speed</label><span style="color:var(--muted)">slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <span style="color:var(--muted)">fast</span>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot" style="background:var(--muted)"></i>point</span>
+        <span><i class="dot" style="background:var(--blue)"></i>on stack</span>
+        <span><i class="dot" style="background:var(--green)"></i>pushing</span>
+        <span><i class="dot" style="background:var(--red)"></i>popped (dent)</span>
+        <span><i class="dot" style="background:var(--yellow)"></i>candidate C</span>
+        <span><i class="dot" style="background:var(--purple)"></i>hull vertex</span>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h3>Orientation Test</h3>
+        <div class="stats">
+          <span>Step: <b id="curStep">0</b>/<b id="totSteps">0</b></span>
+          <span>Phase: <b id="phase">—</b></span>
+          <span>Pops: <b id="pops">0</b></span>
+          <span>Stack: <b id="stackSize">0</b></span>
+        </div>
+        <div class="info" id="info">
+          Press <span class="hl">Run</span> to animate, or <span class="hl">Step</span> one at a time.<br>
+          Each step shows <b>cross(A,B,C)</b> and its sign.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Algorithm</th><th>Time</th><th>Space</th></tr>
+          <tr><td>Monotone chain</td><td class="onlogn">O(n log n)</td><td>O(n)</td></tr>
+          <tr><td>Graham scan</td><td class="onlogn">O(n log n)</td><td>O(n)</td></tr>
+          <tr><td>Gift wrapping</td><td class="onh">O(n&middot;h)</td><td>O(n)</td></tr>
+          <tr><td>QuickHull (avg)</td><td class="onlogn">O(n log n)</td><td>O(n)</td></tr>
+          <tr><td>QuickHull (worst)</td><td class="on2">O(n&sup2;)</td><td>O(n)</td></tr>
+          <tr><td>Chan's algorithm</td><td class="onlogn">O(n log h)</td><td>O(n)</td></tr>
+          <tr><td>orient (1 test)</td><td class="o1">O(1)</td><td>O(1)</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ---------- geometry / model ----------
+let points = [];            // {x,y} in logical coords (0..100)
+let steps = [];             // precomputed animation frames
+let idx = 0;
+let running = false;
+let timer = null;
+let popCount = 0;
+
+const W = 600, H = 440, PAD = 36;
+const svg = document.getElementById('svg');
+
+function cross(a, b, c){
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+// map logical (0..100) -> svg coords (y flipped so up is +y)
+function sx(x){ return PAD + (x / 100) * (W - 2*PAD); }
+function sy(y){ return H - PAD - (y / 100) * (H - 2*PAD); }
+
+function defaultPoints(){
+  return [
+    {x:8,y:14},{x:24,y:60},{x:38,y:30},{x:46,y:78},{x:54,y:20},
+    {x:62,y:52},{x:72,y:84},{x:80,y:34},{x:90,y:66},{x:33,y:45},
+    {x:60,y:10},{x:18,y:88}
+  ];
+}
+
+// ---------- step generation (monotone chain, drop collinear) ----------
+function genSteps(){
+  steps = []; popCount = 0;
+  // sort by x then y, dedup
+  let pts = points.map(p => ({x:p.x, y:p.y}));
+  pts.sort((a,b)=> a.x - b.x || a.y - b.y);
+  pts = pts.filter((p,i)=> i===0 || p.x!==pts[i-1].x || p.y!==pts[i-1].y);
+  const n = pts.length;
+
+  steps.push(frame(pts, [], null, null, 'sort',
+    `Sorted ${n} points by (x, then y). Building the LOWER hull next.`));
+
+  if(n < 3){
+    steps.push(frame(pts, pts.slice(), null, null, 'done', `n < 3 — the points are their own hull.`));
+    finalize(); return;
+  }
+
+  let hull = [];
+  let pops = 0;
+
+  // lower hull
+  steps.push(frame(pts, [], null, null, 'lower', 'Phase: LOWER hull (left → right).'));
+  for(let i=0;i<n;i++){
+    const p = pts[i];
+    while(hull.length >= 2){
+      const a = hull[hull.length-2], b = hull[hull.length-1];
+      const o = cross(a,b,p);
+      steps.push(frame(pts, hull.slice(), {a,b,c:p,o}, null, 'lower',
+        turnMsg(a,b,p,o)));
+      if(o <= 0){ hull.pop(); pops++; steps.push(frame(pts, hull.slice(), {a,b,c:p,o}, b, 'lower',
+        `cross = ${o} ≤ 0 → non-left turn. POP B (a dent).`)); }
+      else break;
+    }
+    hull.push(p);
+    steps.push(frame(pts, hull.slice(), null, null, 'lower',
+      `PUSH (${p.x}, ${p.y}) onto the lower chain.`, p));
+  }
+  const lowerLen = hull.length;
+
+  // upper hull
+  steps.push(frame(pts, hull.slice(), null, null, 'upper', 'Phase: UPPER hull (right → left).'));
+  for(let i=n-2;i>=0;i--){
+    const p = pts[i];
+    while(hull.length > lowerLen){
+      const a = hull[hull.length-2], b = hull[hull.length-1];
+      const o = cross(a,b,p);
+      steps.push(frame(pts, hull.slice(), {a,b,c:p,o}, null, 'upper', turnMsg(a,b,p,o)));
+      if(o <= 0){ hull.pop(); pops++; steps.push(frame(pts, hull.slice(), {a,b,c:p,o}, b, 'upper',
+        `cross = ${o} ≤ 0 → non-left turn. POP B (a dent).`)); }
+      else break;
+    }
+    hull.push(p);
+    steps.push(frame(pts, hull.slice(), null, null, 'upper',
+      `PUSH (${p.x}, ${p.y}) onto the upper chain.`, p));
+  }
+  hull.pop(); // drop duplicate of first point
+  popCount = pops;
+  steps.push(frame(pts, hull.slice(), null, null, 'done',
+    `Done! Convex hull has ${hull.length} vertices. Total pops: ${pops}.`, null, true));
+  finalize();
+}
+
+function turnMsg(a,b,c,o){
+  let cls = o>0 ? 'ccw' : (o<0 ? 'cw' : 'col');
+  let word = o>0 ? 'LEFT turn (CCW) → keep B'
+            : (o<0 ? 'RIGHT turn (CW) → pop B' : 'COLLINEAR → pop B (drop mode)');
+  return `cross(A,B,C) = (${b.x}-${a.x})(${c.y}-${a.y}) − (${b.y}-${a.y})(${c.x}-${a.x}) = `+
+         `<span class="${cls}">${o}</span><br><span class="${cls}">${word}</span>`;
+}
+
+function frame(pts, hull, test, popped, phase, msg, pushed=null, done=false){
+  return {pts:pts.map(p=>({...p})), hull:hull.map(p=>({...p})),
+          test, popped, phase, msg, pushed, done};
+}
+
+function finalize(){
+  document.getElementById('totSteps').textContent = steps.length;
+}
+
+// ---------- rendering ----------
+function render(f){
+  let g = '';
+
+  // hull polygon (partial chain as polyline)
+  if(f.hull.length >= 2){
+    const pts = f.hull.map(p=>`${sx(p.x)},${sy(p.y)}`).join(' ');
+    const closed = f.done;
+    g += `<polyline points="${pts}" fill="${closed?'rgba(188,140,255,0.12)':'none'}" `+
+         `stroke="${closed?'var(--purple)':'var(--blue)'}" stroke-width="2.5" `+
+         `${closed?'':'stroke-dasharray="2 0"'} />`;
+    if(closed){
+      const first = f.hull[0];
+      const last = f.hull[f.hull.length-1];
+      g += `<line x1="${sx(last.x)}" y1="${sy(last.y)}" x2="${sx(first.x)}" y2="${sy(first.y)}" stroke="var(--purple)" stroke-width="2.5" />`;
+    }
+  }
+
+  // orientation test edges A->B (blue) and B->C (yellow)
+  if(f.test){
+    const {a,b,c} = f.test;
+    g += `<line x1="${sx(a.x)}" y1="${sy(a.y)}" x2="${sx(b.x)}" y2="${sy(b.y)}" stroke="var(--blue)" stroke-width="3" />`;
+    g += `<line x1="${sx(b.x)}" y1="${sy(b.y)}" x2="${sx(c.x)}" y2="${sy(c.y)}" stroke="var(--yellow)" stroke-width="3" stroke-dasharray="6 4" />`;
+  }
+
+  // points
+  const hullSet = new Set(f.hull.map(p=>p.x+'_'+p.y));
+  for(const p of f.pts){
+    let color = 'var(--muted)', r = 5;
+    if(hullSet.has(p.x+'_'+p.y)){ color = f.done ? 'var(--purple)' : 'var(--blue)'; r = 6; }
+    if(f.test){
+      if(p.x===f.test.a.x && p.y===f.test.a.y) color = 'var(--blue)';
+      if(p.x===f.test.b.x && p.y===f.test.b.y) color = 'var(--blue)';
+      if(p.x===f.test.c.x && p.y===f.test.c.y){ color = 'var(--yellow)'; r = 7; }
+    }
+    if(f.popped && p.x===f.popped.x && p.y===f.popped.y){ color = 'var(--red)'; r = 8; }
+    if(f.pushed && p.x===f.pushed.x && p.y===f.pushed.y){ color = 'var(--green)'; r = 8; }
+    g += `<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="${r}" fill="${color}" stroke="#0a0d12" stroke-width="1.5" />`;
+  }
+
+  // labels for the active triple
+  if(f.test){
+    const lab = (p,t,col)=>`<text x="${sx(p.x)+9}" y="${sy(p.y)-7}" fill="${col}" font-size="13" font-weight="700">${t}</text>`;
+    g += lab(f.test.a,'A','var(--blue)') + lab(f.test.b,'B','var(--blue)') + lab(f.test.c,'C','var(--yellow)');
+  }
+
+  svg.innerHTML = g;
+
+  document.getElementById('curStep').textContent = Math.min(idx+1, steps.length);
+  document.getElementById('phase').textContent =
+    ({sort:'sort',lower:'lower hull',upper:'upper hull',done:'done'})[f.phase] || f.phase;
+  document.getElementById('stackSize').textContent = f.hull.length;
+  document.getElementById('info').innerHTML = f.msg;
+}
+
+// ---------- log ----------
+function logFrame(f){
+  const el = document.getElementById('log');
+  let cls = 'keep', text = '';
+  if(f.phase==='lower' || f.phase==='upper'){
+    if(f.popped){ cls='pop'; text = `POP (${f.popped.x},${f.popped.y})`; }
+    else if(f.pushed){ cls='push'; text = `PUSH (${f.pushed.x},${f.pushed.y})`; }
+    else if(f.test){ cls='keep'; text = `test cross=${f.test.o}`; }
+  }
+  if(f.phase==='sort'){ cls='phase'; text='SORTED by (x,y)'; }
+  if(f.phase==='lower' && !text){ cls='phase'; text='— lower hull —'; }
+  if(f.phase==='upper' && !text){ cls='phase'; text='— upper hull —'; }
+  if(f.done){ cls='phase'; text=`DONE: ${f.hull.length} hull vertices`; }
+  if(!text) return;
+  const div = document.createElement('div');
+  div.className = cls; div.textContent = text;
+  el.appendChild(div); el.scrollTop = el.scrollHeight;
+  document.getElementById('pops').textContent = livePops();
+}
+
+let _pops = 0;
+function livePops(){ return _pops; }
+
+// ---------- controls ----------
+function speedMs(){ return 1100 - document.getElementById('speed').value * 95; }
+
+function ensureSteps(){ if(steps.length===0){ genSteps(); idx=0; } }
+
+function start(){
+  ensureSteps();
+  running = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  loop();
+}
+function loop(){
+  if(!running || idx >= steps.length){ pause(); return; }
+  applyStep();
+  timer = setTimeout(loop, speedMs());
+}
+function stepForward(){
+  ensureSteps();
+  if(idx < steps.length) applyStep();
+}
+function applyStep(){
+  const f = steps[idx];
+  if(f.popped) _pops++;
+  render(f);
+  logFrame(f);
+  idx++;
+}
+function pause(){
+  running = false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+}
+function reset(){
+  pause(); idx = 0; steps = []; _pops = 0;
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('curStep').textContent = '0';
+  document.getElementById('totSteps').textContent = '0';
+  document.getElementById('pops').textContent = '0';
+  document.getElementById('phase').textContent = '—';
+  document.getElementById('stackSize').textContent = '0';
+  document.getElementById('info').innerHTML =
+    'Press <span class="hl">Run</span> to animate, or <span class="hl">Step</span> one at a time.<br>'+
+    'Each step shows <b>cross(A,B,C)</b> and its sign.';
+  renderInitial();
+}
+function renderInitial(){
+  render(frame(points.slice().sort((a,b)=>a.x-b.x||a.y-b.y), [], null, null, 'sort',
+    document.getElementById('info').innerHTML));
+}
+
+function loadCustom(){
+  const raw = document.getElementById('customInput').value.trim();
+  if(!raw) return;
+  const out = [];
+  for(const part of raw.split(';')){
+    const m = part.split(',');
+    if(m.length>=2){
+      const x = parseFloat(m[0]), y = parseFloat(m[1]);
+      if(!isNaN(x) && !isNaN(y)) out.push({x:Math.max(0,Math.min(100,x)), y:Math.max(0,Math.min(100,y))});
+    }
+  }
+  if(out.length>0){ points = out; reset(); }
+}
+function randomPoints(){
+  const k = 8 + Math.floor(Math.random()*8);
+  points = Array.from({length:k}, ()=>({
+    x: Math.round(5 + Math.random()*90),
+    y: Math.round(5 + Math.random()*90)
+  }));
+  document.getElementById('customInput').value =
+    points.map(p=>`${p.x},${p.y}`).join('; ');
+  reset();
+}
+
+// ---------- init ----------
+points = defaultPoints();
+document.getElementById('customInput').value = points.map(p=>`${p.x},${p.y}`).join('; ');
+renderInitial();
+</script>
+</body>
+</html>
