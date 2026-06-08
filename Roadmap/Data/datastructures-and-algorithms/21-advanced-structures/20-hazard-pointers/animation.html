@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hazard Pointers — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; padding:20px;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:18px; text-align:center; max-width:820px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:5px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-red{color:var(--red); border-color:var(--red);}
+  .b-blue{color:var(--blue); border-color:var(--blue);}
+
+  .wrap{width:100%; max-width:1000px; display:flex; flex-direction:column; gap:16px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px;}
+  .panel h3{color:var(--blue); margin-bottom:10px; font-size:1rem;}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center;}
+  button{
+    padding:9px 18px; border:1.5px solid var(--blue); background:transparent;
+    color:var(--blue); border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+  button.warn{border-color:var(--orange); color:var(--orange);}
+  button.warn:hover:not(:disabled){background:var(--orange); color:var(--bg);}
+  button.danger{border-color:var(--red); color:var(--red);}
+  button.danger:hover:not(:disabled){background:var(--red); color:var(--bg);}
+
+  .speed{display:flex; align-items:center; gap:8px; justify-content:center; color:var(--muted); font-size:.85rem;}
+  .speed input{accent-color:var(--blue); width:140px;}
+
+  /* stage */
+  .stage{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  @media(max-width:780px){.stage{grid-template-columns:1fr;}}
+
+  .threads{display:flex; flex-direction:column; gap:12px;}
+  .thread{
+    border:1px solid var(--border); border-radius:10px; padding:12px; background:#0f141b;
+  }
+  .thread .name{font-weight:700; color:var(--purple); margin-bottom:8px; display:flex; justify-content:space-between;}
+  .thread .stateline{font-family:'Courier New',monospace; font-size:.82rem; color:var(--muted); min-height:1.2em;}
+  .slot{
+    margin-top:8px; padding:8px 10px; border-radius:8px; border:1px dashed var(--border);
+    font-family:'Courier New',monospace; font-size:.85rem; display:flex; align-items:center; gap:8px;
+    transition:all .3s;
+  }
+  .slot .lbl{color:var(--muted);}
+  .slot.published{border-style:solid; border-color:var(--blue); color:var(--blue); box-shadow:0 0 0 1px var(--blue) inset;}
+  .slot.validating{border-style:solid; border-color:var(--yellow); color:var(--yellow);}
+
+  /* stack + retire */
+  .memcol{display:flex; flex-direction:column; gap:14px;}
+  .stackbox, .retirebox{border:1px solid var(--border); border-radius:10px; padding:12px; background:#0f141b;}
+  .ptr{font-family:'Courier New',monospace; color:var(--orange); font-size:.85rem; margin-bottom:8px;}
+  .nodes{display:flex; flex-direction:column; gap:8px;}
+  .node{
+    display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px;
+    border:1px solid var(--border); background:#11161d; font-family:'Courier New',monospace;
+    font-size:.85rem; transition:all .35s; position:relative;
+  }
+  .node .id{font-weight:700; color:var(--text);}
+  .node .nx{color:var(--muted);}
+  .node.protected{border-color:var(--blue); box-shadow:0 0 8px rgba(88,166,255,.5);}
+  .node.retired{border-color:var(--yellow); background:#1c180f;}
+  .node.freed{border-color:var(--red); background:#1c1011; opacity:.45; text-decoration:line-through;}
+  .node.scanning{border-color:var(--yellow); animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 4px rgba(210,153,34,.4);}50%{box-shadow:0 0 14px rgba(210,153,34,.9);}}
+  .tag{font-size:.7rem; padding:1px 6px; border-radius:10px; margin-left:auto;}
+  .tag.prot{background:rgba(88,166,255,.18); color:var(--blue);}
+  .tag.ret{background:rgba(210,153,34,.18); color:var(--yellow);}
+  .tag.free{background:rgba(248,81,73,.18); color:var(--red);}
+  .empty{color:var(--muted); font-style:italic; font-size:.8rem;}
+
+  /* info + log + table */
+  .info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7;}
+  .info .hl{color:var(--yellow);}
+  .info .ok{color:var(--green);}
+  .info .no{color:var(--red);}
+
+  table{width:100%; border-collapse:collapse; font-size:.82rem;}
+  th,td{border:1px solid var(--border); padding:7px 9px; text-align:left;}
+  th{color:var(--blue); background:#0f141b;}
+  td code{color:var(--orange);}
+
+  .log{height:150px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.8rem; line-height:1.6;}
+  .log .e{padding:2px 0; border-bottom:1px solid #1a2029;}
+  .log .e .t{color:var(--muted);}
+  .log .pub{color:var(--blue);} .log .val{color:var(--yellow);}
+  .log .ret{color:var(--orange);} .log .free{color:var(--red);} .log .ok{color:var(--green);}
+
+  .legend{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; font-size:.78rem; color:var(--muted);}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .sw{width:13px; height:13px; border-radius:3px; display:inline-block;}
+</style>
+</head>
+<body>
+  <h1>Hazard Pointers</h1>
+  <p class="subtitle">Safe Memory Reclamation for lock-free structures — threads publish hazard pointers; a retired node is <b>held</b> until no slot references it, then freed.</p>
+
+  <div class="badges">
+    <span class="badge b-blue">protect = publish + validate</span>
+    <span class="badge b-yellow">scan: O(R + H·K)</span>
+    <span class="badge b-green">amortized O(1) reclaim</span>
+    <span class="badge b-red">memory bound Θ(H²·K)</span>
+  </div>
+
+  <div class="wrap">
+    <div class="panel">
+      <div class="controls">
+        <button id="btnPub" onclick="actPublish()">T1: Protect head</button>
+        <button id="btnPop" class="warn" onclick="actPop()">T2: Pop &amp; Retire</button>
+        <button id="btnScan" class="danger" onclick="actScan()">Scan &amp; Reclaim</button>
+        <button id="btnAuto" onclick="autoRun()">▶ Auto demo</button>
+        <button onclick="reset()">Reset</button>
+      </div>
+      <div class="speed" style="margin-top:12px;">
+        <span>Slow</span>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="threads">
+        <div class="panel" style="padding:14px;">
+          <h3>Threads &amp; Hazard Slots</h3>
+          <div class="thread" id="t1">
+            <div class="name"><span>Thread T1 (reader)</span><span id="t1step" class="tag prot" style="display:none">protecting</span></div>
+            <div class="stateline" id="t1state">idle</div>
+            <div class="slot" id="t1slot"><span class="lbl">HP[T1] =</span> <span id="t1val">null</span></div>
+          </div>
+          <div class="thread" id="t2" style="margin-top:10px;">
+            <div class="name"><span>Thread T2 (remover)</span><span id="t2step" class="tag ret" style="display:none">removing</span></div>
+            <div class="stateline" id="t2state">idle</div>
+            <div class="slot" id="t2slot"><span class="lbl">HP[T2] =</span> <span id="t2val">null</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="memcol">
+        <div class="panel stackbox" style="padding:14px;">
+          <h3>Lock-free Stack</h3>
+          <div class="ptr">head → <span id="headTop">—</span></div>
+          <div class="nodes" id="stackNodes"></div>
+        </div>
+        <div class="panel retirebox" style="padding:14px;">
+          <h3>T2 Retire List</h3>
+          <div class="nodes" id="retireNodes"><div class="empty">empty</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>What just happened</h3>
+      <div class="info" id="info">Press <span class="hl">Auto demo</span>, or step manually. The remover (T2) will retire a node, but the scan keeps it while T1's hazard slot still points at it.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation costs</h3>
+      <table>
+        <tr><th>Operation</th><th>Cost</th><th>Notes</th></tr>
+        <tr><td>protect (publish + validate)</td><td><code>O(1)</code></td><td>store + StoreLoad fence + re-read; may retry</td></tr>
+        <tr><td>clear slot</td><td><code>O(1)</code></td><td>store null — unpins the node</td></tr>
+        <tr><td>retire</td><td><code>O(1)</code></td><td>append to thread-local list (never free)</td></tr>
+        <tr><td>scan + reclaim</td><td><code>O(R + H·K)</code></td><td>amortized <code>O(1)</code> per node at threshold ≈ 2·H·K</td></tr>
+        <tr><td>held memory</td><td><code>Θ(H²·K)</code></td><td>bounded; stalled reader pins only its K slots</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Operation log</h3>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>protected (slot points here)</span>
+      <span><span class="sw" style="background:var(--yellow)"></span>retired / scanning</span>
+      <span><span class="sw" style="background:var(--red)"></span>freed</span>
+      <span><span class="sw" style="background:#11161d;border:1px solid var(--border)"></span>live</span>
+    </div>
+  </div>
+
+<script>
+  // ---- state ----
+  let stack, retire, hp, busy=false, popped=null;
+  let nextId = 0;
+
+  function speed(){ return 1150 - document.getElementById('speed').value*100; }
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  function mkNode(v){ return { id:'N'+(nextId++), value:v, next:null, state:'live' }; }
+
+  function reset(){
+    busy=false; popped=null; nextId=0;
+    // build head -> X(30) -> Y(20) -> Z(10)
+    const z=mkNode(10), y=mkNode(20), x=mkNode(30);
+    x.next=y; y.next=z; z.next=null;
+    stack=[x,y,z];
+    retire=[];
+    hp={ T1:null, T2:null };
+    setThread('t1','idle',''); setThread('t2','idle','');
+    document.getElementById('log').innerHTML='';
+    setInfo('Reset. Stack is <span class="hl">head → N0(30) → N1(20) → N2(10)</span>. Slots are empty.');
+    enable(true);
+    render();
+  }
+
+  function enable(on){
+    document.getElementById('btnPub').disabled=!on;
+    document.getElementById('btnPop').disabled=!on;
+    document.getElementById('btnScan').disabled=!on;
+    document.getElementById('btnAuto').disabled=!on;
+  }
+
+  function setThread(t,state,tag){
+    document.getElementById(t+'state').textContent=state;
+    const el=document.getElementById(t+'step');
+    if(tag){ el.style.display='inline-block'; el.textContent=tag; } else el.style.display='none';
+  }
+
+  function setInfo(html){ document.getElementById('info').innerHTML=html; }
+
+  function log(cls,msg){
+    const l=document.getElementById('log');
+    const t=new Date().toLocaleTimeString().split(' ')[0];
+    l.innerHTML += `<div class="e"><span class="t">${t}</span> <span class="${cls}">${msg}</span></div>`;
+    l.scrollTop=l.scrollHeight;
+  }
+
+  function nodeClass(n){
+    let cls='node';
+    if(n.state==='freed') return cls+' freed';
+    if(n.state==='scanning') cls+=' scanning';
+    const protd = (hp.T1===n.id)||(hp.T2===n.id);
+    if(n.state==='retired') cls+=' retired';
+    if(protd) cls+=' protected';
+    return cls;
+  }
+
+  function renderNode(n){
+    const protd=(hp.T1===n.id)||(hp.T2===n.id);
+    let tag='';
+    if(n.state==='freed') tag='<span class="tag free">freed</span>';
+    else if(protd) tag='<span class="tag prot">protected</span>';
+    else if(n.state==='retired') tag='<span class="tag ret">retired</span>';
+    const nx = n.next ? findNode(n.next).id : 'null';
+    return `<div class="${nodeClass(n)}">
+        <span class="id">${n.id}</span>
+        <span>=${n.value}</span>
+        <span class="nx">next→${nx}</span>
+        ${tag}
+      </div>`;
+  }
+
+  function findNode(id){
+    return stack.find(n=>n.id===id) || retire.find(n=>n.id===id);
+  }
+
+  function render(){
+    // slots
+    document.getElementById('t1val').textContent = hp.T1 ? hp.T1 : 'null';
+    document.getElementById('t2val').textContent = hp.T2 ? hp.T2 : 'null';
+    document.getElementById('t1slot').className = 'slot' + (hp.T1?' published':'');
+    document.getElementById('t2slot').className = 'slot' + (hp.T2?' published':'');
+    // stack
+    document.getElementById('headTop').textContent = stack.length? stack[0].id : 'null';
+    document.getElementById('stackNodes').innerHTML =
+      stack.length ? stack.map(renderNode).join('') : '<div class="empty">empty stack</div>';
+    // retire
+    document.getElementById('retireNodes').innerHTML =
+      retire.length ? retire.map(renderNode).join('') : '<div class="empty">empty</div>';
+  }
+
+  // ---- T1: protect head (publish + validate) ----
+  async function actPublish(){
+    if(busy) return; busy=true; enable(false);
+    setThread('t1','p = load(head)','protecting');
+    const target = stack.length ? stack[0] : null;
+    if(!target){ setInfo('head is <span class="no">null</span> — nothing to protect.'); log('val','T1 protect: head is null'); busy=false; enable(true); setThread('t1','idle',''); return; }
+    setInfo(`T1 reads <span class="hl">head = ${target.id}</span>, about to publish it.`);
+    await sleep(speed());
+
+    // publish
+    hp.T1 = target.id; render();
+    document.getElementById('t1slot').classList.add('validating');
+    setThread('t1','HP[T1] = '+target.id+'  (publish)','validating');
+    log('pub',`T1 publishes HP[T1] = ${target.id}`);
+    setInfo(`T1 <span class="ok">published</span> HP[T1]=${target.id}. Now it must <span class="hl">validate</span>: re-read head.`);
+    await sleep(speed());
+
+    // validate
+    const now = stack.length ? stack[0].id : null;
+    document.getElementById('t1slot').classList.remove('validating');
+    if(now===target.id){
+      log('ok',`T1 validate OK: head still = ${target.id} → safe to dereference`);
+      setInfo(`Validate <span class="ok">passed</span> (head still ${target.id}). ${target.id} is now <b>protected</b> — no scan may free it.`);
+      setThread('t1','protecting '+target.id,'protected');
+    } else {
+      log('val',`T1 validate FAILED: head changed to ${now} → retry`);
+      setInfo(`Validate <span class="no">failed</span> (head changed). T1 clears slot and retries.`);
+      hp.T1=null; setThread('t1','retry','');
+    }
+    render(); busy=false; enable(true);
+  }
+
+  // ---- T2: pop & retire ----
+  async function actPop(){
+    if(busy) return; busy=true; enable(false);
+    if(!stack.length){ setInfo('Stack empty — nothing to pop.'); busy=false; enable(true); return; }
+    setThread('t2','old = head','removing');
+    const old = stack[0];
+    setInfo(`T2 pops: <span class="hl">old = head = ${old.id}</span>. It reads old.next, then CAS-unlinks.`);
+    log('ret',`T2 pop: old = ${old.id}`);
+    await sleep(speed());
+
+    // unlink (CAS)
+    stack.shift();
+    popped = old;
+    old.state='retired';
+    retire.push(old);
+    setThread('t2','CAS(head,'+old.id+',next) → retire('+old.id+')','retired');
+    const protd = (hp.T1===old.id);
+    log('ret',`T2 retire(${old.id}) — NOT freed`);
+    setInfo(`T2 unlinked ${old.id} and <span class="hl">retired</span> it (added to retire list, <b>not freed</b>). ` +
+      (protd ? `Note: T1's slot still points at ${old.id}, so a scan will keep it.` : `No slot points at it yet.`));
+    render();
+    busy=false; enable(true); setThread('t2','idle','');
+  }
+
+  // ---- scan & reclaim ----
+  async function actScan(){
+    if(busy) return; busy=true; enable(false);
+    if(!retire.length){ setInfo('Retire list empty — scan frees nothing.'); log('free','scan: retire list empty'); busy=false; enable(true); return; }
+    setInfo('Scan: read <span class="hl">all hazard slots</span> to build the protected set, then free retired nodes not in it.');
+    log('val',`scan: protected = { ${[hp.T1,hp.T2].filter(Boolean).join(', ')||'∅'} }`);
+    const protectedSet = new Set([hp.T1,hp.T2].filter(Boolean));
+    await sleep(speed());
+
+    const keep=[];
+    for(const n of retire){
+      n.state='scanning'; render();
+      await sleep(speed()*0.8);
+      if(protectedSet.has(n.id)){
+        n.state='retired'; keep.push(n);
+        log('val',`scan: ${n.id} is PROTECTED → keep`);
+      } else {
+        n.state='freed';
+        log('free',`scan: ${n.id} not protected → free(${n.id})`);
+      }
+      render();
+      await sleep(speed()*0.6);
+    }
+    const freedNow = retire.filter(n=>n.state==='freed').map(n=>n.id);
+    retire = keep;
+    if(freedNow.length){
+      setInfo(`Scan freed: <span class="no">${freedNow.join(', ')}</span>. Kept (still protected): <span class="hl">${keep.map(n=>n.id).join(', ')||'none'}</span>.`);
+    } else {
+      setInfo(`Scan freed <b>nothing</b> — every retired node is still pinned by a hazard slot. They wait for the next scan after the slot clears.`);
+    }
+    render();
+    busy=false; enable(true);
+  }
+
+  // ---- auto demo: shows the hold-then-free sequence ----
+  async function autoRun(){
+    if(busy) return;
+    reset(); await sleep(400);
+    await actPublish();                 // T1 protects N0(30)
+    await sleep(500);
+    await actPop();                     // T2 pops & retires N0 — but T1 pins it
+    await sleep(500);
+    await actScan();                    // scan keeps N0 (protected)
+    await sleep(700);
+    // T1 done -> clears slot
+    setInfo('T1 finished using the node → it <span class="ok">clears</span> HP[T1].');
+    log('ok','T1 clear: HP[T1] = null');
+    hp.T1=null; setThread('t1','idle',''); render();
+    await sleep(700);
+    await actScan();                    // now N0 is freed
+    setInfo('Now no slot references the node, so the next scan <span class="no">frees</span> it. ✔ No use-after-free occurred.');
+  }
+
+  reset();
+</script>
+</body>
+</html>
