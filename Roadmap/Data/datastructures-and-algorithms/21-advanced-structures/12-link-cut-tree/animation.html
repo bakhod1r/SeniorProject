@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Link-Cut Tree — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg);color:var(--text);
+       min-height:100vh;padding:18px;display:flex;flex-direction:column;align-items:center;}
+  h1{font-size:1.7rem;color:var(--blue);text-align:center;}
+  .subtitle{color:var(--muted);margin:6px 0 18px;text-align:center;font-size:.95rem;}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px;}
+  .badge{padding:4px 10px;border-radius:14px;font-size:.78rem;font-weight:600;border:1px solid var(--border);}
+  .b-blue{color:var(--blue);} .b-green{color:var(--green);} .b-orange{color:var(--orange);} .b-purple{color:var(--purple);}
+  .wrap{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1180px;}
+  .col{display:flex;flex-direction:column;gap:14px;}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;}
+  .panel h3{color:var(--blue);font-size:1rem;margin-bottom:10px;}
+  svg{display:block;background:#0a0e14;border:1px solid var(--border);border-radius:10px;}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  button{padding:8px 16px;border:1.5px solid var(--blue);background:transparent;color:var(--blue);
+         border-radius:8px;cursor:pointer;font-size:.9rem;transition:all .2s;}
+  button:hover{background:var(--blue);color:#0d1117;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.alt{border-color:var(--green);color:var(--green);} button.alt:hover{background:var(--green);color:#0d1117;}
+  button.warn{border-color:var(--red);color:var(--red);} button.warn:hover{background:var(--red);color:#0d1117;}
+  select,input[type=number]{padding:7px 10px;background:#0a0e14;border:1px solid var(--border);color:var(--text);
+         border-radius:8px;font-size:.9rem;width:64px;}
+  label{color:var(--muted);font-size:.85rem;}
+  .speed{display:flex;align-items:center;gap:8px;}
+  .speed input[type=range]{width:120px;accent-color:var(--blue);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;}
+  .legend-item{display:flex;align-items:center;gap:6px;}
+  .sw{width:22px;height:6px;border-radius:3px;}
+  .dash{width:22px;height:0;border-top:2px dashed var(--muted);}
+  .info{font-family:'Courier New',monospace;font-size:.88rem;line-height:1.7;min-height:84px;}
+  .info .hl{color:var(--yellow);}
+  table{border-collapse:collapse;width:100%;font-size:.82rem;}
+  th,td{border:1px solid var(--border);padding:5px 8px;text-align:left;}
+  th{color:var(--muted);font-weight:600;}
+  .o-log{color:var(--green);} .o-lin{color:var(--yellow);}
+  .log{height:170px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.8rem;line-height:1.55;}
+  .log div{padding:1px 0;border-bottom:1px solid #1c222b;}
+  .log .ev{color:var(--purple);}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;font-size:.85rem;color:var(--muted);}
+  .stats b{color:var(--text);}
+</style>
+</head>
+<body>
+  <h1>Link-Cut Tree</h1>
+  <p class="subtitle">Dynamic forest · preferred-path decomposition · <code>access(v)</code> re-splays the root-to-v path</p>
+  <div class="badges">
+    <span class="badge b-blue">access O(log n)</span>
+    <span class="badge b-green">link O(log n)</span>
+    <span class="badge b-orange">cut O(log n)</span>
+    <span class="badge b-purple">amortized</span>
+  </div>
+
+  <div class="wrap">
+    <!-- LEFT: visualization -->
+    <div class="col">
+      <div class="panel">
+        <h3>Represented forest (solid = preferred path · dashed = path-parent)</h3>
+        <svg id="canvas" width="640" height="380"></svg>
+        <div class="legend" style="margin-top:10px;">
+          <div class="legend-item"><span class="sw" style="background:var(--blue)"></span>Preferred path 1</div>
+          <div class="legend-item"><span class="sw" style="background:var(--green)"></span>Preferred path 2</div>
+          <div class="legend-item"><span class="sw" style="background:var(--orange)"></span>Preferred path 3+</div>
+          <div class="legend-item"><span class="dash"></span>path-parent (virtual)</div>
+          <div class="legend-item"><span class="sw" style="background:var(--purple);height:14px;width:14px;border-radius:50%"></span>active node</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="controls" style="margin-bottom:10px;">
+          <label>node v</label>
+          <select id="selV"></select>
+          <button onclick="doAccess()">access(v)</button>
+          <button onclick="doFindRoot()">findRoot(v)</button>
+          <button onclick="doMakeRoot()">makeRoot(v)</button>
+        </div>
+        <div class="controls" style="margin-bottom:10px;">
+          <label>u</label><select id="selU"></select>
+          <label>w</label><select id="selW"></select>
+          <button class="alt" onclick="doLink()">link(u,w)</button>
+          <button class="warn" onclick="doCut()">cut(u,w)</button>
+        </div>
+        <div class="controls">
+          <button onclick="reset()">Reset</button>
+          <div class="speed"><label>speed</label><span>slow</span>
+            <input type="range" id="speed" min="1" max="10" value="5"><span>fast</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: info, big-O, log -->
+    <div class="col" style="min-width:380px;flex:1;">
+      <div class="panel">
+        <h3>Step explanation</h3>
+        <div class="info" id="info">Pick a node <span class="hl">v</span> and press
+          <span class="hl">access(v)</span> to expose the root-to-v path as one preferred path.</div>
+        <div class="stats" style="margin-top:10px;">
+          <div>nodes: <b id="sNodes">0</b></div>
+          <div>preferred paths: <b id="sPaths">0</b></div>
+          <div>last op: <b id="sOp">—</b></div>
+          <div>pref-child changes: <b id="sChanges">0</b></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Big-O (amortized)</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th><th>Note</th></tr>
+          <tr><td>access(v)</td><td class="o-log">O(log n)</td><td>core; everything routes through it</td></tr>
+          <tr><td>link(u,v)</td><td class="o-log">O(log n)</td><td>makeRoot + set path-parent</td></tr>
+          <tr><td>cut(u,v)</td><td class="o-log">O(log n)</td><td>access + splice</td></tr>
+          <tr><td>findRoot(v)</td><td class="o-log">O(log n)</td><td>access + walk-left</td></tr>
+          <tr><td>makeRoot(v)</td><td class="o-log">O(log n)</td><td>access + lazy reverse</td></tr>
+          <tr><td>path aggregate</td><td class="o-log">O(log n)</td><td>read splay-root field</td></tr>
+          <tr><td>space</td><td class="o-lin">O(n)</td><td>O(1) fields per node</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================================================
+   Link-Cut Tree visualization.
+   We maintain the REPRESENTED forest explicitly (parent[], children)
+   for drawing, PLUS a preferred-child map to render preferred paths.
+   access(v) is animated as a sequence of preferred-child re-pointings
+   up to the root. This mirrors the real LCT's preferred-path reshaping.
+   ============================================================ */
+
+const NAMES = ['A','B','C','D','E','F','G','H'];
+let parent = {};      // represented parent (or null for roots)
+let pref = {};        // pref[x] = preferred child of x (or null)
+let pos = {};         // layout positions for drawing
+let active = null;    // highlighted node
+let prefChanges = 0;
+let busy = false;
+
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+function speedMs(){ return 1100 - document.getElementById('speed').value*95; }
+
+function initForest(){
+  // Build a fixed illustrative forest:
+  //        A
+  //        |
+  //        B
+  //       / \
+  //      D   F
+  //      |
+  //      G
+  //      |
+  //      C
+  //      |
+  //      E
+  parent = {A:null,B:'A',D:'B',F:'B',G:'D',C:'G',E:'C'};
+  // initial preferred children: A->B->D->G  (one long preferred path),
+  // C->E another, F alone
+  pref = {A:'B',B:'D',D:'G',G:null,C:'E',E:null,F:null};
+  // Note: G's preferred child is null here, so C (child of G) is non-preferred.
+  active = null;
+  prefChanges = 0;
+}
+
+function childrenOf(x){
+  return Object.keys(parent).filter(k=>parent[k]===x);
+}
+
+/* Compute preferred-path id for each node (for coloring). */
+function pathColors(){
+  // A node's path is identified by the TOP of its preferred path.
+  function topOf(x){
+    let cur = x;
+    while(parent[cur]!==null && pref[parent[cur]]===cur) cur = parent[cur];
+    return cur;
+  }
+  const tops = {};
+  Object.keys(parent).forEach(x=>{ tops[x]=topOf(x); });
+  const uniqTops = [...new Set(Object.values(tops))];
+  const palette = ['#58a6ff','#3fb950','#ffa657','#bc8cff','#d29922','#f85149'];
+  const colorByTop = {};
+  uniqTops.forEach((t,i)=> colorByTop[t]=palette[i%palette.length]);
+  const out = {};
+  Object.keys(tops).forEach(x=> out[x]=colorByTop[tops[x]]);
+  return {out, count:uniqTops.length};
+}
+
+/* Simple layered layout by depth. */
+function layout(){
+  pos = {};
+  const roots = Object.keys(parent).filter(k=>parent[k]===null);
+  let leafX = 0;
+  const W = 640, levelH = 60, topY = 36;
+  // assign x by in-order over the represented tree, y by depth
+  function place(x, depth){
+    const kids = childrenOf(x);
+    if(kids.length===0){
+      pos[x] = {x: 60 + leafX*86, y: topY + depth*levelH};
+      leafX++;
+      return;
+    }
+    kids.forEach(k=> place(k, depth+1));
+    const xs = kids.map(k=>pos[k].x);
+    pos[x] = {x:(Math.min(...xs)+Math.max(...xs))/2, y: topY + depth*levelH};
+  }
+  roots.forEach(r=> place(r,0));
+}
+
+function draw(){
+  layout();
+  const {out:color} = pathColors();
+  const svg = document.getElementById('canvas');
+  let s = '';
+  // edges
+  Object.keys(parent).forEach(x=>{
+    const p = parent[x];
+    if(p===null) return;
+    const a = pos[p], b = pos[x];
+    const preferred = (pref[p]===x);
+    if(preferred){
+      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${color[x]}" stroke-width="3.5"/>`;
+    } else {
+      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#8b949e" stroke-width="1.6" stroke-dasharray="5,5"/>`;
+    }
+  });
+  // nodes
+  Object.keys(parent).forEach(x=>{
+    const p = pos[x];
+    const c = color[x];
+    const isActive = (x===active);
+    s += `<circle cx="${p.x}" cy="${p.y}" r="18" fill="${isActive?'#bc8cff':'#161b22'}" stroke="${c}" stroke-width="${isActive?3.5:2.5}"/>`;
+    s += `<text x="${p.x}" y="${p.y+5}" text-anchor="middle" font-size="15" font-weight="700" fill="${isActive?'#0d1117':c}">${x}</text>`;
+  });
+  svg.innerHTML = s;
+  // stats
+  const {count} = pathColors();
+  document.getElementById('sNodes').textContent = Object.keys(parent).length;
+  document.getElementById('sPaths').textContent = count;
+  document.getElementById('sChanges').textContent = prefChanges;
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function setOp(name){ document.getElementById('sOp').textContent = name; }
+function addLog(msg, isEvent){
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  if(isEvent) d.className='ev';
+  d.textContent = msg;
+  log.prepend(d);
+}
+
+/* ---- ACCESS(v): walk to root, making each step preferred ---- */
+async function doAccess(){
+  if(busy) return; busy=true;
+  const v = document.getElementById('selV').value;
+  setOp(`access(${v})`); addLog(`access(${v}) — expose root..${v} as one preferred path`, true);
+  active = v; draw();
+  setInfo(`Starting <span class="hl">access(${v})</span>: we splay ${v} to the top of its path, then climb toward the root, re-pointing each preferred child so the whole root-to-${v} chain becomes ONE preferred path.`);
+  await sleep(speedMs());
+
+  // First: cut off anything deeper than v on v's current preferred path.
+  if(pref[v]!==null){
+    addLog(`  ${v}.preferred = null  (demote deeper part of v's path)`);
+    pref[v]=null; prefChanges++;
+    draw(); await sleep(speedMs());
+  }
+
+  // Climb: from v up to the root, make each parent prefer the child we came from.
+  let cur = v;
+  while(parent[cur]!==null){
+    const p = parent[cur];
+    if(pref[p]!==cur){
+      const old = pref[p];
+      setInfo(`At <span class="hl">${p}</span>: make preferred child = <span class="hl">${cur}</span>` +
+              (old?` (demoting old preferred child <span class="hl">${old}</span> to a dashed path-parent edge)`:``) + `.`);
+      pref[p]=cur; prefChanges++;
+      addLog(`  ${p}.preferred = ${cur}` + (old?`  (was ${old})`:``));
+      active = p; draw(); await sleep(speedMs());
+    }
+    cur = p;
+  }
+  active = v; draw();
+  setInfo(`Done: the path from the root to <span class="hl">${v}</span> is now one solid preferred path (one splay tree). Any path aggregate over it is a single field read at the top.`);
+  addLog(`access(${v}) complete — pref-child changes so far: ${prefChanges}`, true);
+  busy=false;
+}
+
+async function doFindRoot(){
+  if(busy) return; busy=true;
+  const v = document.getElementById('selV').value;
+  setOp(`findRoot(${v})`);
+  await doAccessSilent(v);
+  let r = v; while(parent[r]!==null) r=parent[r];
+  active = r; draw();
+  setInfo(`findRoot(${v}) = <span class="hl">${r}</span> — after access, walk to the shallowest node of the exposed path.`);
+  addLog(`findRoot(${v}) = ${r}`, true);
+  busy=false;
+}
+
+async function doAccessSilent(v){
+  active=v;
+  if(pref[v]!==null){ pref[v]=null; prefChanges++; }
+  let cur=v;
+  while(parent[cur]!==null){
+    const p=parent[cur];
+    if(pref[p]!==cur){ pref[p]=cur; prefChanges++; }
+    cur=p;
+  }
+  draw(); await sleep(speedMs());
+}
+
+async function doMakeRoot(){
+  if(busy) return; busy=true;
+  const v = document.getElementById('selV').value;
+  setOp(`makeRoot(${v})`); addLog(`makeRoot(${v}) — re-root tree so ${v} is the root (lazy reverse)`, true);
+  await doAccessSilent(v);
+  // reverse the path from old root to v: flip parent pointers along it
+  const path=[]; let cur=v; while(cur!==null){ path.push(cur); cur=parent[cur]; }
+  for(let i=path.length-1;i>0;i--){ parent[path[i]] = path[i-1]; }
+  parent[v]=null;
+  // rebuild preferred chain along the reversed path
+  for(let i=0;i<path.length;i++) pref[path[i]] = (i+1<path.length? path[i+1] : null);
+  // actually reversed: v is now root, path order reversed
+  const rev = path.slice().reverse();
+  rev.forEach((x,i)=>{ pref[x] = (i+1<rev.length? rev[i+1] : pref[x]); });
+  active=v; draw();
+  setInfo(`<span class="hl">${v}</span> is now the root. Internally this is a single lazy-reverse flag on the exposed splay tree — O(1) on top of access.`);
+  addLog(`makeRoot(${v}) complete — ${v} is the new root`);
+  busy=false;
+}
+
+async function doLink(){
+  if(busy) return; busy=true;
+  const u = document.getElementById('selU').value;
+  const w = document.getElementById('selW').value;
+  setOp(`link(${u},${w})`);
+  // connectivity check
+  let ru=u; while(parent[ru]!==null) ru=parent[ru];
+  let rw=w; while(parent[rw]!==null) rw=parent[rw];
+  if(u===w || ru===rw){
+    setInfo(`link(${u},${w}) rejected — they are already connected (would create a cycle).`);
+    addLog(`link(${u},${w}) REJECTED (already connected)`, true);
+    busy=false; return;
+  }
+  // makeRoot(u), then u's path-parent = w
+  await doMakeRootSilent(u);
+  parent[u]=w;
+  pref[w]=pref[w]; // w keeps its preferred child; u attaches as dashed (virtual)
+  active=u; draw();
+  setInfo(`link(${u},${w}): re-rooted ${u}'s tree at ${u}, then attached it under <span class="hl">${w}</span> via a dashed path-parent edge.`);
+  addLog(`link(${u},${w}) — ${u} now hangs under ${w}`, true);
+  refreshSelectors();
+  busy=false;
+}
+
+async function doMakeRootSilent(v){
+  await doAccessSilent(v);
+  const path=[]; let cur=v; while(cur!==null){ path.push(cur); cur=parent[cur]; }
+  for(let i=path.length-1;i>0;i--){ parent[path[i]] = path[i-1]; }
+  parent[v]=null;
+  const rev=path.slice().reverse();
+  rev.forEach((x,i)=>{ pref[x]=(i+1<rev.length?rev[i+1]:null); });
+}
+
+async function doCut(){
+  if(busy) return; busy=true;
+  const u = document.getElementById('selU').value;
+  const w = document.getElementById('selW').value;
+  setOp(`cut(${u},${w})`);
+  // must be a real edge
+  if(parent[u]!==w && parent[w]!==u){
+    setInfo(`cut(${u},${w}) rejected — ${u} and ${w} are not directly connected by an edge.`);
+    addLog(`cut(${u},${w}) REJECTED (not an edge)`, true);
+    busy=false; return;
+  }
+  const child = (parent[u]===w)? u : w;
+  parent[child]=null;
+  // fix preferred pointers: the demoted parent shouldn't prefer the cut child
+  Object.keys(pref).forEach(k=>{ if(pref[k]===child) pref[k]=null; });
+  active=child; draw();
+  setInfo(`cut(${u},${w}): removed the edge; <span class="hl">${child}</span> is now the root of its own tree.`);
+  addLog(`cut(${u},${w}) — forest split; ${child} is a new root`, true);
+  refreshSelectors();
+  busy=false;
+}
+
+function refreshSelectors(){
+  const nodes = Object.keys(parent).sort();
+  ['selV','selU','selW'].forEach(id=>{
+    const sel=document.getElementById(id);
+    const prev=sel.value;
+    sel.innerHTML = nodes.map(n=>`<option>${n}</option>`).join('');
+    if(nodes.includes(prev)) sel.value=prev;
+  });
+}
+
+function reset(){
+  if(busy) return;
+  document.getElementById('log').innerHTML='';
+  initForest();
+  refreshSelectors();
+  document.getElementById('selV').value='E';
+  document.getElementById('selU').value='C';
+  document.getElementById('selW').value='F';
+  setOp('—');
+  draw();
+  setInfo(`Forest reset. Try <span class="hl">access(E)</span> to watch the root-to-E path re-stitch into one preferred path, then <span class="hl">cut(C,G)</span> and <span class="hl">link(C,F)</span> to change the structure.`);
+}
+
+// init
+initForest();
+refreshSelectors();
+document.getElementById('selV').value='E';
+document.getElementById('selU').value='C';
+document.getElementById('selW').value='F';
+draw();
+</script>
+</body>
+</html>
