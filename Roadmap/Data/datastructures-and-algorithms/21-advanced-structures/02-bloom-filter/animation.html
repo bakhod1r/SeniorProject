@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bloom Filter — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:18px; text-align:center; max-width:760px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:20px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-red{color:var(--red); border-color:var(--red);}
+  .b-blue{color:var(--blue); border-color:var(--blue);}
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:18px; margin-bottom:18px; width:100%; max-width:1000px;
+  }
+  .panel h3{color:var(--blue); margin-bottom:12px; font-size:1.05rem;}
+
+  /* controls */
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;}
+  input[type="text"]{
+    padding:9px 14px; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    border-radius:8px; font-size:.95rem; width:200px;
+  }
+  input[type="text"]:focus{outline:none; border-color:var(--blue);}
+  label.small{color:var(--muted); font-size:.85rem;}
+  input[type="range"]{accent-color:var(--blue); width:120px;}
+  button{
+    padding:9px 18px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.add{border-color:var(--green); color:var(--green);}
+  button.add:hover:not(:disabled){background:var(--green); color:var(--bg);}
+  button.query{border-color:var(--yellow); color:var(--yellow);}
+  button.query:hover:not(:disabled){background:var(--yellow); color:var(--bg);}
+  button.fp{border-color:var(--purple); color:var(--purple);}
+  button.fp:hover:not(:disabled){background:var(--purple); color:var(--bg);}
+  button.reset{border-color:var(--red); color:var(--red);}
+  button.reset:hover:not(:disabled){background:var(--red); color:var(--bg);}
+
+  /* bit array */
+  .bitarray{display:flex; flex-wrap:wrap; gap:5px; justify-content:center; padding:6px 0;}
+  .bit{
+    width:34px; height:34px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    font-size:.8rem; font-weight:700; border:1px solid var(--border); background:#1c2128; color:var(--muted);
+    position:relative; transition:all .25s;
+  }
+  .bit .idx{position:absolute; bottom:-15px; font-size:.6rem; color:#5a626c; font-weight:400;}
+  .bit.set{background:#1f3a24; color:var(--green); border-color:var(--green);}
+  .bit.probe-set{background:var(--green); color:var(--bg); border-color:var(--green); transform:scale(1.18); box-shadow:0 0 10px var(--green);}
+  .bit.probe-miss{background:var(--red); color:#fff; border-color:var(--red); transform:scale(1.18); box-shadow:0 0 10px var(--red);}
+  .bit.probe-fp{background:var(--purple); color:#fff; border-color:var(--purple); transform:scale(1.18); box-shadow:0 0 10px var(--purple);}
+  .bit.inserting{background:var(--green); color:var(--bg); border-color:var(--green); transform:scale(1.18); box-shadow:0 0 10px var(--green);}
+
+  /* stats */
+  .stats{display:flex; gap:26px; flex-wrap:wrap; justify-content:center;}
+  .stat{text-align:center;}
+  .stat .lbl{color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.5px;}
+  .stat .val{color:var(--blue); font-size:1.25rem; font-weight:700;}
+
+  /* info panel */
+  .info{font-family:'Courier New',monospace; font-size:.92rem; line-height:1.7; min-height:54px;}
+  .info .hl{color:var(--yellow);}
+  .info .ok{color:var(--green); font-weight:700;}
+  .info .no{color:var(--red); font-weight:700;}
+  .info .fp{color:var(--purple); font-weight:700;}
+
+  /* table */
+  table{width:100%; border-collapse:collapse; font-size:.88rem;}
+  th,td{padding:7px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  td.mono{font-family:'Courier New',monospace;}
+  .c-green{color:var(--green);} .c-yellow{color:var(--yellow);} .c-red{color:var(--red);}
+
+  /* log */
+  .log{max-height:170px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.82rem;}
+  .log .line{padding:3px 0; border-bottom:1px solid #20262e;}
+  .log .line .t{color:#5a626c;}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin-bottom:14px;}
+  .legend .item{display:flex; align-items:center; gap:6px; font-size:.8rem; color:var(--muted);}
+  .swatch{width:14px; height:14px; border-radius:4px; border:1px solid var(--border);}
+</style>
+</head>
+<body>
+  <h1>Bloom Filter</h1>
+  <p class="subtitle">A bit array + k hash functions. Insert sets k bits; a query checks k bits.
+     A <b>0</b> bit means <i>definitely absent</i> (no false negatives); all <b>1</b>s means <i>probably present</i> (maybe a false positive).</p>
+
+  <div class="badges">
+    <span class="badge b-green">Insert O(k)</span>
+    <span class="badge b-green">Query O(k)</span>
+    <span class="badge b-blue">Space O(m) bits</span>
+    <span class="badge b-yellow">FPR ≈ (1−e^(−kn/m))^k</span>
+    <span class="badge b-red">No delete</span>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="item"><span class="swatch" style="background:#1c2128"></span>bit = 0</div>
+    <div class="item"><span class="swatch" style="background:#1f3a24;border-color:var(--green)"></span>bit = 1 (set)</div>
+    <div class="item"><span class="swatch" style="background:var(--green)"></span>inserting / probe hit</div>
+    <div class="item"><span class="swatch" style="background:var(--red)"></span>probe miss (a 0 found)</div>
+    <div class="item"><span class="swatch" style="background:var(--purple)"></span>false positive</div>
+  </div>
+
+  <!-- Controls -->
+  <div class="panel">
+    <h3>Controls</h3>
+    <div class="controls">
+      <input type="text" id="itemInput" placeholder="word, e.g. cat" value="cat">
+      <button class="add" id="addBtn" onclick="doAdd()">Insert</button>
+      <button class="query" id="qBtn" onclick="doQuery()">Query</button>
+      <button class="fp" id="fpBtn" onclick="forceFalsePositive()">Find a False Positive</button>
+      <button class="reset" onclick="resetFilter()">Reset</button>
+    </div>
+    <div class="controls" style="margin-top:12px;">
+      <label class="small">m (bits):</label>
+      <input type="range" id="mSlider" min="16" max="64" value="32" oninput="reshape()">
+      <span id="mVal" class="small">32</span>
+      <label class="small">k (hashes):</label>
+      <input type="range" id="kSlider" min="1" max="6" value="3" oninput="reshape()">
+      <span id="kVal" class="small">3</span>
+      <label class="small">speed:</label>
+      <input type="range" id="speed" min="1" max="10" value="6">
+    </div>
+  </div>
+
+  <!-- Bit array -->
+  <div class="panel">
+    <h3>Bit Array</h3>
+    <div class="bitarray" id="bitarray"></div>
+  </div>
+
+  <!-- Stats -->
+  <div class="panel">
+    <div class="stats">
+      <div class="stat"><div class="lbl">m (bits)</div><div class="val" id="sM">32</div></div>
+      <div class="stat"><div class="lbl">k (hashes)</div><div class="val" id="sK">3</div></div>
+      <div class="stat"><div class="lbl">n (inserted)</div><div class="val" id="sN">0</div></div>
+      <div class="stat"><div class="lbl">bits set</div><div class="val" id="sSet">0</div></div>
+      <div class="stat"><div class="lbl">fill ratio</div><div class="val" id="sFill">0%</div></div>
+      <div class="stat"><div class="lbl">est. FPR</div><div class="val" id="sFpr">0%</div></div>
+    </div>
+  </div>
+
+  <!-- Info -->
+  <div class="panel">
+    <h3>What just happened</h3>
+    <div class="info" id="info">Insert a word to set its <span class="hl">k</span> bits, then query it or a different word. Try "Find a False Positive".</div>
+  </div>
+
+  <!-- Big-O / FPR table -->
+  <div class="panel">
+    <h3>Complexity & False-Positive Rate</h3>
+    <table>
+      <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+      <tr><td>Insert</td><td class="mono c-green">O(k)</td><td>set k bits from k hashes</td></tr>
+      <tr><td>Query (might-contain)</td><td class="mono c-green">O(k)</td><td>check k bits; early-exit on first 0</td></tr>
+      <tr><td>Delete</td><td class="mono c-red">unsupported</td><td>shared bits → use counting Bloom filter</td></tr>
+      <tr><td>Space</td><td class="mono c-yellow">O(m) bits</td><td>~10·n bits for 1% FPR</td></tr>
+      <tr><td>Optimal k</td><td class="mono">(m/n)·ln2</td><td>array half full of 1s</td></tr>
+      <tr><td>FPR p</td><td class="mono">(1−e^(−kn/m))^k</td><td>rises with n, falls with m</td></tr>
+      <tr><td>Sizing m</td><td class="mono">−n·ln p / (ln2)²</td><td>from target FPR p</td></tr>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+<script>
+  // ===== State =====
+  let M = 32, K = 3;
+  let bits = new Uint8Array(M);
+  let inserted = new Set();   // ground-truth set (to detect false positives)
+  let nCount = 0;
+  let busy = false;
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+  function speedMs(){ return 1050 - document.getElementById('speed').value*95; }
+
+  // Two base hashes (FNV-1a-ish 32-bit), then double hashing.
+  function baseHashes(s){
+    let h1 = 2166136261 >>> 0;
+    for(let i=0;i<s.length;i++){ h1 ^= s.charCodeAt(i); h1 = Math.imul(h1, 16777619) >>> 0; }
+    let h2 = 5381 >>> 0;
+    for(let i=0;i<s.length;i++){ h2 = ((h2*33) ^ s.charCodeAt(i)) >>> 0; }
+    h2 = (h2 | 1) >>> 0; // non-zero stride
+    return [h1, h2];
+  }
+  function indices(s){
+    const [h1,h2] = baseHashes(s);
+    const out = [];
+    for(let i=0;i<K;i++){ out.push(((h1 + i*h2) % M + M) % M); }
+    return out;
+  }
+
+  // ===== Render =====
+  function renderBits(highlights){
+    highlights = highlights || {};
+    const c = document.getElementById('bitarray');
+    let html = '';
+    for(let i=0;i<M;i++){
+      let cls = bits[i] ? 'set' : '';
+      if(highlights[i]) cls = highlights[i];
+      html += `<div class="bit ${cls}">${bits[i]}<span class="idx">${i}</span></div>`;
+    }
+    c.innerHTML = html;
+    updateStats();
+  }
+
+  function countSet(){ let s=0; for(let i=0;i<M;i++) s+=bits[i]; return s; }
+  function estFpr(){
+    if(nCount===0) return 0;
+    return Math.pow(1 - Math.exp(-K*nCount/M), K);
+  }
+  function updateStats(){
+    document.getElementById('sM').textContent = M;
+    document.getElementById('sK').textContent = K;
+    document.getElementById('sN').textContent = nCount;
+    const set = countSet();
+    document.getElementById('sSet').textContent = set;
+    document.getElementById('sFill').textContent = ((set/M)*100).toFixed(0)+'%';
+    document.getElementById('sFpr').textContent = (estFpr()*100).toFixed(1)+'%';
+  }
+
+  function setInfo(html){ document.getElementById('info').innerHTML = html; }
+  function addLog(html){
+    const log = document.getElementById('log');
+    const t = new Date().toLocaleTimeString();
+    log.innerHTML = `<div class="line"><span class="t">${t}</span> ${html}</div>` + log.innerHTML;
+  }
+
+  // ===== Operations =====
+  async function doAdd(){
+    if(busy) return;
+    const s = document.getElementById('itemInput').value.trim();
+    if(!s){ setInfo('Type a word to insert.'); return; }
+    busy = true; disableBtns(true);
+    const idx = indices(s);
+    setInfo(`Insert <span class="hl">"${s}"</span> → hashing to bits [${idx.join(', ')}], setting each to 1.`);
+    const hl = {};
+    for(const b of idx){
+      hl[b] = 'inserting';
+      bits[b] = 1;
+      renderBits(hl);
+      await sleep(speedMs());
+    }
+    inserted.add(s);
+    nCount = inserted.size;
+    renderBits();
+    addLog(`<span class="ok">INSERT</span> "${s}" → set bits [${idx.join(',')}]`);
+    setInfo(`Inserted <span class="hl">"${s}"</span>. Bits [${idx.join(', ')}] are now 1. (Bits only ever go 0→1 — that's why there are no false negatives and no delete.)`);
+    busy = false; disableBtns(false);
+  }
+
+  async function doQuery(){
+    if(busy) return;
+    const s = document.getElementById('itemInput').value.trim();
+    if(!s){ setInfo('Type a word to query.'); return; }
+    busy = true; disableBtns(true);
+    const idx = indices(s);
+    setInfo(`Query <span class="hl">"${s}"</span> → checking bits [${idx.join(', ')}]. A single 0 means "definitely absent".`);
+    let allSet = true, missAt = -1;
+    const hl = {};
+    for(const b of idx){
+      if(bits[b]===1){
+        hl[b] = 'probe-set';
+        renderBits(hl);
+        await sleep(speedMs());
+      } else {
+        hl[b] = 'probe-miss';
+        renderBits(hl);
+        allSet = false; missAt = b;
+        await sleep(speedMs());
+        break; // early exit on first 0
+      }
+    }
+    if(!allSet){
+      addLog(`<span class="no">QUERY</span> "${s}" → bit ${missAt} is 0 → <b>ABSENT</b>`);
+      setInfo(`Bit <span class="hl">${missAt}</span> is 0 → <span class="no">DEFINITELY NOT PRESENT</span>. This answer is always correct (no false negatives).`);
+    } else if(inserted.has(s)){
+      addLog(`<span class="ok">QUERY</span> "${s}" → all bits 1 → <b>PRESENT</b> (true positive)`);
+      setInfo(`All k bits are 1 and "${s}" was inserted → <span class="ok">PRESENT</span> (a true positive).`);
+    } else {
+      // all set but never inserted => false positive
+      for(const b of idx) hl[b]='probe-fp';
+      renderBits(hl);
+      addLog(`<span class="fp">QUERY</span> "${s}" → all bits 1 but never inserted → <b>FALSE POSITIVE</b>`);
+      setInfo(`All k bits are 1, yet <span class="hl">"${s}"</span> was never inserted → <span class="fp">FALSE POSITIVE</span>! Other items' bits happened to cover all of its positions.`);
+    }
+    busy = false; disableBtns(false);
+  }
+
+  async function forceFalsePositive(){
+    if(busy) return;
+    if(nCount===0){ setInfo('Insert a few words first, then I will search for a false positive.'); return; }
+    busy = true; disableBtns(true);
+    setInfo('Searching candidate words for one whose k bits are all already set by other items…');
+    // try random short candidates not in the set
+    let found = null;
+    for(let attempt=0; attempt<4000 && !found; attempt++){
+      const cand = 'x'+Math.random().toString(36).slice(2,7);
+      if(inserted.has(cand)) continue;
+      const idx = indices(cand);
+      if(idx.every(b=>bits[b]===1)) found = {cand, idx};
+    }
+    if(!found){
+      setInfo('No false positive found yet — the array is too empty. Insert more words (or lower m / raise k) and try again.');
+      addLog('<span class="t">No false positive found at current fill.</span>');
+      busy=false; disableBtns(false); return;
+    }
+    document.getElementById('itemInput').value = found.cand;
+    const hl = {};
+    for(const b of found.idx){ hl[b]='probe-fp'; }
+    renderBits(hl);
+    addLog(`<span class="fp">FALSE POSITIVE</span> "${found.cand}" → bits [${found.idx.join(',')}] all 1 (never inserted)`);
+    setInfo(`Found a false positive: <span class="hl">"${found.cand}"</span> hashes to bits [${found.idx.join(', ')}], all already 1 — so the filter says <span class="fp">PRESENT</span> even though it was never inserted.`);
+    busy=false; disableBtns(false);
+  }
+
+  function resetFilter(){
+    if(busy) return;
+    bits = new Uint8Array(M);
+    inserted = new Set();
+    nCount = 0;
+    renderBits();
+    setInfo('Filter reset. All bits are 0; every query correctly returns ABSENT.');
+    addLog('<span class="t">— reset —</span>');
+  }
+
+  function reshape(){
+    if(busy) return;
+    M = parseInt(document.getElementById('mSlider').value);
+    K = parseInt(document.getElementById('kSlider').value);
+    document.getElementById('mVal').textContent = M;
+    document.getElementById('kVal').textContent = K;
+    // rebuild from ground truth so state stays consistent
+    bits = new Uint8Array(M);
+    const items = Array.from(inserted);
+    inserted = new Set();
+    nCount = 0;
+    for(const s of items){
+      for(const b of indices(s)) bits[b]=1;
+      inserted.add(s);
+    }
+    nCount = inserted.size;
+    renderBits();
+    setInfo(`Reshaped to m=<span class="hl">${M}</span>, k=<span class="hl">${K}</span>. Re-inserted ${nCount} item(s).`);
+  }
+
+  function disableBtns(d){
+    ['addBtn','qBtn','fpBtn'].forEach(id=>document.getElementById(id).disabled=d);
+  }
+
+  // ===== Init =====
+  renderBits();
+  setInfo('Insert a word to set its <span class="hl">k</span> bits, then query it or a different word. Try "Find a False Positive".');
+</script>
+</body>
+</html>
