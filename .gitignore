@@ -49,6 +49,11 @@ env/
 _site/
 .cache/
 
+# Local test build artifacts (subset config for verifying nav/theme changes)
+_site_test/
+mkdocs.test.yml
+build.log.txt
+
 # PDFs (excluded from repo)
 *.pdf
 
