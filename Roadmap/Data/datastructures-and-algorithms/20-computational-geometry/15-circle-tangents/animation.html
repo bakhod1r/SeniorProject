@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circle Tangents — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.8rem; color:var(--blue); margin-bottom:4px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:16px; text-align:center; font-size:.95rem;}
+  .badges{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:16px;}
+  .badge{padding:4px 12px; border-radius:14px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-time{color:var(--green); background:rgba(63,185,80,.12);}
+  .b-space{color:var(--blue); background:rgba(88,166,255,.12);}
+  .b-cnt{color:var(--purple); background:rgba(188,140,255,.12);}
+  .layout{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; width:100%; max-width:1200px;}
+  .left{flex:1 1 620px; min-width:320px;}
+  .right{flex:1 1 320px; min-width:300px; display:flex; flex-direction:column; gap:14px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+  .mode-tabs{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; justify-content:center;}
+  button{
+    padding:8px 16px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.9rem; transition:all .2s;
+  }
+  button:hover{background:var(--blue); color:var(--bg);}
+  button.active{background:var(--blue); color:var(--bg);}
+  button.alt{border-color:var(--purple); color:var(--purple);}
+  button.alt:hover, button.alt.active{background:var(--purple); color:var(--bg);}
+  svg{display:block; width:100%; height:auto; background:#0a0d12; border:1px solid var(--border); border-radius:10px; touch-action:none;}
+  .ctrl-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;}
+  .ctrl-row label{color:var(--muted); font-size:.85rem; min-width:64px;}
+  input[type=range]{flex:1; accent-color:var(--blue);}
+  .val{color:var(--text); font-size:.85rem; min-width:46px; text-align:right; font-family:'Courier New',monospace;}
+  .info{font-family:'Courier New',monospace; font-size:.85rem; line-height:1.7;}
+  .info .k{color:var(--muted);} .info .v{color:var(--yellow);} .info .hl{color:var(--green); font-weight:bold;}
+  table{width:100%; border-collapse:collapse; font-size:.82rem;}
+  th,td{text-align:left; padding:5px 7px; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  .o1{color:var(--green); font-weight:bold;}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:10px; font-size:.8rem;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .sw{width:22px; height:3px; border-radius:2px; display:inline-block;}
+  #log{height:130px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.78rem; line-height:1.5;}
+  #log div{padding:1px 0; border-bottom:1px solid rgba(48,54,61,.5);}
+  .count-big{font-size:2.2rem; font-weight:bold; text-align:center; color:var(--purple);}
+  .count-lbl{text-align:center; color:var(--muted); font-size:.85rem; margin-top:-4px;}
+  .hint{color:var(--muted); font-size:.78rem; margin-top:6px;}
+</style>
+</head>
+<body>
+  <h1>Circle Tangents</h1>
+  <p class="subtitle">Drag the point or the circles — tangents, touch-points, and the 0–4 common-tangent count update live</p>
+  <div class="badges">
+    <span class="badge b-time">Tangent length: O(1)</span>
+    <span class="badge b-cnt">Common tangents: 0–4</span>
+    <span class="badge b-space">Space: O(1)</span>
+  </div>
+
+  <div class="mode-tabs">
+    <button id="modePoint" class="active" onclick="setMode('point')">Point → Circle (2 tangents)</button>
+    <button id="modeCircles" class="alt" onclick="setMode('circles')">Circle ↔ Circle (0–4 common)</button>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="panel">
+        <div class="legend" id="legend"></div>
+        <svg id="svg" viewBox="0 0 620 460" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="hint" id="hint"></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="panel">
+        <h3>Live Geometry</h3>
+        <div class="info" id="info"></div>
+      </div>
+      <div class="panel" id="countPanel" style="display:none;">
+        <div class="count-big" id="countBig">4</div>
+        <div class="count-lbl" id="countLbl">common tangents</div>
+      </div>
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="ctrl-row">
+          <label>Radius r1</label>
+          <input type="range" id="r1" min="20" max="120" value="70">
+          <span class="val" id="r1v">70</span>
+        </div>
+        <div class="ctrl-row" id="r2row">
+          <label>Radius r2</label>
+          <input type="range" id="r2" min="20" max="120" value="45">
+          <span class="val" id="r2v">45</span>
+        </div>
+        <div class="ctrl-row">
+          <button onclick="resetScene()">Reset</button>
+          <button onclick="randomize()">Random</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Big-O</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>Distance d</td><td class="o1">O(1)</td></tr>
+          <tr><td>Tangent length √(d²−r²)</td><td class="o1">O(1)</td></tr>
+          <tr><td>Touch-points</td><td class="o1">O(1)</td></tr>
+          <tr><td>Classify pair (0–4)</td><td class="o1">O(1)</td></tr>
+          <tr><td>All common tangents</td><td class="o1">O(1)</td></tr>
+          <tr><td>Tangent graph (n discs)</td><td>O(n²)</td></tr>
+        </table>
+      </div>
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+const svg = document.getElementById('svg');
+const NS = "http://www.w3.org/2000/svg";
+const EPS = 1e-9;
+let mode = 'point';
+
+// scene state (in svg coords)
+let P  = {x:480, y:120};          // external point (point mode)
+let C1 = {x:230, y:230};          // circle 1 center
+let C2 = {x:430, y:230};          // circle 2 center
+let r1 = 70, r2 = 45;
+
+let dragTarget = null;
+
+// ---------- math ----------
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function clamp(x,lo,hi){ return x<lo?lo:(x>hi?hi:x); }
+
+function tangentTouchPoints(p,c,r){
+  const d = dist(p,c);
+  if(d < r - EPS) return null;
+  const phi = Math.atan2(p.y-c.y, p.x-c.x);
+  const th  = Math.acos(clamp(r/d,-1,1));
+  return [
+    {x:c.x + r*Math.cos(phi+th), y:c.y + r*Math.sin(phi+th)},
+    {x:c.x + r*Math.cos(phi-th), y:c.y + r*Math.sin(phi-th)}
+  ];
+}
+
+// all common tangents via signed-distance method; returns {a,b,c,t1,t2,external}
+function commonTangents(c1,R1,c2,R2){
+  const dx=c2.x-c1.x, dy=c2.y-c1.y, d2=dx*dx+dy*dy;
+  const out=[];
+  if(d2 < EPS) return out;
+  for(const s1 of [1,-1]) for(const s2 of [1,-1]){
+    const g = s1*R1 - s2*R2;
+    if(d2 < g*g - 1e-6) continue;
+    const xn = g/d2;
+    const h  = Math.sqrt(Math.max(0,d2-g*g))/d2;
+    for(const sign of [1,-1]){
+      const a = dx*xn + sign*dy*h;
+      const b = dy*xn - sign*dx*h;
+      const c = s1*R1 - (a*c1.x + b*c1.y);
+      const t1 = foot(c1,a,b,c), t2 = foot(c2,a,b,c);
+      const sd1 = a*c1.x+b*c1.y+c, sd2 = a*c2.x+b*c2.y+c;
+      out.push({a,b,c,t1,t2,external: sd1*sd2 >= -1e-6});
+      if(h < 1e-9) break;
+    }
+  }
+  return dedup(out);
+}
+function foot(p,a,b,c){ const sd=a*p.x+b*p.y+c; return {x:p.x-sd*a, y:p.y-sd*b}; }
+// Flip sign so (a,b,c) and (−a,−b,−c) — the same geometric line — match.
+function canon(t){
+  if(t.a < -1e-12 || (Math.abs(t.a)<1e-12 && t.b<0)){
+    return {a:-t.a, b:-t.b, c:-t.c, t1:t.t1, t2:t.t2, external:t.external};
+  }
+  return t;
+}
+function dedup(ts){
+  const out=[];
+  for(const raw of ts){
+    const t=canon(raw);
+    if(!out.some(u=>Math.abs(t.a-u.a)<1e-4 && Math.abs(t.b-u.b)<1e-4 && Math.abs(t.c-u.c)<1e-4))
+      out.push(t);
+  }
+  return out;
+}
+function classify(c1,R1,c2,R2){
+  const d=dist(c1,c2), sum=R1+R2, diff=Math.abs(R1-R2);
+  if(d < diff-1e-6) return {name:"nested", count:0};
+  if(Math.abs(d-diff)<=1e-6) return {name:"internally tangent", count:1};
+  if(d < sum-1e-6) return {name:"overlapping", count:2};
+  if(Math.abs(d-sum)<=1e-6) return {name:"externally tangent", count:3};
+  return {name:"separate", count:4};
+}
+
+// ---------- svg helpers ----------
+function el(tag, attrs){
+  const e=document.createElementNS(NS,tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function line(x1,y1,x2,y2,stroke,w,dash){
+  return el('line',{x1,y1,x2,y2,stroke,'stroke-width':w||2,'stroke-dasharray':dash||'0'});
+}
+function circle(cx,cy,r,stroke,fill,w){
+  return el('circle',{cx,cy,r,stroke,fill:fill||'none','stroke-width':w||2});
+}
+function dot(cx,cy,r,fill){ return el('circle',{cx,cy,r,fill}); }
+function label(x,y,txt,fill){
+  const t=el('text',{x,y,fill,'font-size':13,'font-family':'Courier New, monospace'});
+  t.textContent=txt; return t;
+}
+// extend a line a*x+b*y+c=0 across the viewBox
+function lineEndpoints(a,b,c){
+  // pick a point on line, go along direction (-b,a)
+  let px,py;
+  if(Math.abs(b) > Math.abs(a)){ px=0; py=-c/b; } else { py=0; px=-c/a; }
+  const dx=-b, dy=a, L=2000;
+  return [{x:px-dx*L,y:py-dy*L},{x:px+dx*L,y:py+dy*L}];
+}
+
+// ---------- log ----------
+let lastLog="";
+function log(msg){
+  if(msg===lastLog) return; lastLog=msg;
+  const box=document.getElementById('log');
+  const d=document.createElement('div'); d.textContent=msg;
+  box.insertBefore(d, box.firstChild);
+  while(box.children.length>40) box.removeChild(box.lastChild);
+}
+
+// ---------- render ----------
+function render(){
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  // grid baseline
+  svg.appendChild(el('rect',{x:0,y:0,width:620,height:460,fill:'#0a0d12'}));
+  if(mode==='point') renderPoint(); else renderCircles();
+}
+
+function renderPoint(){
+  const r = r1;
+  svg.appendChild(circle(C1.x,C1.y,r,'#58a6ff','none',2.5));     // the circle
+  svg.appendChild(dot(C1.x,C1.y,4,'#58a6ff'));
+  svg.appendChild(label(C1.x+8,C1.y-8,'C','#58a6ff'));
+
+  const d = dist(P,C1);
+  const tps = tangentTouchPoints(P,C1,r);
+
+  // line PC
+  svg.appendChild(line(P.x,P.y,C1.x,C1.y,'#8b949e',1.5,'4 4'));
+
+  if(tps){
+    for(const t of tps){
+      svg.appendChild(line(P.x,P.y,t.x,t.y,'#3fb950',2.5));      // tangent
+      svg.appendChild(line(C1.x,C1.y,t.x,t.y,'#ffa657',1.5,'2 3')); // radius to touch
+      svg.appendChild(dot(t.x,t.y,5,'#d29922'));                  // touch-point
+    }
+    const L = Math.sqrt(Math.max(0,d*d-r*r));
+    log(`point d=${d.toFixed(1)} > r=${r} → 2 tangents, L=${L.toFixed(1)}`);
+  } else {
+    log(`point is inside circle (d=${d.toFixed(1)} < r=${r}) → no tangent`);
+  }
+
+  // draggable point
+  const inside = d < r - EPS;
+  svg.appendChild(dot(P.x,P.y,7, inside ? '#f85149' : '#bc8cff'));
+  svg.appendChild(label(P.x+10,P.y-8,'P','#bc8cff'));
+
+  // info
+  const L = tps ? Math.sqrt(Math.max(0,d*d-r*r)) : null;
+  document.getElementById('info').innerHTML =
+    `<span class="k">d (P→C)</span> = <span class="v">${d.toFixed(2)}</span><br>`+
+    `<span class="k">r</span> = <span class="v">${r}</span><br>`+
+    `<span class="k">position</span> = <span class="hl">${inside?'INSIDE — no tangent':(Math.abs(d-r)<2?'ON circle — 1 tangent':'OUTSIDE — 2 tangents')}</span><br>`+
+    (L!=null?`<span class="k">tangent length</span> = √(d²−r²) = <span class="hl">${L.toFixed(2)}</span><br>`:'')+
+    `<span class="k">radius ⟂ tangent</span> at each touch-point`;
+  document.getElementById('hint').textContent='Drag P (purple) around the circle. Green = tangents, orange = radii (perpendicular), yellow = touch-points.';
+}
+
+function renderCircles(){
+  svg.appendChild(circle(C1.x,C1.y,r1,'#58a6ff','none',2.5));
+  svg.appendChild(circle(C2.x,C2.y,r2,'#bc8cff','none',2.5));
+  svg.appendChild(dot(C1.x,C1.y,4,'#58a6ff'));
+  svg.appendChild(dot(C2.x,C2.y,4,'#bc8cff'));
+  svg.appendChild(label(C1.x-4,C1.y-r1-6,'C1','#58a6ff'));
+  svg.appendChild(label(C2.x-4,C2.y-r2-6,'C2','#bc8cff'));
+  svg.appendChild(line(C1.x,C1.y,C2.x,C2.y,'#8b949e',1.2,'5 5'));
+
+  const cls = classify(C1,r1,C2,r2);
+  const tans = commonTangents(C1,r1,C2,r2);
+  let ext=0, intl=0;
+  for(const t of tans){
+    const ep = lineEndpoints(t.a,t.b,t.c);
+    const col = t.external ? '#3fb950' : '#ffa657';
+    if(t.external) ext++; else intl++;
+    svg.appendChild(line(ep[0].x,ep[0].y,ep[1].x,ep[1].y,col,2.2));
+    svg.appendChild(dot(t.t1.x,t.t1.y,4.5,'#d29922'));
+    svg.appendChild(dot(t.t2.x,t.t2.y,4.5,'#d29922'));
+  }
+  const d = dist(C1,C2);
+  log(`d=${d.toFixed(1)}  r1±r2=${(r1+r2)}/${Math.abs(r1-r2)}  → ${cls.name}: ${cls.count} tangents (${ext} ext, ${intl} int)`);
+
+  document.getElementById('countBig').textContent = tans.length;
+  document.getElementById('countLbl').textContent = cls.name + ` — ${ext} external + ${intl} internal`;
+
+  document.getElementById('info').innerHTML =
+    `<span class="k">d (C1→C2)</span> = <span class="v">${d.toFixed(2)}</span><br>`+
+    `<span class="k">r1 + r2</span> = <span class="v">${(r1+r2)}</span><br>`+
+    `<span class="k">|r1 − r2|</span> = <span class="v">${Math.abs(r1-r2)}</span><br>`+
+    `<span class="k">relationship</span> = <span class="hl">${cls.name}</span><br>`+
+    `<span class="k">external tangents</span> = <span class="v">${ext}</span><br>`+
+    `<span class="k">internal tangents</span> = <span class="v">${intl}</span>`;
+  document.getElementById('hint').textContent='Drag C1 (blue) or C2 (purple). Green = external tangents, orange = internal tangents, yellow = touch-points.';
+}
+
+// ---------- legend ----------
+function setLegend(){
+  const L=document.getElementById('legend');
+  if(mode==='point'){
+    L.innerHTML =
+      `<span><i class="sw" style="background:#3fb950"></i>tangent</span>`+
+      `<span><i class="sw" style="background:#ffa657"></i>radius ⟂</span>`+
+      `<span><i class="sw" style="background:#d29922"></i>touch-point</span>`+
+      `<span><i class="sw" style="background:#bc8cff"></i>point P (red if inside)</span>`;
+  } else {
+    L.innerHTML =
+      `<span><i class="sw" style="background:#3fb950"></i>external tangent</span>`+
+      `<span><i class="sw" style="background:#ffa657"></i>internal tangent</span>`+
+      `<span><i class="sw" style="background:#d29922"></i>touch-point</span>`+
+      `<span><i class="sw" style="background:#8b949e"></i>center line</span>`;
+  }
+}
+
+// ---------- modes ----------
+function setMode(m){
+  mode=m;
+  document.getElementById('modePoint').classList.toggle('active', m==='point');
+  document.getElementById('modeCircles').classList.toggle('active', m==='circles');
+  document.getElementById('countPanel').style.display = m==='circles' ? 'block' : 'none';
+  document.getElementById('r2row').style.display = m==='circles' ? 'flex' : 'none';
+  setLegend();
+  log(m==='point' ? 'mode: tangents from external point' : 'mode: common tangents of two circles');
+  render();
+}
+
+// ---------- dragging ----------
+function svgPoint(evt){
+  const pt=svg.createSVGPoint();
+  const t = evt.touches ? evt.touches[0] : evt;
+  pt.x=t.clientX; pt.y=t.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function pickTarget(p){
+  if(mode==='point'){
+    if(dist(p,P)<22) return 'P';
+    if(dist(p,C1)<22) return 'C1c';
+  } else {
+    if(dist(p,C1)<22) return 'C1';
+    if(dist(p,C2)<22) return 'C2';
+  }
+  return null;
+}
+function onDown(e){ const p=svgPoint(e); dragTarget=pickTarget(p); if(dragTarget) e.preventDefault(); }
+function onMove(e){
+  if(!dragTarget) return;
+  e.preventDefault();
+  const p=svgPoint(e);
+  const x=clamp(p.x,8,612), y=clamp(p.y,8,452);
+  if(dragTarget==='P') P={x,y};
+  else if(dragTarget==='C1c') C1={x,y};
+  else if(dragTarget==='C1') C1={x,y};
+  else if(dragTarget==='C2') C2={x,y};
+  render();
+}
+function onUp(){ dragTarget=null; }
+
+svg.addEventListener('mousedown',onDown);
+window.addEventListener('mousemove',onMove);
+window.addEventListener('mouseup',onUp);
+svg.addEventListener('touchstart',onDown,{passive:false});
+window.addEventListener('touchmove',onMove,{passive:false});
+window.addEventListener('touchend',onUp);
+
+// ---------- sliders ----------
+document.getElementById('r1').addEventListener('input',e=>{
+  r1=+e.target.value; document.getElementById('r1v').textContent=r1; render();
+});
+document.getElementById('r2').addEventListener('input',e=>{
+  r2=+e.target.value; document.getElementById('r2v').textContent=r2; render();
+});
+
+function resetScene(){
+  P={x:480,y:120}; C1={x:230,y:230}; C2={x:430,y:230};
+  r1=70; r2=45;
+  document.getElementById('r1').value=70; document.getElementById('r1v').textContent=70;
+  document.getElementById('r2').value=45; document.getElementById('r2v').textContent=45;
+  log('reset'); render();
+}
+function randomize(){
+  if(mode==='point'){
+    C1={x:180+Math.random()*180, y:140+Math.random()*180};
+    r1=40+Math.random()*70;
+    P={x:80+Math.random()*460, y:60+Math.random()*340};
+  } else {
+    C1={x:160+Math.random()*120, y:160+Math.random()*140};
+    C2={x:320+Math.random()*180, y:160+Math.random()*140};
+    r1=30+Math.random()*80; r2=30+Math.random()*80;
+  }
+  document.getElementById('r1').value=Math.round(r1); document.getElementById('r1v').textContent=Math.round(r1);
+  document.getElementById('r2').value=Math.round(r2); document.getElementById('r2v').textContent=Math.round(r2);
+  log('randomized scene'); render();
+}
+
+// init
+setLegend();
+render();
+log('ready — drag the point or circles');
+</script>
+</body>
+</html>
