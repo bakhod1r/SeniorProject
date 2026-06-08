@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARC &amp; 2Q Adaptive Cache Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;  /* T2 / frequency / hit */
+    --yellow:  #d29922;  /* scan / warning */
+    --red:     #f85149;  /* evict / miss */
+    --blue:    #58a6ff;  /* T1 / recency */
+    --purple:  #bc8cff;  /* ghost / new */
+    --orange:  #ffa657;  /* p marker / promote */
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 18px; }
+  h1 { text-align: center; color: var(--blue); margin-bottom: 4px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 16px; font-size: 0.82rem; }
+
+  .container { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 1fr 330px; gap: 16px; }
+  .main-area { display: flex; flex-direction: column; gap: 14px; }
+  .side-panel { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.92rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="number"], .controls input[type="text"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 9px; border-radius: 4px; font-family: inherit; font-size: 0.82rem; }
+  .controls input[type="number"] { width: 58px; }
+  .controls input[type="text"] { width: 120px; }
+  .controls label { color: var(--muted); font-size: 0.8rem; }
+  button { background: var(--green); color: #04210e; border: none; padding: 6px 13px; border-radius: 4px;
+    cursor: pointer; font-family: inherit; font-size: 0.82rem; font-weight: bold; transition: filter 0.15s; }
+  button:hover { filter: brightness(1.14); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.get   { background: var(--blue);   color: #03152e; }
+  button.scan  { background: var(--yellow); color: #2b1d00; }
+  button.reset { background: var(--red);    color: #2b0606; }
+  button.sec   { background: var(--border); color: var(--text); }
+
+  /* ===== list rows ===== */
+  .lists { display: flex; flex-direction: column; gap: 14px; }
+  .list-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center; }
+  .list-label { display: flex; flex-direction: column; gap: 2px; }
+  .list-label .name { font-weight: bold; font-size: 0.95rem; }
+  .list-label .desc { color: var(--muted); font-size: 0.7rem; }
+  .list-label .count { color: var(--muted); font-size: 0.72rem; }
+  .t1 .name { color: var(--blue); }
+  .t2 .name { color: var(--green); }
+  .b1 .name, .b2 .name { color: var(--purple); }
+
+  .track { background: var(--bg); border: 1px dashed var(--border); border-radius: 6px;
+    min-height: 56px; display: flex; align-items: center; gap: 6px; padding: 8px; overflow-x: auto; }
+  .track .empty { color: var(--muted); font-size: 0.74rem; font-style: italic; padding: 0 6px; }
+
+  .cell { min-width: 46px; height: 40px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 0.88rem; border: 2px solid; transition: transform 0.2s, box-shadow 0.2s; flex: 0 0 auto; }
+  .cell.t1 { background: #102a4d; border-color: var(--blue);   color: #cfe6ff; }
+  .cell.t2 { background: #0f2e18; border-color: var(--green);  color: #c7f5d4; }
+  .cell.ghost { background: #241338; border-color: var(--purple); color: #e3cbff; border-style: dashed; opacity: 0.85; }
+  .cell.flash { transform: translateY(-6px) scale(1.12); box-shadow: 0 0 14px currentColor; }
+  .cell .mru { position: absolute; }
+  .mru-tag { font-size: 0.6rem; color: var(--muted); margin-left: 2px; }
+
+  /* ===== p bar ===== */
+  .pbar-wrap { margin-top: 4px; }
+  .pbar { position: relative; height: 30px; border-radius: 6px; overflow: hidden;
+    background: linear-gradient(90deg, var(--blue) 0%, var(--blue) 50%, var(--green) 50%, var(--green) 100%);
+    border: 1px solid var(--border); }
+  .pbar .recency { position: absolute; left: 0; top: 0; bottom: 0; background: var(--blue); opacity: 0.9; transition: width 0.4s; }
+  .pbar .freq    { position: absolute; right: 0; top: 0; bottom: 0; background: var(--green); opacity: 0.9; }
+  .pbar .marker  { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--orange);
+    box-shadow: 0 0 8px var(--orange); transition: left 0.4s; }
+  .pbar-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.72rem; margin-top: 4px; }
+  .pbar-labels b { color: var(--orange); }
+
+  /* ===== stats ===== */
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center; }
+  .stat .v { font-size: 1.15rem; font-weight: bold; color: var(--blue); }
+  .stat .l { font-size: 0.68rem; color: var(--muted); }
+  .stat .v.green { color: var(--green); }
+  .stat .v.orange { color: var(--orange); }
+  .stat .v.purple { color: var(--purple); }
+
+  /* ===== info ===== */
+  .info { background: var(--bg); border-left: 3px solid var(--blue); border-radius: 4px; padding: 10px;
+    font-size: 0.8rem; line-height: 1.6; min-height: 70px; }
+  .info .hl { color: var(--yellow); }
+  .info .ev { color: var(--red); }
+  .info .gh { color: var(--purple); }
+
+  /* ===== bigO ===== */
+  table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+  th, td { border: 1px solid var(--border); padding: 5px 7px; text-align: left; }
+  th { color: var(--muted); }
+  td.o1 { color: var(--green); font-weight: bold; }
+  td.on { color: var(--yellow); font-weight: bold; }
+
+  /* ===== log ===== */
+  .log { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; height: 180px; overflow-y: auto;
+    padding: 8px; font-size: 0.74rem; line-height: 1.5; }
+  .log div { border-bottom: 1px solid #1c2128; padding: 2px 0; }
+  .log .hit  { color: var(--green); }
+  .log .miss { color: var(--red); }
+  .log .gh   { color: var(--purple); }
+  .log .pmove{ color: var(--orange); }
+
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.72rem; margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 13px; height: 13px; border-radius: 3px; border: 2px solid; }
+</style>
+</head>
+<body>
+  <h1>ARC &amp; 2Q Adaptive Cache</h1>
+  <p class="subtitle">T1/T2 cache data &middot; B1/B2 ghosts drive the self-tuning target <b>p</b> &middot; watch a scan NOT pollute the cache</p>
+
+  <div class="container">
+    <!-- ===================== MAIN ===================== -->
+    <div class="main-area">
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="controls">
+          <label>capacity c</label>
+          <input type="number" id="capInput" value="6" min="2" max="12">
+          <button class="sec" onclick="rebuild()">Set Size</button>
+          &nbsp;
+          <label>key</label>
+          <input type="text" id="keyInput" placeholder="A" value="A">
+          <button class="get" onclick="doAccess()">Access (get)</button>
+          <button onclick="doRandomHot()">Random Hot</button>
+          <button class="scan" onclick="doScan()">Run Scan (8 new keys)</button>
+          <button class="reset" onclick="reset()">Reset</button>
+        </div>
+        <div class="legend">
+          <span><span class="swatch" style="background:#102a4d;border-color:var(--blue)"></span>T1 recency (seen once)</span>
+          <span><span class="swatch" style="background:#0f2e18;border-color:var(--green)"></span>T2 frequency (seen 2+)</span>
+          <span><span class="swatch" style="background:#241338;border-color:var(--purple);border-style:dashed"></span>B1/B2 ghosts (key only)</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>ARC State &mdash; four lists (MRU on the left, LRU/oldest on the right)</h3>
+        <div class="lists">
+          <div class="list-row t1">
+            <div class="list-label">
+              <span class="name">T1</span>
+              <span class="desc">cached, seen once (recency)</span>
+              <span class="count" id="t1count">0 entries</span>
+            </div>
+            <div class="track" id="t1track"></div>
+          </div>
+          <div class="list-row t2">
+            <div class="list-label">
+              <span class="name">T2</span>
+              <span class="desc">cached, seen 2+ (frequency)</span>
+              <span class="count" id="t2count">0 entries</span>
+            </div>
+            <div class="track" id="t2track"></div>
+          </div>
+          <div class="list-row b1">
+            <div class="list-label">
+              <span class="name">B1 (ghost)</span>
+              <span class="desc">evicted from T1, keys only</span>
+              <span class="count" id="b1count">0 ghosts</span>
+            </div>
+            <div class="track" id="b1track"></div>
+          </div>
+          <div class="list-row b2">
+            <div class="list-label">
+              <span class="name">B2 (ghost)</span>
+              <span class="desc">evicted from T2, keys only</span>
+              <span class="count" id="b2count">0 ghosts</span>
+            </div>
+            <div class="track" id="b2track"></div>
+          </div>
+        </div>
+
+        <div class="pbar-wrap">
+          <h3 style="margin-top:14px;">Adaptive target <span style="color:var(--orange)">p</span> &mdash; recency budget vs frequency budget</h3>
+          <div class="pbar">
+            <div class="recency" id="pRecency"></div>
+            <div class="marker" id="pMarker"></div>
+          </div>
+          <div class="pbar-labels">
+            <span style="color:var(--blue)">&larr; T1 target (recency) = p</span>
+            <span><b id="pVal">p = 0</b> / c = <span id="cVal">6</span></span>
+            <span style="color:var(--green)">T2 target (frequency) = c &minus; p &rarr;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>What just happened</h3>
+        <div class="info" id="info">
+          Type a key and press <span class="hl">Access</span>. The first access puts a key in T1.
+          A second access promotes it to T2. Press <span class="hl">Run Scan</span> to flood new keys and
+          watch T2 (your hot set) survive &mdash; that is scan resistance.
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== SIDE ===================== -->
+    <div class="side-panel">
+      <div class="panel">
+        <h3>Live Stats</h3>
+        <div class="stats">
+          <div class="stat"><div class="v green" id="sHits">0</div><div class="l">hits</div></div>
+          <div class="stat"><div class="v" id="sMiss">0</div><div class="l">misses</div></div>
+          <div class="stat"><div class="v purple" id="sGhost">0</div><div class="l">ghost hits</div></div>
+          <div class="stat"><div class="v orange" id="sRatio">0%</div><div class="l">hit ratio</div></div>
+          <div class="stat"><div class="v" id="sP">0</div><div class="l">p (T1 target)</div></div>
+          <div class="stat"><div class="v green" id="sDir">0</div><div class="l">directory / 2c</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Complexity</h3>
+        <table>
+          <tr><th>Operation</th><th>Time</th></tr>
+          <tr><td>get / put</td><td class="o1">O(1) avg</td></tr>
+          <tr><td>REPLACE (evict)</td><td class="o1">O(1)</td></tr>
+          <tr><td>ghost hit + p update</td><td class="o1">O(1)</td></tr>
+          <tr><td>data memory</td><td class="o1">O(c)</td></tr>
+          <tr><td>ghost memory</td><td class="on">O(c) keys</td></tr>
+          <tr><td>total directory</td><td class="on">&le; 2c</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Shadow LRU (same stream)</h3>
+        <div style="font-size:0.76rem;color:var(--muted);margin-bottom:6px;">
+          A plain LRU cache of size c fed the <em>identical</em> access stream, for contrast.
+        </div>
+        <div class="track" id="lrutrack" style="min-height:48px;"></div>
+        <div class="stats" style="margin-top:8px;">
+          <div class="stat"><div class="v green" id="lruHits">0</div><div class="l">LRU hits</div></div>
+          <div class="stat"><div class="v" id="lruRatio">0%</div><div class="l">LRU hit ratio</div></div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;">
+          Run a scan: LRU's ratio collapses as its hot set is evicted; ARC's holds.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ================= ARC MODEL =================
+// Lists are arrays; index 0 = MRU (front), last = LRU (back/oldest).
+let c = 6, p = 0;
+let T1 = [], T2 = [], B1 = [], B2 = [];
+let hits = 0, miss = 0, ghost = 0;
+let busy = false;
+
+// ---- shadow LRU (for the side-by-side contrast panel) ----
+let LRU = [];            // index 0 = MRU, last = LRU
+let lruHits = 0, lruMiss = 0;
+function lruAccess(key){
+  const i = LRU.indexOf(key);
+  if (i !== -1){                 // hit: move to front
+    LRU.splice(i, 1);
+    LRU.unshift(key);
+    lruHits++;
+    return true;
+  }
+  LRU.unshift(key);              // miss: insert at front
+  if (LRU.length > c) LRU.pop(); // evict LRU tail
+  lruMiss++;
+  return false;
+}
+
+function inList(arr, k){ return arr.indexOf(k) !== -1; }
+function rm(arr, k){ const i = arr.indexOf(k); if (i !== -1) arr.splice(i,1); }
+function pushFront(arr, k){ arr.unshift(k); }
+function lru(arr){ return arr[arr.length - 1]; }
+
+// REPLACE: evict one cached value (from T1 or T2) into the matching ghost list.
+function replace(incomingKey){
+  const incomingInB2 = inList(B2, incomingKey);
+  if (T1.length >= 1 && (T1.length > p || (incomingInB2 && T1.length === p))){
+    const victim = T1.pop();          // LRU of T1
+    B1.unshift(victim);               // becomes ghost
+    return { victim, to: 'B1', from: 'T1' };
+  } else {
+    const victim = T2.pop();          // LRU of T2
+    B2.unshift(victim);               // becomes ghost
+    return { victim, to: 'B2', from: 'T2' };
+  }
+}
+
+// Core ARC access. Returns an event description for the UI.
+function access(key){
+  // CASE I: real hit in T1 or T2 -> move to MRU of T2.
+  if (inList(T1, key) || inList(T2, key)){
+    const fromT2 = inList(T2, key);
+    rm(T1, key); rm(T2, key);
+    pushFront(T2, key);
+    hits++;
+    return { type:'hit', key, detail: fromT2
+      ? `HIT in T2 — reinforced, moved to MRU of T2`
+      : `HIT in T1 — PROMOTED to T2 (2nd access)` };
+  }
+  // CASE II: ghost hit in B1 -> grow recency (p up).
+  if (inList(B1, key)){
+    const before = p;
+    const delta = Math.max(1, Math.floor(B2.length / Math.max(1, B1.length)));
+    p = Math.min(p + delta, c);
+    const ev = replace(key);
+    rm(B1, key);
+    pushFront(T2, key);
+    ghost++; miss++;
+    return { type:'ghostB1', key, before, delta, ev,
+      detail:`GHOST HIT in B1 — evicted recency too soon. p ${before}→${p} (+${delta}), favor RECENCY` };
+  }
+  // CASE III: ghost hit in B2 -> grow frequency (p down).
+  if (inList(B2, key)){
+    const before = p;
+    const delta = Math.max(1, Math.floor(B1.length / Math.max(1, B2.length)));
+    p = Math.max(p - delta, 0);
+    const ev = replace(key);
+    rm(B2, key);
+    pushFront(T2, key);
+    ghost++; miss++;
+    return { type:'ghostB2', key, before, delta, ev,
+      detail:`GHOST HIT in B2 — evicted frequency too soon. p ${before}→${p} (-${delta}), favor FREQUENCY` };
+  }
+  // CASE IV: true miss.
+  let ev = null;
+  if (T1.length + B1.length === c){
+    if (T1.length < c){ B1.pop(); ev = replace(key); }
+    else { T1.pop(); }
+  } else if (T1.length + T2.length + B1.length + B2.length >= c){
+    if (T1.length + T2.length + B1.length + B2.length >= 2*c){ B2.pop(); }
+    if (T1.length + T2.length >= c) ev = replace(key);
+  }
+  pushFront(T1, key);
+  miss++;
+  return { type:'miss', key, ev, detail:`MISS — new key, inserted into T1 (recency)` };
+}
+
+// ================= RENDER =================
+function cell(k, cls, flash){
+  return `<div class="cell ${cls} ${flash===k?'flash':''}">${k}</div>`;
+}
+function renderTrack(id, arr, cls, flash){
+  const el = document.getElementById(id);
+  if (arr.length === 0){ el.innerHTML = '<span class="empty">empty</span>'; return; }
+  el.innerHTML = arr.map(k => cell(k, cls, flash)).join('');
+}
+function render(flash){
+  renderTrack('t1track', T1, 't1', flash);
+  renderTrack('t2track', T2, 't2', flash);
+  renderTrack('b1track', B1, 'ghost', flash);
+  renderTrack('b2track', B2, 'ghost', flash);
+  document.getElementById('t1count').textContent = T1.length + ' entries';
+  document.getElementById('t2count').textContent = T2.length + ' entries';
+  document.getElementById('b1count').textContent = B1.length + ' ghosts';
+  document.getElementById('b2count').textContent = B2.length + ' ghosts';
+
+  // p bar
+  const pct = c === 0 ? 0 : (p / c) * 100;
+  document.getElementById('pRecency').style.width = pct + '%';
+  document.getElementById('pMarker').style.left = pct + '%';
+  document.getElementById('pVal').textContent = 'p = ' + p;
+  document.getElementById('cVal').textContent = c;
+
+  // stats
+  document.getElementById('sHits').textContent = hits;
+  document.getElementById('sMiss').textContent = miss;
+  document.getElementById('sGhost').textContent = ghost;
+  const total = hits + miss;
+  document.getElementById('sRatio').textContent = total ? Math.round(hits/total*100) + '%' : '0%';
+  document.getElementById('sP').textContent = p;
+  document.getElementById('sDir').textContent = (T1.length+T2.length+B1.length+B2.length) + ' / ' + (2*c);
+
+  // shadow LRU
+  const lt = document.getElementById('lrutrack');
+  if (LRU.length === 0){ lt.innerHTML = '<span class="empty">empty</span>'; }
+  else { lt.innerHTML = LRU.map(k => `<div class="cell t1 ${flash===k?'flash':''}">${k}</div>`).join(''); }
+  document.getElementById('lruHits').textContent = lruHits;
+  const lt2 = lruHits + lruMiss;
+  document.getElementById('lruRatio').textContent = lt2 ? Math.round(lruHits/lt2*100) + '%' : '0%';
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function addLog(html, cls){
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = cls || '';
+  d.innerHTML = html;
+  log.prepend(d);
+  while (log.children.length > 120) log.removeChild(log.lastChild);
+}
+
+// ================= EVENT HANDLERS =================
+function applyEvent(ev){
+  let cls = 'miss', logmsg = '';
+  if (ev.type === 'hit'){
+    cls = 'hit';
+    setInfo(`<span class="hl">${ev.key}</span> &mdash; ${ev.detail}.`);
+    logmsg = `access ${ev.key}: ${ev.detail}`;
+  } else if (ev.type === 'miss'){
+    cls = 'miss';
+    let evt = ev.ev ? ` &nbsp;<span class="ev">evicted ${ev.ev.victim}: ${ev.ev.from}→${ev.ev.to} ghost</span>` : '';
+    setInfo(`<span class="hl">${ev.key}</span> &mdash; ${ev.detail}.${evt}`);
+    logmsg = `access ${ev.key}: MISS → T1` + (ev.ev ? ` | evict ${ev.ev.victim} → ${ev.ev.to}` : '');
+  } else { // ghost hits
+    cls = 'gh';
+    let evt = ev.ev ? ` &nbsp;<span class="ev">evicted ${ev.ev.victim} → ${ev.ev.to}</span>` : '';
+    setInfo(`<span class="gh">${ev.key}</span> &mdash; ${ev.detail}.${evt}`);
+    addLog(`<span class="pmove">p ${ev.before}→${ev.before!==undefined?p:p}</span>`, 'pmove');
+    logmsg = `access ${ev.key}: ${ev.detail.replace(/<[^>]+>/g,'')}`;
+  }
+  addLog(logmsg, cls);
+  render(ev.key);
+  setTimeout(() => render(), 650);
+}
+
+function doAccess(){
+  if (busy) return;
+  const raw = document.getElementById('keyInput').value.trim().toUpperCase();
+  if (!raw) return;
+  lruAccess(raw);
+  const ev = access(raw);
+  applyEvent(ev);
+}
+
+function doRandomHot(){
+  if (busy) return;
+  const pool = ['A','B','C','D'];
+  const k = pool[Math.floor(Math.random()*pool.length)];
+  document.getElementById('keyInput').value = k;
+  lruAccess(k);
+  applyEvent(access(k));
+}
+
+async function doScan(){
+  if (busy) return;
+  busy = true;
+  setInfo('<span class="hl">Scanning…</span> flooding 8 brand-new one-time keys. Watch them pile into T1 while T2 (your hot set) stays untouched.');
+  let base = 100;
+  for (let i = 0; i < 8; i++){
+    const k = 'S' + (base + i);
+    lruAccess(k);
+    const ev = access(k);
+    let logmsg = `scan ${k}: MISS → T1` + (ev.ev ? ` | evict ${ev.ev.victim} → ${ev.ev.to}` : '');
+    addLog(logmsg, 'miss');
+    render(k);
+    await sleep(420);
+  }
+  render();
+  setInfo('Scan finished. Notice <span style="color:var(--green)">T2</span> kept its keys: scan items entered T1, were never accessed twice, and drained via REPLACE. <b>That is scan resistance.</b>');
+  busy = false;
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function rebuild(){
+  const v = parseInt(document.getElementById('capInput').value, 10);
+  if (isNaN(v) || v < 2 || v > 12) return;
+  c = v;
+  reset();
+}
+
+function reset(){
+  p = 0; T1 = []; T2 = []; B1 = []; B2 = [];
+  hits = 0; miss = 0; ghost = 0; busy = false;
+  LRU = []; lruHits = 0; lruMiss = 0;
+  document.getElementById('log').innerHTML = '';
+  setInfo('Reset. Type a key and press <span class="hl">Access</span>. First access → T1, second → T2. Try a few hot keys, then <span class="hl">Run Scan</span>.');
+  render();
+}
+
+// ================= SEED A LITTLE STATE =================
+function seed(){
+  // Prove a small hot set so the scan demo is dramatic.
+  ['A','B','A','B'].forEach(k => { lruAccess(k); access(k); }); // A,B end up in T2
+  render();
+  setInfo('Seeded: keys <span style="color:var(--green)">A</span> and <span style="color:var(--green)">B</span> were accessed twice, so they live in T2. Now press <span class="hl">Run Scan</span> and watch them survive.');
+  document.getElementById('log').innerHTML = '';
+  addLog('seeded hot set A,B → T2', 'hit');
+}
+
+reset();
+seed();
+</script>
+</body>
+</html>
