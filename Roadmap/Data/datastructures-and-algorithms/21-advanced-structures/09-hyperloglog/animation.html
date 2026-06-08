@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HyperLogLog — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:4px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:16px; text-align:center; font-size:.95rem;}
+  .badges{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.78rem; font-weight:600; border:1px solid var(--border);}
+  .badge.add{color:var(--green); border-color:var(--green);}
+  .badge.count{color:var(--yellow); border-color:var(--yellow);}
+  .badge.mem{color:var(--purple); border-color:var(--purple);}
+  .wrap{width:100%; max-width:1000px; display:flex; flex-direction:column; gap:16px;}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px;}
+  .panel h3{color:var(--blue); margin-bottom:10px; font-size:1.05rem;}
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;}
+  button{
+    padding:9px 18px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  input[type=text]{
+    padding:9px 12px; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    border-radius:8px; font-size:.92rem; width:200px;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue);}
+  .speed{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:.85rem;}
+  input[type=range]{accent-color:var(--blue); width:120px;}
+  /* hash bits visual */
+  .bits{display:flex; flex-wrap:wrap; gap:3px; font-family:'Courier New',monospace; margin-top:8px;}
+  .bit{
+    width:22px; height:30px; display:flex; align-items:center; justify-content:center;
+    border-radius:4px; font-weight:700; font-size:.85rem; background:var(--bg); border:1px solid var(--border);
+    transition:all .25s;
+  }
+  .bit.index{background:rgba(88,166,255,.22); border-color:var(--blue); color:var(--blue);}
+  .bit.zero{background:rgba(210,153,34,.22); border-color:var(--yellow); color:var(--yellow);}
+  .bit.one{background:rgba(63,185,80,.25); border-color:var(--green); color:var(--green);}
+  .bitlabel{font-size:.7rem; color:var(--muted); margin-top:6px;}
+  /* registers */
+  .reg-grid{display:flex; flex-wrap:wrap; gap:4px; justify-content:center;}
+  .reg{
+    width:30px; display:flex; flex-direction:column; align-items:center; gap:2px;
+  }
+  .reg-bar{
+    width:26px; background:var(--border); border-radius:3px 3px 0 0; transition:all .3s;
+    display:flex; align-items:flex-start; justify-content:center; color:var(--bg); font-size:.65rem; font-weight:700;
+  }
+  .reg-bar.filled{background:var(--blue);}
+  .reg-bar.hit{background:var(--green); box-shadow:0 0 8px var(--green);}
+  .reg-bar.target{background:var(--orange);}
+  .reg-idx{font-size:.6rem; color:var(--muted);}
+  /* stats */
+  .stats{display:flex; gap:24px; flex-wrap:wrap; justify-content:center;}
+  .stat{text-align:center;}
+  .stat .label{color:var(--muted); font-size:.75rem;}
+  .stat .value{font-size:1.4rem; font-weight:700;}
+  .stat .value.true{color:var(--green);}
+  .stat .value.est{color:var(--blue);}
+  .stat .value.err{color:var(--orange);}
+  /* info */
+  .info{font-family:'Courier New',monospace; font-size:.9rem; line-height:1.7; white-space:pre-wrap;}
+  .info .hl{color:var(--yellow);}
+  /* table */
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:6px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  td.good{color:var(--green);} td.warn{color:var(--orange);}
+  /* log */
+  .log{max-height:150px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.8rem; line-height:1.6;}
+  .log div{padding:2px 0; border-bottom:1px solid rgba(48,54,61,.5); color:var(--muted);}
+  .log div span{color:var(--text);}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; font-size:.78rem; color:var(--muted); margin-top:8px;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .sw{width:13px; height:13px; border-radius:3px; display:inline-block;}
+</style>
+</head>
+<body>
+  <h1>HyperLogLog</h1>
+  <p class="subtitle">Cardinality estimation in tiny memory — hash, pick a register by prefix, count leading zeros, estimate from the harmonic mean</p>
+  <div class="badges">
+    <span class="badge add">add: O(1)</span>
+    <span class="badge count">count: O(m)</span>
+    <span class="badge mem">memory: O(m) ≈ fixed</span>
+    <span class="badge add">error ≈ 1.04/√m</span>
+  </div>
+
+  <div class="wrap">
+
+    <!-- Controls -->
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls">
+        <input type="text" id="itemInput" placeholder="item id (e.g. user-42)">
+        <button id="addBtn" onclick="addItem()">Add item</button>
+        <button id="add10Btn" onclick="addMany(10)">+10 random</button>
+        <button id="add100Btn" onclick="addMany(100)">+100 random</button>
+        <button id="autoBtn" onclick="toggleAuto()">Auto-add</button>
+        <button id="dupBtn" onclick="addDuplicate()">Add duplicate</button>
+        <button id="resetBtn" onclick="reset()">Reset</button>
+        <span class="speed">p=<span id="pVal">4</span>
+          <input type="range" id="pSlider" min="3" max="6" value="4" oninput="changeP()"></span>
+        <span class="speed">slow<input type="range" id="speedSlider" min="1" max="10" value="6">fast</span>
+      </div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--blue)"></i>index bits (first p)</span>
+        <span><i class="sw" style="background:var(--yellow)"></i>leading zero</span>
+        <span><i class="sw" style="background:var(--green)"></i>first one</span>
+        <span><i class="sw" style="background:var(--orange)"></i>target register</span>
+        <span><i class="sw" style="background:var(--green)"></i>register updated</span>
+      </div>
+    </div>
+
+    <!-- Hash visualization -->
+    <div class="panel">
+      <h3>Step 1–3: hash item → prefix picks register → count leading zeros of the rest</h3>
+      <div id="bitsArea">
+        <div class="info" style="color:var(--muted)">Add an item to see its hash decomposed.</div>
+      </div>
+    </div>
+
+    <!-- Registers -->
+    <div class="panel">
+      <h3>Step 4: registers fill with the MAX rank per bucket (<span id="mVal">16</span> registers)</h3>
+      <div class="reg-grid" id="regGrid"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel">
+      <h3>Step 5: estimate from the harmonic mean vs the true count</h3>
+      <div class="stats">
+        <div class="stat"><div class="label">True distinct</div><div class="value true" id="trueCount">0</div></div>
+        <div class="stat"><div class="label">HLL estimate</div><div class="value est" id="estCount">0</div></div>
+        <div class="stat"><div class="label">Relative error</div><div class="value err" id="relErr">0%</div></div>
+        <div class="stat"><div class="label">Empty registers (V)</div><div class="value" id="zeroCount">16</div></div>
+        <div class="stat"><div class="label">Method</div><div class="value" id="method" style="font-size:.95rem;color:var(--purple)">—</div></div>
+      </div>
+      <div class="info" id="formula" style="margin-top:12px;color:var(--muted)"></div>
+    </div>
+
+    <!-- Error table -->
+    <div class="panel">
+      <h3>Accuracy table: error ≈ 1.04/√m (independent of n)</h3>
+      <table>
+        <thead><tr><th>p</th><th>m = 2^p</th><th>1.04/√m</th><th>dense memory (6-bit)</th><th></th></tr></thead>
+        <tbody id="errTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Log -->
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+
+<script>
+  // ===== HLL state (toy: small p, 16-bit hash for readability) =====
+  let P = 4;
+  let M = 1 << P;
+  let HASH_BITS = 16;          // toy hash width for display
+  let registers = new Array(M).fill(0);
+  let exact = new Set();
+  let lastItem = null;
+  let autoTimer = null;
+  let autoCounter = 0;
+
+  function getSpeed(){ return 1100 - document.getElementById('speedSlider').value*100; }
+
+  // ===== toy 16-bit hash (FNV-1a folded) =====
+  function hash16(s){
+    let h = 0x811c9dc5 >>> 0;
+    for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return (h ^ (h>>>16)) & 0xFFFF;
+  }
+  function toBits(x, n){ return x.toString(2).padStart(n,'0'); }
+
+  // index = top P bits; rank = 1 + leading zeros of the remaining (HASH_BITS-P) bits (sentinel guards all-zero)
+  function decompose(x){
+    const idx = x >>> (HASH_BITS - P);
+    const restBits = toBits(x, HASH_BITS).slice(P);
+    let lz = 0;
+    for(const c of restBits){ if(c==='0') lz++; else break; }
+    if(lz === restBits.length) lz = restBits.length; // all-zero sentinel
+    const rank = lz + 1;
+    return {idx, restBits, lz, rank};
+  }
+
+  function alphaM(m){
+    if(m===16) return 0.673;
+    if(m===32) return 0.697;
+    if(m===64) return 0.709;
+    return 0.7213/(1+1.079/m);
+  }
+
+  function estimate(){
+    const m = M;
+    let sum=0, zeros=0;
+    for(const r of registers){ sum += Math.pow(2,-r); if(r===0) zeros++; }
+    let est = alphaM(m)*m*m/sum;
+    let method = 'harmonic mean';
+    if(est <= 2.5*m && zeros>0){
+      est = m*Math.log(m/zeros);
+      method = 'linear counting';
+    }
+    return {est, zeros, method, sum};
+  }
+
+  // ===== rendering =====
+  function renderBits(item, x, d){
+    const bits = toBits(x, HASH_BITS);
+    let html = `<div class="info">item = <span class="hl">${item}</span>   hash = ${x} = 0b${bits}</div>`;
+    html += `<div class="bits">`;
+    for(let i=0;i<HASH_BITS;i++){
+      let cls='bit';
+      if(i < P){ cls+=' index'; }
+      else {
+        const restPos = i - P;
+        if(restPos < d.lz){ cls+=' zero'; }
+        else if(restPos === d.lz){ cls+=' one'; }
+      }
+      html += `<div class="${cls}">${bits[i]}</div>`;
+    }
+    html += `</div>`;
+    html += `<div class="bitlabel">first ${P} bits → register index = <b>${d.idx}</b> &nbsp;|&nbsp; rest has <b>${d.lz}</b> leading zeros → rank = <b>${d.rank}</b></div>`;
+    document.getElementById('bitsArea').innerHTML = html;
+  }
+
+  function renderRegisters(targetIdx, updated){
+    const grid = document.getElementById('regGrid');
+    const maxR = Math.max(1, ...registers);
+    grid.innerHTML = registers.map((r,i)=>{
+      const h = 14 + (r/maxR)*70;
+      let cls='reg-bar';
+      if(i===targetIdx && updated) cls+=' hit';
+      else if(i===targetIdx) cls+=' target';
+      else if(r>0) cls+=' filled';
+      return `<div class="reg">
+        <div class="${cls}" style="height:${h}px">${r>0?r:''}</div>
+        <div class="reg-idx">${i}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderStats(){
+    const {est, zeros, method, sum} = estimate();
+    const trueN = exact.size;
+    document.getElementById('trueCount').textContent = trueN;
+    document.getElementById('estCount').textContent = Math.round(est);
+    const err = trueN>0 ? Math.abs(est-trueN)/trueN*100 : 0;
+    document.getElementById('relErr').textContent = err.toFixed(1)+'%';
+    document.getElementById('zeroCount').textContent = zeros;
+    document.getElementById('method').textContent = method;
+    const a = alphaM(M);
+    if(method==='linear counting'){
+      document.getElementById('formula').innerHTML =
+        `est = m · ln(m / V) = ${M} · ln(${M} / ${zeros}) = <span class="hl">${est.toFixed(2)}</span>`;
+    } else {
+      document.getElementById('formula').innerHTML =
+        `est = α·m² / Σ2^(−M[j]) = ${a.toFixed(3)}·${M}² / ${sum.toFixed(3)} = <span class="hl">${est.toFixed(2)}</span>`;
+    }
+  }
+
+  function renderErrTable(){
+    const rows = [10,12,14,16];
+    const body = document.getElementById('errTable');
+    body.innerHTML = rows.map(p=>{
+      const m = 1<<p;
+      const e = (1.04/Math.sqrt(m)*100);
+      const mem = (m*6/8);
+      const memStr = mem>=1024 ? (mem/1024).toFixed(0)+' KB' : mem.toFixed(0)+' B';
+      const note = p===14 ? '← Redis default' : '';
+      return `<tr><td>${p}</td><td>${m.toLocaleString()}</td><td class="${e<1?'good':'warn'}">${e.toFixed(2)}%</td><td>~${memStr}</td><td style="color:var(--purple)">${note}</td></tr>`;
+    }).join('');
+  }
+
+  function log(msg, val){
+    const l = document.getElementById('log');
+    const d = document.createElement('div');
+    d.innerHTML = msg + (val!==undefined? ` <span>${val}</span>`:'');
+    l.prepend(d);
+    while(l.children.length>40) l.removeChild(l.lastChild);
+  }
+
+  // ===== operations =====
+  function doAdd(item, quiet){
+    const x = hash16(item);
+    const d = decompose(x);
+    const before = registers[d.idx];
+    const isNew = !exact.has(item);
+    exact.add(item);
+    let updated = false;
+    if(d.rank > registers[d.idx]){ registers[d.idx] = d.rank; updated = true; }
+    lastItem = item;
+    if(!quiet){
+      renderBits(item, x, d);
+      renderRegisters(d.idx, updated);
+      if(updated) log(`add "${item}" → reg[${d.idx}] ${before}→${d.rank}`, isNew?'(new)':'(dup, but raised)');
+      else log(`add "${item}" → reg[${d.idx}] stays ${before}`, isNew?'(new)':'(duplicate, ignored)');
+    }
+    renderStats();
+    return {idx:d.idx, updated};
+  }
+
+  function addItem(){
+    const inp = document.getElementById('itemInput');
+    const item = inp.value.trim() || ('user-'+(autoCounter++));
+    doAdd(item);
+    inp.value='';
+  }
+
+  function addMany(n){
+    for(let i=0;i<n;i++){ doAdd('user-'+(autoCounter++), i<n-1); }
+    // render final one fully
+    const item = 'user-'+(autoCounter-1);
+    const x = hash16(item); const d = decompose(x);
+    renderBits(item, x, d); renderRegisters(d.idx, true);
+    log(`added ${n} random items`, `(true distinct now ${exact.size})`);
+    renderStats();
+  }
+
+  function addDuplicate(){
+    if(!lastItem){ log('no previous item to duplicate'); return; }
+    doAdd(lastItem);
+  }
+
+  function toggleAuto(){
+    const btn = document.getElementById('autoBtn');
+    if(autoTimer){ clearInterval(autoTimer); autoTimer=null; btn.textContent='Auto-add'; btn.classList.remove('active'); return; }
+    btn.textContent='Stop';
+    autoTimer = setInterval(()=>{ doAdd('user-'+(autoCounter++)); }, getSpeed());
+  }
+
+  function changeP(){
+    P = parseInt(document.getElementById('pSlider').value);
+    M = 1<<P;
+    document.getElementById('pVal').textContent = P;
+    document.getElementById('mVal').textContent = M;
+    reset();
+  }
+
+  function reset(){
+    if(autoTimer){ clearInterval(autoTimer); autoTimer=null; document.getElementById('autoBtn').textContent='Auto-add'; }
+    registers = new Array(M).fill(0);
+    exact = new Set();
+    lastItem = null;
+    autoCounter = 0;
+    document.getElementById('bitsArea').innerHTML =
+      '<div class="info" style="color:var(--muted)">Add an item to see its hash decomposed.</div>';
+    renderRegisters(-1,false);
+    renderStats();
+    log('reset', `(m=${M}, error≈${(1.04/Math.sqrt(M)*100).toFixed(1)}% — note: m is tiny here for visibility)`);
+  }
+
+  // ===== init =====
+  renderErrTable();
+  reset();
+</script>
+</body>
+</html>
