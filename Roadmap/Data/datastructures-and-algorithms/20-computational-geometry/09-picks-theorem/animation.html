@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pick's Theorem — Visual Animation</title>
+<style>
+    :root {
+        --bg:      #0d1117;
+        --surface: #161b22;
+        --border:  #30363d;
+        --text:    #e6edf3;
+        --muted:   #8b949e;
+        --green:   #3fb950;
+        --yellow:  #d29922;
+        --red:     #f85149;
+        --blue:    #58a6ff;
+        --purple:  #bc8cff;
+        --orange:  #ffa657;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+    }
+    h1 {
+        font-size: 2rem;
+        color: var(--blue);
+        margin-bottom: 6px;
+        text-align: center;
+    }
+    .subtitle { color: var(--muted); margin-bottom: 18px; text-align: center; }
+
+    .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; }
+    .badge {
+        padding: 4px 12px; border-radius: 20px; font-size: .8rem; font-weight: 600;
+        border: 1px solid var(--border); background: var(--surface);
+    }
+    .badge.g { color: var(--green); }
+    .badge.b { color: var(--blue); }
+    .badge.o { color: var(--orange); }
+    .badge.p { color: var(--purple); }
+
+    .layout { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 1200px; }
+    .left  { flex: 1 1 540px; min-width: 320px; }
+    .right { flex: 1 1 360px; min-width: 300px; }
+
+    .panel {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; padding: 16px; margin-bottom: 16px;
+    }
+    .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 1rem; }
+
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    button {
+        padding: 8px 16px; border: 1px solid var(--blue); background: transparent;
+        color: var(--blue); border-radius: 8px; cursor: pointer; font-size: .9rem;
+        transition: all .2s;
+    }
+    button:hover { background: var(--blue); color: var(--bg); }
+    button.warn { border-color: var(--red); color: var(--red); }
+    button.warn:hover { background: var(--red); color: var(--bg); }
+    select {
+        padding: 8px 12px; background: var(--bg); color: var(--text);
+        border: 1px solid var(--border); border-radius: 8px; font-size: .9rem;
+    }
+
+    svg { width: 100%; height: auto; background: #0a0d12; border-radius: 10px; display: block; touch-action: none; }
+
+    /* The big live formula */
+    .formula {
+        font-family: 'Courier New', monospace; font-size: 1.15rem; text-align: center;
+        line-height: 1.9; padding: 8px 0;
+    }
+    .formula .I { color: var(--green); font-weight: 700; }
+    .formula .B { color: var(--orange); font-weight: 700; }
+    .formula .A { color: var(--blue); font-weight: 700; }
+    .formula .op { color: var(--muted); }
+    .formula .res { color: var(--purple); font-weight: 700; }
+    .formula .check { font-size: .85rem; }
+    .ok  { color: var(--green); }
+    .bad { color: var(--red); }
+
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat {
+        background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+        padding: 10px; text-align: center;
+    }
+    .stat .label { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; }
+    .stat .value { font-size: 1.5rem; font-weight: 700; margin-top: 2px; }
+    .stat.i .value { color: var(--green); }
+    .stat.b .value { color: var(--orange); }
+    .stat.a .value { color: var(--blue); }
+
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    td.c { font-family: 'Courier New', monospace; }
+    .cx { color: var(--green); }
+    .cn { color: var(--yellow); }
+
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: .8rem; }
+    .legend .item { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+    .log {
+        height: 140px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 8px; font-family: 'Courier New', monospace; font-size: .78rem;
+        line-height: 1.6;
+    }
+    .log div { color: var(--muted); }
+    .log div span { color: var(--text); }
+    .hint { color: var(--muted); font-size: .8rem; margin-bottom: 8px; }
+    .edge-step { font-family: 'Courier New', monospace; font-size: .8rem; line-height: 1.7; }
+</style>
+</head>
+<body>
+    <h1>Pick's Theorem</h1>
+    <p class="subtitle">Area = I + B/2 &minus; 1 &nbsp;|&nbsp; click the grid to add vertices, drag to move them</p>
+
+    <div class="badges">
+        <span class="badge a">Shoelace O(n)</span>
+        <span class="badge o">Boundary &Sigma; gcd</span>
+        <span class="badge g">Interior via Pick</span>
+        <span class="badge p">Integer-exact</span>
+    </div>
+
+    <div class="layout">
+        <!-- LEFT: grid + controls -->
+        <div class="left">
+            <div class="panel">
+                <div class="legend">
+                    <span class="item"><span class="dot" style="background:var(--purple)"></span>Vertex</span>
+                    <span class="item"><span class="dot" style="background:var(--orange)"></span>Boundary point (B)</span>
+                    <span class="item"><span class="dot" style="background:var(--green)"></span>Interior point (I)</span>
+                    <span class="item"><span class="dot" style="background:var(--muted)"></span>Outside</span>
+                </div>
+                <svg id="grid" viewBox="0 0 520 520"></svg>
+            </div>
+            <div class="panel">
+                <h3>Controls</h3>
+                <div class="hint">Click empty grid = add vertex. Drag a vertex = move it. Vertices snap to the integer lattice.</div>
+                <div class="controls">
+                    <label style="color:var(--muted);align-self:center;font-size:.85rem">Preset:</label>
+                    <select id="preset">
+                        <option value="triangle">Right triangle (0,0)(8,0)(0,6)</option>
+                        <option value="square">Square 8&times;8</option>
+                        <option value="lshape">L-shape</option>
+                        <option value="thin">Thin staircase</option>
+                        <option value="diamond">Diamond</option>
+                    </select>
+                    <button onclick="loadPreset()">Load</button>
+                    <button class="warn" onclick="clearPoly()">Clear</button>
+                    <button onclick="undo()">Undo vertex</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: live formula, stats, edge breakdown, big-O, log -->
+        <div class="right">
+            <div class="panel">
+                <h3>Live Pick Relation</h3>
+                <div class="formula" id="formula">Add at least 3 vertices.</div>
+                <div class="stats">
+                    <div class="stat i"><div class="label">Interior I</div><div class="value" id="vI">&ndash;</div></div>
+                    <div class="stat b"><div class="label">Boundary B</div><div class="value" id="vB">&ndash;</div></div>
+                    <div class="stat a"><div class="label">Area A</div><div class="value" id="vA">&ndash;</div></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Per-edge gcd boundary count</h3>
+                <div class="edge-step" id="edges">&ndash;</div>
+            </div>
+
+            <div class="panel">
+                <h3>Complexity</h3>
+                <table>
+                    <tr><th>Step</th><th>Time</th><th>Notes</th></tr>
+                    <tr><td class="c">Shoelace 2A</td><td class="c cx">O(n)</td><td>exact integer</td></tr>
+                    <tr><td class="c">Boundary B</td><td class="c cx">O(n log C)</td><td>gcd per edge</td></tr>
+                    <tr><td class="c">Interior I</td><td class="c cx">O(1)</td><td>Pick rearranged</td></tr>
+                    <tr><td class="c">Grid scan</td><td class="c cn">O(W&middot;H)</td><td>brute force only</td></tr>
+                </table>
+            </div>
+
+            <div class="panel">
+                <h3>Operation Log</h3>
+                <div class="log" id="log"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ===== GRID CONFIG =====
+const SVG = document.getElementById('grid');
+const NS = "http://www.w3.org/2000/svg";
+const GRID = 13;            // lattice cells across (0..GRID)
+const PAD = 30;
+const SIZE = 520;
+const STEP = (SIZE - 2 * PAD) / GRID;
+
+let poly = [];             // list of [x,y] lattice vertices
+let dragIndex = -1;
+
+// lattice -> screen
+function sx(x){ return PAD + x * STEP; }
+function sy(y){ return SIZE - PAD - y * STEP; }   // y up
+// screen -> nearest lattice point
+function toLattice(px, py){
+    const x = Math.round((px - PAD) / STEP);
+    const y = Math.round((SIZE - PAD - py) / STEP);
+    return [Math.max(0, Math.min(GRID, x)), Math.max(0, Math.min(GRID, y))];
+}
+
+// ===== MATH =====
+function gcd(a, b){ a=Math.abs(a); b=Math.abs(b); while(b){ [a,b]=[b,a%b]; } return a; }
+
+function twiceArea(p){
+    let s = 0;
+    for (let i=0;i<p.length;i++){
+        const j = (i+1)%p.length;
+        s += p[i][0]*p[j][1] - p[j][0]*p[i][1];
+    }
+    return Math.abs(s);
+}
+function boundaryCount(p){
+    let b = 0;
+    for (let i=0;i<p.length;i++){
+        const j=(i+1)%p.length;
+        b += gcd(p[j][0]-p[i][0], p[j][1]-p[i][1]);
+    }
+    return b;
+}
+
+// is lattice point (x,y) strictly inside polygon? (ray cast, boundary excluded)
+function onSegment(px,py,ax,ay,bx,by){
+    // collinear & within bounding box
+    const cross = (bx-ax)*(py-ay) - (by-ay)*(px-ax);
+    if (cross !== 0) return false;
+    return Math.min(ax,bx)<=px && px<=Math.max(ax,bx) &&
+           Math.min(ay,by)<=py && py<=Math.max(ay,by);
+}
+function onBoundary(px,py,p){
+    for (let i=0;i<p.length;i++){
+        const j=(i+1)%p.length;
+        if (onSegment(px,py,p[i][0],p[i][1],p[j][0],p[j][1])) return true;
+    }
+    return false;
+}
+function strictlyInside(px,py,p){
+    if (onBoundary(px,py,p)) return false;
+    let inside = false;
+    for (let i=0,j=p.length-1;i<p.length;j=i++){
+        const xi=p[i][0], yi=p[i][1], xj=p[j][0], yj=p[j][1];
+        const intersect = ((yi>py)!==(yj>py)) &&
+            (px < (xj-xi)*(py-yi)/(yj-yi)+xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+// ===== RENDER =====
+function render(){
+    while (SVG.firstChild) SVG.removeChild(SVG.firstChild);
+
+    // grid lines
+    for (let i=0;i<=GRID;i++){
+        line(sx(i), sy(0), sx(i), sy(GRID), '#1c2430', 1);
+        line(sx(0), sy(i), sx(GRID), sy(i), '#1c2430', 1);
+    }
+
+    const valid = poly.length >= 3;
+    const twoA = valid ? twiceArea(poly) : 0;
+
+    // polygon fill + outline
+    if (poly.length >= 2){
+        const pts = poly.map(v=>`${sx(v[0])},${sy(v[1])}`).join(' ');
+        if (poly.length >= 3){
+            const fill = document.createElementNS(NS,'polygon');
+            fill.setAttribute('points', pts);
+            fill.setAttribute('fill', 'rgba(88,166,255,0.10)');
+            fill.setAttribute('stroke', 'var(--blue)');
+            fill.setAttribute('stroke-width', '2');
+            SVG.appendChild(fill);
+        } else {
+            const pl = document.createElementNS(NS,'polyline');
+            pl.setAttribute('points', pts);
+            pl.setAttribute('fill','none');
+            pl.setAttribute('stroke','var(--blue)');
+            pl.setAttribute('stroke-width','2');
+            SVG.appendChild(pl);
+        }
+    }
+
+    // classify every lattice point
+    let I=0, B=0;
+    const vertexSet = new Set(poly.map(v=>v[0]+','+v[1]));
+    for (let x=0;x<=GRID;x++){
+        for (let y=0;y<=GRID;y++){
+            let cls='out';
+            if (valid){
+                if (onBoundary(x,y,poly)) { cls='bnd'; B++; }
+                else if (strictlyInside(x,y,poly)) { cls='int'; I++; }
+            }
+            dot(x,y,cls, vertexSet.has(x+','+y));
+        }
+    }
+
+    // vertices on top (purple, larger)
+    poly.forEach((v,idx)=>{
+        const c = document.createElementNS(NS,'circle');
+        c.setAttribute('cx', sx(v[0])); c.setAttribute('cy', sy(v[1]));
+        c.setAttribute('r', 7);
+        c.setAttribute('fill', 'var(--purple)');
+        c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width','1.5');
+        c.style.cursor='grab';
+        c.addEventListener('pointerdown', e=>{ e.stopPropagation(); dragIndex=idx; });
+        SVG.appendChild(c);
+    });
+
+    updatePanels(valid, twoA, I, B);
+}
+
+function line(x1,y1,x2,y2,color,w){
+    const l=document.createElementNS(NS,'line');
+    l.setAttribute('x1',x1); l.setAttribute('y1',y1);
+    l.setAttribute('x2',x2); l.setAttribute('y2',y2);
+    l.setAttribute('stroke',color); l.setAttribute('stroke-width',w);
+    SVG.appendChild(l);
+}
+function dot(x,y,cls,isVertex){
+    if (isVertex) return; // drawn separately
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx', sx(x)); c.setAttribute('cy', sy(y));
+    let r=2.5, fill='var(--muted)';
+    if (cls==='bnd'){ r=5; fill='var(--orange)'; }
+    else if (cls==='int'){ r=5; fill='var(--green)'; }
+    c.setAttribute('r', r); c.setAttribute('fill', fill);
+    c.setAttribute('opacity', cls==='out' ? '0.35' : '1');
+    SVG.appendChild(c);
+}
+
+function updatePanels(valid, twoA, I, B){
+    if (!valid){
+        document.getElementById('formula').innerHTML = 'Add at least 3 vertices to a simple polygon.';
+        document.getElementById('vI').textContent='–';
+        document.getElementById('vB').textContent='–';
+        document.getElementById('vA').textContent='–';
+        document.getElementById('edges').textContent='–';
+        return;
+    }
+    const areaPick = I + B/2 - 1;       // Pick predicts
+    const areaShoe = twoA/2;            // shoelace truth
+    const match = Math.abs(areaPick - areaShoe) < 1e-9;
+
+    document.getElementById('vI').textContent = I;
+    document.getElementById('vB').textContent = B;
+    document.getElementById('vA').textContent = areaShoe;
+
+    document.getElementById('formula').innerHTML =
+        `<span class="A">A</span> <span class="op">=</span> ` +
+        `<span class="I">I</span> <span class="op">+</span> ` +
+        `<span class="B">B</span><span class="op">/2</span> <span class="op">&minus; 1</span><br>` +
+        `<span class="res">${areaShoe}</span> <span class="op">=</span> ` +
+        `<span class="I">${I}</span> <span class="op">+</span> ` +
+        `<span class="B">${B}</span><span class="op">/2</span> <span class="op">&minus; 1</span> ` +
+        `<span class="op">=</span> <span class="res">${areaPick}</span><br>` +
+        `<span class="check ${match?'ok':'bad'}">${match?'✓ Pick matches shoelace':'✗ mismatch (self-intersection?)'}</span>`;
+
+    // edge gcd breakdown
+    let rows = '';
+    for (let i=0;i<poly.length;i++){
+        const j=(i+1)%poly.length;
+        const dx = poly[j][0]-poly[i][0], dy = poly[j][1]-poly[i][1];
+        const g = gcd(dx,dy);
+        rows += `(${poly[i][0]},${poly[i][1]})→(${poly[j][0]},${poly[j][1]})  gcd(${Math.abs(dx)},${Math.abs(dy)}) = <span class="cx">${g}</span><br>`;
+    }
+    rows += `<br><b>B = Σ = <span class="B" style="color:var(--orange)">${B}</span></b>`;
+    document.getElementById('edges').innerHTML = rows;
+}
+
+// ===== LOG =====
+function log(msg){
+    const el = document.getElementById('log');
+    const d = document.createElement('div');
+    d.innerHTML = msg;
+    el.prepend(d);
+    while (el.children.length > 40) el.removeChild(el.lastChild);
+}
+
+// ===== INTERACTION =====
+SVG.addEventListener('pointerdown', e=>{
+    if (dragIndex !== -1) return;
+    const r = SVG.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (SIZE / r.width);
+    const py = (e.clientY - r.top)  * (SIZE / r.height);
+    const [lx,ly] = toLattice(px,py);
+    // avoid exact duplicate vertex
+    if (poly.some(v=>v[0]===lx && v[1]===ly)) return;
+    poly.push([lx,ly]);
+    log(`Added vertex <span>(${lx}, ${ly})</span> — now ${poly.length} vertices`);
+    render();
+});
+window.addEventListener('pointermove', e=>{
+    if (dragIndex === -1) return;
+    const r = SVG.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (SIZE / r.width);
+    const py = (e.clientY - r.top)  * (SIZE / r.height);
+    const [lx,ly] = toLattice(px,py);
+    if (poly[dragIndex][0]!==lx || poly[dragIndex][1]!==ly){
+        poly[dragIndex] = [lx,ly];
+        render();
+    }
+});
+window.addEventListener('pointerup', ()=>{
+    if (dragIndex !== -1){
+        const v = poly[dragIndex];
+        log(`Moved vertex to <span>(${v[0]}, ${v[1]})</span>`);
+        dragIndex = -1;
+    }
+});
+
+function clearPoly(){ poly=[]; log('Cleared polygon'); render(); }
+function undo(){ if (poly.length){ const v=poly.pop(); log(`Removed vertex (${v[0]},${v[1]})`); render(); } }
+
+// ===== PRESETS =====
+const PRESETS = {
+    triangle: [[0,0],[8,0],[0,6]],
+    square:   [[2,2],[10,2],[10,10],[2,10]],
+    lshape:   [[1,1],[9,1],[9,5],[5,5],[5,10],[1,10]],
+    thin:     [[1,1],[4,1],[4,3],[7,3],[7,5],[10,5],[10,7],[1,7]],
+    diamond:  [[6,1],[11,6],[6,11],[1,6]]
+};
+function loadPreset(){
+    const key = document.getElementById('preset').value;
+    poly = PRESETS[key].map(v=>[...v]);
+    log(`Loaded preset <span>${key}</span>`);
+    render();
+}
+
+// ===== INIT =====
+loadPreset();
+log('Ready. Click the grid to add vertices, drag to move them.');
+</script>
+</body>
+</html>
