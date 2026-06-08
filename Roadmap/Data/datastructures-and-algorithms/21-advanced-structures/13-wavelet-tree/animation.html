@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wavelet Tree — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:18px;
+  }
+  h1{font-size:1.9rem; color:var(--blue); text-align:center; margin-bottom:4px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:18px; font-size:.95rem;}
+  .wrap{max-width:1100px; margin:0 auto;}
+  .badges{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;}
+  .badge{background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:5px 14px; font-size:.8rem;}
+  .badge b{color:var(--purple);}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px;}
+  .panel h3{color:var(--blue); font-size:1rem; margin-bottom:10px;}
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; margin-bottom:10px;}
+  input[type=text],input[type=number]{
+    padding:8px 10px; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    border-radius:8px; font-size:.9rem;
+  }
+  input[type=text]{width:320px;}
+  input[type=number]{width:70px;}
+  label{color:var(--muted); font-size:.85rem; margin-right:2px;}
+  button{
+    padding:8px 16px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.9rem; transition:all .2s;
+  }
+  button:hover{background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.q{border-color:var(--purple); color:var(--purple);}
+  button.q:hover{background:var(--purple); color:var(--bg);}
+  .speed{display:flex; align-items:center; gap:8px; justify-content:center; margin-top:6px;}
+  .speed input[type=range]{accent-color:var(--blue); width:150px;}
+
+  /* tree levels */
+  #tree{display:flex; flex-direction:column; gap:14px; overflow-x:auto;}
+  .level{}
+  .level-head{color:var(--muted); font-size:.78rem; margin-bottom:6px;}
+  .nodes{display:flex; gap:18px; flex-wrap:wrap;}
+  .node{border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--bg);}
+  .node.onpath{border-color:var(--orange); box-shadow:0 0 0 2px rgba(255,166,87,.25);}
+  .node-alpha{font-size:.72rem; color:var(--muted); margin-bottom:5px;}
+  .seq{display:flex; gap:3px; flex-wrap:wrap;}
+  .cell{
+    min-width:24px; height:38px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    border-radius:5px; font-size:.72rem; background:#21262d; border:1px solid var(--border); position:relative;
+  }
+  .cell .val{font-weight:600;}
+  .cell .bit{font-size:.62rem; color:var(--muted);}
+  .cell.bit0{border-color:var(--green);}
+  .cell.bit1{border-color:var(--purple);}
+  .cell.inrange{background:#1f2d1f;}
+  .cell.lo{outline:2px solid var(--blue);}
+  .cell.hi{outline:2px solid var(--orange);}
+  .cell.answer{background:var(--green); color:#06210b; border-color:var(--green); font-weight:700;}
+  .leafrow{display:flex; gap:6px; flex-wrap:wrap;}
+  .leaf{border:1px dashed var(--border); border-radius:6px; padding:4px 8px; font-size:.72rem; color:var(--muted);}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media(max-width:860px){.twocol{grid-template-columns:1fr;}}
+  .info code{color:var(--yellow);}
+  .info .line{font-family:'Courier New',monospace; font-size:.85rem; line-height:1.7;}
+  table{width:100%; border-collapse:collapse; font-size:.82rem;}
+  th,td{border:1px solid var(--border); padding:6px 8px; text-align:left;}
+  th{color:var(--muted); font-weight:600;}
+  td .o{color:var(--green); font-weight:700;}
+  #log{max-height:170px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.78rem; line-height:1.6;}
+  #log div{padding:2px 0; border-bottom:1px solid #1c2128;}
+  #log .hl{color:var(--orange);}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin:6px 0 12px; font-size:.78rem;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .sw{width:14px; height:14px; border-radius:3px; display:inline-block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Wavelet Tree</h1>
+  <p class="subtitle">Recursively split the <b>alphabet</b> — one bitvector per level — and answer access / rank / quantile in O(log&nbsp;σ)</p>
+
+  <div class="badges">
+    <div class="badge">Query: <b>O(log σ)</b></div>
+    <div class="badge">Build: <b>O(n log σ)</b></div>
+    <div class="badge">Space: <b>n·log₂σ bits</b></div>
+    <div class="badge">σ (alphabet): <b id="bSigma">16</b></div>
+    <div class="badge">levels: <b id="bLevels">4</b></div>
+  </div>
+
+  <div class="panel">
+    <h3>Sequence &amp; Build</h3>
+    <div class="controls">
+      <input type="text" id="seqInput" placeholder="comma values in [0, sigma)">
+      <button onclick="loadSeq()">Build</button>
+      <button onclick="randomSeq()">Random</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Queries</h3>
+    <div class="controls">
+      <label>access i</label><input type="number" id="accI" value="6" min="0">
+      <button class="q" onclick="runAccess()">access(i)</button>
+      <span style="width:14px"></span>
+      <label>rank c</label><input type="number" id="rankC" value="3" min="0">
+      <label>i</label><input type="number" id="rankI" value="20" min="0">
+      <button class="q" onclick="runRank()">rank_c(i)</button>
+    </div>
+    <div class="controls" style="margin-top:8px;">
+      <label>quantile l</label><input type="number" id="qL" value="2" min="0">
+      <label>r</label><input type="number" id="qR" value="14" min="0">
+      <label>k</label><input type="number" id="qK" value="3" min="0">
+      <button class="q" onclick="runQuantile()">quantile(l,r,k)</button>
+      <button onclick="resetView()">Reset</button>
+    </div>
+    <div class="speed">
+      <span style="color:var(--muted)">Slow</span>
+      <input type="range" id="speed" min="1" max="10" value="5">
+      <span style="color:var(--muted)">Fast</span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--green)"></i>bit 0 (lower half → left)</span>
+    <span><i class="sw" style="background:var(--purple)"></i>bit 1 (upper half → right)</span>
+    <span><i class="sw" style="background:#1f2d1f;border:1px solid var(--border)"></i>in current range</span>
+    <span><i class="sw" style="background:var(--orange)"></i>node on query path</span>
+    <span><i class="sw" style="background:var(--green)"></i>answer</span>
+  </div>
+
+  <div class="panel">
+    <h3>Wavelet Tree — alphabet split per level</h3>
+    <div id="tree"></div>
+  </div>
+
+  <div class="twocol">
+    <div class="panel info">
+      <h3>Step Info</h3>
+      <div class="line" id="info">Press <code>Build</code>, then run a query and watch it descend.</div>
+    </div>
+    <div class="panel">
+      <h3>Big-O</h3>
+      <table>
+        <tr><th>Operation</th><th>Time</th><th>Note</th></tr>
+        <tr><td>build</td><td class="o">O(n log σ)</td><td>one pass per level</td></tr>
+        <tr><td>access(i)</td><td class="o">O(log σ)</td><td>read one bit per level</td></tr>
+        <tr><td>rank_c(i)</td><td class="o">O(log σ)</td><td>follow bits of c</td></tr>
+        <tr><td>quantile(l,r,k)</td><td class="o">O(log σ)</td><td>carry range, compare k</td></tr>
+        <tr><td>rangeCount</td><td class="o">O(log σ)</td><td>countLess descent</td></tr>
+        <tr><td>space</td><td class="o">n·⌈log₂σ⌉ bits</td><td>succinct (+o())</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Wavelet tree model (pointer style, prefix-rank per node).
+   Each node: {a,b, seq, bit, prefix, left, right, id, level}
+   ============================================================ */
+let SIGMA = 16;
+let SEQ = [3,3,9,1,2,1,7,6,4,8,9,4,3,7,5,9,2,7,3,5];
+let root = null;
+let levels = [];      // levels[l] = array of nodes at depth l
+let busy = false;
+let nextId = 0;
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function speedMs(){ return 1150 - document.getElementById('speed').value*100; }
+
+function build(seq, a, b, level){
+  if(b - a <= 1) return null;
+  const mid = (a + b) >> 1;
+  const node = {a,b,mid, seq:seq.slice(), bit:[], prefix:[0], left:null, right:null, id:nextId++, level};
+  const left=[], right=[];
+  for(let i=0;i<seq.length;i++){
+    const bit = seq[i] >= mid ? 1 : 0;
+    node.bit.push(bit);
+    node.prefix.push(node.prefix[i] + bit);
+    if(bit===0) left.push(seq[i]); else right.push(seq[i]);
+  }
+  node.left  = build(left,  a, mid, level+1);
+  node.right = build(right, mid, b, level+1);
+  return node;
+}
+function rank1(node,i){ return node.prefix[i]; }
+function rank0(node,i){ return i - node.prefix[i]; }
+
+function collectLevels(node){
+  levels=[];
+  function rec(n){
+    if(!n) return;
+    (levels[n.level] = levels[n.level]||[]).push(n);
+    rec(n.left); rec(n.right);
+  }
+  rec(node);
+}
+
+function rebuild(){
+  nextId=0;
+  // ensure values fit alphabet
+  let mx = 0; for(const v of SEQ) mx = Math.max(mx, v);
+  let s = 1; while(s <= mx) s <<= 1;       // next pow2 > mx
+  SIGMA = Math.max(2, s);
+  root = build(SEQ, 0, SIGMA, 0);
+  collectLevels(root);
+  document.getElementById('bSigma').textContent = SIGMA;
+  document.getElementById('bLevels').textContent = Math.max(1, Math.log2(SIGMA));
+  render();
+}
+
+/* ---------------- rendering ---------------- */
+function render(highlight){
+  highlight = highlight || {};            // {nodeId:{range:[l,r], lo, hi, answerIdx}}
+  const tree = document.getElementById('tree');
+  tree.innerHTML='';
+  for(let l=0; l<levels.length; l++){
+    const lv = levels[l];
+    if(!lv) continue;
+    const div = document.createElement('div');
+    div.className='level';
+    const head = document.createElement('div');
+    head.className='level-head';
+    head.textContent = `Level ${l}  —  split alphabet into halves of width ${ (lv[0].b - lv[0].a)>>1 }`;
+    div.appendChild(head);
+    const nodes = document.createElement('div');
+    nodes.className='nodes';
+    for(const n of lv){
+      const hl = highlight[n.id];
+      const nd = document.createElement('div');
+      nd.className='node'+(hl&&hl.onpath?' onpath':'');
+      const al = document.createElement('div');
+      al.className='node-alpha';
+      al.textContent = `alphabet [${n.a}, ${n.b})  mid=${n.mid}`;
+      nd.appendChild(al);
+      const sq = document.createElement('div');
+      sq.className='seq';
+      for(let i=0;i<n.seq.length;i++){
+        const c = document.createElement('div');
+        let cls = 'cell ' + (n.bit[i]===0?'bit0':'bit1');
+        if(hl){
+          if(hl.range && i>=hl.range[0] && i<hl.range[1]) cls+=' inrange';
+          if(hl.lo===i) cls+=' lo';
+          if(hl.hi===i) cls+=' hi';
+          if(hl.answerIdx===i) cls+=' answer';
+        }
+        c.className=cls;
+        c.innerHTML = `<span class="val">${n.seq[i]}</span><span class="bit">${n.bit[i]}</span>`;
+        sq.appendChild(c);
+      }
+      nd.appendChild(sq);
+      nodes.appendChild(nd);
+    }
+    div.appendChild(nodes);
+    tree.appendChild(div);
+  }
+  // leaf row
+  const leafDiv = document.createElement('div');
+  leafDiv.className='level';
+  const lh=document.createElement('div'); lh.className='level-head'; lh.textContent='Leaves — each holds one symbol (sorted order)';
+  leafDiv.appendChild(lh);
+  const lr=document.createElement('div'); lr.className='leafrow';
+  for(let v=0; v<SIGMA; v++){
+    const cnt = SEQ.filter(x=>x===v).length;
+    if(cnt===0) continue;
+    const e=document.createElement('div'); e.className='leaf'; e.textContent=`${v} ×${cnt}`;
+    lr.appendChild(e);
+  }
+  leafDiv.appendChild(lr);
+  document.getElementById('tree').appendChild(leafDiv);
+}
+
+function setInfo(html){ document.getElementById('info').innerHTML = html; }
+function addLog(html){
+  const log=document.getElementById('log');
+  const d=document.createElement('div'); d.innerHTML=html; log.prepend(d);
+}
+
+/* ---------------- queries (animated) ---------------- */
+async function runAccess(){
+  if(busy) return; busy=true;
+  let i = clampInt('accI',0,SEQ.length-1);
+  addLog(`<span class="hl">access(${i})</span> — reconstruct S[${i}] bit by bit`);
+  let node=root, val='';
+  const path={};
+  while(node){
+    path[node.id]={onpath:true, lo:i};
+    render(path);
+    const bit = node.bit[i];
+    setInfo(`At alphabet [${node.a},${node.b}). B[${i}] = <code>${bit}</code> → go ${bit===0?'LEFT (lower half)':'RIGHT (upper half)'}.`);
+    await sleep(speedMs());
+    if(bit===0){ i = rank0(node,i); node=node.left; }
+    else { i = rank1(node,i); node=node.right; }
+    if(node) val='';
+    else {
+      // figure leaf value: the surviving alphabet collapsed
+    }
+  }
+  // recover value by re-walking to get alphabet
+  const v = recoverAccess(clampInt('accI',0,SEQ.length-1));
+  setInfo(`Alphabet collapsed → <code>S[${clampInt('accI',0,SEQ.length-1)}] = ${v}</code>. Touched ${Math.log2(SIGMA)} levels.`);
+  addLog(`= ${v}`);
+  busy=false;
+}
+function recoverAccess(i){
+  let node=root,a=0,b=SIGMA;
+  while(node){
+    const mid=(a+b)>>1;
+    if(node.bit[i]===0){ i=rank0(node,i); b=mid; node=node.left; }
+    else { i=rank1(node,i); a=mid; node=node.right; }
+  }
+  return a;
+}
+
+async function runRank(){
+  if(busy) return; busy=true;
+  let c = clampInt('rankC',0,SIGMA-1);
+  let i = clampInt('rankI',0,SEQ.length);
+  addLog(`<span class="hl">rank_${c}(${i})</span> — count symbol ${c} in S[0..${i})`);
+  let node=root, a=0,b=SIGMA;
+  const path={};
+  while(node){
+    path[node.id]={onpath:true, lo:i<node.seq.length?i:undefined};
+    render(path);
+    const mid=(a+b)>>1;
+    const goLeft = c<mid;
+    setInfo(`At [${a},${b}). c=${c} ${goLeft?'< ':'≥ '}mid=${mid} → follow ${goLeft?'0-bits (left)':'1-bits (right)'}. i = ${goLeft?'rank0':'rank1'}(B,${i}) = ${goLeft?rank0(node,i):rank1(node,i)}.`);
+    await sleep(speedMs());
+    if(goLeft){ i=rank0(node,i); b=mid; node=node.left; }
+    else { i=rank1(node,i); a=mid; node=node.right; }
+  }
+  setInfo(`At leaf for symbol ${c}: <code>rank_${c} = ${i}</code> occurrences in the prefix.`);
+  addLog(`= ${i}`);
+  busy=false;
+}
+
+async function runQuantile(){
+  if(busy) return; busy=true;
+  let l=clampInt('qL',0,SEQ.length-1);
+  let r=clampInt('qR',l+1,SEQ.length);
+  let k=clampInt('qK',0,r-l-1);
+  addLog(`<span class="hl">quantile(${l},${r},${k})</span> — ${k}-th smallest (0-idx) in S[${l}..${r})`);
+  let node=root,a=0,b=SIGMA;
+  const path={};
+  while(node){
+    path[node.id]={onpath:true, range:[l,r], lo:l, hi:r-1};
+    render(path);
+    const l0=rank0(node,l), r0=rank0(node,r), cntLeft=r0-l0;
+    setInfo(`At [${a},${b}). range [${l},${r}). cnt_left = rank0(${r})−rank0(${l}) = ${cntLeft}. ` +
+            (k<cntLeft ? `k=${k} &lt; ${cntLeft} → go LEFT (smaller half).`
+                       : `k=${k} ≥ ${cntLeft} → skip ${cntLeft}, k←${k-cntLeft}, go RIGHT.`));
+    await sleep(speedMs());
+    if(k<cntLeft){ l=l0; r=r0; b=(a+b)>>1; node=node.left; }
+    else { k-=cntLeft; l=l-l0; r=r-r0; a=(a+b)>>1; node=node.right; }
+  }
+  setInfo(`Alphabet collapsed → <code>k-th smallest = ${a}</code> (occurs ${r-l}× in the range).`);
+  addLog(`= ${a}  (freq ${r-l})`);
+  busy=false;
+}
+
+function resetView(){ render(); setInfo('View reset. Run a query to animate the descent.'); }
+
+/* ---------------- input helpers ---------------- */
+function clampInt(id,lo,hi){
+  let v=parseInt(document.getElementById(id).value);
+  if(isNaN(v)) v=lo;
+  v=Math.max(lo,Math.min(hi,v));
+  document.getElementById(id).value=v;
+  return v;
+}
+function loadSeq(){
+  const raw=document.getElementById('seqInput').value;
+  const nums=raw.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)&&n>=0);
+  if(nums.length){ SEQ=nums; rebuild(); addLog(`Built wavelet tree on n=${SEQ.length}, σ=${SIGMA}.`); }
+}
+function randomSeq(){
+  const n=14+Math.floor(Math.random()*10);
+  const sig=[8,16][Math.floor(Math.random()*2)];
+  SEQ=Array.from({length:n},()=>Math.floor(Math.random()*sig));
+  document.getElementById('seqInput').value=SEQ.join(', ');
+  rebuild();
+  addLog(`Random sequence n=${SEQ.length}, σ=${SIGMA}.`);
+}
+
+/* ---------------- init ---------------- */
+document.getElementById('seqInput').value=SEQ.join(', ');
+rebuild();
+addLog('Loaded default sequence. Try quantile(2,14,3).');
+</script>
+</body>
+</html>
