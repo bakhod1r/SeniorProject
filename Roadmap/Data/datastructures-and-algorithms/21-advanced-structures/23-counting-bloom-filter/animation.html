@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Counting Bloom Filter — Visual Animation</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh; padding:20px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  h1{font-size:1.9rem; color:var(--blue); margin-bottom:6px; text-align:center;}
+  .subtitle{color:var(--muted); margin-bottom:18px; text-align:center; max-width:820px;}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:20px;}
+  .badge{padding:4px 12px; border-radius:20px; font-size:.8rem; font-weight:600; border:1px solid var(--border);}
+  .b-green{color:var(--green); border-color:var(--green);}
+  .b-yellow{color:var(--yellow); border-color:var(--yellow);}
+  .b-red{color:var(--red); border-color:var(--red);}
+  .b-blue{color:var(--blue); border-color:var(--blue);}
+  .b-purple{color:var(--purple); border-color:var(--purple);}
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:18px; margin-bottom:18px; width:100%; max-width:1040px;
+  }
+  .panel h3{color:var(--blue); margin-bottom:12px; font-size:1.05rem;}
+
+  /* controls */
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;}
+  input[type="text"]{
+    padding:9px 14px; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    border-radius:8px; font-size:.95rem; width:190px;
+  }
+  input[type="text"]:focus{outline:none; border-color:var(--blue);}
+  label.small{color:var(--muted); font-size:.85rem;}
+  input[type="range"]{accent-color:var(--blue); width:120px;}
+  button{
+    padding:9px 16px; border:1px solid var(--blue); background:transparent; color:var(--blue);
+    border-radius:8px; cursor:pointer; font-size:.92rem; transition:all .2s;
+  }
+  button:hover:not(:disabled){background:var(--blue); color:var(--bg);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button.add{border-color:var(--green); color:var(--green);}
+  button.add:hover:not(:disabled){background:var(--green); color:var(--bg);}
+  button.del{border-color:var(--orange); color:var(--orange);}
+  button.del:hover:not(:disabled){background:var(--orange); color:var(--bg);}
+  button.query{border-color:var(--yellow); color:var(--yellow);}
+  button.query:hover:not(:disabled){background:var(--yellow); color:var(--bg);}
+  button.over{border-color:var(--purple); color:var(--purple);}
+  button.over:hover:not(:disabled){background:var(--purple); color:var(--bg);}
+  button.reset{border-color:var(--red); color:var(--red);}
+  button.reset:hover:not(:disabled){background:var(--red); color:var(--bg);}
+
+  /* counter array */
+  .ctrarray{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; padding:6px 0 22px;}
+  .ctr{
+    width:40px; height:40px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:1rem; font-weight:700; border:1px solid var(--border); background:#1c2128; color:var(--muted);
+    position:relative; transition:all .25s;
+  }
+  .ctr .idx{position:absolute; bottom:-16px; font-size:.6rem; color:#5a626c; font-weight:400;}
+  .ctr.set{background:#1f3a24; color:var(--green); border-color:var(--green);}   /* counter > 0 */
+  .ctr.inc{background:var(--green); color:var(--bg); border-color:var(--green); transform:scale(1.18); box-shadow:0 0 10px var(--green);}
+  .ctr.dec{background:var(--orange); color:var(--bg); border-color:var(--orange); transform:scale(1.18); box-shadow:0 0 10px var(--orange);}
+  .ctr.probe-set{background:var(--green); color:var(--bg); border-color:var(--green); transform:scale(1.18); box-shadow:0 0 10px var(--green);}
+  .ctr.probe-miss{background:var(--red); color:#fff; border-color:var(--red); transform:scale(1.18); box-shadow:0 0 10px var(--red);}
+  .ctr.probe-fp{background:var(--purple); color:#fff; border-color:var(--purple); transform:scale(1.18); box-shadow:0 0 10px var(--purple);}
+  .ctr.saturated{background:#4a2233; color:var(--purple); border-color:var(--purple); box-shadow:0 0 8px var(--purple);}
+
+  /* stats */
+  .stats{display:flex; gap:24px; flex-wrap:wrap; justify-content:center;}
+  .stat{text-align:center;}
+  .stat .lbl{color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.5px;}
+  .stat .val{color:var(--blue); font-size:1.25rem; font-weight:700;}
+
+  /* info panel */
+  .info{font-family:'Courier New',monospace; font-size:.92rem; line-height:1.7; min-height:54px;}
+  .info .hl{color:var(--yellow);}
+  .info .ok{color:var(--green); font-weight:700;}
+  .info .no{color:var(--red); font-weight:700;}
+  .info .fp{color:var(--purple); font-weight:700;}
+  .info .sat{color:var(--purple); font-weight:700;}
+
+  /* table */
+  table{width:100%; border-collapse:collapse; font-size:.88rem;}
+  th,td{padding:7px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{color:var(--muted); font-weight:600;}
+  td.mono{font-family:'Courier New',monospace;}
+  .c-green{color:var(--green);} .c-yellow{color:var(--yellow);} .c-red{color:var(--red);}
+  .c-orange{color:var(--orange);} .c-purple{color:var(--purple);}
+
+  /* log */
+  .log{max-height:170px; overflow-y:auto; font-family:'Courier New',monospace; font-size:.82rem;}
+  .log .line{padding:3px 0; border-bottom:1px solid #20262e;}
+  .log .line .t{color:#5a626c;}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-bottom:14px;}
+  .legend .item{display:flex; align-items:center; gap:6px; font-size:.8rem; color:var(--muted);}
+  .swatch{width:14px; height:14px; border-radius:4px; border:1px solid var(--border);}
+</style>
+</head>
+<body>
+  <h1>Counting Bloom Filter</h1>
+  <p class="subtitle">A Bloom filter with a small <b>counter</b> per slot (max 15) instead of a bit.
+     <b>Insert</b> increments k counters; <b>Delete</b> decrements them; a query needs all k counters <b>&gt; 0</b>.
+     The counter is what lets you <i>delete</i> — and saturating at the max keeps overflow safe.</p>
+
+  <div class="badges">
+    <span class="badge b-green">Insert O(k)</span>
+    <span class="badge b-orange" style="color:var(--orange);border-color:var(--orange)">Delete O(k)</span>
+    <span class="badge b-green">Query O(k)</span>
+    <span class="badge b-blue">Space ~4× Bloom</span>
+    <span class="badge b-yellow">FPR ≈ (1−e^(−kn/m))^k</span>
+    <span class="badge b-purple">Saturate at 15</span>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="item"><span class="swatch" style="background:#1c2128"></span>counter = 0</div>
+    <div class="item"><span class="swatch" style="background:#1f3a24;border-color:var(--green)"></span>counter &gt; 0 (set)</div>
+    <div class="item"><span class="swatch" style="background:var(--green)"></span>increment / probe hit</div>
+    <div class="item"><span class="swatch" style="background:var(--orange)"></span>decrement (delete)</div>
+    <div class="item"><span class="swatch" style="background:var(--red)"></span>probe miss (a 0 found)</div>
+    <div class="item"><span class="swatch" style="background:var(--purple)"></span>false positive / saturated (15)</div>
+  </div>
+
+  <!-- Controls -->
+  <div class="panel">
+    <h3>Controls</h3>
+    <div class="controls">
+      <input type="text" id="itemInput" placeholder="word, e.g. cat" value="cat">
+      <button class="add" id="addBtn" onclick="doAdd()">Insert (+1)</button>
+      <button class="del" id="delBtn" onclick="doDelete()">Delete (−1)</button>
+      <button class="query" id="qBtn" onclick="doQuery()">Query</button>
+      <button class="over" id="ovBtn" onclick="forceOverflow()">Force Overflow</button>
+      <button class="reset" onclick="resetFilter()">Reset</button>
+    </div>
+    <div class="controls" style="margin-top:12px;">
+      <label class="small">m (slots):</label>
+      <input type="range" id="mSlider" min="12" max="48" value="24" oninput="reshape()">
+      <span id="mVal" class="small">24</span>
+      <label class="small">k (hashes):</label>
+      <input type="range" id="kSlider" min="1" max="5" value="3" oninput="reshape()">
+      <span id="kVal" class="small">3</span>
+      <label class="small">speed:</label>
+      <input type="range" id="speed" min="1" max="10" value="6">
+    </div>
+  </div>
+
+  <!-- Counter array -->
+  <div class="panel">
+    <h3>Counter Array (each slot holds 0..15)</h3>
+    <div class="ctrarray" id="ctrarray"></div>
+  </div>
+
+  <!-- Stats -->
+  <div class="panel">
+    <div class="stats">
+      <div class="stat"><div class="lbl">m (slots)</div><div class="val" id="sM">24</div></div>
+      <div class="stat"><div class="lbl">k (hashes)</div><div class="val" id="sK">3</div></div>
+      <div class="stat"><div class="lbl">n (present)</div><div class="val" id="sN">0</div></div>
+      <div class="stat"><div class="lbl">slots set</div><div class="val" id="sSet">0</div></div>
+      <div class="stat"><div class="lbl">mean counter</div><div class="val" id="sMean">0.00</div></div>
+      <div class="stat"><div class="lbl">fill ratio</div><div class="val" id="sFill">0%</div></div>
+      <div class="stat"><div class="lbl">est. FPR</div><div class="val" id="sFpr">0%</div></div>
+    </div>
+  </div>
+
+  <!-- Info -->
+  <div class="panel">
+    <h3>What just happened</h3>
+    <div class="info" id="info">Insert a word to increment its <span class="hl">k</span> counters. Insert two words that share a slot, delete one, and watch the shared counter drop but stay &gt; 0 — that's why deletion is safe. Try "Force Overflow" to saturate a counter at 15.</div>
+  </div>
+
+  <!-- Big-O / FPR table -->
+  <div class="panel">
+    <h3>Complexity, False-Positive Rate & Overflow</h3>
+    <table>
+      <tr><th>Operation</th><th>Action</th><th>Time</th><th>Notes</th></tr>
+      <tr><td>Insert</td><td class="mono c-green">counter += 1</td><td class="mono c-green">O(k)</td><td>saturate at 15 (never wrap)</td></tr>
+      <tr><td>Delete</td><td class="mono c-orange">counter −= 1</td><td class="mono c-green">O(k)</td><td>clamp at 0; skip saturated</td></tr>
+      <tr><td>Query</td><td class="mono">all counters &gt; 0?</td><td class="mono c-green">O(k)</td><td>early-exit on first 0</td></tr>
+      <tr><td>Space</td><td class="mono c-purple">m × 4 bits</td><td class="mono c-yellow">O(m·c)</td><td>~4× a Bloom filter</td></tr>
+      <tr><td>Optimal k</td><td class="mono">(m/n)·ln2</td><td class="mono">—</td><td>mean counter ≈ ln2 ≈ 0.69</td></tr>
+      <tr><td>FPR p</td><td class="mono">(1−e^(−kn/m))^k</td><td class="mono">—</td><td>same as Bloom; falls as you delete</td></tr>
+      <tr><td>Overflow (4-bit)</td><td class="mono c-purple">Pr[≥16] ≈ (ln2)¹⁶/16!</td><td class="mono">—</td><td>≈ 10⁻¹⁶ — essentially never</td></tr>
+    </table>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <h3>Operation Log</h3>
+    <div class="log" id="log"></div>
+  </div>
+
+<script>
+  // ===== State =====
+  const MAXC = 15;            // 4-bit counter maximum
+  let M = 24, K = 3;
+  let counters = new Uint8Array(M);
+  let multiplicity = new Map(); // ground-truth: item -> times inserted (net)
+  let busy = false;
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+  function speedMs(){ return 1050 - document.getElementById('speed').value*95; }
+
+  // Two base hashes (FNV-1a-ish 32-bit), then double hashing.
+  function baseHashes(s){
+    let h1 = 2166136261 >>> 0;
+    for(let i=0;i<s.length;i++){ h1 ^= s.charCodeAt(i); h1 = Math.imul(h1, 16777619) >>> 0; }
+    let h2 = 5381 >>> 0;
+    for(let i=0;i<s.length;i++){ h2 = ((h2*33) ^ s.charCodeAt(i)) >>> 0; }
+    h2 = (h2 | 1) >>> 0; // non-zero stride
+    return [h1, h2];
+  }
+  function indices(s){
+    const [h1,h2] = baseHashes(s);
+    const out = [];
+    for(let i=0;i<K;i++){ out.push(((h1 + i*h2) % M + M) % M); }
+    return out;
+  }
+
+  // ===== Render =====
+  function renderCtrs(highlights){
+    highlights = highlights || {};
+    const c = document.getElementById('ctrarray');
+    let html = '';
+    for(let i=0;i<M;i++){
+      let cls = '';
+      if(counters[i] >= MAXC) cls = 'saturated';
+      else if(counters[i] > 0) cls = 'set';
+      if(highlights[i]) cls = highlights[i];
+      html += `<div class="ctr ${cls}">${counters[i]}<span class="idx">${i}</span></div>`;
+    }
+    c.innerHTML = html;
+    updateStats();
+  }
+
+  function countSet(){ let s=0; for(let i=0;i<M;i++) if(counters[i]>0) s++; return s; }
+  function sumCtr(){ let s=0; for(let i=0;i<M;i++) s+=counters[i]; return s; }
+  function presentCount(){ return multiplicity.size; }
+  function estFpr(){
+    const n = presentCount();
+    if(n===0) return 0;
+    return Math.pow(1 - Math.exp(-K*n/M), K);
+  }
+  function updateStats(){
+    document.getElementById('sM').textContent = M;
+    document.getElementById('sK').textContent = K;
+    document.getElementById('sN').textContent = presentCount();
+    const set = countSet();
+    document.getElementById('sSet').textContent = set;
+    document.getElementById('sMean').textContent = (sumCtr()/M).toFixed(2);
+    document.getElementById('sFill').textContent = ((set/M)*100).toFixed(0)+'%';
+    document.getElementById('sFpr').textContent = (estFpr()*100).toFixed(1)+'%';
+  }
+
+  function setInfo(html){ document.getElementById('info').innerHTML = html; }
+  function addLog(html){
+    const log = document.getElementById('log');
+    const t = new Date().toLocaleTimeString();
+    log.innerHTML = `<div class="line"><span class="t">${t}</span> ${html}</div>` + log.innerHTML;
+  }
+
+  // ===== Operations =====
+  async function doAdd(){
+    if(busy) return;
+    const s = document.getElementById('itemInput').value.trim();
+    if(!s){ setInfo('Type a word to insert.'); return; }
+    busy = true; disableBtns(true);
+    const idx = indices(s);
+    setInfo(`Insert <span class="hl">"${s}"</span> → incrementing counters [${idx.join(', ')}] by 1 (saturating at 15).`);
+    let satNote = false;
+    for(const b of idx){
+      const hl = {}; hl[b] = 'inc';
+      if(counters[b] < MAXC) counters[b]++;
+      else satNote = true; // already saturated, stays at 15
+      renderCtrs(hl);
+      await sleep(speedMs());
+    }
+    multiplicity.set(s, (multiplicity.get(s)||0) + 1);
+    renderCtrs();
+    addLog(`<span class="ok">INSERT</span> "${s}" → counters [${idx.join(',')}] +1`);
+    setInfo(`Inserted <span class="hl">"${s}"</span>. Counters [${idx.join(', ')}] incremented`
+      + (satNote ? ` (one was already <span class="sat">saturated at 15</span> and stayed there).` : `. A counter &gt; 0 means at least one item needs that slot.`));
+    busy = false; disableBtns(false);
+  }
+
+  async function doDelete(){
+    if(busy) return;
+    const s = document.getElementById('itemInput').value.trim();
+    if(!s){ setInfo('Type a word to delete.'); return; }
+    busy = true; disableBtns(true);
+    const idx = indices(s);
+    if(!multiplicity.has(s)){
+      // deleting an item never inserted: underflow danger demo
+      setInfo(`<span class="no">Warning:</span> "${s}" was never inserted. Deleting it decrements counters other items may need → this is how a CBF can get a <span class="no">false negative</span>. (We clamp at 0 to avoid wraparound.)`);
+      addLog(`<span class="no">DELETE</span> "${s}" — NEVER INSERTED (underflow risk)`);
+    } else {
+      setInfo(`Delete <span class="hl">"${s}"</span> → decrementing counters [${idx.join(', ')}] by 1 (clamp at 0; skip saturated).`);
+    }
+    for(const b of idx){
+      const hl = {}; hl[b] = 'dec';
+      if(counters[b] > 0 && counters[b] < MAXC) counters[b]--; // clamp at 0, never touch saturated
+      renderCtrs(hl);
+      await sleep(speedMs());
+    }
+    if(multiplicity.has(s)){
+      const m1 = multiplicity.get(s) - 1;
+      if(m1 <= 0) multiplicity.delete(s); else multiplicity.set(s, m1);
+    }
+    renderCtrs();
+    addLog(`<span class="dec" style="color:var(--orange)">DELETE</span> "${s}" → counters [${idx.join(',')}] −1`);
+    if(multiplicity.has(s) === false){
+      setInfo(`Deleted <span class="hl">"${s}"</span>. Shared counters only dropped to the level other items still need — so deleting "${s}" does <b>not</b> break them. <span class="ok">That is the whole point of a counting Bloom filter.</span>`);
+    }
+    busy = false; disableBtns(false);
+  }
+
+  async function doQuery(){
+    if(busy) return;
+    const s = document.getElementById('itemInput').value.trim();
+    if(!s){ setInfo('Type a word to query.'); return; }
+    busy = true; disableBtns(true);
+    const idx = indices(s);
+    setInfo(`Query <span class="hl">"${s}"</span> → checking counters [${idx.join(', ')}]. A single 0 means "definitely absent".`);
+    let allSet = true, missAt = -1;
+    const hl = {};
+    for(const b of idx){
+      if(counters[b] > 0){
+        hl[b] = 'probe-set';
+        renderCtrs(hl);
+        await sleep(speedMs());
+      } else {
+        hl[b] = 'probe-miss';
+        renderCtrs(hl);
+        allSet = false; missAt = b;
+        await sleep(speedMs());
+        break; // early exit on first 0
+      }
+    }
+    if(!allSet){
+      addLog(`<span class="no">QUERY</span> "${s}" → counter ${missAt} is 0 → <b>ABSENT</b>`);
+      setInfo(`Counter <span class="hl">${missAt}</span> is 0 → <span class="no">DEFINITELY NOT PRESENT</span>. Always correct (no false negatives, as long as you only delete inserted items).`);
+    } else if(multiplicity.has(s)){
+      addLog(`<span class="ok">QUERY</span> "${s}" → all counters &gt; 0 → <b>PRESENT</b> (true positive)`);
+      setInfo(`All k counters are &gt; 0 and "${s}" is in the set → <span class="ok">PRESENT</span> (a true positive).`);
+    } else {
+      for(const b of idx) hl[b]='probe-fp';
+      renderCtrs(hl);
+      addLog(`<span class="fp">QUERY</span> "${s}" → all counters &gt; 0 but not in set → <b>FALSE POSITIVE</b>`);
+      setInfo(`All k counters are &gt; 0, yet <span class="hl">"${s}"</span> is not in the set → <span class="fp">FALSE POSITIVE</span>! Other items' counters happen to cover all of its positions.`);
+    }
+    busy = false; disableBtns(false);
+  }
+
+  async function forceOverflow(){
+    if(busy) return;
+    busy = true; disableBtns(true);
+    // pick the most-loaded slot and drive it to 15 by inserting synthetic words that hit it
+    setInfo('Inserting synthetic words to drive one counter up to its 4-bit maximum (15) and saturate it…');
+    // find a target slot: just use slot 0's neighborhood; insert words until some counter saturates
+    let saturatedSlot = -1;
+    for(let attempt=0; attempt<6000 && saturatedSlot<0; attempt++){
+      const cand = 'of'+attempt.toString(36);
+      const idx = indices(cand);
+      for(const b of idx){ if(counters[b] < MAXC) counters[b]++; }
+      multiplicity.set(cand, 1);
+      for(const b of idx){ if(counters[b] >= MAXC){ saturatedSlot = b; break; } }
+    }
+    renderCtrs();
+    if(saturatedSlot < 0){
+      setInfo('Could not saturate a counter — try a smaller m or higher k, then Force Overflow again.');
+      addLog('<span class="t">overflow attempt: no counter reached 15</span>');
+      busy=false; disableBtns(false); return;
+    }
+    const hl = {}; hl[saturatedSlot] = 'probe-fp';
+    renderCtrs(hl);
+    addLog(`<span class="fp">OVERFLOW</span> counter ${saturatedSlot} reached 15 → <b>SATURATED</b>`);
+    setInfo(`Counter <span class="hl">${saturatedSlot}</span> hit its maximum (15) and is now <span class="sat">SATURATED</span>. Further increments leave it at 15 (no wrap to 0), and we never decrement it again — its true count is lost. A saturated slot is permanently "set", which can only add extra <span class="fp">false positives</span>, never a false negative.`);
+    busy=false; disableBtns(false);
+  }
+
+  function resetFilter(){
+    if(busy) return;
+    counters = new Uint8Array(M);
+    multiplicity = new Map();
+    renderCtrs();
+    setInfo('Filter reset. All counters are 0; every query correctly returns ABSENT.');
+    addLog('<span class="t">— reset —</span>');
+  }
+
+  function reshape(){
+    if(busy) return;
+    M = parseInt(document.getElementById('mSlider').value);
+    K = parseInt(document.getElementById('kSlider').value);
+    document.getElementById('mVal').textContent = M;
+    document.getElementById('kVal').textContent = K;
+    // rebuild from ground truth (multiplicity) so state stays consistent
+    counters = new Uint8Array(M);
+    const items = Array.from(multiplicity.entries());
+    multiplicity = new Map();
+    for(const [s, mult] of items){
+      for(let r=0;r<mult;r++){
+        for(const b of indices(s)){ if(counters[b] < MAXC) counters[b]++; }
+      }
+      multiplicity.set(s, mult);
+    }
+    renderCtrs();
+    setInfo(`Reshaped to m=<span class="hl">${M}</span>, k=<span class="hl">${K}</span>. Re-inserted ${multiplicity.size} item(s).`);
+  }
+
+  function disableBtns(d){
+    ['addBtn','delBtn','qBtn','ovBtn'].forEach(id=>document.getElementById(id).disabled=d);
+  }
+
+  // ===== Init =====
+  renderCtrs();
+  setInfo('Insert a word to increment its <span class="hl">k</span> counters. Insert two words that share a slot, delete one, and watch the shared counter drop but stay &gt; 0 — that is why deletion is safe. Try "Force Overflow" to saturate a counter at 15.');
+</script>
+</body>
+</html>
