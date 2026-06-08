@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Half-Plane Intersection — Interactive Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface); display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .badge {
+    display: inline-flex; gap: 6px; align-items: center; background: var(--bg);
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; color: var(--muted);
+  }
+  header .badge b { color: var(--blue); }
+
+  main {
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px;
+    max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--muted); margin: 0 0 12px 0; font-weight: 600;
+  }
+  .control-group { margin-bottom: 16px; }
+  .control-group:last-child { margin-bottom: 0; }
+
+  .step-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+
+  button.btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-family: inherit; transition: all 0.15s ease; white-space: nowrap;
+  }
+  button.btn:hover:not(:disabled) { background: var(--border); border-color: var(--muted); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: #4493e0; }
+  button.btn.danger  { border-color: var(--red); color: var(--red); }
+  button.btn.success { border-color: var(--green); color: var(--green); }
+
+  .speed-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  input[type="range"] { flex: 1; accent-color: var(--blue); }
+
+  select {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-family: inherit; font-size: 13px;
+  }
+
+  /* deque strip */
+  .deque-strip { display: flex; gap: 6px; flex-wrap: wrap; min-height: 30px; }
+  .dq-item {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+    padding: 4px 8px; border: 1px solid var(--blue); background: rgba(88,166,255,0.15);
+    border-radius: 6px; color: var(--text);
+  }
+  .dq-item.back  { border-color: var(--orange); background: rgba(255,166,87,0.22); color: var(--orange); font-weight: 700; }
+  .dq-item.front { border-color: var(--purple); background: rgba(188,140,255,0.20); color: var(--purple); font-weight: 700; }
+  .dq-item.popped { border-color: var(--red); background: rgba(248,81,73,0.15); color: var(--red); text-decoration: line-through; }
+  .empty-note { color: var(--muted); font-size: 12px; font-style: italic; }
+
+  table.bigo { width: 100%; border-collapse: collapse; font-size: 12px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; }
+  table.bigo th, table.bigo td { border: 1px solid var(--border); padding: 5px 6px; text-align: left; }
+  table.bigo th { color: var(--muted); font-weight: 600; background: var(--bg); }
+  table.bigo td.c-good { color: var(--green); }
+  table.bigo td.c-mid  { color: var(--yellow); }
+  table.bigo td.c-bad  { color: var(--red); }
+
+  .right-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  #vis { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  svg#board { width: 100%; height: 480px; display: block; background: var(--bg); border-radius: 8px; }
+
+  .info-bar {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5; min-height: 44px;
+    color: var(--text); margin-top: 14px;
+  }
+  .info-bar code {
+    background: rgba(88,166,255,0.15); color: var(--blue); padding: 1px 6px;
+    border-radius: 4px; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 12px;
+  }
+  .info-bar.empty   { border-color: var(--red);   }
+  .info-bar.unbound { border-color: var(--orange); }
+  .info-bar.bounded { border-color: var(--green);  }
+
+  .stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .stats-row .stat {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  .stats-row .stat b { color: var(--text); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; }
+  .legend span {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid; }
+  .sw.region  { background: rgba(63,185,80,0.30);  border-color: var(--green);  }
+  .sw.newhp   { background: rgba(255,166,87,0.30);  border-color: var(--orange); }
+  .sw.line    { background: rgba(88,166,255,0.30);  border-color: var(--blue);   }
+  .sw.corner  { background: rgba(188,140,255,0.30); border-color: var(--purple); }
+
+  #log-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    max-height: 180px; overflow-y: auto; font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px; line-height: 1.55;
+  }
+  #log .entry { padding: 2px 0; color: var(--muted); }
+  #log .entry .ts { color: var(--orange); margin-right: 6px; }
+  #log .entry.add  { color: var(--text);   }
+  #log .entry.pop  { color: var(--red);     }
+  #log .entry.done { color: var(--green);   }
+  #log .entry.empty{ color: var(--red); font-weight: 700; }
+
+  .toast {
+    position: fixed; bottom: 18px; right: 18px; background: var(--surface);
+    border: 1px solid var(--border); color: var(--text); padding: 10px 14px;
+    border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.25s ease;
+    pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Half-Plane Intersection <span class="sub">— angle-sort + deque sweep</span></h1>
+  <div class="badge">Scenario: <select id="scenario" style="width:auto;display:inline-block;margin-left:6px;"></select></div>
+</header>
+
+<main>
+  <!-- LEFT: controls + deque + Big-O -->
+  <aside class="panel" id="controls">
+    <div class="control-group">
+      <h2>Controls</h2>
+      <div class="step-controls">
+        <button class="btn primary" id="btnStep">Step</button>
+        <button class="btn success" id="btnRun">Run</button>
+        <button class="btn" id="btnPause">Pause</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+      <div class="speed-row">
+        <span>Slow</span>
+        <input type="range" id="speed" min="120" max="1500" value="750" />
+        <span>Fast</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h2>Active Deque (sorted by angle)</h2>
+      <div class="deque-strip" id="dequeStrip"><span class="empty-note">empty</span></div>
+    </div>
+
+    <div class="control-group">
+      <h2>Complexity</h2>
+      <table class="bigo">
+        <tr><th>Operation</th><th>Time</th></tr>
+        <tr><td>Sort by angle</td><td class="c-mid">O(m log m)</td></tr>
+        <tr><td>Deque sweep</td><td class="c-good">O(m) amort.</td></tr>
+        <tr><td>Side test</td><td class="c-good">O(1)</td></tr>
+        <tr><td>Two-line corner</td><td class="c-good">O(1)</td></tr>
+        <tr><td><b>Total (standard)</b></td><td class="c-mid"><b>O(m log m)</b></td></tr>
+        <tr><td>Incremental clip</td><td class="c-bad">O(m²)</td></tr>
+        <tr><td>Space</td><td class="c-good">O(m)</td></tr>
+      </table>
+    </div>
+  </aside>
+
+  <!-- RIGHT: board + log -->
+  <div class="right-col">
+    <section id="vis">
+      <svg id="board" viewBox="0 0 760 480" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="info-bar" id="info">Press <code>Step</code> to add one half-plane at a time, or <code>Run</code> to animate the whole intersection. Each half-plane shades its allowed side; the green region is the running feasible area.</div>
+      <div class="stats-row">
+        <div class="stat">Half-plane: <b id="statIdx">0</b> / <b id="statTotal">0</b></div>
+        <div class="stat">Deque size: <b id="statDq">0</b></div>
+        <div class="stat">Pops: <b id="statPops">0</b></div>
+        <div class="stat">Region corners: <b id="statCorners">0</b></div>
+        <div class="stat">Status: <b id="statKind">—</b></div>
+      </div>
+      <div class="legend">
+        <span><span class="sw region"></span>feasible region</span>
+        <span><span class="sw newhp"></span>new half-plane (allowed side)</span>
+        <span><span class="sw line"></span>boundary line</span>
+        <span><span class="sw corner"></span>region corner</span>
+      </div>
+    </section>
+
+    <section id="log-panel">
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin:0 0 10px 0;font-weight:600;">Operation Log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Half-plane intersection visualizer
+//  Half-plane: point P + direction D; allowed side = LEFT of D.
+//  Angle-sort + deque sweep, animated one half-plane at a time.
+// ============================================================
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const EPS = 1e-9;
+
+// world coordinate range mapped into the SVG viewport
+const WORLD = { minX: -10, maxX: 10, minY: -10, maxY: 10 };
+const VIEW  = { w: 760, h: 480, pad: 20 };
+
+function wx(x) { // world x -> screen x
+  return VIEW.pad + (x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * (VIEW.w - 2 * VIEW.pad);
+}
+function wy(y) { // world y -> screen y (flip)
+  return VIEW.h - VIEW.pad - (y - WORLD.minY) / (WORLD.maxY - WORLD.minY) * (VIEW.h - 2 * VIEW.pad);
+}
+
+// ---------- geometry helpers ----------
+function cross(ax, ay, bx, by) { return ax * by - ay * bx; }
+
+// half-plane from inequality a*x + b*y <= c, allowed side LEFT of D=(-b,a)
+function hpFromIneq(a, b, c, label) {
+  let px, py;
+  if (Math.abs(a) > Math.abs(b)) { px = c / a; py = 0; }
+  else { px = 0; py = c / b; }
+  return { px, py, dx: -b, dy: a, a, b, c, label };
+}
+function hpAngle(h) { return Math.atan2(h.dy, h.dx); }
+function hpOut(h, qx, qy) { return cross(h.dx, h.dy, qx - h.px, qy - h.py) < -EPS; }
+function hpInter(a, b) {
+  const den = cross(a.dx, a.dy, b.dx, b.dy);
+  if (Math.abs(den) < 1e-12) return null;
+  const t = cross(b.px - a.px, b.py - a.py, b.dx, b.dy) / den;
+  return { x: a.px + a.dx * t, y: a.py + a.dy * t };
+}
+
+// ---------- scenarios ----------
+// each builds a list of inequalities (a,b,c) for a*x+b*y<=c
+const SCENARIOS = {
+  "Bounded box (rectangle)": [
+    hpFromIneq(-1, 0, 1, "x ≥ -1"),
+    hpFromIneq( 1, 0, 6, "x ≤ 6"),
+    hpFromIneq( 0,-1, 1, "y ≥ -1"),
+    hpFromIneq( 0, 1, 5, "y ≤ 5"),
+  ],
+  "Triangle (LP feasible)": [
+    hpFromIneq(-1, 0, 0, "x ≥ 0"),
+    hpFromIneq( 0,-1, 0, "y ≥ 0"),
+    hpFromIneq( 1, 1, 7, "x + y ≤ 7"),
+  ],
+  "Pentagon (5 cuts)": [
+    hpFromIneq( Math.cos(0.3),        Math.sin(0.3),        6, "c1"),
+    hpFromIneq( Math.cos(1.6),        Math.sin(1.6),        6, "c2"),
+    hpFromIneq( Math.cos(2.9),        Math.sin(2.9),        6, "c3"),
+    hpFromIneq( Math.cos(4.2),        Math.sin(4.2),        6, "c4"),
+    hpFromIneq( Math.cos(5.5),        Math.sin(5.5),        6, "c5"),
+  ],
+  "Unbounded wedge": [
+    hpFromIneq(-1, 0, 0, "x ≥ 0"),
+    hpFromIneq( 0,-1, 0, "y ≥ 0"),
+  ],
+  "Empty (contradiction)": [
+    hpFromIneq( 1, 0, 1, "x ≤ 1"),
+    hpFromIneq(-1, 0,-3, "x ≥ 3"),
+    hpFromIneq( 0, 1, 4, "y ≤ 4"),
+  ],
+};
+
+// bounding box half-planes (large) — keep unbounded regions finite
+function boxHPs() {
+  const B = 9.5;
+  return [
+    hpFromIneq(-1, 0, B, "box x≥-B"),
+    hpFromIneq( 1, 0, B, "box x≤B"),
+    hpFromIneq( 0,-1, B, "box y≥-B"),
+    hpFromIneq( 0, 1, B, "box y≤B"),
+  ];
+}
+
+// ---------- state ----------
+const state = {
+  scenarioName: "Bounded box (rectangle)",
+  sorted: [],       // half-planes incl. box, sorted by angle
+  idx: 0,           // next half-plane to process
+  dq: [],           // current deque (active half-planes)
+  pops: 0,
+  region: [],       // current polygon corners
+  kind: "—",
+  running: false, paused: false, stopped: false,
+  speedMs: 600, done: false,
+  highlight: null,  // {kind:'add'|'popBack'|'popFront', hp, idx}
+};
+
+const els = {
+  board:    document.getElementById("board"),
+  dequeStrip: document.getElementById("dequeStrip"),
+  info:     document.getElementById("info"),
+  log:      document.getElementById("log"),
+  speed:    document.getElementById("speed"),
+  scenario: document.getElementById("scenario"),
+  statIdx:  document.getElementById("statIdx"),
+  statTotal:document.getElementById("statTotal"),
+  statDq:   document.getElementById("statDq"),
+  statPops: document.getElementById("statPops"),
+  statCorners: document.getElementById("statCorners"),
+  statKind: document.getElementById("statKind"),
+  toast:    document.getElementById("toast"),
+};
+
+// ---------- helpers ----------
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function pauseGate() { while (state.paused && !state.stopped) await sleep(60); }
+async function wait() { await pauseGate(); if (state.stopped) throw new Error("__stop__"); await sleep(state.speedMs); }
+
+function showToast(msg) {
+  els.toast.textContent = msg; els.toast.classList.add("show");
+  setTimeout(() => els.toast.classList.remove("show"), 1600);
+}
+function log(msg, klass = "") {
+  const d = new Date();
+  const t = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, "0")).join(":");
+  const div = document.createElement("div");
+  div.className = "entry " + klass;
+  div.innerHTML = `<span class="ts">[${t}]</span>${msg}`;
+  els.log.appendChild(div); els.log.scrollTop = els.log.scrollHeight;
+}
+function info(text, kind) {
+  els.info.innerHTML = text;
+  els.info.className = "info-bar" + (kind ? " " + kind : "");
+}
+
+// ---------- compute the current region polygon from the deque ----------
+function regionFromDeque(dq) {
+  // close + cleanup similar to the real algorithm
+  let q = dq.slice();
+  while (q.length >= 3 && hpOut(q[0], ...corner(q[q.length-1], q[q.length-2]))) q.pop();
+  while (q.length >= 3 && hpOut(q[q.length-1], ...corner(q[0], q[1]))) q.shift();
+  if (q.length < 3) return { poly: [], kind: "EMPTY" };
+  const poly = [];
+  let onBox = false;
+  for (let i = 0; i < q.length; i++) {
+    const p = hpInter(q[i], q[(i + 1) % q.length]);
+    if (!p) continue;
+    if (Math.abs(p.x) > 9 || Math.abs(p.y) > 9) onBox = true;
+    poly.push(p);
+  }
+  if (poly.length < 3) return { poly: [], kind: "EMPTY" };
+  return { poly, kind: onBox ? "UNBOUNDED" : "BOUNDED" };
+}
+function corner(a, b) { const p = hpInter(a, b); return p ? [p.x, p.y] : [1e18, 1e18]; }
+
+// ---------- drawing ----------
+function shadePolygon(svg, pts, fill, stroke, op) {
+  if (pts.length < 3) return;
+  const poly = document.createElementNS(SVG_NS, "polygon");
+  poly.setAttribute("points", pts.map(p => `${wx(p.x)},${wy(p.y)}`).join(" "));
+  poly.setAttribute("fill", fill);
+  poly.setAttribute("fill-opacity", op);
+  poly.setAttribute("stroke", stroke);
+  poly.setAttribute("stroke-width", "2");
+  svg.appendChild(poly);
+}
+
+// shade the allowed half of a half-plane within the world box, as a big polygon
+function allowedPolygon(h) {
+  // clip the world rectangle to the half-plane (Sutherland-Hodgman)
+  let poly = [
+    { x: WORLD.minX, y: WORLD.minY }, { x: WORLD.maxX, y: WORLD.minY },
+    { x: WORLD.maxX, y: WORLD.maxY }, { x: WORLD.minX, y: WORLD.maxY },
+  ];
+  const out = [];
+  const inside = (p) => !hpOut(h, p.x, p.y);
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i], nxt = poly[(i + 1) % poly.length];
+    const ci = inside(cur), ni = inside(nxt);
+    if (ci) out.push(cur);
+    if (ci !== ni) {
+      // intersect segment cur-nxt with the boundary line of h
+      const segDx = nxt.x - cur.x, segDy = nxt.y - cur.y;
+      const den = cross(h.dx, h.dy, segDx, segDy);
+      if (Math.abs(den) > 1e-12) {
+        const t = cross(h.dx, h.dy, h.px - cur.x, h.py - cur.y) / den;
+        out.push({ x: cur.x + segDx * t, y: cur.y + segDy * t });
+      }
+    }
+  }
+  return out;
+}
+
+function drawBoardBoundaryLine(svg, h, color, width) {
+  // draw the boundary line of h across the whole world box
+  const len = 40;
+  const x1 = h.px - h.dx * len, y1 = h.py - h.dy * len;
+  const x2 = h.px + h.dx * len, y2 = h.py + h.dy * len;
+  const line = document.createElementNS(SVG_NS, "line");
+  line.setAttribute("x1", wx(x1)); line.setAttribute("y1", wy(y1));
+  line.setAttribute("x2", wx(x2)); line.setAttribute("y2", wy(y2));
+  line.setAttribute("stroke", color); line.setAttribute("stroke-width", width);
+  svg.appendChild(line);
+}
+
+function render() {
+  const svg = els.board;
+  svg.innerHTML = "";
+
+  // grid axes
+  const ax = document.createElementNS(SVG_NS, "line");
+  ax.setAttribute("x1", wx(WORLD.minX)); ax.setAttribute("y1", wy(0));
+  ax.setAttribute("x2", wx(WORLD.maxX)); ax.setAttribute("y2", wy(0));
+  ax.setAttribute("stroke", "#30363d"); ax.setAttribute("stroke-width", "1");
+  svg.appendChild(ax);
+  const ay = document.createElementNS(SVG_NS, "line");
+  ay.setAttribute("x1", wx(0)); ay.setAttribute("y1", wy(WORLD.minY));
+  ay.setAttribute("x2", wx(0)); ay.setAttribute("y2", wy(WORLD.maxY));
+  ay.setAttribute("stroke", "#30363d"); ay.setAttribute("stroke-width", "1");
+  svg.appendChild(ay);
+
+  // the new half-plane being processed: shade allowed side (orange) + line (blue)
+  if (state.highlight && state.highlight.hp) {
+    const h = state.highlight.hp;
+    shadePolygon(svg, allowedPolygon(h), "#ffa657", "#ffa657", 0.12);
+    drawBoardBoundaryLine(svg, h, "#58a6ff", 2.5);
+  }
+
+  // current feasible region (green)
+  const { poly, kind } = regionFromDeque(state.dq);
+  state.region = poly; state.kind = state.done ? kind : (kind === "EMPTY" ? "building" : kind);
+  shadePolygon(svg, poly, "#3fb950", "#3fb950", 0.30);
+
+  // region corners (purple dots)
+  for (const p of poly) {
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("cx", wx(p.x)); c.setAttribute("cy", wy(p.y));
+    c.setAttribute("r", 4); c.setAttribute("fill", "#bc8cff");
+    c.setAttribute("stroke", "#fff"); c.setAttribute("stroke-width", 1);
+    svg.appendChild(c);
+  }
+
+  drawDeque();
+  els.statIdx.textContent = state.idx;
+  els.statTotal.textContent = state.sorted.length;
+  els.statDq.textContent = state.dq.length;
+  els.statPops.textContent = state.pops;
+  els.statCorners.textContent = poly.length;
+  els.statKind.textContent = state.done ? kind : "building";
+}
+
+function drawDeque() {
+  els.dequeStrip.innerHTML = "";
+  if (state.dq.length === 0) { els.dequeStrip.innerHTML = '<span class="empty-note">empty</span>'; return; }
+  state.dq.forEach((h, i) => {
+    const span = document.createElement("div");
+    let cls = "dq-item";
+    if (i === 0) cls += " front";
+    else if (i === state.dq.length - 1) cls += " back";
+    span.className = cls;
+    const deg = (hpAngle(h) * 180 / Math.PI).toFixed(0);
+    span.textContent = `${h.label} @${deg}°`;
+    els.dequeStrip.appendChild(span);
+  });
+}
+
+// ---------- one step: process one half-plane ----------
+async function processOne() {
+  if (state.idx >= state.sorted.length) {
+    // finalize
+    const { poly, kind } = regionFromDeque(state.dq);
+    state.done = true;
+    render();
+    if (kind === "EMPTY") {
+      info(`Done. The half-planes have <b>no common point</b> — the region is <code>EMPTY</code>.`, "empty");
+      log("done — EMPTY region", "empty");
+    } else if (kind === "UNBOUNDED") {
+      info(`Done. The feasible region is <code>UNBOUNDED</code> (an edge touches the bounding box).`, "unbound");
+      log(`done — UNBOUNDED region, ${poly.length} corners`, "done");
+    } else {
+      info(`Done. Bounded feasible region with <code>${poly.length}</code> corners.`, "bounded");
+      log(`done — BOUNDED region, ${poly.length} corners`, "done");
+    }
+    return false;
+  }
+
+  const h = state.sorted[state.idx];
+  state.highlight = { kind: "add", hp: h, idx: state.idx };
+  render();
+  const deg = (hpAngle(h) * 180 / Math.PI).toFixed(0);
+  info(`Add half-plane <code>${h.label}</code> (angle ${deg}°). Shade its allowed side (orange); blue is its boundary line.`);
+  log(`add ${h.label} @${deg}°`, "add");
+  await wait();
+
+  // skip parallel (same angle) as the previous deque entry
+  if (state.dq.length > 0 && Math.abs(hpAngle(state.dq[state.dq.length - 1]) - hpAngle(h)) < 1e-9) {
+    info(`<code>${h.label}</code> is <b>parallel</b> to the deque back — keep the tighter one, skip the rest.`);
+    log(`parallel skip ${h.label}`, "pop");
+    state.idx++;
+    state.highlight = null;
+    render();
+    await wait();
+    return true;
+  }
+
+  // pop back while new plane excludes the back corner
+  while (state.dq.length >= 2) {
+    const c = hpInter(state.dq[state.dq.length - 1], state.dq[state.dq.length - 2]);
+    if (c && hpOut(h, c.x, c.y)) {
+      const removed = state.dq.pop();
+      state.pops++;
+      render();
+      info(`Back corner <code>(${c.x.toFixed(1)}, ${c.y.toFixed(1)})</code> is now <b>outside</b> ${h.label} → pop <code>${removed.label}</code> from the back.`);
+      log(`pop back ${removed.label}`, "pop");
+      await wait();
+    } else break;
+  }
+  // pop front while new plane excludes the front corner (wrap-around)
+  while (state.dq.length >= 2) {
+    const c = hpInter(state.dq[0], state.dq[1]);
+    if (c && hpOut(h, c.x, c.y)) {
+      const removed = state.dq.shift();
+      state.pops++;
+      render();
+      info(`Front corner <code>(${c.x.toFixed(1)}, ${c.y.toFixed(1)})</code> is outside ${h.label} → pop <code>${removed.label}</code> from the <b>front</b> (the chain wrapped past 180°).`);
+      log(`pop front ${removed.label}`, "pop");
+      await wait();
+    } else break;
+  }
+
+  state.dq.push(h);
+  state.idx++;
+  state.highlight = null;
+  render();
+  info(`Push <code>${h.label}</code> on the back. The green feasible region now reflects all constraints so far.`);
+  await wait();
+  return true;
+}
+
+// ---------- drivers ----------
+async function doStep() {
+  if (state.running) { showToast("Already running…"); return; }
+  if (state.done) { showToast("Finished. Reset to restart."); return; }
+  state.running = true; state.stopped = false; state.paused = false;
+  try { await processOne(); }
+  catch (e) { if (e.message !== "__stop__") console.error(e); }
+  finally { state.running = false; }
+}
+async function doRun() {
+  if (state.running) { showToast("Already running…"); return; }
+  if (state.done) { showToast("Finished. Reset to restart."); return; }
+  state.running = true; state.stopped = false; state.paused = false;
+  log("run: animating to completion", "add");
+  try { let more = true; while (more && !state.stopped) more = await processOne(); }
+  catch (e) { if (e.message !== "__stop__") console.error(e); else info("Paused/stopped."); }
+  finally { state.running = false; }
+}
+function doReset() {
+  state.stopped = true; state.paused = false;
+  setTimeout(() => { initScenario(state.scenarioName); }, 80);
+}
+
+// ---------- scenario init ----------
+function initScenario(name) {
+  state.scenarioName = name;
+  const planes = SCENARIOS[name].slice();
+  const all = planes.concat(boxHPs());
+  all.sort((a, b) => {
+    const da = hpAngle(a), db = hpAngle(b);
+    if (Math.abs(da - db) < 1e-9) return cross(a.dx, a.dy, b.px - a.px, b.py - a.py) < 0 ? -1 : 1;
+    return da - db;
+  });
+  state.sorted = all;
+  state.idx = 0; state.dq = []; state.pops = 0; state.region = [];
+  state.kind = "—"; state.done = false; state.stopped = false; state.paused = false;
+  state.highlight = null;
+  render();
+  info(`Scenario: <b>${name}</b>. ${planes.length} user half-planes + 4 bounding-box planes, sorted by angle. Press <code>Step</code> or <code>Run</code>.`);
+  log(`scenario "${name}" — ${all.length} half-planes (incl. box)`, "add");
+}
+
+// ---------- wiring ----------
+document.getElementById("btnStep").addEventListener("click", doStep);
+document.getElementById("btnRun").addEventListener("click", doRun);
+document.getElementById("btnPause").addEventListener("click", () => {
+  if (!state.running) return;
+  state.paused = !state.paused;
+  info(state.paused ? "Paused. Press <code>Pause</code> again or <code>Step</code> to resume." : "Resumed.");
+});
+document.getElementById("btnReset").addEventListener("click", doReset);
+els.speed.addEventListener("input", (e) => { state.speedMs = 1620 - Number(e.target.value); });
+els.scenario.addEventListener("change", () => {
+  if (state.running) { showToast("Wait for the run to finish"); els.scenario.value = state.scenarioName; return; }
+  initScenario(els.scenario.value);
+});
+
+// ---------- init ----------
+function init() {
+  els.scenario.innerHTML = Object.keys(SCENARIOS).map(n => `<option value="${n}">${n}</option>`).join("");
+  state.speedMs = 1620 - Number(els.speed.value);
+  initScenario("Bounded box (rectangle)");
+  log("Half-plane intersection visualizer ready.", "done");
+}
+init();
+</script>
+</body>
+</html>
