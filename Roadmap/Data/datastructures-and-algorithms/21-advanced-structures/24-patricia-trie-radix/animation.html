@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PATRICIA Trie / Radix Tree — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.8rem;color:var(--blue);margin-bottom:4px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:16px;text-align:center;max-width:840px;font-size:.92rem}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.op{color:var(--green);border-color:var(--green)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.badge.lpm{color:var(--orange);border-color:var(--orange)}
+.input-control,.controls{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+input[type=text]{padding:8px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;font-size:.95rem;width:180px}
+input[type=text]:focus{outline:none;border-color:var(--blue)}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);border-radius:6px;cursor:pointer;font-size:.92rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+button.lpm{border-color:var(--orange);color:var(--orange)}
+button.lpm:hover:not(:disabled){background:var(--orange);color:var(--bg)}
+.speed-control{display:flex;align-items:center;gap:8px;margin-bottom:14px;color:var(--muted);font-size:.85rem}
+input[type=range]{width:140px;accent-color:var(--blue)}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 20px;display:flex;gap:22px;flex-wrap:wrap;justify-content:center;width:100%;max-width:1180px;margin-bottom:14px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.stat-value.save{color:var(--green)}
+.layout{display:grid;grid-template-columns:1fr 260px;gap:14px;width:100%;max-width:1180px;margin-bottom:14px}
+@media(max-width:820px){.layout{grid-template-columns:1fr}}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:18px;min-height:420px;overflow:auto}
+.side-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px;overflow-y:auto;max-height:480px}
+.side-panel h3{color:var(--blue);font-size:.9rem;margin-bottom:8px}
+.word-item{font-family:monospace;padding:3px 6px;border-radius:4px;font-size:.88rem}
+.word-item:nth-child(even){background:var(--bg)}
+.word-item.lpmhit{color:var(--orange);font-weight:700}
+svg{display:block;margin:0 auto}
+.node circle{fill:var(--bg);stroke:var(--blue);stroke-width:2;transition:all .25s}
+.node.terminal circle{fill:rgba(63,185,80,.16);stroke:var(--green)}
+.node.path circle{stroke:var(--yellow);stroke-width:3.5}
+.node.found circle{fill:var(--green);stroke:var(--green)}
+.node.notfound circle{fill:var(--red);stroke:var(--red)}
+.node.split circle{fill:rgba(188,140,255,.25);stroke:var(--purple);stroke-width:3.5}
+.node.lpm circle{fill:var(--orange);stroke:var(--orange)}
+.node text{fill:var(--text);text-anchor:middle;dominant-baseline:central;font-family:monospace;font-size:.8rem;font-weight:700}
+.node.found text,.node.notfound text,.node.lpm text{fill:var(--bg)}
+.edge{stroke:var(--border);stroke-width:1.6;fill:none}
+.edge.path{stroke:var(--yellow);stroke-width:3}
+.edge.split{stroke:var(--purple);stroke-width:3}
+.edge-label{fill:var(--muted);font-family:monospace;font-size:.78rem;text-anchor:middle;font-weight:600}
+.edge-label.path{fill:var(--yellow)}
+.edge-label.split{fill:var(--purple)}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1180px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);margin-bottom:6px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6;min-height:2.4em}
+.step-info .hl{color:var(--yellow);font-weight:700}
+.step-info .ok{color:var(--green);font-weight:700}
+.step-info .bad{color:var(--red);font-weight:700}
+.step-info .sp{color:var(--purple);font-weight:700}
+.step-info .or{color:var(--orange);font-weight:700}
+.bigo{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1180px;margin-bottom:14px}
+.bigo h3{color:var(--blue);margin-bottom:8px;font-size:.95rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600}
+td.c{font-family:monospace;color:var(--green);font-weight:700}
+td.c.warn{color:var(--yellow)}
+.log{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1180px;max-height:160px;overflow-y:auto}
+.log h3{color:var(--blue);margin-bottom:6px;font-size:.95rem}
+.log-entry{font-family:monospace;font-size:.8rem;padding:2px 0;color:var(--muted);border-bottom:1px solid rgba(48,54,61,.5)}
+.log-entry .tag{color:var(--blue);font-weight:700}
+.legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;font-size:.78rem}
+.legend-item{display:flex;align-items:center;gap:6px}
+.legend-color{width:14px;height:14px;border-radius:4px;border:1px solid var(--border)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:8px;text-align:center;max-width:860px}
+</style>
+</head>
+<body>
+<h1>PATRICIA Trie / Radix Tree</h1>
+<p class="subtitle">A trie with single-child chains compressed into string-labeled edges. Insert splits an edge where keys diverge; longest-prefix match (LPM) descends to the deepest matching stored key — the operation behind IP routing.</p>
+
+<div class="badges">
+<span class="badge op">Insert / Search / LPM: O(L)</span>
+<span class="badge space">Nodes: O(N) (&le; 2N&minus;1)</span>
+<span class="badge lpm">Longest-prefix match</span>
+</div>
+
+<div class="input-control">
+<input type="text" id="keyIn" placeholder="key e.g. romane" value="romane">
+<button onclick="doInsert()">Insert</button>
+<button onclick="doSearch()">Search</button>
+<button class="lpm" onclick="doLPM()">Longest prefix</button>
+<button class="secondary" onclick="resetTree()">&#8635; Reset</button>
+<button class="secondary" onclick="demo()">Load demo</button>
+</div>
+
+<div class="controls">
+<button class="secondary" onclick="stepAnim()" id="stepBtn">Step &raquo;</button>
+<button class="secondary" onclick="playAnim()" id="playBtn">&#9654; Play</button>
+</div>
+
+<div class="speed-control">
+<span>Slow</span>
+<input type="range" id="speed" min="1" max="10" value="5">
+<span>Fast</span>
+</div>
+
+<div class="legend">
+<div class="legend-item"><span class="legend-color" style="background:var(--bg);border-color:var(--blue)"></span>Internal</div>
+<div class="legend-item"><span class="legend-color" style="background:rgba(63,185,80,.16);border-color:var(--green)"></span>Terminal (stored key)</div>
+<div class="legend-item"><span class="legend-color" style="background:var(--bg);border-color:var(--yellow)"></span>On path</div>
+<div class="legend-item"><span class="legend-color" style="background:var(--green)"></span>Found</div>
+<div class="legend-item"><span class="legend-color" style="background:var(--red)"></span>Diverged</div>
+<div class="legend-item"><span class="legend-color" style="background:rgba(188,140,255,.25);border-color:var(--purple)"></span>New split node</div>
+<div class="legend-item"><span class="legend-color" style="background:var(--orange)"></span>LPM answer</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Keys</div><div class="stat-value" id="sKeys">0</div></div>
+<div><div class="stat-label">Radix nodes</div><div class="stat-value" id="sNodes">1</div></div>
+<div><div class="stat-label">Plain-trie nodes</div><div class="stat-value" id="sPlain">1</div></div>
+<div><div class="stat-label">Saved</div><div class="stat-value save" id="sSaved">0%</div></div>
+<div><div class="stat-label">Last op</div><div class="stat-value" id="sOp">&ndash;</div></div>
+</div>
+
+<div class="layout">
+<div class="canvas-container" id="canvas"></div>
+<div class="side-panel">
+  <h3>Stored keys (sorted)</h3>
+  <div id="words"></div>
+</div>
+</div>
+
+<div class="info-panel">
+<h3>Trace</h3>
+<div class="step-info" id="info">Insert keys to build the radix tree. Each edge is labeled with a whole string; inserting a diverging key <span class="sp">splits</span> an edge. Try Search and Longest&nbsp;prefix.</div>
+</div>
+
+<div class="bigo">
+<h3>Complexity</h3>
+<table>
+<tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+<tr><td>Insert (with split)</td><td class="c">O(L)</td><td>&le; 2 new nodes per insert</td></tr>
+<tr><td>Search</td><td class="c">O(L)</td><td>independent of key count N</td></tr>
+<tr><td>StartsWith</td><td class="c">O(L)</td><td>prefix may end mid-edge</td></tr>
+<tr><td>Delete (with merge)</td><td class="c">O(L)</td><td>fuse single-child node back</td></tr>
+<tr><td>Longest-prefix match</td><td class="c">O(L)</td><td>IP routing operation</td></tr>
+<tr><td>Total nodes</td><td class="c">O(N)</td><td>&le; 2N&minus;1, key-length independent</td></tr>
+<tr><td>Total space</td><td class="c warn">O(N + chars)</td><td>vs O(chars&times;&Sigma;) for plain trie</td></tr>
+</table>
+</div>
+
+<div class="log">
+<h3>Operation log</h3>
+<div id="logBox"></div>
+</div>
+
+<p class="footer-note">Canonical use: longest-prefix match for IP routing (Linux kernel <code>fib_trie</code>, BSD radix). Also: in-memory DB indexes (Adaptive Radix Tree in DuckDB / HyPer), HTTP routers (Go httprouter, chi), and Ethereum's Merkle-Patricia trie. Builds on the plain trie (09-trees/05-trie).</p>
+
+<script>
+// ===== Radix tree model =====
+let idc = 0;
+function newNode(label){ return {id:++idc, label:label||"", ch:new Map(), end:false}; }
+let root = newNode("");
+
+let pathSet = new Set();      // node ids on the current path
+let edgePath = new Set();     // child ids whose incoming edge is highlighted (path)
+let splitId = -1;             // a node created by the last split
+let edgeSplit = new Set();    // child ids whose edge is part of the split
+let finalCls = null;          // 'found' | 'notfound' | null
+let lastNodeId = -1;          // final node hit during search
+let lpmId = -1;               // node that is the LPM answer
+
+// step-based animation queue
+let animQueue = [];
+let animTimer = null;
+
+function cpl(a,b){ let n=Math.min(a.length,b.length),i=0; while(i<n&&a[i]===b[i])i++; return i; }
+
+// Plain insert (no animation) for demo/reset bulk loads.
+function insertPlain(key){
+  let n=root;
+  while(true){
+    if(key===""){ n.end=true; return; }
+    if(!n.ch.has(key[0])){ const leaf=newNode(key); leaf.end=true; n.ch.set(key[0],leaf); return; }
+    const c=n.ch.get(key[0]);
+    const k=cpl(c.label,key);
+    if(k===c.label.length){ key=key.slice(k); n=c; continue; }
+    const s=newNode(c.label.slice(0,k));
+    c.label=c.label.slice(k);
+    s.ch.set(c.label[0],c);
+    n.ch.set(key[0],s);
+    if(k===key.length){ s.end=true; }
+    else{ const rest=key.slice(k); const leaf=newNode(rest); leaf.end=true; s.ch.set(rest[0],leaf); }
+    return;
+  }
+}
+
+function clearHi(){ pathSet=new Set(); edgePath=new Set(); edgeSplit=new Set(); splitId=-1; finalCls=null; lastNodeId=-1; lpmId=-1; }
+
+// ===== counting / collection =====
+function countNodes(n){ let c=1; for(const v of n.ch.values()) c+=countNodes(v); return c; }
+function countKeys(n){ let c=n.end?1:0; for(const v of n.ch.values()) c+=countKeys(v); return c; }
+function plainTrieNodes(n){ let total=1; for(const v of n.ch.values()){ total+= v.label.length + plainTrieNodes(v) - 1; } return total; }
+function collect(n,prefix,out){ if(n.end) out.push(prefix); const keys=[...n.ch.keys()].sort(); for(const k of keys){ const c=n.ch.get(k); collect(c,prefix+c.label,out);} }
+
+// ===== layout =====
+function layout(n,depth,col,map){
+  if(n.ch.size===0){ map.set(n.id,{x:col,d:depth}); return col+1; }
+  const keys=[...n.ch.keys()].sort();
+  let cur=col;
+  for(const k of keys){ cur=layout(n.ch.get(k),depth+1,cur,map); }
+  const first=map.get(n.ch.get(keys[0]).id).x;
+  const last=map.get(n.ch.get(keys[keys.length-1]).id).x;
+  map.set(n.id,{x:(first+last)/2,d:depth});
+  return cur;
+}
+
+function render(){
+  const c=document.getElementById('canvas');
+  const map=new Map();
+  const total=layout(root,0,0,map);
+  const maxD=Math.max(0,...[...map.values()].map(v=>v.d));
+  const W=Math.max(620,total*92), H=Math.max(380,(maxD+1)*92);
+  const sx=x=> total<=1 ? W/2 : 36+x*(W-72)/(total-1);
+  const sy=d=> 38+d*(H-66)/Math.max(1,maxD);
+
+  let edges='',labels='',nodes='';
+  function walk(n){
+    const p=map.get(n.id);
+    const keys=[...n.ch.keys()].sort();
+    for(const k of keys){
+      const child=n.ch.get(k);
+      const cp=map.get(child.id);
+      let cls='edge';
+      if(edgeSplit.has(child.id)) cls='edge split';
+      else if(edgePath.has(child.id)) cls='edge path';
+      let lcls='edge-label';
+      if(edgeSplit.has(child.id)) lcls='edge-label split';
+      else if(edgePath.has(child.id)) lcls='edge-label path';
+      const x1=sx(p.x),y1=sy(p.d),x2=sx(cp.x),y2=sy(cp.d);
+      edges+=`<line class="${cls}" x1="${x1}" y1="${y1+18}" x2="${x2}" y2="${y2-18}"/>`;
+      labels+=`<text class="${lcls}" x="${(x1+x2)/2}" y="${(y1+y2)/2}">"${child.label}"</text>`;
+      walk(child);
+    }
+  }
+  walk(root);
+
+  function ndr(n){
+    const p=map.get(n.id);
+    let cls='node';
+    if(n.end) cls+=' terminal';
+    if(pathSet.has(n.id)) cls+=' path';
+    if(n.id===splitId) cls+=' split';
+    if(n.id===lpmId) cls+=' lpm';
+    if(finalCls && n.id===lastNodeId){
+      if(finalCls==='found') cls+=' found';
+      else if(finalCls==='notfound') cls+=' notfound';
+    }
+    const label = n===root ? '&middot;' : (n.end?'&#9679;':'&#9675;');
+    nodes+=`<g class="${cls}"><circle cx="${sx(p.x)}" cy="${sy(p.d)}" r="18"/><text x="${sx(p.x)}" y="${sy(p.d)}">${label}</text></g>`;
+    for(const v of n.ch.values()) ndr(v);
+  }
+  ndr(root);
+  c.innerHTML=`<svg width="${W}" height="${H+20}">${edges}${labels}${nodes}</svg>`;
+  updateStats();
+}
+
+function updateStats(){
+  const rn=countNodes(root), pl=plainTrieNodes(root);
+  document.getElementById('sKeys').textContent=countKeys(root);
+  document.getElementById('sNodes').textContent=rn;
+  document.getElementById('sPlain').textContent=pl;
+  const saved = pl>0 ? Math.round((1-rn/pl)*100) : 0;
+  document.getElementById('sSaved').textContent=(saved>0?saved:0)+'%';
+  const all=[]; collect(root,'',all);
+  document.getElementById('words').innerHTML = all.length
+    ? all.map(w=>`<div class="word-item ${(''+document.getElementById('words').dataset.lpm)===w?'lpmhit':''}">${w}</div>`).join('')
+    : '<div style="color:var(--muted);font-size:.85rem">(empty)</div>';
+}
+
+function log(tag,msg){
+  const box=document.getElementById('logBox');
+  const e=document.createElement('div');
+  e.className='log-entry';
+  e.innerHTML=`<span class="tag">${tag}</span> ${msg}`;
+  box.insertBefore(e,box.firstChild);
+  while(box.children.length>40) box.removeChild(box.lastChild);
+}
+function setInfo(html){ document.getElementById('info').innerHTML=html; }
+function speedMs(){ return 1100 - document.getElementById('speed').value*95; }
+
+// ===== animated insert (builds a step queue) =====
+function buildInsertSteps(key){
+  const steps=[]; let n=root; let spelled="";
+  while(true){
+    steps.push({type:'visit',node:n.id,spelled,msg:`At node spelling <span class="hl">"${spelled}"</span>; remaining key <span class="hl">"${key}"</span>.`});
+    if(key===""){
+      steps.push({type:'mark',node:n.id,msg:`Key consumed. Mark this node <span class="ok">terminal</span>.`,apply:()=>{n.end=true;}});
+      break;
+    }
+    if(!n.ch.has(key[0])){
+      const leaf=newNode(key); leaf.end=true; const head=key[0]; const nn=n;
+      steps.push({type:'leaf',msg:`No child for '<span class="hl">${key[0]}</span>'. Attach leaf edge "<span class="ok">${key}</span>".`,
+        apply:()=>{ nn.ch.set(head,leaf); }, newId:leaf.id});
+      break;
+    }
+    const c=n.ch.get(key[0]);
+    const k=cpl(c.label,key);
+    if(k===c.label.length){
+      steps.push({type:'follow',child:c.id,msg:`Edge "<span class="hl">${c.label}</span>" fully matches. Descend.`});
+      spelled+=c.label; key=key.slice(k); n=c; continue;
+    }
+    // split
+    const head=key[0]; const parent=n;
+    const shared=c.label.slice(0,k);
+    steps.push({type:'split',child:c.id,msg:`Edge "<span class="hl">${c.label}</span>" diverges at position ${k}. <span class="sp">SPLIT</span> into "<span class="sp">${shared}</span>" + "${c.label.slice(k)}".`,
+      apply:()=>{
+        const s=newNode(shared);
+        c.label=c.label.slice(k);
+        s.ch.set(c.label[0],c);
+        parent.ch.set(head,s);
+        if(k===key.length){ s.end=true; }
+        else{ const rest=key.slice(k); const leaf=newNode(rest); leaf.end=true; s.ch.set(rest[0],leaf); }
+        splitId=s.id; edgeSplit=new Set([c.id]); for(const v of s.ch.values()) edgeSplit.add(v.id);
+      }});
+    break;
+  }
+  return steps;
+}
+
+function runSteps(steps,auto){
+  clearHi();
+  animQueue=steps.slice();
+  if(auto){ playAnim(); } else { stepAnim(); }
+}
+
+function stepAnim(){
+  if(animTimer){ clearTimeout(animTimer); animTimer=null; document.getElementById('playBtn').innerHTML='&#9654; Play'; }
+  if(animQueue.length===0){ return; }
+  const s=animQueue.shift();
+  applyStep(s);
+}
+function playAnim(){
+  if(animTimer){ clearTimeout(animTimer); animTimer=null; document.getElementById('playBtn').innerHTML='&#9654; Play'; return; }
+  document.getElementById('playBtn').innerHTML='&#10073;&#10073; Pause';
+  const tick=()=>{
+    if(animQueue.length===0){ document.getElementById('playBtn').innerHTML='&#9654; Play'; animTimer=null; return; }
+    const s=animQueue.shift(); applyStep(s);
+    animTimer=setTimeout(tick,speedMs());
+  };
+  tick();
+}
+
+function applyStep(s){
+  if(s.type==='visit'){ pathSet.add(s.node); }
+  else if(s.type==='follow'){ edgePath.add(s.child); pathSet.add(s.child); }
+  else if(s.type==='leaf'){ if(s.apply) s.apply(); }
+  else if(s.type==='mark'){ if(s.apply) s.apply(); }
+  else if(s.type==='split'){ if(s.apply) s.apply(); }
+  if(s.msg) setInfo(s.msg);
+  render();
+}
+
+// ===== handlers =====
+function doInsert(){
+  const w=document.getElementById('keyIn').value.trim().toLowerCase();
+  document.getElementById('words').dataset.lpm='';
+  clearHi();
+  document.getElementById('sOp').textContent='insert "'+w+'"';
+  log('INSERT', '"'+w+'"');
+  const steps=buildInsertSteps(w);
+  runSteps(steps,true);
+}
+
+function doSearch(){
+  const w=document.getElementById('keyIn').value.trim().toLowerCase();
+  document.getElementById('words').dataset.lpm='';
+  clearHi();
+  pathSet=new Set([root.id]);
+  let n=root, key=w, ok=true;
+  while(key!==""){
+    if(!n.ch.has(key[0])){ ok=false; break; }
+    const c=n.ch.get(key[0]); const k=cpl(c.label,key);
+    if(k<c.label.length){ ok=false; lastNodeId=c.id; break; }
+    edgePath.add(c.id); pathSet.add(c.id); lastNodeId=c.id;
+    key=key.slice(k); n=c;
+  }
+  document.getElementById('sOp').textContent='search "'+w+'"';
+  if(ok && n.end){ finalCls='found'; lastNodeId=n.id; setInfo(`<span class="ok">FOUND</span> "${w}" is a stored key (terminal node).`); log('SEARCH','"'+w+'" → found'); }
+  else if(!ok){ finalCls='notfound'; setInfo(`<span class="bad">NOT FOUND</span> "${w}" — an edge diverged before the key was consumed.`); log('SEARCH','"'+w+'" → not found'); }
+  else { lastNodeId=n.id; setInfo(`"${w}" is a <span class="hl">prefix only</span> (node reached but not terminal).`); log('SEARCH','"'+w+'" → prefix only'); }
+  render();
+}
+
+function doLPM(){
+  const w=document.getElementById('keyIn').value.trim().toLowerCase();
+  clearHi();
+  pathSet=new Set([root.id]);
+  let n=root, key=w, best=null, bestId=-1, spelled="";
+  while(true){
+    if(n.end){ best=spelled; bestId=n.id; }
+    if(key===""){ break; }
+    if(!n.ch.has(key[0])) break;
+    const c=n.ch.get(key[0]); const k=cpl(c.label,key);
+    if(k<c.label.length) break;
+    edgePath.add(c.id); pathSet.add(c.id);
+    spelled+=c.label; key=key.slice(k); n=c;
+  }
+  lpmId=bestId;
+  document.getElementById('words').dataset.lpm=(best===null?'':best);
+  document.getElementById('sOp').textContent='LPM "'+w+'"';
+  if(best!==null){ setInfo(`<span class="or">LONGEST PREFIX</span> of "${w}" is "<span class="or">${best}</span>" — the deepest stored key on the descent path. This is exactly IP routing's most-specific match.`); log('LPM','"'+w+'" → "'+best+'"'); }
+  else { setInfo(`<span class="bad">NO STORED PREFIX</span> of "${w}". (Add an empty-string key to act as a default route.)`); log('LPM','"'+w+'" → none'); }
+  render();
+}
+
+function resetTree(){
+  root=newNode(""); idc=1; clearHi();
+  document.getElementById('words').dataset.lpm='';
+  document.getElementById('sOp').textContent='reset';
+  document.getElementById('logBox').innerHTML='';
+  setInfo('Empty radix tree. Insert keys to build it.');
+  log('RESET','tree cleared');
+  render();
+}
+
+function demo(){
+  root=newNode(""); idc=1; clearHi();
+  document.getElementById('words').dataset.lpm='';
+  ['romane','romanus','romulus','rubens','ruber','rubicon','rubicundus'].forEach(insertPlain);
+  document.getElementById('sOp').textContent='demo';
+  setInfo('Demo loaded: 7 keys, <span class="hl">13</span> radix nodes (a plain trie would need ~50). Try LPM on "rubicund" or insert "rom" to split the "rom" edge.');
+  log('DEMO','romane, romanus, romulus, rubens, ruber, rubicon, rubicundus');
+  render();
+}
+
+// init
+demo();
+</script>
+</body>
+</html>
