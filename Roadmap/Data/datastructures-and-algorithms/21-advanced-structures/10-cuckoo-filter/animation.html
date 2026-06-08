@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuckoo Filter — Visual Animation</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6rem; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 18px; font-size: 0.9rem; }
+
+  .badges { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .badge { background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+           padding: 4px 14px; font-size: 0.8rem; color: var(--muted); }
+  .badge b { color: var(--green); }
+
+  .container { max-width: 1180px; margin: 0 auto; display: grid;
+               grid-template-columns: 1fr 340px; gap: 18px; }
+  @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border);
+           border-radius: 10px; padding: 16px; margin-bottom: 18px; }
+  .panel h3 { color: var(--blue); margin-bottom: 12px; font-size: 1rem; }
+
+  /* controls */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type="text"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 10px; border-radius: 6px; width: 130px; font-family: inherit;
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--blue); }
+  button {
+    background: var(--green); color: #06210e; border: none; padding: 7px 14px;
+    border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.85rem;
+    font-weight: 600; transition: filter 0.2s;
+  }
+  button:hover { filter: brightness(1.12); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.blue { background: var(--blue); color: #04203f; }
+  button.red  { background: var(--red);  color: #2a0707; }
+  button.grey { background: var(--border); color: var(--text); }
+  .speed { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 0.85rem; }
+  .speed input[type=range] { accent-color: var(--blue); }
+
+  /* buckets */
+  .buckets { display: flex; flex-direction: column; gap: 6px; }
+  .bucket-row { display: flex; align-items: center; gap: 8px; }
+  .bidx { width: 34px; text-align: right; color: var(--muted); font-size: 0.8rem; flex-shrink: 0; font-family: 'Courier New', monospace; }
+  .slots { display: flex; gap: 5px; }
+  .slot {
+    width: 56px; height: 38px; border: 1px solid var(--border); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: #21262d; font-family: 'Courier New', monospace; font-size: 0.85rem;
+    color: var(--text); transition: all 0.3s ease; position: relative;
+  }
+  .slot.empty { color: #3a414a; }
+  .slot.cand   { border-color: var(--blue);   box-shadow: 0 0 0 2px rgba(88,166,255,0.35); }
+  .slot.insert { background: var(--green); color: #06210e; border-color: var(--green); }
+  .slot.evict  { background: var(--orange); color: #2a1500; border-color: var(--orange); }
+  .slot.found  { background: var(--green); color: #06210e; border-color: var(--green); box-shadow: 0 0 10px var(--green); }
+  .slot.scan   { background: var(--yellow); color: #241a00; border-color: var(--yellow); }
+  .slot.del    { background: var(--red); color: #2a0707; border-color: var(--red); }
+  .bucket-row.active .bidx { color: var(--blue); font-weight: bold; }
+
+  /* info / hash display */
+  .hashbox { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+             padding: 10px; font-family: 'Courier New', monospace; font-size: 0.82rem;
+             line-height: 1.7; min-height: 92px; }
+  .hashbox .k { color: var(--purple); }
+  .hashbox .v { color: var(--green); }
+  .hashbox .a { color: var(--orange); }
+
+  .info { font-family: 'Courier New', monospace; font-size: 0.88rem; line-height: 1.6; min-height: 48px; }
+  .info .hl { color: var(--yellow); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th, td { border: 1px solid var(--border); padding: 5px 7px; text-align: center; }
+  th { color: var(--muted); font-weight: 600; }
+  td.good { color: var(--green); }
+
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 0.85rem; }
+  .stat { color: var(--muted); }
+  .stat b { color: var(--blue); font-size: 1.05rem; }
+
+  .log { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+         padding: 8px; height: 170px; overflow-y: auto; font-family: 'Courier New', monospace;
+         font-size: 0.78rem; line-height: 1.5; }
+  .log div { padding: 1px 0; border-bottom: 1px solid #1d2128; }
+  .log .ok { color: var(--green); }
+  .log .warn { color: var(--yellow); }
+  .log .err { color: var(--red); }
+  .log .nfo { color: var(--muted); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0; font-size: 0.78rem; }
+  .legend span { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+  <h1>Cuckoo Filter</h1>
+  <p class="subtitle">Fingerprints in buckets &middot; two candidate buckets &middot; cuckoo kick-out relocation &middot; lookup &middot; delete</p>
+
+  <div class="badges">
+    <div class="badge">Lookup <b>O(1)</b></div>
+    <div class="badge">Delete <b>O(1)</b></div>
+    <div class="badge">Insert <b>O(1) amortized</b></div>
+    <div class="badge">FPR <b>&asymp; 2b / 2^f</b></div>
+    <div class="badge">i2 = i1 XOR hash(f)</div>
+  </div>
+
+  <div class="container">
+    <!-- LEFT: visualization -->
+    <div>
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="controls">
+          <input type="text" id="itemInput" placeholder="item (e.g. apple)" value="apple">
+          <button onclick="doInsert()">Insert</button>
+          <button class="blue" onclick="doLookup()">Lookup</button>
+          <button class="red"  onclick="doDelete()">Delete</button>
+          <button class="grey" onclick="randomInsert()">Random Insert</button>
+          <button class="grey" onclick="resetFilter()">Reset</button>
+        </div>
+        <div class="speed">
+          <label>Speed</label>
+          <span>slow</span>
+          <input type="range" id="speed" min="1" max="10" value="6">
+          <span>fast</span>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--blue)"></i>candidate bucket</span>
+          <span><i class="sw" style="background:var(--green)"></i>insert / found</span>
+          <span><i class="sw" style="background:var(--orange)"></i>evicted (kick-out)</span>
+          <span><i class="sw" style="background:var(--yellow)"></i>scanning</span>
+          <span><i class="sw" style="background:var(--red)"></i>delete</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Hash Trace</h3>
+        <div class="hashbox" id="hashbox">Insert, look up, or delete an item to see how its fingerprint and two candidate buckets are computed.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Buckets (each holds b = 4 fingerprints; 0 = empty)</h3>
+        <div class="stats">
+          <span class="stat">items: <b id="stCount">0</b></span>
+          <span class="stat">capacity: <b id="stCap">0</b></span>
+          <span class="stat">load: <b id="stLoad">0%</b></span>
+          <span class="stat">kicks (last): <b id="stKicks">0</b></span>
+        </div>
+        <div class="buckets" id="buckets"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: side panel -->
+    <div>
+      <div class="panel">
+        <h3>Last Operation</h3>
+        <div class="info" id="info">Ready. The filter starts empty.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Load Factor &amp; FPR</h3>
+        <table>
+          <tr><th>fingerprint bits f</th><th>FPR &asymp; 2b/2^f (b=4)</th></tr>
+          <tr><td>8</td><td>3.1%</td></tr>
+          <tr><td>10</td><td>0.78%</td></tr>
+          <tr><td>12</td><td>0.20%</td></tr>
+          <tr><td>16</td><td>0.012%</td></tr>
+        </table>
+        <table style="margin-top:10px">
+          <tr><th>bucket size b</th><th>max load factor</th></tr>
+          <tr><td>1</td><td>~50%</td></tr>
+          <tr><td>2</td><td>~84%</td></tr>
+          <tr><td class="good">4</td><td class="good">~95%</td></tr>
+          <tr><td>8</td><td>~98%</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>Operation Log</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ===== CONFIG =====
+const NUM_BUCKETS = 8;     // power of two
+const BUCKET_SIZE = 4;
+const FP_BITS     = 8;     // 8-bit fingerprints -> FPR ~3%
+const MAX_KICKS   = 50;    // small for visualization
+
+let buckets = [];          // buckets[i] = array of BUCKET_SIZE bytes (0 = empty)
+let count = 0;
+let busy = false;
+let lastKicks = 0;
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function speedMs(){ return 1100 - document.getElementById('speed').value*100; }
+
+// ---- simple deterministic string hash (32-bit) ----
+function hash32(str){
+  let h = 0x811c9dc5 >>> 0;            // FNV-1a
+  for (let i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  // extra mix
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d) >>> 0; h ^= h >>> 12;
+  return h >>> 0;
+}
+
+function fingerprint(h){
+  let f = h & ((1<<FP_BITS)-1);
+  return f === 0 ? 1 : f;             // 0 reserved for empty
+}
+function indexFor(h){ return (h >>> 16) & (NUM_BUCKETS-1); }
+function altIndex(i, f){
+  const hf = hash32('fp:' + f);
+  return (i ^ indexFor(hf)) & (NUM_BUCKETS-1);
+}
+
+function initFilter(){
+  buckets = [];
+  for (let i=0;i<NUM_BUCKETS;i++) buckets.push(new Array(BUCKET_SIZE).fill(0));
+  count = 0; lastKicks = 0;
+}
+
+// ===== RENDER =====
+function render(highlights){
+  highlights = highlights || {};   // key "i:s" -> className
+  const activeRows = highlights._rows || {};
+  const el = document.getElementById('buckets');
+  let html = '';
+  for (let i=0;i<NUM_BUCKETS;i++){
+    const rowCls = activeRows[i] ? 'bucket-row active' : 'bucket-row';
+    html += `<div class="${rowCls}"><div class="bidx">b${i}</div><div class="slots">`;
+    for (let s=0;s<BUCKET_SIZE;s++){
+      const v = buckets[i][s];
+      const extra = highlights[i+':'+s] || '';
+      const cls = 'slot ' + (v===0 ? 'empty ' : '') + extra;
+      html += `<div class="${cls}">${v===0 ? '·' : v}</div>`;
+    }
+    html += '</div></div>';
+  }
+  el.innerHTML = html;
+
+  document.getElementById('stCount').textContent = count;
+  document.getElementById('stCap').textContent = NUM_BUCKETS*BUCKET_SIZE;
+  const load = count/(NUM_BUCKETS*BUCKET_SIZE)*100;
+  document.getElementById('stLoad').textContent = load.toFixed(0)+'%';
+  document.getElementById('stKicks').textContent = lastKicks;
+}
+
+function setInfo(msg){ document.getElementById('info').innerHTML = msg; }
+function setHash(item, h, f, i1, i2){
+  document.getElementById('hashbox').innerHTML =
+    `item        = <span class="k">"${item}"</span>\n` +
+    `hash(item)  = <span class="v">0x${h.toString(16).padStart(8,'0')}</span>\n` +
+    `fingerprint = <span class="v">${f}</span>  (${FP_BITS}-bit)\n` +
+    `i1 = hash >> 16 &amp; (m-1)        = <span class="a">b${i1}</span>\n` +
+    `i2 = i1 XOR hash(fp) &amp; (m-1)   = <span class="a">b${i2}</span>`;
+}
+
+let logCount = 0;
+function addLog(msg, cls){
+  logCount++;
+  const log = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = cls||'nfo';
+  d.textContent = `${logCount.toString().padStart(2,'0')}  ${msg}`;
+  log.insertBefore(d, log.firstChild);
+}
+
+function bucketHas(i, f){ return buckets[i].indexOf(f) !== -1; }
+function freeSlot(i){ return buckets[i].indexOf(0); }
+
+// ===== INSERT (with animated kick-out) =====
+async function doInsert(){
+  if (busy) return;
+  const item = document.getElementById('itemInput').value.trim();
+  if (!item){ return; }
+  busy = true; lastKicks = 0;
+  const h = hash32(item), f = fingerprint(h);
+  let i1 = indexFor(h), i2 = altIndex(i1, f);
+  setHash(item, h, f, i1, i2);
+  setInfo(`Insert <span class="hl">"${item}"</span> &rarr; fp <span class="hl">${f}</span>, candidates b${i1} &amp; b${i2}`);
+
+  // highlight candidates
+  render({_rows:{[i1]:1,[i2]:1}, ...candHL(i1), ...candHL(i2)});
+  await sleep(speedMs());
+
+  // try i1 then i2
+  for (const i of [i1, i2]){
+    const s = freeSlot(i);
+    if (s !== -1){
+      buckets[i][s] = f; count++;
+      render({[i+':'+s]:'insert'});
+      addLog(`insert "${item}" fp=${f} -> b${i} slot ${s}`, 'ok');
+      setInfo(`Placed fp <span class="hl">${f}</span> in b${i} (had a free slot).`);
+      await sleep(speedMs());
+      render(); busy=false; return;
+    }
+  }
+
+  // both full -> kick out
+  addLog(`both buckets full -> cuckoo kick-out begins`, 'warn');
+  setInfo(`Both b${i1} and b${i2} are full. Starting <span class="hl">cuckoo relocation</span>...`);
+  let i = Math.random()<0.5 ? i1 : i2;
+  let carry = f;
+  for (let n=0;n<MAX_KICKS;n++){
+    lastKicks = n+1;
+    const s = Math.floor(Math.random()*BUCKET_SIZE);
+    const victim = buckets[i][s];
+    buckets[i][s] = carry;
+    // show eviction
+    render({[i+':'+s]:'evict'});
+    addLog(`kick #${n+1}: place ${carry} in b${i}[${s}], evict ${victim}`, 'warn');
+    setInfo(`Kick #${n+1}: put <span class="hl">${carry}</span> into b${i}, evict <span class="hl">${victim}</span>, relocate it.`);
+    await sleep(speedMs());
+    carry = victim;
+    i = altIndex(i, carry);
+    const fs = freeSlot(i);
+    if (fs !== -1){
+      buckets[i][fs] = carry; count++;
+      render({[i+':'+fs]:'insert'});
+      addLog(`relocated ${carry} -> b${i} slot ${fs}; insert done`, 'ok');
+      setInfo(`Evicted fp <span class="hl">${carry}</span> found room in b${i}. Insert complete after ${lastKicks} kick(s).`);
+      await sleep(speedMs());
+      render(); busy=false; return;
+    } else {
+      render({_rows:{[i]:1}, ...candHL(i)});
+      await sleep(Math.max(120, speedMs()/2));
+    }
+  }
+  // failure
+  addLog(`INSERT FAILED after ${MAX_KICKS} kicks (table too full)`, 'err');
+  setInfo(`<span style="color:var(--red)">Insert failed</span>: relocation exceeded MaxKicks. The filter is too full &mdash; resize or use a stash.`);
+  render(); busy=false;
+}
+
+function candHL(i){
+  const o = {};
+  for (let s=0;s<BUCKET_SIZE;s++) o[i+':'+s] = 'cand';
+  return o;
+}
+
+// ===== LOOKUP =====
+async function doLookup(){
+  if (busy) return;
+  const item = document.getElementById('itemInput').value.trim();
+  if (!item) return;
+  busy = true;
+  const h = hash32(item), f = fingerprint(h);
+  const i1 = indexFor(h), i2 = altIndex(i1, f);
+  setHash(item, h, f, i1, i2);
+  setInfo(`Lookup <span class="hl">"${item}"</span> &rarr; fp <span class="hl">${f}</span>, scan b${i1} &amp; b${i2}`);
+  render({_rows:{[i1]:1,[i2]:1}, ...candHL(i1), ...candHL(i2)});
+  await sleep(speedMs());
+
+  for (const i of [i1, i2]){
+    for (let s=0;s<BUCKET_SIZE;s++){
+      const hl = {_rows:{[i1]:1,[i2]:1}};
+      hl[i+':'+s] = (buckets[i][s]===f) ? 'found' : 'scan';
+      render(hl);
+      await sleep(Math.max(100, speedMs()/2));
+      if (buckets[i][s]===f){
+        addLog(`lookup "${item}" fp=${f} -> FOUND in b${i}[${s}]`, 'ok');
+        setInfo(`Found fp <span class="hl">${f}</span> in b${i}. Answer: <b style="color:var(--green)">probably present</b>.`);
+        await sleep(speedMs()); render(); busy=false; return;
+      }
+    }
+  }
+  addLog(`lookup "${item}" fp=${f} -> not found`, 'nfo');
+  setInfo(`fp <span class="hl">${f}</span> not in either candidate bucket. Answer: <b style="color:var(--red)">definitely absent</b>.`);
+  await sleep(speedMs()); render(); busy=false;
+}
+
+// ===== DELETE =====
+async function doDelete(){
+  if (busy) return;
+  const item = document.getElementById('itemInput').value.trim();
+  if (!item) return;
+  busy = true;
+  const h = hash32(item), f = fingerprint(h);
+  const i1 = indexFor(h), i2 = altIndex(i1, f);
+  setHash(item, h, f, i1, i2);
+  setInfo(`Delete <span class="hl">"${item}"</span> &rarr; fp <span class="hl">${f}</span>, search b${i1} &amp; b${i2}`);
+  render({_rows:{[i1]:1,[i2]:1}, ...candHL(i1), ...candHL(i2)});
+  await sleep(speedMs());
+
+  for (const i of [i1, i2]){
+    for (let s=0;s<BUCKET_SIZE;s++){
+      if (buckets[i][s]===f){
+        render({[i+':'+s]:'del'});
+        addLog(`delete "${item}" fp=${f} -> removed from b${i}[${s}]`, 'ok');
+        setInfo(`Erased fp <span class="hl">${f}</span> from b${i}[${s}]. Slot is free again.`);
+        await sleep(speedMs());
+        buckets[i][s] = 0; count--;
+        render(); busy=false; return;
+      }
+    }
+  }
+  addLog(`delete "${item}" fp=${f} -> nothing to remove`, 'warn');
+  setInfo(`fp <span class="hl">${f}</span> not present &mdash; nothing deleted. (Only delete items you inserted.)`);
+  await sleep(speedMs()); render(); busy=false;
+}
+
+// ===== helpers =====
+let randCounter = 0;
+function randomInsert(){
+  if (busy) return;
+  document.getElementById('itemInput').value = 'k' + (randCounter++);
+  doInsert();
+}
+function resetFilter(){
+  if (busy) return;
+  initFilter();
+  document.getElementById('log').innerHTML = '';
+  logCount = 0;
+  document.getElementById('hashbox').innerHTML = 'Filter reset. Insert an item to begin.';
+  setInfo('Ready. The filter starts empty.');
+  render();
+  addLog('filter reset (empty)', 'nfo');
+}
+
+// ===== INIT =====
+initFilter();
+render();
+addLog('cuckoo filter ready: 8 buckets x 4 slots, 8-bit fingerprints', 'nfo');
+// seed a few items so the picture is not empty
+(async ()=>{
+  for (const it of ['apple','banana','cherry','date']){
+    document.getElementById('itemInput').value = it;
+    await doInsert();
+    await sleep(150);
+  }
+  document.getElementById('itemInput').value = 'apple';
+})();
+</script>
+</body>
+</html>
