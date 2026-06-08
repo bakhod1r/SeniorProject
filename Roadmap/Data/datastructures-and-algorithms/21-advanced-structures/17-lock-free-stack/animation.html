@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Treiber Lock-Free Stack — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:1.9rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:16px;text-align:center;max-width:820px;font-size:.92rem;line-height:1.5}
+code{background:#22272e;padding:1px 5px;border-radius:4px;color:var(--orange);font-size:.85em}
+.badges{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.lf{color:var(--green);border-color:var(--green)}
+.badge.aba{color:var(--red);border-color:var(--red)}
+.badge.sp{color:var(--blue);border-color:var(--blue)}
+.wrap{width:100%;max-width:1080px;display:flex;flex-direction:column;align-items:center}
+.controls,.scenario,.speed-control{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);
+  border-radius:6px;cursor:pointer;font-size:.92rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.scn{border-color:var(--purple);color:var(--purple)}
+button.scn:hover:not(:disabled){background:var(--purple);color:var(--bg)}
+button.scn.active{background:var(--purple);color:var(--bg)}
+button.danger{border-color:var(--red);color:var(--red)}
+button.danger:hover:not(:disabled){background:var(--red);color:var(--bg)}
+.speed-control label,.speed-control span{color:var(--muted);font-size:.85rem}
+input[type=range]{width:140px;accent-color:var(--blue)}
+input[type=text]{padding:7px 12px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;width:120px;font-size:.9rem}
+input[type=text]:focus{outline:none;border-color:var(--blue)}
+
+.stage{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:22px;
+  width:100%;margin-bottom:16px;min-height:230px;position:relative}
+.lane-label{font-family:monospace;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+
+/* stack render: horizontal nodes head(left) -> ... -> nil */
+.stackrow{display:flex;align-items:center;gap:0;flex-wrap:wrap;min-height:74px}
+.headptr{display:flex;flex-direction:column;align-items:center;margin-right:4px}
+.headptr .lbl{font-family:monospace;font-size:.7rem;color:var(--blue);font-weight:700}
+.headptr .arrow{color:var(--blue);font-size:1.1rem;line-height:1}
+.node{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-width:62px;height:58px;background:var(--bg);border:2px solid var(--border);border-radius:8px;
+  font-family:monospace;position:relative;transition:all .3s}
+.node .val{font-size:1.1rem;font-weight:700;color:var(--text)}
+.node .nid{font-size:.58rem;color:var(--muted);position:absolute;top:3px;left:5px}
+.node.head{border-color:var(--blue);background:rgba(88,166,255,.16)}
+.node.head .val{color:var(--blue)}
+.node.new{border-color:var(--green);background:rgba(63,185,80,.18)}
+.node.new .val{color:var(--green)}
+.node.pop{border-color:var(--red);background:rgba(248,81,73,.18)}
+.node.pop .val{color:var(--red)}
+.node.scan{border-color:var(--yellow);background:rgba(210,153,34,.18)}
+.node.recycled{border-color:var(--orange);background:rgba(255,166,87,.20);border-style:dashed}
+.node.recycled .val{color:var(--orange)}
+.node.freed{opacity:.32;border-style:dashed}
+.arrowseg{color:var(--muted);font-size:1.2rem;margin:0 4px;line-height:1}
+.nilbox{font-family:monospace;color:var(--muted);font-size:.85rem;border:2px dashed var(--border);
+  border-radius:8px;padding:8px 12px;min-width:48px;text-align:center;height:58px;display:flex;align-items:center;justify-content:center}
+
+/* thread tape */
+.threads{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;margin-bottom:16px}
+.tcard{background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:14px}
+.tcard.t1{border-color:rgba(88,166,255,.5)}
+.tcard.t2{border-color:rgba(188,140,255,.5)}
+.tcard h3{font-size:.85rem;font-family:monospace;margin-bottom:8px}
+.tcard.t1 h3{color:var(--blue)}
+.tcard.t2 h3{color:var(--purple)}
+.tcard .line{font-family:monospace;font-size:.82rem;color:var(--muted);line-height:1.7;min-height:1.7em}
+.tcard .line.act{color:var(--text);background:#22272e;border-left:3px solid var(--yellow);padding-left:6px}
+.tcard .reg{font-family:monospace;font-size:.75rem;color:var(--muted);margin-top:6px}
+.tcard .reg b{color:var(--orange)}
+
+.info-panel,.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:15px 20px;width:100%;margin-bottom:16px}
+.info-panel h3{color:var(--blue);margin-bottom:8px;font-size:.95rem}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.6}
+.step-info .hl{color:var(--yellow);font-weight:600}
+.step-info .ok{color:var(--green);font-weight:600}
+.step-info .bad{color:var(--red);font-weight:600}
+.stats{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:12px 20px}
+.stat{text-align:center}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;margin-bottom:16px}
+@media(max-width:760px){.grid2,.threads{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+.bigo-wrap{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px}
+.bigo-wrap h3,.log-wrap h3{color:var(--blue);font-size:.95rem;margin-bottom:10px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase}
+td code{font-size:.85em}
+.c-o1{color:var(--green);font-weight:700}
+.c-amort{color:var(--yellow);font-weight:700}
+.log-wrap{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px 20px}
+.log{font-family:monospace;font-size:.8rem;line-height:1.55;max-height:200px;overflow-y:auto;color:var(--muted)}
+.log .e{padding:2px 0;border-bottom:1px solid #1c2128}
+.log .e.ok{color:var(--green)}
+.log .e.bad{color:var(--red)}
+.log .e.warn{color:var(--yellow)}
+.log .e.t1{color:var(--blue)}
+.log .e.t2{color:var(--purple)}
+.legend{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+.foot{color:var(--muted);font-size:.76rem;margin-top:8px;text-align:center;max-width:820px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>Treiber Lock-Free Stack</h1>
+<p class="subtitle">A concurrent LIFO stack: a singly linked list with an <b>atomic head</b> pointer. <code>push</code> and <code>pop</code> are CAS retry loops. Watch two threads race, a CAS retry, and the classic <b>ABA</b> corruption — then the tagged-pointer fix.</p>
+
+<div class="badges">
+  <span class="badge lf">push: O(1)*</span>
+  <span class="badge lf">pop: O(1)*</span>
+  <span class="badge sp">space: O(n)</span>
+  <span class="badge lf">lock-free</span>
+  <span class="badge aba">ABA hazard</span>
+</div>
+
+<div class="wrap">
+
+  <!-- Scenario selector -->
+  <div class="scenario">
+    <button class="scn active" id="scnRace" onclick="loadScenario('race')">Concurrent Push Race</button>
+    <button class="scn" id="scnRetry" onclick="loadScenario('retry')">CAS Retry</button>
+    <button class="scn danger" id="scnAba" onclick="loadScenario('aba')">ABA Corruption</button>
+    <button class="scn" id="scnTag" onclick="loadScenario('tag')">Tagged-Pointer Fix</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button id="playBtn" onclick="play()">Play</button>
+    <button id="stepBtn" onclick="stepForward()">Step ▸</button>
+    <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+    <button id="resetBtn" onclick="resetScenario()">Reset</button>
+  </div>
+
+  <div class="speed-control">
+    <label>Speed:</label><span>Slow</span>
+    <input type="range" id="speed" min="1" max="10" value="5">
+    <span>Fast</span>
+    <span style="margin-left:12px">Step <b id="stepNum" style="color:var(--text)">0</b>/<b id="stepTot" style="color:var(--text)">0</b></span>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.5);border-color:var(--blue)"></div>head node</div>
+    <div class="legend-item"><div class="legend-color" style="background:rgba(63,185,80,.5);border-color:var(--green)"></div>new (pushing)</div>
+    <div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.5);border-color:var(--red)"></div>popping</div>
+    <div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.5);border-color:var(--yellow)"></div>scanning</div>
+    <div class="legend-item"><div class="legend-color" style="background:rgba(255,166,87,.5);border-color:var(--orange)"></div>recycled addr</div>
+  </div>
+
+  <!-- Stack stage -->
+  <div class="stage">
+    <div class="lane-label">Shared stack — atomic head pointer</div>
+    <div class="stackrow" id="stackrow"></div>
+  </div>
+
+  <!-- Thread tapes -->
+  <div class="threads">
+    <div class="tcard t1">
+      <h3 id="t1title">Thread T1</h3>
+      <div class="line" id="t1l0"></div>
+      <div class="line" id="t1l1"></div>
+      <div class="line" id="t1l2"></div>
+      <div class="reg" id="t1reg"></div>
+    </div>
+    <div class="tcard t2">
+      <h3 id="t2title">Thread T2</h3>
+      <div class="line" id="t2l0"></div>
+      <div class="line" id="t2l1"></div>
+      <div class="line" id="t2l2"></div>
+      <div class="reg" id="t2reg"></div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Stack size</div><div class="stat-value" id="stSize">0</div></div>
+    <div class="stat"><div class="stat-label">Head tag</div><div class="stat-value" id="stTag">0</div></div>
+    <div class="stat"><div class="stat-label">CAS ok</div><div class="stat-value" id="stOk">0</div></div>
+    <div class="stat"><div class="stat-label">CAS retries</div><div class="stat-value" id="stRetry">0</div></div>
+  </div>
+
+  <!-- Info panel -->
+  <div class="info-panel">
+    <h3>What's happening</h3>
+    <div class="step-info" id="info">Pick a scenario above, then press <span class="hl">Play</span> or <span class="hl">Step ▸</span>.</div>
+  </div>
+
+  <!-- Big-O + log -->
+  <div class="grid2">
+    <div class="bigo-wrap">
+      <h3>Complexity</h3>
+      <table>
+        <tr><th>Operation</th><th>Time</th><th>Space</th><th>Note</th></tr>
+        <tr><td><code>push</code></td><td class="c-amort">O(1)*</td><td class="c-o1">O(1)</td><td>1 CAS; * unbounded retries under contention</td></tr>
+        <tr><td><code>pop</code></td><td class="c-amort">O(1)*</td><td class="c-o1">O(1)</td><td>1 CAS; ABA hazard</td></tr>
+        <tr><td><code>peek</code></td><td class="c-o1">O(1)</td><td class="c-o1">O(1)</td><td>single atomic load</td></tr>
+        <tr><td><code>isEmpty</code></td><td class="c-o1">O(1)</td><td class="c-o1">O(1)</td><td><code>head==nil</code></td></tr>
+      </table>
+    </div>
+    <div class="log-wrap">
+      <h3>Operation log</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <p class="foot">Lock-free = the <i>system</i> always makes progress even if a thread stalls (not the same as fast). ABA: <code>head</code> goes A→B→A, so a stale CAS sees the same bits and succeeds wrongly. Fix: a version <b>tag</b> on the head — every successful CAS bumps it, so a recycled pointer carries a fresh tag and the stale CAS fails.</p>
+</div>
+
+<script>
+// ===================== STATE =====================
+let steps = [];
+let idx = 0;
+let timer = null;
+let running = false;
+let scenario = 'race';
+
+function speedMs(){ return 1150 - document.getElementById('speed').value*100; }
+
+// A "step" carries a full snapshot to render:
+//  nodes: [{id,val,cls}]  ordered head->bottom  (cls: ''|'head'|'new'|'pop'|'scan'|'recycled'|'freed')
+//  head:  node id or null (drawn as the head arrow target)
+//  t1/t2: {title, lines:[{txt,act}], reg}
+//  info:  html string
+//  stats: {size,tag,ok,retry}
+//  log:   {txt, cls}  (appended once when reaching this step going forward)
+
+// ===================== SCENARIO BUILDERS =====================
+function N(id,val,cls=''){ return {id,val,cls}; }
+
+function buildRace(){
+  const S=[]; let ok=0,retry=0;
+  const t1=(l,r)=>({title:'T1: push(2)',lines:l,reg:r});
+  const t2=(l,r)=>({title:'T2: push(3)',lines:l,reg:r});
+  // initial: head -> A(1) -> nil
+  S.push({
+    nodes:[N('A',1,'head')], head:'A',
+    t1:t1([{txt:'n := Node(2)',act:0},{txt:'old := head',act:0},{txt:'CAS(head, old, n)',act:0}],'X(2).next = ?'),
+    t2:t2([{txt:'n := Node(3)',act:0},{txt:'old := head',act:0},{txt:'CAS(head, old, n)',act:0}],'Y(3).next = ?'),
+    info:'Start: <span class="hl">head → A(1) → nil</span>. Both threads will push concurrently.',
+    stats:{size:1,tag:0,ok,retry}, log:{txt:'init: head → A(1)',cls:''}
+  });
+  S.push({
+    nodes:[N('A',1,'head'),N('X',2,'new')], head:'A',
+    t1:t1([{txt:'n := Node(2)',act:0},{txt:'old := head  // A',act:1},{txt:'CAS(head, old, n)',act:0}],'X(2).next = A'),
+    t2:t2([{txt:'n := Node(3)',act:0},{txt:'old := head  // A',act:1},{txt:'CAS(head, old, n)',act:0}],'Y(3).next = A'),
+    info:'Both threads read the <span class="hl">same old head = A</span> and link their new node above it. A race is set up.',
+    stats:{size:1,tag:0,ok,retry}, log:{txt:'T1 reads old=A; T2 reads old=A',cls:'warn'}
+  });
+  ok=1;
+  S.push({
+    nodes:[N('X',2,'head'),N('A',1,''),], head:'X',
+    t1:t1([{txt:'n := Node(2)',act:0},{txt:'old := head  // A',act:0},{txt:'CAS(head, A, X) ✓',act:1}],'success — head → X'),
+    t2:t2([{txt:'n := Node(3)',act:0},{txt:'old := head  // A',act:0},{txt:'CAS(head, A, Y)',act:0}],'Y(3).next = A (stale!)'),
+    info:'<span class="ok">T1 wins the CAS</span>: head → X(2) → A(1). T2 still believes old = A.',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T1 CAS(A→X) OK  head → X(2) → A(1)',cls:'t1'}
+  });
+  retry=1;
+  S.push({
+    nodes:[N('X',2,'head'),N('A',1,'')], head:'X',
+    t1:t1([{txt:'return',act:1},{txt:'',act:0},{txt:'',act:0}],'done'),
+    t2:t2([{txt:'old := head  // A',act:0},{txt:'CAS(head, A, Y) ✗',act:1},{txt:'retry…',act:0}],'head is X, not A → fail'),
+    info:'<span class="bad">T2 CAS fails</span> — head is now X, not A. No update lost: T2 will retry with the fresh head.',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T2 CAS(A→Y) FAIL (head moved) → retry',cls:'bad'}
+  });
+  S.push({
+    nodes:[N('X',2,'head'),N('A',1,''),N('Y',3,'new')], head:'X',
+    t1:t1([{txt:'done',act:0},{txt:'',act:0},{txt:'',act:0}],'done'),
+    t2:t2([{txt:'old := head  // X',act:1},{txt:'Y.next = X',act:1},{txt:'CAS(head, X, Y)',act:0}],'Y(3).next = X (fresh!)'),
+    info:'T2 re-reads <span class="hl">old = X</span> and re-links Y.next = X. Now its CAS will target the current head.',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T2 re-reads old=X, re-links Y.next=X',cls:'t2'}
+  });
+  ok=2;
+  S.push({
+    nodes:[N('Y',3,'head'),N('X',2,''),N('A',1,'')], head:'Y',
+    t1:t1([{txt:'done',act:0},{txt:'',act:0},{txt:'',act:0}],'done'),
+    t2:t2([{txt:'CAS(head, X, Y) ✓',act:1},{txt:'return',act:0},{txt:'',act:0}],'success — head → Y'),
+    info:'<span class="ok">T2 retry succeeds</span>: head → Y(3) → X(2) → A(1). Both pushes landed, nothing lost.',
+    stats:{size:3,tag:0,ok,retry}, log:{txt:'T2 CAS(X→Y) OK  head → Y(3) → X(2) → A(1)',cls:'t2'}
+  });
+  return S;
+}
+
+function buildRetry(){
+  const S=[]; let ok=0,retry=0;
+  const t1=(l,r)=>({title:'T1: pop()',lines:l,reg:r});
+  const t2=(l,r)=>({title:'T2: pop()',lines:l,reg:r});
+  S.push({
+    nodes:[N('C',9,'head'),N('B',4,''),N('A',1,'')], head:'C',
+    t1:t1([{txt:'old := head  // C',act:0},{txt:'next := old.next  // B',act:0},{txt:'CAS(head, C, B)',act:0}],''),
+    t2:t2([{txt:'old := head  // C',act:0},{txt:'next := old.next  // B',act:0},{txt:'CAS(head, C, B)',act:0}],''),
+    info:'Two threads both try to pop the top. Start: head → C(9) → B(4) → A(1).',
+    stats:{size:3,tag:0,ok,retry}, log:{txt:'init: head → C(9) → B(4) → A(1)',cls:''}
+  });
+  S.push({
+    nodes:[N('C',9,'head scan'),N('B',4,'scan'),N('A',1,'')], head:'C',
+    t1:t1([{txt:'old := head  // C',act:1},{txt:'next := old.next  // B',act:1},{txt:'CAS(head, C, B)',act:0}],'old=C next=B'),
+    t2:t2([{txt:'old := head  // C',act:1},{txt:'next := old.next  // B',act:1},{txt:'CAS(head, C, B)',act:0}],'old=C next=B'),
+    info:'Both read <span class="hl">old=C, next=B</span>. They are about to race on the same CAS.',
+    stats:{size:3,tag:0,ok,retry}, log:{txt:'T1 & T2 both read old=C, next=B',cls:'warn'}
+  });
+  ok=1;
+  S.push({
+    nodes:[N('B',4,'head'),N('A',1,''),N('C',9,'pop')], head:'B',
+    t1:t1([{txt:'CAS(head, C, B) ✓',act:1},{txt:'return 9',act:0},{txt:'',act:0}],'popped 9'),
+    t2:t2([{txt:'CAS(head, C, B)',act:0},{txt:'…about to fire',act:0},{txt:'',act:0}],'old=C (stale)'),
+    info:'<span class="ok">T1 wins</span>: pops C(9), head → B(4) → A(1).',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T1 CAS(C→B) OK, returns 9',cls:'t1'}
+  });
+  retry=1;
+  S.push({
+    nodes:[N('B',4,'head'),N('A',1,'')], head:'B',
+    t1:t1([{txt:'done (9)',act:0},{txt:'',act:0},{txt:'',act:0}],'done'),
+    t2:t2([{txt:'CAS(head, C, B) ✗',act:1},{txt:'retry…',act:0},{txt:'',act:0}],'head is B, not C → fail'),
+    info:'<span class="bad">T2 CAS fails</span> — head is B now, not C. Safe! T2 retries from the fresh head.',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T2 CAS(C→B) FAIL → retry',cls:'bad'}
+  });
+  ok=2;
+  S.push({
+    nodes:[N('A',1,'head'),N('B',4,'pop')], head:'A',
+    t1:t1([{txt:'done (9)',act:0},{txt:'',act:0},{txt:'',act:0}],'done'),
+    t2:t2([{txt:'old := head // B',act:0},{txt:'CAS(head, B, A) ✓',act:1},{txt:'return 4',act:0}],'popped 4'),
+    info:'<span class="ok">T2 retry succeeds</span>: reads old=B, pops B(4), head → A(1). No element popped twice.',
+    stats:{size:1,tag:0,ok,retry}, log:{txt:'T2 retry: CAS(B→A) OK, returns 4',cls:'t2'}
+  });
+  return S;
+}
+
+function buildAba(){
+  const S=[]; let ok=0,retry=0;
+  const t1=(l,r)=>({title:'T1: pop()  (victim)',lines:l,reg:r});
+  const t2=(l,r)=>({title:'T2: pop,pop,push  (attacker)',lines:l,reg:r});
+  S.push({
+    nodes:[N('A',1,'head'),N('B',4,''),N('C',9,'')], head:'A',
+    t1:t1([{txt:'old := head  // A',act:0},{txt:'next := old.next // B',act:0},{txt:'CAS(head, A, B)',act:0}],''),
+    t2:t2([{txt:'idle',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'No version tag. Start: head → A(1) → B(4) → C(9). T1 begins a pop.',
+    stats:{size:3,tag:0,ok,retry}, log:{txt:'init (NO TAG): head → A → B → C',cls:'warn'}
+  });
+  S.push({
+    nodes:[N('A',1,'head scan'),N('B',4,'scan'),N('C',9,'')], head:'A',
+    t1:t1([{txt:'old := head  // A',act:1},{txt:'next := old.next // B',act:1},{txt:'…PREEMPTED…',act:0}],'old=A next=B (cached)'),
+    t2:t2([{txt:'idle',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'T1 reads <span class="hl">old=A, next=B</span>, then is <span class="bad">preempted</span> — still holding old=A, next=B.',
+    stats:{size:3,tag:0,ok,retry}, log:{txt:'T1 reads old=A,next=B then is preempted',cls:'t1'}
+  });
+  S.push({
+    nodes:[N('B',4,'head'),N('C',9,''),N('A',1,'pop')], head:'B',
+    t1:t1([{txt:'old=A next=B  (held)',act:0},{txt:'',act:0},{txt:'',act:0}],'frozen'),
+    t2:t2([{txt:'pop() → 1',act:1},{txt:'free(A)',act:1},{txt:'',act:0}],'head → B; A freed'),
+    info:'T2 pops A and <span class="bad">frees</span> it. head → B(4) → C(9). A is now reclaimable.',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T2 pop→1, free(A). head → B → C',cls:'t2'}
+  });
+  S.push({
+    nodes:[N('C',9,'head'),N('B',4,'pop'),N('A',1,'freed')], head:'C',
+    t1:t1([{txt:'old=A next=B  (held)',act:0},{txt:'',act:0},{txt:'',act:0}],'frozen — next=B stale'),
+    t2:t2([{txt:'pop() → 4',act:1},{txt:'free(B)',act:1},{txt:'',act:0}],'head → C; B freed'),
+    info:'T2 pops B and <span class="bad">frees</span> it too. head → C(9). T1\'s cached next=B now points at <b>freed</b> memory.',
+    stats:{size:1,tag:0,ok,retry}, log:{txt:'T2 pop→4, free(B). head → C',cls:'t2'}
+  });
+  S.push({
+    nodes:[N('A',7,'head recycled'),N('C',9,'')], head:'A',
+    t1:t1([{txt:'old=A next=B  (held)',act:0},{txt:'',act:0},{txt:'',act:0}],'old=A — bits match again!'),
+    t2:t2([{txt:'push(7)',act:1},{txt:'alloc REUSES A addr',act:1},{txt:'',act:0}],'head → A*(7) → C'),
+    info:'T2 pushes 7; the allocator <span class="bad">recycles A\'s address</span>. head → A*(7) → C. The pointer bits equal "A" again — the <b>A→B→A</b> pattern.',
+    stats:{size:2,tag:0,ok,retry}, log:{txt:'T2 push(7) reuses A address. head bits = A again (ABA!)',cls:'warn'}
+  });
+  ok=1;
+  S.push({
+    nodes:[N('B',4,'head freed'),N('?','?','pop')], head:'B',
+    t1:t1([{txt:'CAS(head, A, B) ✓ ✗',act:1},{txt:'returns 1; head→B',act:0},{txt:'CORRUPT',act:0}],'matched bits, wrong node'),
+    t2:t2([{txt:'(head → A*(7) → C)',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'<span class="bad">T1\'s CAS(head, A, B) WRONGLY SUCCEEDS</span> — bits match A. head is set to <b>B, which was freed</b>. The stack is corrupted: 7 is lost, B is resurrected.',
+    stats:{size:1,tag:0,ok,retry}, log:{txt:'T1 CAS(A→B) WRONGLY SUCCEEDS — head → freed B. STACK CORRUPT',cls:'bad'}
+  });
+  return S;
+}
+
+function buildTag(){
+  const S=[]; let ok=0,retry=0;
+  const t1=(l,r)=>({title:'T1: pop()  (victim)',lines:l,reg:r});
+  const t2=(l,r)=>({title:'T2: pop,pop,push  (attacker)',lines:l,reg:r});
+  S.push({
+    nodes:[N('A',1,'head'),N('B',4,''),N('C',9,'')], head:'A',
+    t1:t1([{txt:'(old,t) := head // (A,5)',act:0},{txt:'next := A.next // B',act:0},{txt:'CAS((A,5),(B,6))',act:0}],''),
+    t2:t2([{txt:'idle',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'Same scenario, now with a <span class="ok">version tag</span>. head = (A, tag 5).',
+    stats:{size:3,tag:5,ok,retry}, log:{txt:'init (TAGGED): head=(A,5) → B → C',cls:'ok'}
+  });
+  S.push({
+    nodes:[N('A',1,'head scan'),N('B',4,'scan'),N('C',9,'')], head:'A',
+    t1:t1([{txt:'(old,t)=(A,5)',act:1},{txt:'next := B',act:1},{txt:'…PREEMPTED…',act:0}],'holds (A,5), next=B'),
+    t2:t2([{txt:'idle',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'T1 reads <span class="hl">(A, tag 5)</span> and next=B, then is preempted.',
+    stats:{size:3,tag:5,ok,retry}, log:{txt:'T1 reads (A,5), next=B; preempted',cls:'t1'}
+  });
+  S.push({
+    nodes:[N('C',9,'head'),N('A',1,'recycled')], head:'C',
+    t1:t1([{txt:'holds (A,5)',act:0},{txt:'',act:0},{txt:'',act:0}],'tag held = 5'),
+    t2:t2([{txt:'pop→1 (tag→6)',act:1},{txt:'pop→4 (tag→7)',act:1},{txt:'push7 reuse A (tag→8)',act:1}],'head=(A,8)'),
+    info:'T2 pops twice and pushes a recycled A. Each success <span class="ok">bumps the tag</span>: now head = (A, <b>tag 8</b>).',
+    stats:{size:2,tag:8,ok,retry}, log:{txt:'T2 ops bump tag 5→6→7→8. head=(A,8)',cls:'t2'}
+  });
+  retry=1;
+  S.push({
+    nodes:[N('A',7,'head recycled'),N('C',9,'')], head:'A',
+    t1:t1([{txt:'CAS((A,5),(B,6)) ✗',act:1},{txt:'tag 5 ≠ 8 → FAIL',act:0},{txt:'retry…',act:0}],'pointer A matches, tag differs'),
+    t2:t2([{txt:'done — head=(A,8)',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'<span class="ok">T1\'s CAS FAILS safely</span>: the pointer bits match A, but tag 5 ≠ 8. The stale CAS is rejected — <b>ABA defeated</b>. T1 retries from the fresh head.',
+    stats:{size:2,tag:8,ok,retry}, log:{txt:'T1 CAS((A,5)→…) FAILS: tag 5≠8 — ABA defeated ✓',cls:'ok'}
+  });
+  ok=1;
+  S.push({
+    nodes:[N('C',9,'head')], head:'C',
+    t1:t1([{txt:'(old,t)=(A,8)',act:0},{txt:'next := C',act:0},{txt:'CAS((A,8),(C,9)) ✓',act:1}],'fresh read, correct'),
+    t2:t2([{txt:'done',act:0},{txt:'',act:0},{txt:'',act:0}],''),
+    info:'<span class="ok">T1 retry succeeds correctly</span> on the real current head (A,8), popping 7. The stack stays consistent. Tagging restored correctness.',
+    stats:{size:1,tag:9,ok,retry}, log:{txt:'T1 retry CAS((A,8)→(C,9)) OK, pops 7. Consistent ✓',cls:'ok'}
+  });
+  return S;
+}
+
+const BUILDERS={race:buildRace,retry:buildRetry,aba:buildAba,tag:buildTag};
+
+// ===================== RENDER =====================
+function renderStack(step){
+  const row=document.getElementById('stackrow');
+  let html='<div class="headptr"><span class="lbl">head</span><span class="arrow">▼</span></div>';
+  // head pointer column then nodes left->right
+  if(step.nodes.length===0){
+    html+='<div class="nilbox">nil</div>';
+  }else{
+    step.nodes.forEach((n,i)=>{
+      html+=`<div class="node ${n.cls}"><span class="nid">${n.id}</span><span class="val">${n.val}</span></div>`;
+      if(i<step.nodes.length-1) html+='<span class="arrowseg">→</span>';
+    });
+    html+='<span class="arrowseg">→</span><div class="nilbox">nil</div>';
+  }
+  row.innerHTML=html;
+}
+
+function renderThread(prefix,t){
+  document.getElementById(prefix+'title').textContent=t.title;
+  for(let i=0;i<3;i++){
+    const el=document.getElementById(prefix+'l'+i);
+    const line=t.lines[i]||{txt:'',act:0};
+    el.textContent=line.txt;
+    el.className='line'+(line.act?' act':'');
+  }
+  document.getElementById(prefix+'reg').innerHTML = t.reg?('<b>reg:</b> '+t.reg):'';
+}
+
+function renderStep(step){
+  renderStack(step);
+  renderThread('t1',step.t1);
+  renderThread('t2',step.t2);
+  document.getElementById('info').innerHTML=step.info;
+  document.getElementById('stSize').textContent=step.stats.size;
+  document.getElementById('stTag').textContent=step.stats.tag;
+  document.getElementById('stOk').textContent=step.stats.ok;
+  document.getElementById('stRetry').textContent=step.stats.retry;
+  document.getElementById('stepNum').textContent=idx+1;
+}
+
+function pushLog(step){
+  if(!step.log) return;
+  const log=document.getElementById('log');
+  const e=document.createElement('div');
+  e.className='e '+(step.log.cls||'');
+  e.textContent=`[${idx+1}] ${step.log.txt}`;
+  log.appendChild(e);
+  log.scrollTop=log.scrollHeight;
+}
+
+// ===================== CONTROLS =====================
+function loadScenario(name){
+  scenario=name;
+  document.querySelectorAll('.scn').forEach(b=>b.classList.remove('active'));
+  ({race:'scnRace',retry:'scnRetry',aba:'scnAba',tag:'scnTag'})[name] &&
+    document.getElementById(({race:'scnRace',retry:'scnRetry',aba:'scnAba',tag:'scnTag'})[name]).classList.add('active');
+  resetScenario();
+}
+
+function resetScenario(){
+  pause();
+  steps=BUILDERS[scenario]();
+  idx=0;
+  document.getElementById('log').innerHTML='';
+  document.getElementById('stepTot').textContent=steps.length;
+  renderStep(steps[0]);
+  pushLog(steps[0]);
+}
+
+function stepForward(){
+  if(idx<steps.length-1){
+    idx++;
+    renderStep(steps[idx]);
+    pushLog(steps[idx]);
+  }
+  if(idx>=steps.length-1) pause();
+}
+
+function play(){
+  if(idx>=steps.length-1){ resetScenario(); }
+  running=true;
+  document.getElementById('playBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  run();
+}
+function run(){
+  if(!running) return;
+  if(idx>=steps.length-1){ pause(); return; }
+  stepForward();
+  timer=setTimeout(run,speedMs());
+}
+function pause(){
+  running=false;
+  clearTimeout(timer);
+  document.getElementById('playBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+
+// ===================== INIT =====================
+resetScenario();
+</script>
+</body>
+</html>
