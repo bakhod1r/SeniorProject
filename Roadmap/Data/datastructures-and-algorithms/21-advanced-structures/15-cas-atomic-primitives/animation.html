@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAS &amp; Atomic Primitives — Visual Animation</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{font-size:1.9rem;color:var(--blue);margin-bottom:6px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:16px;text-align:center;max-width:820px}
+.badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;border:1px solid var(--border);background:var(--surface)}
+.badge.ok{color:var(--green);border-color:var(--green)}
+.badge.warn{color:var(--yellow);border-color:var(--yellow)}
+.badge.acc{color:var(--blue);border-color:var(--blue)}
+.controls,.input-control{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:8px 16px;border:2px solid var(--blue);background:transparent;color:var(--blue);
+  border-radius:6px;cursor:pointer;font-size:.92rem;transition:all .2s}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+button.mode.active{background:var(--purple);border-color:var(--purple);color:var(--bg)}
+.speed-control{display:flex;align-items:center;gap:8px;margin-bottom:14px;color:var(--muted);font-size:.85rem}
+.speed-control input[type=range]{width:140px;accent-color:var(--blue)}
+
+.stage{display:grid;grid-template-columns:1fr 130px 1fr;gap:14px;width:100%;max-width:1100px;
+  align-items:stretch;margin-bottom:16px}
+@media(max-width:820px){.stage{grid-template-columns:1fr}}
+.thread-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:16px}
+.thread-panel.t1{border-top:3px solid var(--blue)}
+.thread-panel.t2{border-top:3px solid var(--orange)}
+.thread-panel h3{font-size:.95rem;margin-bottom:10px;font-family:monospace}
+.thread-panel.t1 h3{color:var(--blue)}
+.thread-panel.t2 h3{color:var(--orange)}
+.regline{font-family:monospace;font-size:.85rem;margin:6px 0;color:var(--muted)}
+.regline b{color:var(--text)}
+.phase{display:inline-block;padding:2px 8px;border-radius:8px;font-size:.72rem;font-weight:700;margin-top:6px}
+.phase.idle{background:#21262d;color:var(--muted)}
+.phase.read{background:rgba(88,166,255,.18);color:var(--blue)}
+.phase.compute{background:rgba(210,153,34,.18);color:var(--yellow)}
+.phase.cas-ok{background:rgba(63,185,80,.2);color:var(--green)}
+.phase.cas-fail{background:rgba(248,81,73,.2);color:var(--red)}
+
+.shared{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px}
+.shared .lbl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.cell{margin-top:8px;width:84px;height:84px;display:flex;align-items:center;justify-content:center;
+  font-family:monospace;font-size:1.9rem;font-weight:800;border:3px solid var(--border);
+  border-radius:10px;background:var(--bg);color:var(--text);transition:all .35s}
+.cell.touched{border-color:var(--green);background:rgba(63,185,80,.18);color:var(--green);transform:scale(1.08)}
+.cell.aba{border-color:var(--purple);background:rgba(188,140,255,.18);color:var(--purple)}
+.tagline{margin-top:8px;font-family:monospace;font-size:.72rem;color:var(--purple)}
+
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+  display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:12px 18px;width:100%;max-width:1100px;margin-bottom:14px}
+.stat{text-align:center}
+.stat .k{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:1px}
+.stat .v{font-family:monospace;font-size:1.25rem;font-weight:700}
+.stat .v.b{color:var(--blue)}.stat .v.g{color:var(--green)}.stat .v.r{color:var(--red)}.stat .v.o{color:var(--orange)}
+
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 18px;width:100%;max-width:1100px;margin-bottom:14px}
+.info-panel h3{color:var(--blue);font-size:.95rem;margin-bottom:8px}
+.step-info{font-family:monospace;font-size:.9rem;line-height:1.55}
+.step-info .hl{color:var(--yellow);font-weight:700}
+.step-info .ok{color:var(--green);font-weight:700}
+.step-info .bad{color:var(--red);font-weight:700}
+
+table{border-collapse:collapse;width:100%;max-width:1100px;margin-bottom:14px;font-size:.82rem}
+caption{color:var(--blue);font-weight:600;text-align:left;margin-bottom:6px}
+th,td{border:1px solid var(--border);padding:6px 10px;text-align:left}
+th{background:var(--surface);color:var(--muted)}
+td code{color:var(--orange)}
+
+.legend{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.legend-color{width:14px;height:14px;border-radius:3px;border:2px solid var(--border)}
+
+.log{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 16px;
+  width:100%;max-width:1100px;height:180px;overflow-y:auto;font-family:monospace;font-size:.82rem;line-height:1.5}
+.log .row{padding:2px 0;border-bottom:1px solid #21262d}
+.log .t1{color:var(--blue)}.log .t2{color:var(--orange)}
+.log .ok{color:var(--green)}.log .bad{color:var(--red)}.log .sys{color:var(--muted)}.log .aba{color:var(--purple)}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:10px;text-align:center;max-width:880px}
+</style>
+</head>
+<body>
+<h1>CAS &amp; Atomic Primitives</h1>
+<p class="subtitle">Two threads run the <b>CAS loop</b> — <i>read &rarr; compute &rarr; compare-and-swap &rarr; retry</i> — on one shared variable. Watch one thread <b style="color:var(--green)">succeed</b> and the other <b style="color:var(--red)">fail and retry</b>. Switch to <b style="color:var(--purple)">ABA mode</b> to see a value go A&rarr;B&rarr;A and fool a naive CAS — then enable the version tag to defeat it.</p>
+
+<div class="badges">
+  <span class="badge ok">CAS: O(1) per attempt</span>
+  <span class="badge warn">Loop: O(retries) under contention</span>
+  <span class="badge acc">fetch-add: wait-free</span>
+  <span class="badge acc">CAS loop: lock-free</span>
+</div>
+
+<div class="controls">
+  <button id="modeCounter" class="mode active" onclick="setMode('counter')">Counter (two threads)</button>
+  <button id="modeAba" class="mode" onclick="setMode('aba')">ABA scenario</button>
+</div>
+
+<div class="input-control">
+  <button id="startBtn" onclick="start()">Start</button>
+  <button id="stepBtn" onclick="stepForward()">Step</button>
+  <button id="pauseBtn" onclick="pause()" disabled>Pause</button>
+  <button id="resetBtn" class="secondary" onclick="reset()">Reset</button>
+  <button id="tagBtn" class="secondary" onclick="toggleTag()">Version tag: OFF</button>
+</div>
+
+<div class="speed-control">
+  <span>Slow</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span>Fast</span>
+</div>
+
+<div class="stage">
+  <div class="thread-panel t1" id="panelT1">
+    <h3>Thread A</h3>
+    <div class="regline">old&nbsp;&nbsp;= <b id="t1old">–</b></div>
+    <div class="regline">f(old) = <b id="t1new">–</b></div>
+    <div class="phase idle" id="t1phase">idle</div>
+  </div>
+
+  <div class="shared">
+    <div class="lbl" id="sharedLbl">shared</div>
+    <div class="cell" id="sharedCell">5</div>
+    <div class="tagline" id="tagLine"></div>
+  </div>
+
+  <div class="thread-panel t2" id="panelT2">
+    <h3>Thread B</h3>
+    <div class="regline">old&nbsp;&nbsp;= <b id="t2old">–</b></div>
+    <div class="regline">f(old) = <b id="t2new">–</b></div>
+    <div class="phase idle" id="t2phase">idle</div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="k">Step</div><div class="v b"><span id="stepCur">0</span>/<span id="stepTot">0</span></div></div>
+  <div class="stat"><div class="k">CAS success</div><div class="v g" id="okCount">0</div></div>
+  <div class="stat"><div class="k">CAS retries</div><div class="v r" id="failCount">0</div></div>
+  <div class="stat"><div class="k">Shared value</div><div class="v o" id="valStat">5</div></div>
+</div>
+
+<div class="info-panel">
+  <h3>What is happening</h3>
+  <div class="step-info" id="stepInfo">Press <span class="hl">Start</span> to run the animation, or <span class="hl">Step</span> to advance one micro-step at a time.</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-color" style="border-color:var(--blue);background:rgba(88,166,255,.18)"></div>read</div>
+  <div class="legend-item"><div class="legend-color" style="border-color:var(--yellow);background:rgba(210,153,34,.18)"></div>compute</div>
+  <div class="legend-item"><div class="legend-color" style="border-color:var(--green);background:rgba(63,185,80,.2)"></div>CAS success</div>
+  <div class="legend-item"><div class="legend-color" style="border-color:var(--red);background:rgba(248,81,73,.2)"></div>CAS fail / retry</div>
+  <div class="legend-item"><div class="legend-color" style="border-color:var(--purple);background:rgba(188,140,255,.18)"></div>ABA value</div>
+</div>
+
+<table>
+  <caption>Atomic operation reference</caption>
+  <tr><th>Operation</th><th>Effect (atomic)</th><th>Returns</th><th>Progress</th></tr>
+  <tr><td><code>load</code></td><td>read the value</td><td>value</td><td>wait-free</td></tr>
+  <tr><td><code>store</code></td><td>write the value</td><td>—</td><td>wait-free</td></tr>
+  <tr><td><code>fetch-add(d)</code></td><td>v += d</td><td>old v</td><td>wait-free</td></tr>
+  <tr><td><code>exchange(x)</code></td><td>v = x</td><td>old v</td><td>wait-free</td></tr>
+  <tr><td><code>CAS(exp,new)</code></td><td>if v==exp then v=new</td><td>success?</td><td>—</td></tr>
+  <tr><td><code>CAS loop</code></td><td>read, compute, CAS, retry</td><td>—</td><td>lock-free</td></tr>
+</table>
+
+<div class="info-panel" style="max-width:1100px">
+  <h3>Operation Log</h3>
+  <div class="log" id="log"></div>
+</div>
+
+<p class="footer-note">Counter mode: both threads run <code>for { old=load(); if CAS(old, old+1) break }</code>. Only one CAS per contested value can succeed; the loser re-reads the new value and retries — no increment is ever lost. ABA mode: Thread B changes the value A&rarr;B&rarr;A while Thread A is paused mid-loop; A's CAS then wrongly succeeds because the value <i>looks</i> unchanged. A version tag makes every change unique, so A's stale CAS fails as it should.</p>
+
+<script>
+// ===== STATE =====
+let mode = 'counter';
+let useTag = false;
+let steps = [];
+let idx = 0;
+let running = false;
+let timer = null;
+
+// ===== STEP BUILDERS =====
+// Each step: {shared, tag, t1:{old,new,phase}, t2:{old,new,phase},
+//             cellClass, info, log:{cls,text}, ok, fail}
+function phaseLabel(p){
+  return {idle:'idle',read:'read',compute:'compute','cas-ok':'CAS ✓','cas-fail':'CAS ✗ retry'}[p]||p;
+}
+
+function buildCounter(){
+  // Shared starts at 5. Thread A and B each try to increment via CAS loop.
+  // Interleaving: both read 5; A computes 6, CASes -> ok; B computes 6, CASes -> FAIL;
+  // B re-reads 6, computes 7, CASes -> ok. Final = 7.
+  let s = [];
+  const T1 = {old:'–',new:'–',phase:'idle'};
+  const T2 = {old:'–',new:'–',phase:'idle'};
+  let ok=0, fail=0;
+  const mk=(shared,t1,t2,cell,info,log)=>s.push({
+    shared,tag:null,t1:{...t1},t2:{...t2},cellClass:cell,info,log,ok,fail
+  });
+
+  mk(5,{old:'–',new:'–',phase:'idle'},{old:'–',new:'–',phase:'idle'},'',
+    'Shared variable starts at <span class="hl">5</span>. Both threads will increment it with a CAS loop.',
+    {cls:'sys',text:'shared = 5. Thread A and Thread B both want to do +1.'});
+
+  mk(5,{old:5,new:'–',phase:'read'},{old:'–',new:'–',phase:'idle'},'touched',
+    'Thread A <span class="hl">reads</span> shared &rarr; A.old = 5.',
+    {cls:'t1',text:'A: old = load(shared) = 5'});
+
+  mk(5,{old:5,new:'–',phase:'read'},{old:5,new:'–',phase:'read'},'touched',
+    'Thread B also <span class="hl">reads</span> shared &rarr; B.old = 5. Both hold old=5.',
+    {cls:'t2',text:'B: old = load(shared) = 5'});
+
+  mk(5,{old:5,new:6,phase:'compute'},{old:5,new:'–',phase:'read'},'',
+    'Thread A <span class="hl">computes</span> f(old)=5+1=6.',
+    {cls:'t1',text:'A: desired = old + 1 = 6'});
+
+  mk(5,{old:5,new:6,phase:'compute'},{old:5,new:6,phase:'compute'},'',
+    'Thread B <span class="hl">computes</span> f(old)=5+1=6 (same, based on stale read).',
+    {cls:'t2',text:'B: desired = old + 1 = 6'});
+
+  ok=1;
+  mk(6,{old:5,new:6,phase:'cas-ok'},{old:5,new:6,phase:'compute'},'touched',
+    'Thread A: <span class="ok">CAS(shared, 5, 6) SUCCEEDS</span> — shared was 5. shared = 6.',
+    {cls:'ok',text:'A: CAS(5 -> 6) ✓  shared = 6'});
+
+  fail=1;
+  mk(6,{old:5,new:6,phase:'idle'},{old:5,new:6,phase:'cas-fail'},'',
+    'Thread B: <span class="bad">CAS(shared, 5, 6) FAILS</span> — shared is now 6, not 5. No write. B must retry.',
+    {cls:'bad',text:'B: CAS(5 -> 6) ✗  shared is 6, not 5 — retry'});
+
+  mk(6,{old:5,new:6,phase:'idle'},{old:6,new:'–',phase:'read'},'touched',
+    'Thread B <span class="hl">re-reads</span> inside the loop &rarr; B.old = 6 (fresh!).',
+    {cls:'t2',text:'B: old = load(shared) = 6   (re-read)'});
+
+  mk(6,{old:5,new:6,phase:'idle'},{old:6,new:7,phase:'compute'},'',
+    'Thread B <span class="hl">computes</span> f(old)=6+1=7.',
+    {cls:'t2',text:'B: desired = old + 1 = 7'});
+
+  ok=2;
+  mk(7,{old:5,new:6,phase:'idle'},{old:6,new:7,phase:'cas-ok'},'touched',
+    'Thread B: <span class="ok">CAS(shared, 6, 7) SUCCEEDS</span>. shared = 7.',
+    {cls:'ok',text:'B: CAS(6 -> 7) ✓  shared = 7'});
+
+  mk(7,{old:'–',new:'–',phase:'idle'},{old:'–',new:'–',phase:'idle'},'touched',
+    'Done. Two increments from 5 &rarr; <span class="ok">7</span>. No update lost — the failed CAS forced a clean re-read.',
+    {cls:'sys',text:'final = 7. Both increments counted; 1 retry was needed.'});
+
+  return s;
+}
+
+function buildAba(tagged){
+  // top points at A. Thread A reads head=A (about to CAS top A->next).
+  // Thread B pops A, pops, then re-pushes A (reusing it). top is A again.
+  // Naive: A's CAS(top, A, ...) SUCCEEDS wrongly. With a version tag it FAILS.
+  let s=[];
+  let ok=0, fail=0;
+  const mk=(shared,tag,t1,t2,cell,info,log)=>s.push({
+    shared,tag,t1:{...t1},t2:{...t2},cellClass:cell,info,log,ok,fail
+  });
+
+  mk('A',tagged?1:null,{old:'–',new:'–',phase:'idle'},{old:'–',new:'–',phase:'idle'},'aba',
+    'Shared pointer <span class="hl">top = A</span>'+(tagged?', tag = 1.':' (no version).')+' Thread A is about to pop.',
+    {cls:'sys',text:'top = A'+(tagged?'  (tag=1)':'')});
+
+  mk('A',tagged?1:null,{old:'A',new:'–',phase:'read'},{old:'–',new:'–',phase:'idle'},'aba',
+    'Thread A <span class="hl">reads</span> top &rarr; A.old = A'+(tagged?' (tag=1)':'')+'. Then A is <b>preempted</b>.',
+    {cls:'t1',text:'A: old = load(top) = A'+(tagged?' tag=1':'')+'  ... A preempted'});
+
+  mk('B (was A)',tagged?2:null,{old:'A',new:'–',phase:'idle'},{old:'A',new:'B',phase:'cas-ok'},'',
+    'Thread B pops A &rarr; top = B'+(tagged?', tag bumps to 2.':'.'),
+    {cls:'t2',text:'B: pop A    top = B'+(tagged?'  tag=2':'')});
+
+  mk('(empty/C)',tagged?3:null,{old:'A',new:'–',phase:'idle'},{old:'B',new:'C',phase:'cas-ok'},'',
+    'Thread B pops B too &rarr; top advances'+(tagged?', tag = 3.':'.'),
+    {cls:'t2',text:'B: pop B    top = C'+(tagged?'  tag=3':'')});
+
+  mk('A',tagged?4:null,{old:'A',new:'–',phase:'idle'},{old:'C',new:'A',phase:'cas-ok'},'aba',
+    'Thread B <span class="aba">re-pushes A</span> (reusing the same node) &rarr; top = A again'+(tagged?', but tag = 4.':'. The value LOOKS unchanged to A.'),
+    {cls:'aba',text:'B: push A (reused)    top = A again'+(tagged?'  tag=4':'')});
+
+  if(!tagged){
+    ok=1;
+    mk('?',null,{old:'A',new:'(stale)',phase:'cas-fail'},{old:'–',new:'–',phase:'idle'},'',
+      'Thread A resumes and runs <span class="bad">CAS(top, A, A.next)</span>. top IS A, so it <span class="bad">SUCCEEDS — wrongly!</span> A.next is stale; the stack is now <b>corrupted</b>. This is the ABA bug.',
+      {cls:'bad',text:'A: CAS(top, A, staleNext) ✓ (WRONG!) — ABA corruption'});
+    mk('corrupt',null,{old:'–',new:'–',phase:'idle'},{old:'–',new:'–',phase:'idle'},'',
+      '<span class="bad">Structure corrupted.</span> CAS compared the VALUE (A) and missed that the world changed A&rarr;...&rarr;A. Enable the <span class="hl">version tag</span> and replay.',
+      {cls:'sys',text:'Turn on "Version tag" and press Reset+Start to see the fix.'});
+  } else {
+    fail=1;
+    mk('A',4,{old:'A (tag=1)',new:'–',phase:'cas-fail'},{old:'–',new:'–',phase:'idle'},'aba',
+      'Thread A resumes and runs <span class="ok">CAS(top, (A,tag=1), ...)</span>. top is (A, tag=<b>4</b>) &ne; (A, tag=1), so the CAS <span class="ok">FAILS</span> — exactly as it should. A re-reads and retries safely.',
+      {cls:'ok',text:'A: CAS((A,1) -> ...) ✗  tag is 4, not 1 — ABA defeated ✓'});
+    mk('A',4,{old:'–',new:'–',phase:'idle'},{old:'–',new:'–',phase:'idle'},'aba',
+      '<span class="ok">No corruption.</span> The version tag made every change unique, so the stale CAS could not succeed. This is what <code>AtomicStampedReference</code> / a packed (ptr,tag) buys you.',
+      {cls:'sys',text:'Versioned pointer defeats ABA. Done.'});
+  }
+  return s;
+}
+
+// ===== RENDER =====
+function render(st){
+  document.getElementById('sharedCell').textContent = st.shared;
+  document.getElementById('sharedCell').className = 'cell ' + (st.cellClass||'');
+  document.getElementById('tagLine').textContent = st.tag!=null ? ('tag = '+st.tag) : '';
+
+  setThread('t1',st.t1);
+  setThread('t2',st.t2);
+
+  document.getElementById('stepCur').textContent = idx;
+  document.getElementById('stepTot').textContent = steps.length;
+  document.getElementById('okCount').textContent = st.ok;
+  document.getElementById('failCount').textContent = st.fail;
+  document.getElementById('valStat').textContent = st.shared;
+  document.getElementById('stepInfo').innerHTML = st.info;
+}
+function setThread(prefix,t){
+  document.getElementById(prefix+'old').textContent = t.old;
+  document.getElementById(prefix+'new').textContent = t.new;
+  const ph = document.getElementById(prefix+'phase');
+  ph.className = 'phase '+t.phase;
+  ph.textContent = phaseLabel(t.phase);
+}
+function addLog(log){
+  const el=document.getElementById('log');
+  const row=document.createElement('div');
+  row.className='row '+log.cls;
+  row.textContent='» '+log.text;
+  el.appendChild(row);
+  el.scrollTop=el.scrollHeight;
+}
+
+// ===== CONTROLS =====
+function getDelay(){ return 1150 - document.getElementById('speedSlider').value*100; }
+
+function buildSteps(){
+  steps = mode==='counter' ? buildCounter() : buildAba(useTag);
+  idx = 0;
+  document.getElementById('stepTot').textContent = steps.length;
+}
+
+function start(){
+  if(steps.length===0) buildSteps();
+  if(idx>=steps.length) return;
+  running=true;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('pauseBtn').disabled=false;
+  loop();
+}
+function loop(){
+  if(!running||idx>=steps.length){ pause(); return; }
+  stepForward();
+  timer=setTimeout(loop,getDelay());
+}
+function stepForward(){
+  if(steps.length===0) buildSteps();
+  if(idx>=steps.length) return;
+  const st=steps[idx];
+  idx++;
+  render(st);
+  addLog(st.log);
+  if(idx>=steps.length) pause();
+}
+function pause(){
+  running=false; clearTimeout(timer);
+  document.getElementById('startBtn').disabled=false;
+  document.getElementById('pauseBtn').disabled=true;
+}
+function reset(){
+  pause();
+  document.getElementById('log').innerHTML='';
+  buildSteps();
+  const init = mode==='counter'
+    ? {shared:5,tag:null,t1:{old:'–',new:'–',phase:'idle'},t2:{old:'–',new:'–',phase:'idle'},cellClass:'',ok:0,fail:0,info:'Press <span class="hl">Start</span> to run the CAS loop. Two threads, one shared variable.'}
+    : {shared:'A',tag:useTag?1:null,t1:{old:'–',new:'–',phase:'idle'},t2:{old:'–',new:'–',phase:'idle'},cellClass:'aba',ok:0,fail:0,info:'ABA scenario. '+(useTag?'Version tag is <span class="hl">ON</span> — the bug will be defeated.':'Version tag is <span class="hl">OFF</span> — the naive CAS will be fooled.')};
+  render(init);
+  document.getElementById('stepCur').textContent='0';
+}
+function setMode(m){
+  mode=m;
+  document.getElementById('modeCounter').classList.toggle('active',m==='counter');
+  document.getElementById('modeAba').classList.toggle('active',m==='aba');
+  document.getElementById('sharedLbl').textContent = m==='counter' ? 'shared int' : 'top pointer';
+  document.getElementById('tagBtn').disabled = (m!=='aba');
+  reset();
+}
+function toggleTag(){
+  useTag=!useTag;
+  document.getElementById('tagBtn').textContent='Version tag: '+(useTag?'ON':'OFF');
+  document.getElementById('tagBtn').classList.toggle('mode',useTag);
+  document.getElementById('tagBtn').classList.toggle('active',useTag);
+  if(mode==='aba') reset();
+}
+
+// ===== INIT =====
+document.getElementById('tagBtn').disabled=true;
+reset();
+</script>
+</body>
+</html>
