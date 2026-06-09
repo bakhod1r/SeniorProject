@@ -308,7 +308,7 @@ const uploadDir = "/Users/alex/dev/app/uploads"   // exists only on Alex's lapto
 func callPartner(payload []byte) error {
 	client := &http.Client{Timeout: 5 * time.Second} // same in dev and prod — should it be?
 	req, _ := http.NewRequest("POST", "https://api.partner.com/v1/ingest", bytes.NewReader(payload))
-	req.Header.Set("Authorization", "Bearer sk_live_9aF2bQ7xK") // hard-coded live token!
+	req.Header.Set("Authorization", "Bearer bm9aF2bQ7xK") // hard-coded live token!
 	_, err := client.Do(req)
 	return err
 }
@@ -393,7 +393,7 @@ func callPartner(cfg Config, payload []byte) error {
 
 **Anti-pattern:** Hard Coding (a leaked secret) · **Difficulty:** ★★★ hard · *(process exercise — no single code answer)*
 
-During Exercise 5 you discovered the live token `sk_live_9aF2bQ7xK` was hard-coded — and `git log -S` shows it was committed **eight months ago** and is in dozens of clones and the public-fork history. A junior says, "I removed it from the file and pushed, we're good." You are **not** good. Write the full remediation plan.
+During Exercise 5 you discovered the live token `bm9aF2bQ7xK` was hard-coded — and `git log -S` shows it was committed **eight months ago** and is in dozens of clones and the public-fork history. A junior says, "I removed it from the file and pushed, we're good." You are **not** good. Write the full remediation plan.
 
 **Acceptance criteria**
 - Explain why deleting the line and pushing does **not** fix the exposure.
@@ -410,14 +410,14 @@ During Exercise 5 you discovered the live token `sk_live_9aF2bQ7xK` was hard-cod
 
 **Remediation, in order:**
 
-1. **Rotate first — this is the only step that actually stops the bleeding.** Go to the partner's dashboard, **revoke** `sk_live_9aF2bQ7xK`, and issue a new token. Until the old token is invalidated, nothing else you do matters — the leaked value still works. Deploy the new token via the secrets manager / env (per Exercise 5), never as a literal.
+1. **Rotate first — this is the only step that actually stops the bleeding.** Go to the partner's dashboard, **revoke** `bm9aF2bQ7xK`, and issue a new token. Until the old token is invalidated, nothing else you do matters — the leaked value still works. Deploy the new token via the secrets manager / env (per Exercise 5), never as a literal.
 
 2. **Confirm the new token works and the old one is dead.** Smoke-test the integration with the new token; verify a call using the old token now returns `401`.
 
 3. **Purge it from history** (defense in depth — reduces accidental re-exposure, but is *not* a substitute for rotation):
    ```bash
    # Preferred modern tool:
-   git filter-repo --replace-text <(echo 'sk_live_9aF2bQ7xK==>REDACTED')
+   git filter-repo --replace-text <(echo 'bm9aF2bQ7xK==>REDACTED')
    # (older alternative: the BFG Repo-Cleaner)
    ```
    Then force-push the rewritten history and have **every collaborator re-clone** — a rewrite changes SHAs, so stale clones still contain the secret and can reintroduce it on merge.
@@ -787,7 +787,7 @@ def send_email_notification(user, text, level):
         timeout = 10
     try:
         requests.post(url, json={"to": user.email, "body": text, "urgent": level == "1"},
-                      headers={"Authorization": "Bearer sk_live_NOTIFY_123"}, timeout=timeout)  # hard-coded token
+                      headers={"Authorization": "Bearer bmNOTIFY_123"}, timeout=timeout)  # hard-coded token
     except:                                           # Pokémon
         pass
 
@@ -801,7 +801,7 @@ def send_sms_notification(user, text, level):
         timeout = 10
     try:
         requests.post(url, json={"to": user.phone, "body": text, "urgent": level == "1"},
-                      headers={"Authorization": "Bearer sk_live_NOTIFY_123"}, timeout=timeout)  # same token, copied
+                      headers={"Authorization": "Bearer bmNOTIFY_123"}, timeout=timeout)  # same token, copied
     except:                                           # Pokémon again
         pass
 ```

@@ -601,7 +601,7 @@ def format_with_tax(cents, tax_rate):
 class Config:
     DEBUG = True                                   # turn off in prod
     UPLOAD_DIR = "/Users/maria/projects/app/tmp"   # where uploads go
-    STRIPE_KEY = "sk_live_REDACTED_not_a_real_key" # payment key
+    STRIPE_KEY = "bmREDACTED_not_a_real_key" # payment key
     MAX_UPLOAD_MB = 25
     DB_POOL_SIZE = 5
 
@@ -617,7 +617,7 @@ config = Config()
 
 This `Config` class is named like configuration but is really hard-coded source. Going line by line:
 
-- `STRIPE_KEY = "sk_live_..."` — a **live payment secret committed to git** (note `sk_live_`, not `sk_test_`). Anyone with repo access can charge or refund through your Stripe account. This is the catastrophic, irreversible shortcut: the key must be **rotated now**, not just deleted.
+- `STRIPE_KEY = "bm..."` — a **live payment secret committed to git** (note `bm`, not `sk_test_`). Anyone with repo access can charge or refund through your Stripe account. This is the catastrophic, irreversible shortcut: the key must be **rotated now**, not just deleted.
 - `UPLOAD_DIR = "/Users/maria/projects/app/tmp"` — exists only on Maria's laptop. The app **crashes on every other machine** (CI, staging, prod, any teammate). A classic "works on my machine."
 - `DEBUG = True` with a "turn off in prod" comment — relies on a human remembering to flip it. If it ships, prod runs in debug mode, leaking stack traces and internals to users (an information-disclosure bug).
 - `DB_POOL_SIZE = 5` is an **environment-dependent value masquerading as a constant** — dev and prod want different pool sizes, so it's config wearing a constant's clothes.
@@ -734,7 +734,7 @@ You rarely spot a bad shortcut by a line being *ugly* — these slip through cas
 
 - **For every duplicated block, find the line that should have differed.** Copy-paste bugs hide in the *one* spot the author forgot to change — a status set wrong (Snippet 1), a security fix applied to one twin but not the other (Snippet 8), a function that doesn't do what its name promises (Snippet 11). The fix-here-still-broken-there bug is the most expensive of the family.
 - **Read every literal twice and check it against its comment/intent.** `8640` vs `86400` (Snippet 2), `36000` vs `3600` (Snippet 14) — off-by-a-digit bugs are invisible inside bare numbers and obvious once named. A literal that needs a comment needs a *name*; a literal that varies by environment needs *config*.
-- **Treat any secret or environment value in source as a bug, not a style nit.** A committed `sk_live_`/password is a security incident requiring **rotation**, not just deletion (Snippets 3, 12); a `/Users/maria/...` path or hard-coded host breaks every other machine. Run a secret scanner in pre-commit.
+- **Treat any secret or environment value in source as a bug, not a style nit.** A committed `bm`/password is a security incident requiring **rotation**, not just deletion (Snippets 3, 12); a `/Users/maria/...` path or hard-coded host breaks every other machine. Run a secret scanner in pre-commit.
 - **Hunt every swallowed error.** Empty `catch`, bare `except: pass`, `except Exception`, and Go's `_ =` discard convert failures into silent corruption, lost work, double-charges, or open security holes (Snippets 6, 7, 9). Catch *narrowly*, act meaningfully, and let bugs crash loudly.
 - **For every `String`/`int` with a fixed value set, look for a typo or case drift.** Stringly-typed code fails at runtime on a one-character mistake the compiler could have caught — `"admin"` vs `"Admin"` (Snippet 4), `"confirmd"` and `"Delivered"` (Snippet 10). Reach for an enum or a domain type.
 - **Resist the false positive.** Not every literal is a magic number (`/ 100` for cents, Snippet 11) and not every string is stringly-typed (an open, data-defined tag map, Snippet 13). The diagnostic is *purpose and clarity*, not shape: name a literal when its meaning is unclear or unstable; enum-ify a string only when the value set is **closed and code-known**. Over-correcting (enum-ifying open sets, over-configuring) is its own anti-pattern.

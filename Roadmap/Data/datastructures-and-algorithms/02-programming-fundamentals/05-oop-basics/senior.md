@@ -1034,7 +1034,7 @@ func (s *OrderService) PlaceOrder(order *Order) error {
 func main() {
     service := NewOrderService(
         &PostgresOrderRepo{db: prodDB},
-        &StripeProcessor{key: "sk_live_..."},
+        &StripeProcessor{key: "bm..."},
         &EmailNotifier{smtp: smtpClient},
     )
     // ...
