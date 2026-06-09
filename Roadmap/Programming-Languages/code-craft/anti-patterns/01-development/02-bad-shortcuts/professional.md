@@ -49,7 +49,7 @@ Two disciplines define this level:
 - **Required:** Working mental model of a managed runtime: heap vs stack, string interning, a tracing GC's allocation/mark/sweep cost, JIT compilation, constant folding and inlining (JVM, Go's compiler, CPython's interpreter loop).
 - **Required:** You can read a flame graph and a `benchstat`/JMH comparison and tell signal from noise.
 - **Helpful:** Familiarity with how strings are represented (Java's `String` + `String.hashCode` caching + interning pool; Go's immutable string header; Python's `str` with interned small strings).
-- **Helpful:** [profiling-techniques](../../../../../skills/profiling-techniques), [memory-leak-detection](../../../../../skills/memory-leak-detection), [big-o-analysis](../../../../../skills/big-o-analysis), [hash-table-design](../../../../../skills/hash-table-design) for the measurement vocabulary.
+- **Helpful:** profiling-techniques, memory-leak-detection, big-o-analysis, hash-table-design for the measurement vocabulary.
 
 ---
 
@@ -363,7 +363,7 @@ if err := charge(ctx, order); err != nil {
 }
 ```
 
-This costs a few allocations *only on the error path* (which is, by definition, not the hot path) and buys full observability. Compare to `catch {}`, which "saves" those allocations and costs you the outage. See [error-handling-patterns](../../../../../skills/error-handling-patterns) and [observability-stack](../../../../../skills/observability-stack).
+This costs a few allocations *only on the error path* (which is, by definition, not the hot path) and buys full observability. Compare to `catch {}`, which "saves" those allocations and costs you the outage. See error-handling-patterns and observability-stack.
 
 > **Diagnose it:** JFR/async-profiler "exception" events reveal exception-as-control-flow hotspots (high throw rate on a normal path); a CPU profile dominated by `fillInStackTrace` confirms it. For the observability cost, the symptom is the *absence* of signal — a latency cliff with no corresponding error rate is the fingerprint of swallowed errors.
 
@@ -598,6 +598,6 @@ Professional-level mistakes — sophisticated, and therefore expensive:
 - [Over-Engineering → Premature Optimization](../03-over-engineering/professional.md) — profile before optimizing; the counterweight to chasing these runtime costs prematurely.
 - [Over-Engineering → Soft Coding](../03-over-engineering/professional.md) — the over-configured extreme whose every knob is a runtime load and a hot-path lookup.
 - [Bad Structure](../01-bad-structure/professional.md) — megamorphic dispatch, aliasing-defeats-the-optimizer, and the "ugly is sometimes fast" discipline reused here.
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — structured, observable error handling; the cure for Pokémon exceptions.
-- [error-handling-patterns](../../../../../skills/error-handling-patterns) · [observability-stack](../../../../../skills/observability-stack) · [profiling-techniques](../../../../../skills/profiling-techniques) · [hash-table-design](../../../../../skills/hash-table-design) — the measurement, error, and data-structure toolkits referenced throughout.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Duplicate Code, Primitive Obsession (the smell behind stringly-typed) at the smell level.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — structured, observable error handling; the cure for Pokémon exceptions.
+- error-handling-patterns · observability-stack · profiling-techniques · hash-table-design — the measurement, error, and data-structure toolkits referenced throughout.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Duplicate Code, Primitive Obsession (the smell behind stringly-typed) at the smell level.

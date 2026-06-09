@@ -750,9 +750,9 @@ A few habits separate a strong answer from a textbook recital:
 - [`senior.md`](senior.md) — eliminating these at codebase scale: shared-library trade-offs, config strategy, error-handling architecture, type-driven design.
 - [`professional.md`](professional.md) — performance, observability, and config/secrets implications.
 - [`tasks.md`](tasks.md) · [`find-bug.md`](find-bug.md) · [`optimize.md`](optimize.md) — practice the diagnosis and cleanup.
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling.
-- [Clean Code → Meaningful Names](../../clean-code/01-meaningful-names/README.md) — naming away magic values.
-- [DRY Principle](../../clean-code/README.md) — and Sandi Metz's "wrong abstraction" counterpoint.
-- [Secrets Management](../../../../Architecture/system-design/README.md) — handling credentials safely.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling.
+- [Clean Code → Meaningful Names](../../../clean-code/01-meaningful-names/README.md) — naming away magic values.
+- [DRY Principle](../../../clean-code/README.md) — and Sandi Metz's "wrong abstraction" counterpoint.
+- [Secrets Management](../../../../../Architecture/system-design/README.md) — handling credentials safely.
 - [Over-Engineering](../03-over-engineering/middle.md) — Soft Coding and Speculative Generality, the over-applied versions of these fixes.
 - [Bad Structure](../01-bad-structure/interview.md) — the sibling category; its `interview.md` shares this format.

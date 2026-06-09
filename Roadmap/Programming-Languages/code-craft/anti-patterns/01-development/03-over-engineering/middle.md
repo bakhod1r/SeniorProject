@@ -146,7 +146,7 @@ class OrderManager { Order get(int id){ return repo.get(id); } }
 // → one class that talks to the repo, plus layers ONLY where a real job exists.
 ```
 
-For Yo-yo: prefer **composition**. Inheritance is justified for genuine *is-a* with stable, shallow hierarchies; use it for one level, reach for delegation/strategy beyond that. (See [Replace Inheritance with Delegation](../../refactoring/02-refactoring-techniques/README.md).)
+For Yo-yo: prefer **composition**. Inheritance is justified for genuine *is-a* with stable, shallow hierarchies; use it for one level, reach for delegation/strategy beyond that. (See [Replace Inheritance with Delegation](../../../refactoring/02-refactoring-techniques/README.md).)
 
 > **Ousterhout's framing:** prefer **deep modules** — a simple interface hiding substantial implementation — over **shallow modules** that add interface without hiding much. Lasagna is a stack of shallow modules.
 
@@ -312,6 +312,6 @@ graph TD
 
 - [Bad Shortcuts → middle](../02-bad-shortcuts/middle.md) — the Rule of Three and the wrong-abstraction trap; Soft Coding as the over-correction of Hard Coding.
 - [Bad Structure → middle](../01-bad-structure/middle.md) — Lasagna vs Spaghetti; over-correcting one creates the other.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance, cohesion.
-- [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md) — Collapse Hierarchy, Inline Class, Replace Subclass with Delegate.
-- [Design Patterns](../../design-patterns/README.md) — patterns applied speculatively become over-engineering.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance, cohesion.
+- [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Collapse Hierarchy, Inline Class, Replace Subclass with Delegate.
+- [Design Patterns](../../../design-patterns/README.md) — patterns applied speculatively become over-engineering.

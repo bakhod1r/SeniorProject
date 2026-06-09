@@ -896,11 +896,11 @@ green  →  one named refactoring  →  green  →  commit  →  repeat
 - [`tasks.md`](tasks.md) — guided exercises building these moves from scratch.
 - [`find-bug.md`](find-bug.md) — the *spotting* counterpart: identify the shortcut, don't fix it.
 - [`junior.md`](junior.md) · [`middle.md`](middle.md) · [`senior.md`](senior.md) — recognize → countermove → refactor-at-scale.
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — the mechanical catalog for every move named above.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Duplicate Code, Magic Number, Primitive Obsession at the smell level.
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — the target state for the Pokémon-exception exercises.
-- [Clean Code → Meaningful Names](../../clean-code/01-meaningful-names/README.md) — naming away magic values.
-- [DRY Principle](../../clean-code/README.md) — and its limit, the coincidental-duplication trap (Exercise 3).
-- [Secrets Management](../../../../Architecture/system-design/README.md) — handling and rotating credentials (Exercise 4).
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — the mechanical catalog for every move named above.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Duplicate Code, Magic Number, Primitive Obsession at the smell level.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — the target state for the Pokémon-exception exercises.
+- [Clean Code → Meaningful Names](../../../clean-code/01-meaningful-names/README.md) — naming away magic values.
+- [DRY Principle](../../../clean-code/README.md) — and its limit, the coincidental-duplication trap (Exercise 3).
+- [Secrets Management](../../../../../Architecture/system-design/README.md) — handling and rotating credentials (Exercise 4).
 - [Over-Engineering](../03-over-engineering/middle.md) — Soft Coding, the over-correction to avoid when introducing configuration.
 - [Bad Structure](../01-bad-structure/optimize.md) — the sibling refactoring file; same discipline, different anti-patterns.

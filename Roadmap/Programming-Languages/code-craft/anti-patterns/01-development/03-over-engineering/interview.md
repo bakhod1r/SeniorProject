@@ -767,6 +767,6 @@ A few habits separate a strong answer from a textbook recital:
 - [`tasks.md`](tasks.md) · [`find-bug.md`](find-bug.md) · [`optimize.md`](optimize.md) — practice diagnosing and simplifying.
 - [Bad Structure](../01-bad-structure/middle.md) — Lasagna is the inverse of Spaghetti; Speculative Generality neighbors the Boat Anchor.
 - [Bad Shortcuts](../02-bad-shortcuts/middle.md) — Soft Coding is the over-correction of Hard Coding; the Rule of Three and the wrong-abstraction trap.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance, cohesion, deep modules.
-- [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md) — Remove Speculative Generality, Collapse Hierarchy, Inline Class, Replace Subclass with Delegate.
-- [Design Patterns](../../design-patterns/README.md) — patterns are tools, not goals; applying them speculatively is over-engineering.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance, cohesion, deep modules.
+- [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Remove Speculative Generality, Collapse Hierarchy, Inline Class, Replace Subclass with Delegate.
+- [Design Patterns](../../../design-patterns/README.md) — patterns are tools, not goals; applying them speculatively is over-engineering.

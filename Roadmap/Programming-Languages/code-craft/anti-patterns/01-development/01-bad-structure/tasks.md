@@ -463,7 +463,7 @@ def handle(command: str, payload: dict) -> dict:
         return {"error": str(e)}
 ```
 
-**Why it's better.** Dispatch is now a single dictionary lookup instead of a linear scan of `elif`s, and adding a command is a two-line change (one handler + one table entry) that never touches existing branches — an [open/closed](../../../../Architecture/README.md) win. The per-command validation is centralized in `_require`, so the error format is consistent and there is no repeated "else: return error" boilerplate. Each handler is small, named, and independently testable. The "unknown command" case lives in exactly one place.
+**Why it's better.** Dispatch is now a single dictionary lookup instead of a linear scan of `elif`s, and adding a command is a two-line change (one handler + one table entry) that never touches existing branches — an [open/closed](../../../../../Architecture/README.md) win. The per-command validation is centralized in `_require`, so the error format is consistent and there is no repeated "else: return error" boilerplate. Each handler is small, named, and independently testable. The "unknown command" case lives in exactly one place.
 
 ```mermaid
 graph LR
@@ -707,7 +707,7 @@ func TestRegister(t *testing.T) {
 }
 ```
 
-**Why it's better.** The service no longer reaches out to `os.Getenv`, a live Postgres, an SMTP server, and the wall clock from inside its logic — those are now injected interfaces it depends on, not concretions it constructs. That makes `Register` deterministic and unit-testable in microseconds with fakes (note the `fixedClock`, which pins `time.Now()`). Email is a distinct `Mailer` responsibility rather than inline SMTP, so the service coordinates instead of implementing. Errors are wrapped with context (`%w`) so a failure tells you *which* step broke. This is the practical form of [Dependency Injection](../../../language-internals/README.md) and the Dependency Inversion idea: depend on small interfaces, supply the implementations from outside.
+**Why it's better.** The service no longer reaches out to `os.Getenv`, a live Postgres, an SMTP server, and the wall clock from inside its logic — those are now injected interfaces it depends on, not concretions it constructs. That makes `Register` deterministic and unit-testable in microseconds with fakes (note the `fixedClock`, which pins `time.Now()`). Email is a distinct `Mailer` responsibility rather than inline SMTP, so the service coordinates instead of implementing. Errors are wrapped with context (`%w`) so a failure tells you *which* step broke. This is the practical form of [Dependency Injection](../../../../language-internals/README.md) and the Dependency Inversion idea: depend on small interfaces, supply the implementations from outside.
 
 </details>
 
@@ -1111,7 +1111,7 @@ A failing run reports every offender at once:
 - [`find-bug.md`](find-bug.md) — spot-the-anti-pattern snippets (critical reading practice).
 - [`optimize.md`](optimize.md) — more flawed implementations to clean up.
 - [`interview.md`](interview.md) — Q&A across all levels for job prep.
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — Extract Class, Replace Conditional with Polymorphism, Replace Nested Conditional with Guard Clauses.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — the SRP cure for God Objects.
-- [Clean Code → Functions](../../clean-code/02-functions/README.md) — small functions, flag arguments, guard clauses.
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Extract Class, Replace Conditional with Polymorphism, Replace Nested Conditional with Guard Clauses.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — the SRP cure for God Objects.
+- [Clean Code → Functions](../../../clean-code/02-functions/README.md) — small functions, flag arguments, guard clauses.
 - [Over-Engineering](../03-over-engineering/middle.md) — the sibling category; Boat Anchor and Lasagna live next door.

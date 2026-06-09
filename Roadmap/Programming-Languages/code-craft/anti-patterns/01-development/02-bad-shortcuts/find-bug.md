@@ -174,7 +174,7 @@ func newRedis() *redis.Client {
 }
 ```
 
-And operationally: **rotate the leaked password immediately**, then add a secret scanner (`gitleaks`, `git-secrets`) to pre-commit so the next one is caught before it ships. See [Secrets Management](../../../../Architecture/system-design/README.md).
+And operationally: **rotate the leaked password immediately**, then add a secret scanner (`gitleaks`, `git-secrets`) to pre-commit so the next one is caught before it ships. See [Secrets Management](../../../../../Architecture/system-design/README.md).
 
 </details>
 
@@ -750,8 +750,8 @@ The meta-lesson: **bad shortcuts don't just make code harder to maintain — the
 - [`tasks.md`](tasks.md) — exercises that build the same muscles from the writing side.
 - [`optimize.md`](optimize.md) — flawed implementations to refactor end-to-end.
 - [`interview.md`](interview.md) — Q&A across all levels.
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling.
-- [Clean Code → Meaningful Names](../../clean-code/01-meaningful-names/README.md) — naming away magic values.
-- [DRY Principle](../../clean-code/README.md) — extracting copy-pasted knowledge (and its limits).
-- [Secrets Management](../../../../Architecture/system-design/README.md) — handling credentials so they never reach git.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling.
+- [Clean Code → Meaningful Names](../../../clean-code/01-meaningful-names/README.md) — naming away magic values.
+- [DRY Principle](../../../clean-code/README.md) — extracting copy-pasted knowledge (and its limits).
+- [Secrets Management](../../../../../Architecture/system-design/README.md) — handling credentials so they never reach git.
 - [Bad Structure](../01-bad-structure/find-bug.md) and [Over-Engineering](../03-over-engineering/find-bug.md) — the sibling find-bug files.

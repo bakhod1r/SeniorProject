@@ -1023,8 +1023,8 @@ green  →  one named refactoring  →  green  →  commit  →  repeat
 - [`tasks.md`](tasks.md) — guided exercises building these moves from scratch.
 - [`find-bug.md`](find-bug.md) — the *spotting* counterpart: identify the anti-pattern, don't fix it.
 - [`junior.md`](junior.md) · [`middle.md`](middle.md) · [`senior.md`](senior.md) — recognize → countermove → refactor-at-scale.
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — the mechanical catalog for every move named above.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Large Class, Long Method, Long Parameter List at the smell level.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — SRP and cohesion, the target state for Exercise 9.
-- [Clean Code → Functions](../../clean-code/02-functions/README.md) — small functions, guard clauses, flag arguments.
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — the mechanical catalog for every move named above.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Large Class, Long Method, Long Parameter List at the smell level.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — SRP and cohesion, the target state for Exercise 9.
+- [Clean Code → Functions](../../../clean-code/02-functions/README.md) — small functions, guard clauses, flag arguments.
 - [Over-Engineering](../03-over-engineering/middle.md) — Lasagna Code, the over-correction to avoid when splitting a God Object.

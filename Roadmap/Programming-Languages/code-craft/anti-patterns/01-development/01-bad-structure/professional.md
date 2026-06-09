@@ -48,7 +48,7 @@ Two disciplines define this level:
 - **Required:** Working mental model of a managed runtime: heap vs stack, a tracing GC's mark/sweep phases, JIT compilation and inlining (Java/JVM, Go's compiler, CPython's interpreter loop).
 - **Required:** You can read a flame graph and a `benchstat`/JMH comparison and tell signal from noise.
 - **Helpful:** Familiarity with CPU microarchitecture basics — cache lines (~64 bytes), branch prediction, instruction cache, false sharing.
-- **Helpful:** [profiling-techniques](../../../../../skills/profiling-techniques), [memory-leak-detection](../../../../../skills/memory-leak-detection), [big-o-analysis](../../../../../skills/big-o-analysis) skills for the measurement vocabulary.
+- **Helpful:** profiling-techniques, memory-leak-detection, big-o-analysis skills for the measurement vocabulary.
 
 ---
 
@@ -246,7 +246,7 @@ async def handler(req):
         cache[req.key] = ...    # set — based on a now-stale check
 ```
 
-The cure is structural, not a bigger lock: give state **one owner**, pass data explicitly, and confine mutation. See [concurrency-patterns](../../../../../skills/concurrency-patterns) and [immutability-patterns](../../immutability-patterns). Untangled, single-owner state lets you replace a global lock with fine-grained ownership or lock-free message passing.
+The cure is structural, not a bigger lock: give state **one owner**, pass data explicitly, and confine mutation. See concurrency-patterns and immutability-patterns. Untangled, single-owner state lets you replace a global lock with fine-grained ownership or lock-free message passing.
 
 > **Diagnose it:** `go build -gcflags=-m` shows missed optimizations; `-race` / ThreadSanitizer finds the races; `go tool trace` / JFR shows goroutines/threads blocked on a contended lock (long "waiting on mutex" spans).
 
@@ -535,8 +535,8 @@ Professional-level mistakes — sophisticated, and therefore expensive:
 ## Related Topics
 
 - [Over-Engineering → Premature Optimization](../03-over-engineering/professional.md) — the discipline of profiling before optimizing; the counterweight to this file.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — SRP as the structural cure whose runtime payoff this file quantifies.
-- [Design Patterns → Strategy / State](../../design-patterns/README.md) — polymorphic dispatch, with the megamorphic caveat covered here.
-- [profiling-techniques](../../../../../skills/profiling-techniques) · [memory-leak-detection](../../../../../skills/memory-leak-detection) · [concurrency-patterns](../../../../../skills/concurrency-patterns) — the measurement and concurrency toolkits referenced throughout.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Large Class, Long Method at the smell level.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — SRP as the structural cure whose runtime payoff this file quantifies.
+- [Design Patterns → Strategy / State](../../../design-patterns/README.md) — polymorphic dispatch, with the megamorphic caveat covered here.
+- profiling-techniques · memory-leak-detection · concurrency-patterns — the measurement and concurrency toolkits referenced throughout.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Large Class, Long Method at the smell level.
 - [Bad Shortcuts](../02-bad-shortcuts/professional.md) and [Over-Engineering](../03-over-engineering/professional.md) — the sibling categories at this level.

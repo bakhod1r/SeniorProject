@@ -53,7 +53,7 @@ Two corollaries run through everything below:
 - **Required:** A working mental model of a managed runtime: heap vs. stack, tracing/generational GC, JIT inlining and devirtualization, escape analysis, monomorphic vs. megamorphic call sites. (The sibling [Bad Structure → professional.md](../01-bad-structure/professional.md) builds this vocabulary — read it first if "megamorphic" isn't yet reflexive.)
 - **Required:** You can read a flame graph and a `benchstat`/JMH comparison and separate signal from noise.
 - **Helpful:** You have read disassembly (`go tool objdump`, `javap -c`, `dis.dis`) at least once and weren't frightened.
-- **Helpful:** [profiling-techniques](../../../../../skills/profiling-techniques), [big-o-analysis](../../../../../skills/big-o-analysis), [memory-leak-detection](../../../../../skills/memory-leak-detection) for the measurement vocabulary.
+- **Helpful:** profiling-techniques, big-o-analysis, memory-leak-detection for the measurement vocabulary.
 
 ---
 
@@ -554,7 +554,7 @@ Professional-level mistakes — sophisticated, and therefore expensive:
 
 - [Bad Structure → professional.md](../01-bad-structure/professional.md) — megamorphic dispatch, cache locality, false sharing, DCE mechanics; the sibling deep-systems file this one builds on.
 - [Bad Shortcuts → professional.md](../02-bad-shortcuts/professional.md) — Hard Coding vs. Soft Coding at the runtime level; the third sibling category.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance, whose runtime payoff (flat graphs, fewer dispatches) this file quantifies.
-- [Design Patterns → Strategy / State](../../design-patterns/README.md) — polymorphic dispatch, with the megamorphic / non-inlinable caveat covered here.
-- [profiling-techniques](../../../../../skills/profiling-techniques) · [big-o-analysis](../../../../../skills/big-o-analysis) · [memory-leak-detection](../../../../../skills/memory-leak-detection) — the measurement toolkit referenced throughout.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Speculative Generality and Middle Man (Lasagna) at the smell level.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance, whose runtime payoff (flat graphs, fewer dispatches) this file quantifies.
+- [Design Patterns → Strategy / State](../../../design-patterns/README.md) — polymorphic dispatch, with the megamorphic / non-inlinable caveat covered here.
+- profiling-techniques · big-o-analysis · memory-leak-detection — the measurement toolkit referenced throughout.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Speculative Generality and Middle Man (Lasagna) at the smell level.

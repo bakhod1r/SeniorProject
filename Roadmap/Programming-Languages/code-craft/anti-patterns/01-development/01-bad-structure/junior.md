@@ -113,7 +113,7 @@ public class OrderManager {
 - **Every change touches it.** Payments, email, pricing, and reporting all live here, so almost every feature edits the same file — guaranteeing merge conflicts and accidental breakage.
 - **It can't be tested in isolation.** To test order creation you must wire up email, payments, and the database, because they're all entangled.
 - **Nobody understands it whole.** 2,400 lines exceed what a person can hold in their head, so changes are made by guessing.
-- **It violates the [Single Responsibility Principle](../../clean-code/09-classes/README.md):** a class should have one reason to change; this one has forty.
+- **It violates the [Single Responsibility Principle](../../../clean-code/09-classes/README.md):** a class should have one reason to change; this one has forty.
 
 ### The junior-level fix
 
@@ -408,7 +408,7 @@ Mistakes juniors make *about* these anti-patterns (not just the patterns themsel
 
 | Anti-pattern | Spot it by | Fix it with |
 |---|---|---|
-| **God Object** | One huge class, imported everywhere, many `and`s in its description | Extract responsibilities into focused classes ([SRP](../../clean-code/09-classes/README.md)) |
+| **God Object** | One huge class, imported everywhere, many `and`s in its description | Extract responsibilities into focused classes ([SRP](../../../clean-code/09-classes/README.md)) |
 | **Spaghetti Code** | Hidden shared state, order-dependent calls | Explicit data in/out; linear, returnable functions |
 | **Lava Flow** | "Don't remove, not sure why" comments | Coverage + `git blame`, then delete (git keeps history) |
 | **Boat Anchor** | Zero call sites, "might need it later" | Delete; rebuild when a real requirement appears |
@@ -439,8 +439,8 @@ Mistakes juniors make *about* these anti-patterns (not just the patterns themsel
 
 ## Related Topics
 
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — the Single Responsibility cure for God Objects.
-- [Clean Code → Functions](../../clean-code/02-functions/README.md) — small functions and guard clauses.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — the smell-level view (Large Class, Long Method).
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — the Single Responsibility cure for God Objects.
+- [Clean Code → Functions](../../../clean-code/02-functions/README.md) — small functions and guard clauses.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — the smell-level view (Large Class, Long Method).
 - [Bad Shortcuts](../02-bad-shortcuts/junior.md) — the sibling category: convenience that compounds.
 - [Over-Engineering](../03-over-engineering/junior.md) — YAGNI and the case against Boat Anchors and Speculative Generality.

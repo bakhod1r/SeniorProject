@@ -483,6 +483,6 @@ Run over code you're about to write or review:
 
 - [Bad Structure](../01-bad-structure/junior.md) — Lasagna is the inverse of Spaghetti; Speculative Generality is a Boat Anchor.
 - [Bad Shortcuts](../02-bad-shortcuts/junior.md) — Soft Coding is the over-correction of Hard Coding.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance; cohesion.
-- [Design Patterns](../../design-patterns/README.md) — patterns are tools, not goals; applying them speculatively is over-engineering.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Speculative Generality and Middle Man (Lasagna) as smells.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance; cohesion.
+- [Design Patterns](../../../design-patterns/README.md) — patterns are tools, not goals; applying them speculatively is over-engineering.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Speculative Generality and Middle Man (Lasagna) as smells.

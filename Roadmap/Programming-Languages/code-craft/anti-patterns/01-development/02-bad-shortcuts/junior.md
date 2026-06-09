@@ -45,7 +45,7 @@ At the junior level your goal is to **recognize the shortcut as you're about to 
 ## Prerequisites
 
 - **Required:** You can write functions, use constants/enums, and handle errors/exceptions in at least one language (examples use Go, Java, Python).
-- **Required:** You understand the [DRY principle](../../clean-code/README.md) at a basic level — "don't repeat yourself."
+- **Required:** You understand the [DRY principle](../../../clean-code/README.md) at a basic level — "don't repeat yourself."
 - **Helpful:** You've experienced fixing a bug, then discovering the same bug copy-pasted somewhere else.
 - **Helpful:** Basic awareness of configuration vs. code (environment variables, config files).
 
@@ -114,7 +114,7 @@ def price_for_guest(items):
 
 ### The junior-level fix
 
-Extract the shared knowledge into one function and call it. This is [DRY](../../clean-code/README.md) in practice.
+Extract the shared knowledge into one function and call it. This is [DRY](../../../clean-code/README.md) in practice.
 
 ```python
 def shipping_for(total):
@@ -185,7 +185,7 @@ const uploadDir = "/Users/alex/dev/app/uploads"   // works only on Alex's laptop
 ### Why it's bad
 
 - **It can't move between environments.** Dev, staging, and prod need different URLs; hard-coding forces a code change (and redeploy) to switch.
-- **It leaks secrets.** Credentials in source end up in git history forever and in every clone — a serious security hole. (See [Secrets Management](../../../../Architecture/system-design/README.md).)
+- **It leaks secrets.** Credentials in source end up in git history forever and in every clone — a serious security hole. (See [Secrets Management](../../../../../Architecture/system-design/README.md).)
 - **It breaks on other machines.** `/Users/alex/...` exists only on Alex's laptop.
 
 ### The junior-level fix
@@ -280,7 +280,7 @@ try {
 // a bug like NullPointerException is NOT caught here — it crashes loudly, as it should
 ```
 
-> **Smell test:** an empty catch block, a bare `except:`, or `catch (Exception e) {}` is almost always wrong. If you catch it, *do something* with it. See [Error Handling](../../clean-code/06-error-handling/README.md).
+> **Smell test:** an empty catch block, a bare `except:`, or `catch (Exception e) {}` is almost always wrong. If you catch it, *do something* with it. See [Error Handling](../../../clean-code/06-error-handling/README.md).
 
 ---
 
@@ -413,7 +413,7 @@ Run over any file you touch this week:
 
 | Anti-pattern | Spot it by | Fix it with |
 |---|---|---|
-| **Copy-Paste** | The same logic in multiple places | Extract one function; [DRY](../../clean-code/README.md) (knowledge, not text) |
+| **Copy-Paste** | The same logic in multiple places | Extract one function; [DRY](../../../clean-code/README.md) (knowledge, not text) |
 | **Magic Numbers/Strings** | Bare literals doing real work | Named constants / enums |
 | **Hard Coding** | URLs, paths, secrets in source | Configuration / env vars; secrets out of git |
 | **Cargo Cult** | Lines you can't explain | Justify or delete; read the docs |
@@ -445,8 +445,8 @@ Run over any file you touch this week:
 
 ## Related Topics
 
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling.
-- [Clean Code → Meaningful Names](../../clean-code/01-meaningful-names/README.md) — naming away magic values.
-- [DRY Principle](../../clean-code/README.md) — and its limits (coincidental duplication).
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling.
+- [Clean Code → Meaningful Names](../../../clean-code/01-meaningful-names/README.md) — naming away magic values.
+- [DRY Principle](../../../clean-code/README.md) — and its limits (coincidental duplication).
 - [Bad Structure](../01-bad-structure/junior.md) — the sibling category; Cargo Cult feeds Lava Flow.
 - [Over-Engineering](../03-over-engineering/junior.md) — the opposite failure: too much abstraction instead of too little.

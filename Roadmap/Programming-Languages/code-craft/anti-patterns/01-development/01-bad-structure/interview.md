@@ -697,9 +697,9 @@ A few habits separate a strong answer from a textbook recital:
 - [`senior.md`](senior.md) — refactoring at scale, root causes, and when not to refactor.
 - [`professional.md`](professional.md) — performance, GC, build, and toolchain implications.
 - [`tasks.md`](tasks.md) · [`find-bug.md`](find-bug.md) · [`optimize.md`](optimize.md) — practice the diagnosis and cleanup.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — cohesion and SRP, the God Object cure.
-- [Clean Code → Functions](../../clean-code/02-functions/README.md) — small functions, guard clauses, flag arguments.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Large Class, Long Method, the smell-level view.
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — Extract Class/Method, Replace Conditional with Polymorphism, characterization tests.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — cohesion and SRP, the God Object cure.
+- [Clean Code → Functions](../../../clean-code/02-functions/README.md) — small functions, guard clauses, flag arguments.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Large Class, Long Method, the smell-level view.
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Extract Class/Method, Replace Conditional with Polymorphism, characterization tests.
 - [Over-Engineering](../03-over-engineering/middle.md) — YAGNI, Boat Anchor's neighbor, and Lasagna (the over-correction).
 - [Bad Shortcuts](../02-bad-shortcuts/middle.md) — the sibling category of convenience that compounds.

@@ -43,9 +43,9 @@ This file is about the **forces** that produce bad structure and the **practical
 
 - **Required:** Comfortable reading [`junior.md`](junior.md) — you can identify all five anti-patterns.
 - **Required:** You've written enough code to have *maintained* something you wrote months ago.
-- **Helpful:** Basic refactoring vocabulary — Extract Method, Extract Class (see [Refactoring](../../refactoring/02-refactoring-techniques/README.md)).
+- **Helpful:** Basic refactoring vocabulary — Extract Method, Extract Class (see [Refactoring](../../../refactoring/02-refactoring-techniques/README.md)).
 - **Helpful:** You participate in code review, as author or reviewer.
-- **Helpful:** Awareness of the [SOLID principles](../../../../Architecture/README.md), especially SRP and the Dependency Inversion idea.
+- **Helpful:** Awareness of the [SOLID principles](../../../../../Architecture/README.md), especially SRP and the Dependency Inversion idea.
 
 ---
 
@@ -92,7 +92,7 @@ class Account:
     def send_statement_email(self): ...   # uses B  ← extract me
 ```
 
-**2. Extract by responsibility, inject the collaborators.** Move cluster B into its own class and pass it in. This is the practical application of [Dependency Injection](../../../language-internals/README.md) and SRP.
+**2. Extract by responsibility, inject the collaborators.** Move cluster B into its own class and pass it in. This is the practical application of [Dependency Injection](../../../../language-internals/README.md) and SRP.
 
 ```python
 class Account:
@@ -377,7 +377,7 @@ Cycle:  green → extract one piece → green → commit → repeat
 
 ## Related Topics
 
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — cohesion and SRP in depth.
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — the mechanical moves referenced here.
-- [Design Patterns → Strategy / State](../../design-patterns/README.md) — the positive counterparts to type-switch Arrow code.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — cohesion and SRP in depth.
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — the mechanical moves referenced here.
+- [Design Patterns → Strategy / State](../../../design-patterns/README.md) — the positive counterparts to type-switch Arrow code.
 - [Bad Shortcuts](../02-bad-shortcuts/middle.md) and [Over-Engineering](../03-over-engineering/middle.md) — the sibling categories; Boat Anchor and Lasagna live next door.

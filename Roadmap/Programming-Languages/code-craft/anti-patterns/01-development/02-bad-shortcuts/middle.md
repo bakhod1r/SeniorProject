@@ -136,7 +136,7 @@ graph LR
 | Per-environment endpoints, modes | Environment variables | Differ per deploy, [12-factor](https://12factor.net) |
 | Passwords, API keys, tokens | **Secrets manager / env injected at runtime** | Must never touch source control |
 
-The cardinal rule: **secrets never enter git** — not in source, not in a committed config file. If a secret is ever committed, rotate it; git history is forever. See [Secrets Management](../../../../Architecture/system-design/README.md).
+The cardinal rule: **secrets never enter git** — not in source, not in a committed config file. If a secret is ever committed, rotate it; git history is forever. See [Secrets Management](../../../../../Architecture/system-design/README.md).
 
 > **The trap (over-configuration):** making *everything* configurable adds knobs nobody turns, multiplies test combinations, and creates [Soft Coding](../03-over-engineering/middle.md) — an over-engineering anti-pattern. Configure what genuinely varies by environment; hard-code what doesn't.
 
@@ -184,7 +184,7 @@ except requests.HTTPError as e:
 
 **4. Decide fail-fast vs fail-safe per context.** A batch job processing 10k records might log-and-skip a bad record (fail-safe); a payment must fail-fast. The choice is a design decision, not a default.
 
-> **The trap (over-catching the other way):** wrapping every call in its own `try/catch` produces noise and hides the happy path. Let exceptions propagate to a sensible boundary (a request handler, a job runner) that has one place to log and respond. See [Error Handling](../../clean-code/06-error-handling/README.md).
+> **The trap (over-catching the other way):** wrapping every call in its own `try/catch` produces noise and hides the happy path. Let exceptions propagate to a sensible boundary (a request handler, a job runner) that has one place to log and respond. See [Error Handling](../../../clean-code/06-error-handling/README.md).
 
 ---
 
@@ -336,8 +336,8 @@ Put a **secret scanner in pre-commit** — it's the one shortcut whose cost (a l
 
 ## Related Topics
 
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — designing error flow.
-- [DRY Principle](../../clean-code/README.md) — and Sandi Metz's "wrong abstraction" counterpoint.
-- [Secrets Management](../../../../Architecture/system-design/README.md) — handling credentials safely.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — designing error flow.
+- [DRY Principle](../../../clean-code/README.md) — and Sandi Metz's "wrong abstraction" counterpoint.
+- [Secrets Management](../../../../../Architecture/system-design/README.md) — handling credentials safely.
 - [Over-Engineering](../03-over-engineering/middle.md) — Soft Coding and Speculative Generality (the over-applied versions of these fixes).
 - [Bad Structure](../01-bad-structure/middle.md) — premature DRY produces the Spaghetti it tried to avoid.

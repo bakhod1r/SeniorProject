@@ -849,7 +849,7 @@ The meta-lesson: **bad structure isn't only aesthetic.** A God Object caused a l
 - [`tasks.md`](tasks.md) — exercises that build the same muscles from the writing side.
 - [`optimize.md`](optimize.md) — flawed implementations to refactor end-to-end.
 - [`interview.md`](interview.md) — Q&A across all levels.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — the SRP cure for God Objects.
-- [Clean Code → Functions](../../clean-code/02-functions/README.md) — guard clauses and flag-argument removal.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Large Class, Long Method, the smell-level view.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — the SRP cure for God Objects.
+- [Clean Code → Functions](../../../clean-code/02-functions/README.md) — guard clauses and flag-argument removal.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Large Class, Long Method, the smell-level view.
 - [Bad Shortcuts](../02-bad-shortcuts/find-bug.md) and [Over-Engineering](../03-over-engineering/find-bug.md) — the sibling find-bug files.

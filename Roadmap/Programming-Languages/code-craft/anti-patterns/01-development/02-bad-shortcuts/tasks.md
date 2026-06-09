@@ -1018,9 +1018,9 @@ Bad shortcuts are cheapest to stop in code review, while the diff is still small
 - [`find-bug.md`](find-bug.md) — spot-the-shortcut snippets (critical reading practice).
 - [`optimize.md`](optimize.md) — more flawed implementations to clean up.
 - [`interview.md`](interview.md) — Q&A across all levels for job prep.
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling, done properly.
-- [Clean Code → Meaningful Names](../../clean-code/01-meaningful-names/README.md) — naming away magic values.
-- [DRY Principle](../../clean-code/README.md) — and Sandi Metz's "wrong abstraction" counterpoint (Exercise 2).
-- [Secrets Management](../../../../Architecture/system-design/README.md) — handling credentials safely.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — the cure for Pokémon exception handling, done properly.
+- [Clean Code → Meaningful Names](../../../clean-code/01-meaningful-names/README.md) — naming away magic values.
+- [DRY Principle](../../../clean-code/README.md) — and Sandi Metz's "wrong abstraction" counterpoint (Exercise 2).
+- [Secrets Management](../../../../../Architecture/system-design/README.md) — handling credentials safely.
 - [Bad Structure](../01-bad-structure/tasks.md) — the sibling category's exercises; Cargo Cult feeds Lava Flow.
 - [Over-Engineering](../03-over-engineering/middle.md) — Soft Coding and Speculative Generality: the over-applied versions of these fixes.

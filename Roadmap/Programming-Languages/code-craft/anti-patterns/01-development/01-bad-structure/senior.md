@@ -48,7 +48,7 @@ Two questions define senior-level work here:
 - **Required:** Fluency with [`junior.md`](junior.md) and [`middle.md`](middle.md) — you can recognize all five anti-patterns and apply Extract Class / guard clauses with a characterization test.
 - **Required:** You have shipped to production, owned an incident, and maintained code you did not write.
 - **Helpful:** Working knowledge of feature flags / config-driven rollout, and a CI pipeline you can extend.
-- **Helpful:** Familiarity with [SOLID](../../../../Architecture/README.md) (especially SRP and Dependency Inversion) and [Refactoring techniques](../../refactoring/02-refactoring-techniques/README.md).
+- **Helpful:** Familiarity with [SOLID](../../../../../Architecture/README.md) (especially SRP and Dependency Inversion) and [Refactoring techniques](../../../refactoring/02-refactoring-techniques/README.md).
 - **Helpful:** Exposure to architecture tests / fitness functions (ArchUnit, `go-arch-lint`, import-linter) — covered in [`professional.md`](professional.md) for the runtime angle.
 
 ---
@@ -408,7 +408,7 @@ public Report exportXml(Report r) {
 }
 ```
 
-The deprecation lifecycle: **announce** (changelog, deprecation header, compiler warning) → **instrument** (count real callers) → **wait** a published window (a major version, a quarter) → **remove** only after the counter is zero or remaining callers are migrated. This is parallel-change applied to a public contract: expand the replacement, migrate callers, contract the old form — but the "migrate" step now includes *external* consumers and therefore a communication plan, not just a code change. See [API versioning / deprecation](../../../../Architecture/system-design/README.md).
+The deprecation lifecycle: **announce** (changelog, deprecation header, compiler warning) → **instrument** (count real callers) → **wait** a published window (a major version, a quarter) → **remove** only after the counter is zero or remaining callers are migrated. This is parallel-change applied to a public contract: expand the replacement, migrate callers, contract the old form — but the "migrate" step now includes *external* consumers and therefore a communication plan, not just a code change. See [API versioning / deprecation](../../../../../Architecture/system-design/README.md).
 
 > **The discipline:** a Boat Anchor is unused code that *invites* dependence. Every day it survives, the odds rise that someone wires into it — converting a cheap deletion into an expensive migration. Govern the inflow (no speculative abstraction without a ticket) and run a periodic outflow (deprecate-and-remove unused public surface).
 
@@ -457,7 +457,7 @@ def price(p):  return RULES[p.kind].price(p)
 def taxable(p): return RULES[p.kind].taxable
 ```
 
-When the rules carry behavior *and* data and the set is open-ended, promote each row to a polymorphic type ([Replace Conditional with Polymorphism](../../refactoring/02-refactoring-techniques/README.md), [Strategy / State patterns](../../design-patterns/README.md)). The key senior judgment: a table for *closed, data-like* variation; polymorphism for *open, behavior-rich* variation; guard clauses for *validation* nesting. Don't reach for a class hierarchy where a map literal would do — that's how you turn an Arrow into [Lasagna](../03-over-engineering/senior.md).
+When the rules carry behavior *and* data and the set is open-ended, promote each row to a polymorphic type ([Replace Conditional with Polymorphism](../../../refactoring/02-refactoring-techniques/README.md), [Strategy / State patterns](../../../design-patterns/README.md)). The key senior judgment: a table for *closed, data-like* variation; polymorphism for *open, behavior-rich* variation; guard clauses for *validation* nesting. Don't reach for a class hierarchy where a map literal would do — that's how you turn an Arrow into [Lasagna](../03-over-engineering/senior.md).
 
 ---
 
@@ -615,10 +615,10 @@ Mistakes seniors make when refactoring bad structure at scale:
 
 ## Related Topics
 
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — SRP and cohesion, the target state for a dismantled God Object.
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — the mechanical moves: Extract Class, Replace Conditional with Polymorphism, Branch by Abstraction.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Large Class, Long Method, Shotgun Surgery at the smell level.
-- [Design Patterns → Strategy / State](../../design-patterns/README.md) — the positive counterparts to type-switch Arrows and stateful spaghetti.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — SRP and cohesion, the target state for a dismantled God Object.
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — the mechanical moves: Extract Class, Replace Conditional with Polymorphism, Branch by Abstraction.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Large Class, Long Method, Shotgun Surgery at the smell level.
+- [Design Patterns → Strategy / State](../../../design-patterns/README.md) — the positive counterparts to type-switch Arrows and stateful spaghetti.
 - [Over-Engineering](../03-over-engineering/senior.md) — the failure mode of *over*-applying these fixes: Lasagna, Speculative Generality, YAGNI.
 - [Bad Shortcuts](../02-bad-shortcuts/senior.md) — the sibling category; making illegal states unrepresentable connects the two.
-- [Architecture → SOLID & System Design](../../../../Architecture/README.md) — boundaries, Dependency Inversion, and the Conway's-law / inverse-Conway angle.
+- [Architecture → SOLID & System Design](../../../../../Architecture/README.md) — boundaries, Dependency Inversion, and the Conway's-law / inverse-Conway angle.

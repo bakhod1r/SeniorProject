@@ -177,7 +177,7 @@ String msg = Greeter.greet("Sam");
 
 **What improved & how to verify.** Four types collapse to one method; the indirection a reader had to trace (engine → strategy → factory → impl) is gone. **Verify** with the characterization test — same output string. The deleted code is recoverable from git the day a *real* second greeting style appears, and you'll model it better against the actual requirement (YAGNI). Keep this a single **structural commit**.
 
-> **Cross-reference:** this is the textbook *Inline Class* + *Remove Speculative Generality* pair from [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md). Compare with the next exercise, where the *same shape* is kept on purpose.
+> **Cross-reference:** this is the textbook *Inline Class* + *Remove Speculative Generality* pair from [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md). Compare with the next exercise, where the *same shape* is kept on purpose.
 
 </details>
 
@@ -981,6 +981,6 @@ green  →  one named removal/inline  →  green  →  commit  →  repeat
 - [`junior.md`](junior.md) · [`middle.md`](middle.md) · [`senior.md`](senior.md) — recognize → calibrate the right altitude → simplify at scale.
 - [Bad Structure → optimize](../01-bad-structure/optimize.md) — the same refactoring discipline applied to *under*-structured code (the over-correction to avoid when collapsing layers is Spaghetti).
 - [Bad Shortcuts → middle](../02-bad-shortcuts/middle.md) — the Rule of Three and the wrong-abstraction trap; Soft Coding as the over-correction of Hard Coding.
-- [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md) — the mechanical catalog for Inline Class, Inline Function, Collapse Hierarchy, Replace Subclass with Delegate, Remove Middle Man.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Speculative Generality, Middle Man, and Lazy Element at the smell level.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance; cohesion, the target state for Exercise 7.
+- [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md) — the mechanical catalog for Inline Class, Inline Function, Collapse Hierarchy, Replace Subclass with Delegate, Remove Middle Man.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Speculative Generality, Middle Man, and Lazy Element at the smell level.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance; cohesion, the target state for Exercise 7.

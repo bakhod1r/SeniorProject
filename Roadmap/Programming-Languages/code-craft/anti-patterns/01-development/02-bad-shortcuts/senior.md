@@ -48,7 +48,7 @@ Two questions define senior-level work here:
 - **Required:** You have shipped to production, owned an incident, rotated a credential, and maintained a service you did not write.
 - **Helpful:** Working knowledge of feature flags, a CI pipeline you can extend, and a secrets manager (Vault, AWS/GCP Secrets Manager, SOPS).
 - **Helpful:** Familiarity with the cross-cutting refactoring techniques from [Bad Structure → senior](../01-bad-structure/senior.md) — parallel-change, branch-by-abstraction, characterization tests — because de-duplication and type rollouts use exactly these.
-- **Helpful:** [SOLID](../../../../Architecture/README.md), [Refactoring techniques](../../refactoring/02-refactoring-techniques/README.md), and a basic grasp of distributed systems (these fixes cross service boundaries).
+- **Helpful:** [SOLID](../../../../../Architecture/README.md), [Refactoring techniques](../../../refactoring/02-refactoring-techniques/README.md), and a basic grasp of distributed systems (these fixes cross service boundaries).
 
 ---
 
@@ -222,7 +222,7 @@ public final class DbCredentials {
 
 ### Preventing drift
 
-Drift — config that differs between environments in ways nobody intended — is the silent killer of "but it worked in staging." Defenses: **config-as-code** so every value is in version control and diffable; a **single schema** (the `Settings` type above) shared by all environments so the *shape* can't drift even if values do; and **CI checks** that diff env configs and flag undeclared keys. See [Secrets Management](../../../../Architecture/system-design/README.md).
+Drift — config that differs between environments in ways nobody intended — is the silent killer of "but it worked in staging." Defenses: **config-as-code** so every value is in version control and diffable; a **single schema** (the `Settings` type above) shared by all environments so the *shape* can't drift even if values do; and **CI checks** that diff env configs and flag undeclared keys. See [Secrets Management](../../../../../Architecture/system-design/README.md).
 
 > **The trap (still over-configuration):** a strategy is not "make everything an env var." Knobs nobody turns multiply the test matrix and let operators misconfigure the system into invalid states — the [Soft Coding](../03-over-engineering/senior.md) anti-pattern at org scale. Configure what genuinely varies per environment; keep truly-fixed values as code constants.
 
@@ -306,7 +306,7 @@ A swallowed exception is the *absence* of observability; the strategy's job is t
 
 The taxonomy drives it: bugs and missing config **fail fast** (crash at boundary/startup); dependency outages **degrade** (circuit-break, serve stale/cached, queue for later); a batch job over 10k records **log-and-skips** a bad record (fail-safe) while a payment **fails fast**. The choice is a design decision recorded in the taxonomy, not an each-developer default.
 
-> **The deliverable** is a one-page error-handling convention (taxonomy + result-vs-exception rule + boundary list + logging/metrics standard) *plus the lint rule that enforces it* (bare-except / empty-catch fails CI) *plus the service template that bakes in the boundary*. Without the gate and the template, the next copy-pasted service reinvents Pokémon. See [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) and the [error-handling-patterns](../../clean-code/06-error-handling/README.md) skill.
+> **The deliverable** is a one-page error-handling convention (taxonomy + result-vs-exception rule + boundary list + logging/metrics standard) *plus the lint rule that enforces it* (bare-except / empty-catch fails CI) *plus the service template that bakes in the boundary*. Without the gate and the template, the next copy-pasted service reinvents Pokémon. See [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) and the [error-handling-patterns](../../../clean-code/06-error-handling/README.md) skill.
 
 ---
 
@@ -555,9 +555,9 @@ Mistakes seniors make fixing bad shortcuts at scale:
 
 - [Bad Structure → senior](../01-bad-structure/senior.md) — the sibling category; the parallel-change / strangler / characterization-test machinery reused here for de-duplication and type rollout.
 - [Over-Engineering → senior](../03-over-engineering/senior.md) — the over-applied failure modes: Soft Coding (over-configuration) and Speculative Generality (the wrong shared abstraction).
-- [Clean Code → Error Handling](../../clean-code/06-error-handling/README.md) — designing error flow, the foundation of the codebase-wide error strategy.
-- [Clean Code → Meaningful Names](../../clean-code/01-meaningful-names/README.md) — naming by *meaning* in the de-magic-numbering campaign.
-- [DRY Principle](../../clean-code/README.md) — and its limits at the service boundary (the wrong shared dependency).
-- [Refactoring → Refactoring Techniques](../../refactoring/02-refactoring-techniques/README.md) — Parallel Change, Branch by Abstraction, Replace Type Code.
-- [Secrets Management / System Design](../../../../Architecture/system-design/README.md) — config-as-code, secret rotation, dynamic credentials, drift prevention.
-- [Architecture → SOLID & System Design](../../../../Architecture/README.md) — boundaries and the Conway's-law angle behind copy-paste onboarding.
+- [Clean Code → Error Handling](../../../clean-code/06-error-handling/README.md) — designing error flow, the foundation of the codebase-wide error strategy.
+- [Clean Code → Meaningful Names](../../../clean-code/01-meaningful-names/README.md) — naming by *meaning* in the de-magic-numbering campaign.
+- [DRY Principle](../../../clean-code/README.md) — and its limits at the service boundary (the wrong shared dependency).
+- [Refactoring → Refactoring Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Parallel Change, Branch by Abstraction, Replace Type Code.
+- [Secrets Management / System Design](../../../../../Architecture/system-design/README.md) — config-as-code, secret rotation, dynamic credentials, drift prevention.
+- [Architecture → SOLID & System Design](../../../../../Architecture/README.md) — boundaries and the Conway's-law angle behind copy-paste onboarding.

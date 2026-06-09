@@ -1070,7 +1070,7 @@ A pull request that fixes a genuine race condition in a payment retry has attrac
 - [interview.md](interview.md) — Q&A across all levels for job prep.
 - [Bad Structure → Exercises](../01-bad-structure/tasks.md) — the sibling category; Lasagna is the inverse of Spaghetti, Boat Anchor neighbors Speculative Generality.
 - [Bad Shortcuts → middle](../02-bad-shortcuts/middle.md) — the Rule of Three and the wrong-abstraction trap; Soft Coding as the over-correction of Hard Coding.
-- [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md) — Inline Class, Remove Speculative Generality, Collapse Hierarchy, Replace Subclass with Delegate.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance; deep vs. shallow modules.
+- [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Inline Class, Remove Speculative Generality, Collapse Hierarchy, Replace Subclass with Delegate.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance; deep vs. shallow modules.
 </content>
 </invoke>

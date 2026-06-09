@@ -256,7 +256,7 @@ graph TD
 4. **Decommission** the remote service only when its traffic is zero across a full business cycle. Then **delete the saga orchestrator, the compensating transactions, the inter-service retry policy, and the idempotency plumbing** — none of which the in-process version needs.
 5. **Lock in the boundary as a module, not a service.** A modular monolith keeps the *logical* separation (package boundaries, an [ArchUnit](../01-bad-structure/senior.md) fitness function forbidding cross-module internal imports) while paying none of the distributed tax. You can always re-extract a *specific* module to a service later — *if a real force appears* — and now you'll do it against evidence.
 
-> **The senior judgment:** microservices are an organizational/scaling tool, not a code-quality tool. Their benefit is **independent deployability across many teams**; their cost is **distributed-systems complexity, paid by everyone, forever.** If you're not getting the benefit, you're only paying the cost. A *modular monolith* gives you most of the separation with none of the tax, and keeps the option to split open. (See [microservice communication](../../../../Architecture/system-design/README.md) for when the split *is* warranted.)
+> **The senior judgment:** microservices are an organizational/scaling tool, not a code-quality tool. Their benefit is **independent deployability across many teams**; their cost is **distributed-systems complexity, paid by everyone, forever.** If you're not getting the benefit, you're only paying the cost. A *modular monolith* gives you most of the separation with none of the tax, and keeps the option to split open. (See [microservice communication](../../../../../Architecture/system-design/README.md) for when the split *is* warranted.)
 
 ---
 
@@ -523,7 +523,7 @@ Mistakes seniors make around over-engineering at scale:
 
 - [Bad Structure → senior](../01-bad-structure/senior.md) — the shared safe-change toolkit (seams, Strangler Fig, branch-by-abstraction, parallel-change, fitness functions) and the *opposite* failure: too little structure. Over-applying its fixes produces this file's patterns.
 - [Bad Shortcuts → senior](../02-bad-shortcuts/senior.md) — Cargo Cult at architecture scale; Soft Coding as the over-correction of Hard Coding; making illegal states unrepresentable.
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance (the Yo-yo cure), cohesion, deep modules.
-- [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md) — Collapse Hierarchy, Inline Class, Remove Speculative Generality, Branch by Abstraction, Parallel Change.
-- [Design Patterns](../../design-patterns/README.md) — patterns are tools, not goals; applying them speculatively at scale is exactly this anti-pattern family.
-- [Architecture → System Design](../../../../Architecture/system-design/README.md) — when microservices, sharding, caching, and rule engines *are* warranted; API/schema versioning for Type-1 decisions.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance (the Yo-yo cure), cohesion, deep modules.
+- [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Collapse Hierarchy, Inline Class, Remove Speculative Generality, Branch by Abstraction, Parallel Change.
+- [Design Patterns](../../../design-patterns/README.md) — patterns are tools, not goals; applying them speculatively at scale is exactly this anti-pattern family.
+- [Architecture → System Design](../../../../../Architecture/system-design/README.md) — when microservices, sharding, caching, and rule engines *are* warranted; API/schema versioning for Type-1 decisions.

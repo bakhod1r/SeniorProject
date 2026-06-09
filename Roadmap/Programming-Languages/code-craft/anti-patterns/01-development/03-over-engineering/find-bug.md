@@ -878,6 +878,6 @@ The meta-lesson cuts both ways. **Over-engineering causes bugs, not just bloat**
 - [`optimize.md`](optimize.md) — over-engineered implementations to simplify end-to-end.
 - [`interview.md`](interview.md) — Q&A across all levels.
 - [Bad Structure → find-bug](../01-bad-structure/find-bug.md) and [Bad Shortcuts → find-bug](../02-bad-shortcuts/find-bug.md) — the sibling find-bug files (Lasagna is the inverse of Spaghetti; Soft Coding the over-correction of Hard Coding).
-- [Clean Code → Classes](../../clean-code/09-classes/README.md) — composition over inheritance, the cure for Yo-yo.
-- [Refactoring → Code Smells](../../refactoring/01-code-smells/README.md) — Speculative Generality and Middle Man (Lasagna) at the smell level.
-- [Refactoring → Techniques](../../refactoring/02-refactoring-techniques/README.md) — Remove Speculative Generality, Collapse Hierarchy, Inline Class, Replace Subclass with Delegate.
+- [Clean Code → Classes](../../../clean-code/09-classes/README.md) — composition over inheritance, the cure for Yo-yo.
+- [Refactoring → Code Smells](../../../refactoring/01-code-smells/README.md) — Speculative Generality and Middle Man (Lasagna) at the smell level.
+- [Refactoring → Techniques](../../../refactoring/02-refactoring-techniques/README.md) — Remove Speculative Generality, Collapse Hierarchy, Inline Class, Replace Subclass with Delegate.
