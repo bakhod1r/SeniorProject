@@ -1,865 +1,785 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>0012. Integer to Roman — Visual Animation</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Integer to Roman — Two Approaches</title>
+<style>
+  :root{
+    --bg:#0a0d12; --bg2:#0d1117; --surface:#141a22; --surface2:#1b232e;
+    --border:#222c38; --border2:#2c3848;
+    --text:#e6edf3; --muted:#8b97a6; --faint:#5b6675;
+    --blue:#4f9dff; --blue-dim:#16314f;
+    --yellow:#f4b740; --yellow-dim:#3a2c08;
+    --green:#34d399; --green-dim:#0c2c22;
+    --red:#f85149;
+    --accent:#34d399;
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 8px 24px -12px rgba(0,0,0,.6);
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono','Cascadia Code',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    font-family:var(--sans); background:
+      radial-gradient(1200px 600px at 80% -10%, #10202e 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, #161226 0%, transparent 55%),
+      var(--bg);
+    color:var(--text); min-height:100vh; padding:28px 24px 120px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-            padding: 20px;
-        }
+  /* header */
+  .head{display:flex; align-items:flex-start; gap:14px; margin-bottom:6px;}
+  .back{width:40px; height:40px; flex:none; border-radius:11px; border:1px solid var(--border2);
+    background:var(--surface); color:var(--muted); font-size:1.1rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition:.15s;}
+  .back:hover{color:var(--text); border-color:var(--blue);}
+  h1{font-size:2rem; font-weight:700; letter-spacing:-.02em; line-height:1.1;}
+  .pill{display:inline-flex; align-items:center; padding:3px 11px; border-radius:999px;
+    font-size:.78rem; font-weight:600; vertical-align:middle; margin-left:10px;}
+  .pill.easy{background:rgba(52,211,153,.13); color:var(--green); border:1px solid rgba(52,211,153,.25);}
+  .pill.med{background:rgba(244,183,64,.13); color:var(--yellow); border:1px solid rgba(244,183,64,.25);}
+  .tags{display:flex; gap:8px; margin:14px 0 8px;}
+  .tag{padding:5px 13px; border-radius:999px; font-size:.82rem; color:var(--muted);
+    background:var(--surface); border:1px solid var(--border);}
+  .lede{color:var(--muted); font-size:1.02rem; line-height:1.5; max-width:780px; margin-top:4px;}
+  .lede b{color:var(--text); font-weight:600;}
+  .lede code{font-family:var(--mono); color:var(--blue); font-size:.9em;}
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+  /* layout */
+  .grid{display:grid; grid-template-columns:1fr 384px; gap:20px; margin-top:24px;}
+  .card{background:linear-gradient(180deg, var(--surface) 0%, var(--bg2) 100%);
+    border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow);}
+  .card.pad{padding:18px 20px;}
+  .side{display:flex; flex-direction:column; gap:16px;}
+  .label{font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--faint); font-weight:700; margin-bottom:12px;}
 
-        .header h1 {
-            font-size: 1.8rem;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 8px;
-        }
+  /* approach selector */
+  .approaches{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .approaches .segmented{flex-wrap:wrap;}
+  .comp{font-family:var(--mono); font-size:.8rem; color:var(--muted); white-space:nowrap;}
+  .comp b{color:var(--green);}
 
-        .header p { color: #94a3b8; font-size: 0.95rem; }
+  /* presets */
+  .toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .segmented{display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:11px; padding:3px;}
+  .segmented button{border:none; background:transparent; color:var(--muted); font-family:inherit;
+    font-size:.84rem; font-weight:600; padding:7px 14px; border-radius:8px; cursor:pointer; transition:.15s;}
+  .segmented button:hover{color:var(--text);}
+  .segmented button.on{background:var(--surface2); color:var(--text); box-shadow:0 1px 0 rgba(255,255,255,.04);}
+  .ghost{display:inline-flex; align-items:center; gap:7px; border:1px solid var(--border2);
+    background:var(--surface); color:var(--text); font-family:inherit; font-size:.84rem; font-weight:600;
+    padding:8px 14px; border-radius:10px; cursor:pointer; transition:.15s;}
+  .ghost:hover{border-color:var(--blue); color:var(--blue);}
 
-        /* TABS */
-        .tabs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
+  /* stage */
+  .stage{padding:22px 24px 28px; border-top:1px solid var(--border);}
+  .compare{text-align:center; font-family:var(--mono); font-size:1rem; color:var(--yellow);
+    min-height:1.4em; margin-bottom:24px; letter-spacing:.01em;}
+  .compare .dim{color:var(--faint);}
+  .compare .ans{color:var(--green); font-weight:700;}
+  .rowlabel{font-family:var(--mono); font-size:.78rem; color:var(--faint); margin:0 0 10px 2px;}
+  .rowlabel.sp{margin-top:34px;}
 
-        .tab {
-            padding: 10px 20px;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px 8px 0 0;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.9rem;
-            user-select: none;
-        }
+  .cells{display:grid; gap:12px; justify-content:start;}
+  .cell{position:relative; height:64px; border-radius:12px; border:1.5px solid var(--border2);
+    background:var(--bg); display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:1.15rem; font-weight:600; color:var(--text);
+    transition:transform .2s, background .2s, border-color .2s, box-shadow .2s;}
+  .cell .ix{position:absolute; bottom:-20px; left:0; right:0; text-align:center; font-size:.72rem; color:var(--faint); font-weight:500;}
+  .cell.stored{border-color:var(--blue); background:var(--blue-dim); color:#bdd9ff; opacity:.85;}
+  .cell.ptr{border-color:var(--blue); background:var(--blue-dim); color:#bdd9ff;}
+  .cell.cur{border-color:var(--yellow); background:var(--yellow-dim); color:#ffd887; box-shadow:0 0 0 1px var(--yellow), 0 8px 22px -10px rgba(244,183,64,.5); transform:translateY(-3px);}
+  .cell.match{border-color:var(--green); background:var(--green-dim); color:#9af3d3; box-shadow:0 0 0 1px var(--green), 0 10px 24px -8px rgba(52,211,153,.55); transform:translateY(-3px);}
 
-        .tab:hover { background: #334155; }
+  .arrow{position:absolute; left:0; right:0; text-align:center; font-family:var(--mono); font-size:.74rem; font-weight:700; line-height:1; pointer-events:none; color:var(--blue);}
+  .arrow.below{bottom:-40px;}
+  .arrow b{display:block; font-size:.9rem;}
 
-        .tab.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-            color: white;
-            font-weight: 600;
-        }
+  /* hash map chips */
+  .chips{display:flex; flex-wrap:wrap; gap:10px; min-height:50px; align-content:flex-start;}
+  .chip{display:inline-flex; align-items:center; gap:6px; padding:9px 13px; border-radius:11px;
+    font-family:var(--mono); font-size:.95rem; font-weight:600; color:var(--text);
+    background:var(--bg); border:1.5px solid var(--border2); transition:.2s;}
+  .chip span{color:var(--faint); font-size:.82rem; font-weight:500;}
+  .chip.add{border-color:var(--green); background:var(--green-dim); color:#9af3d3; box-shadow:0 0 0 1px var(--green), 0 8px 20px -10px rgba(52,211,153,.5);}
+  .chip.add span{color:#5fd3ad;}
+  .chip.hit{border-color:var(--yellow); background:var(--yellow-dim); color:#ffd887; box-shadow:0 0 0 1px var(--yellow), 0 8px 20px -10px rgba(244,183,64,.5);}
+  .chip.hit span{color:#d8b25c;}
+  .chip-empty{font-family:var(--mono); font-size:.85rem; color:var(--faint); padding:14px 2px;}
 
-        /* CONTAINER */
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 24px;
-            border: 1px solid #334155;
-        }
+  /* transport */
+  .transport{position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+    width:min(1100px, calc(100% - 40px)); z-index:30; display:flex; align-items:center; gap:16px;
+    background:rgba(16,21,28,.92); backdrop-filter:blur(14px); border:1px solid var(--border2);
+    border-radius:18px; padding:12px 18px; box-shadow:0 14px 40px -12px rgba(0,0,0,.75);}
+  .tbtn{width:38px; height:38px; border-radius:50%; border:1px solid var(--border2);
+    background:var(--surface); color:var(--text); cursor:pointer; flex:none;
+    display:flex; align-items:center; justify-content:center; transition:.15s;}
+  .tbtn:hover:not(:disabled){border-color:var(--blue); color:var(--blue);}
+  .tbtn:disabled{opacity:.35; cursor:not-allowed;}
+  .tbtn svg{width:16px; height:16px; fill:currentColor;}
+  .play{width:54px; height:54px; border:none; background:var(--accent); color:#04130d;
+    box-shadow:0 0 0 6px rgba(52,211,153,.13), 0 8px 20px -6px rgba(52,211,153,.5);}
+  .play:hover:not(:disabled){filter:brightness(1.08); border:none; color:#04130d;}
+  .play svg{width:20px; height:20px;}
+  .scrub{flex:1; display:flex; align-items:center;}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:999px;
+    background:var(--border2); outline:none; cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:var(--accent); border:2px solid #04130d; box-shadow:0 0 0 3px rgba(52,211,153,.2);}
+  input[type=range].track-green{background:linear-gradient(90deg, var(--accent) var(--p,0%), var(--border2) var(--p,0%));}
+  .counter{font-family:var(--mono); font-size:.85rem; color:var(--muted); min-width:52px; text-align:center;}
+  .speed{display:flex; align-items:center; gap:8px;}
+  .speed svg{width:15px; height:15px; fill:var(--muted);}
+  .speed input[type=range]{width:92px;}
+  .mult{font-family:var(--mono); font-size:.82rem; color:var(--muted); min-width:42px; text-align:right;}
 
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
+  /* side */
+  .narr{display:flex; gap:11px; align-items:flex-start; padding:15px 17px;
+    background:linear-gradient(180deg, var(--surface2), var(--surface)); border:1px solid var(--border2);
+    border-radius:14px; font-size:.92rem; line-height:1.5; color:var(--text);}
+  .narr .dotg{width:9px; height:9px; border-radius:50%; background:var(--green); margin-top:6px; flex:none; box-shadow:0 0 10px var(--green);}
+  .narr code{font-family:var(--mono); color:var(--yellow); font-size:.88em;}
 
-        /* INPUT */
-        .input-section {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .metric{background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:13px 14px;}
+  .metric .v{font-family:var(--mono); font-size:1.5rem; font-weight:700; line-height:1; color:var(--text);}
+  .metric .v.muted{color:var(--faint);}
+  .metric .k{font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin-top:7px; font-weight:600;}
+  .metric.wide{grid-column:span 3; display:flex; align-items:baseline; gap:10px;}
+  .metric.wide .v{font-size:1.25rem; color:var(--blue);}
 
-        .input-section label {
-            font-size: 0.9rem;
-            color: #94a3b8;
-        }
+  .code{font-family:var(--mono); font-size:.83rem; line-height:1.75; overflow-x:auto;}
+  .code .ln{display:flex; gap:14px; padding:1px 8px; border-radius:6px; white-space:pre;}
+  .code .ln .no{color:var(--faint); width:14px; text-align:right; user-select:none; flex:none;}
+  .code .ln.active{background:linear-gradient(90deg, rgba(244,183,64,.14), rgba(244,183,64,.02)); box-shadow:inset 2px 0 0 var(--yellow);}
+  .code .ln.active .no{color:var(--yellow);}
+  .code .kw{color:#ff7b9c;} .code .fn{color:var(--blue);} .code .nu{color:#c3a6ff;} .code .op{color:var(--muted);}
+  .code .cm{color:#6b7889; font-style:italic;} .code .st{color:#9ad07f;} .code .ty{color:#7ee0c8;}
 
-        .input-section input {
-            padding: 8px 12px;
-            background: #0f172a;
-            color: #e2e8f0;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            font-size: 1rem;
-            width: 120px;
-            text-align: center;
-        }
+  .codetabs{display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:3px; gap:2px; margin-bottom:13px;}
+  .codetabs button{border:none; background:transparent; color:var(--muted); font-family:inherit; font-size:.78rem; font-weight:600; padding:5px 11px; border-radius:7px; cursor:pointer; transition:.15s;}
+  .codetabs button:hover{color:var(--text);}
+  .codetabs button.on{background:var(--surface2); color:var(--text); box-shadow:0 1px 0 rgba(255,255,255,.04);}
+  .src{font-family:var(--mono); font-size:.78rem; line-height:1.65; color:#cdd6e0; white-space:pre; overflow:auto; max-height:360px; margin:0;}
+  .src[hidden]{display:none;}
 
-        .input-section input:focus {
-            outline: none;
-            border-color: #3b82f6;
-        }
+  .legend{display:flex; flex-direction:column; gap:9px;}
+  .legend .it{display:flex; align-items:center; gap:9px; font-size:.85rem; color:var(--muted);}
+  .legend .sw{width:14px; height:14px; border-radius:4px; flex:none;}
+  .sw.blue{background:var(--blue-dim); border:1.5px solid var(--blue);}
+  .sw.yellow{background:var(--yellow-dim); border:1.5px solid var(--yellow);}
+  .sw.green{background:var(--green-dim); border:1.5px solid var(--green);}
 
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
+  .how{font-size:.9rem; line-height:1.6; color:var(--muted);}
+  .how b{color:var(--text); font-weight:600;}
+  .how p+p{margin-top:9px;}
 
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-success { background: #10b981; color: white; }
-        .btn-success:hover { background: #059669; }
-        .btn-warning { background: #f59e0b; color: #1e293b; }
-        .btn-warning:hover { background: #d97706; }
+  @media (max-width:920px){
+    .grid{grid-template-columns:1fr;}
+    body{padding:20px 14px 130px;}
+    h1{font-size:1.6rem;}
+  }
 
-        /* RESULT DISPLAY */
-        .result-box {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .result-box .label {
-            font-size: 0.8rem;
-            color: #64748b;
-            margin-bottom: 4px;
-        }
-
-        .result-box .value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #60a5fa;
-            font-family: 'Courier New', monospace;
-            letter-spacing: 3px;
-        }
-
-        /* STEPS */
-        .steps-container {
-            margin-top: 16px;
-        }
-
-        .step {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            margin-bottom: 6px;
-            background: #0f172a;
-            border-radius: 8px;
-            border-left: 3px solid #334155;
-            opacity: 0;
-            transform: translateX(-20px);
-            transition: all 0.4s ease;
-        }
-
-        .step.visible {
-            opacity: 1;
-            transform: translateX(0);
-        }
-
-        .step.active-step {
-            border-left-color: #3b82f6;
-            background: #1a2744;
-        }
-
-        .step.done {
-            border-left-color: #10b981;
-        }
-
-        .step-number {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: #334155;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 600;
-            flex-shrink: 0;
-        }
-
-        .step.active-step .step-number { background: #3b82f6; }
-        .step.done .step-number { background: #10b981; }
-
-        .step-info { flex: 1; }
-
-        .step-desc {
-            font-size: 0.85rem;
-            color: #94a3b8;
-        }
-
-        .step-values {
-            font-size: 0.9rem;
-            font-family: 'Courier New', monospace;
-            margin-top: 2px;
-        }
-
-        .step-remaining {
-            color: #f59e0b;
-            font-weight: 600;
-        }
-
-        .step-symbol {
-            color: #10b981;
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
-
-        .step-result {
-            color: #60a5fa;
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            min-width: 120px;
-            text-align: right;
-        }
-
-        /* VALUE TABLE */
-        .value-table {
-            margin-top: 20px;
-            background: #0f172a;
-            border-radius: 8px;
-            padding: 16px;
-            border: 1px solid #334155;
-        }
-
-        .value-table h3 {
-            font-size: 0.95rem;
-            color: #94a3b8;
-            margin-bottom: 12px;
-        }
-
-        .table-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-            gap: 6px;
-        }
-
-        .table-cell {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 8px;
-            background: #1e293b;
-            border-radius: 6px;
-            border: 1px solid #334155;
-            transition: all 0.3s;
-        }
-
-        .table-cell.highlight {
-            border-color: #3b82f6;
-            background: #1a2744;
-            transform: scale(1.05);
-        }
-
-        .table-cell .sym {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #a78bfa;
-        }
-
-        .table-cell .val {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin-top: 2px;
-        }
-
-        /* DIGIT MAP TAB */
-        .digit-decomposition {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
-
-        .digit-group {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 14px 20px;
-            text-align: center;
-            min-width: 120px;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: all 0.5s ease;
-        }
-
-        .digit-group.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .digit-group.active-group {
-            border-color: #3b82f6;
-            background: #1a2744;
-        }
-
-        .digit-place {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .digit-value {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #f59e0b;
-            font-family: 'Courier New', monospace;
-        }
-
-        .digit-arrow {
-            font-size: 1.2rem;
-            color: #64748b;
-            margin: 6px 0;
-        }
-
-        .digit-roman {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: #10b981;
-            font-family: 'Courier New', monospace;
-            letter-spacing: 2px;
-        }
-
-        /* CONTROLS */
-        .controls {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            margin-top: 16px;
-            flex-wrap: wrap;
-        }
-
-        /* SPEED SLIDER */
-        .speed-control {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 10px;
-            justify-content: center;
-        }
-
-        .speed-control label {
-            font-size: 0.8rem;
-            color: #64748b;
-        }
-
-        .speed-control input[type="range"] {
-            width: 100px;
-            accent-color: #3b82f6;
-        }
-
-        /* BUILDING ANIMATION */
-        .building-display {
-            display: flex;
-            gap: 2px;
-            justify-content: center;
-            margin: 16px 0;
-            min-height: 48px;
-            align-items: center;
-        }
-
-        .roman-char {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 44px;
-            background: #334155;
-            border-radius: 6px;
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: #e2e8f0;
-            font-family: 'Courier New', monospace;
-            opacity: 0;
-            transform: scale(0.5);
-            transition: all 0.3s ease;
-        }
-
-        .roman-char.visible {
-            opacity: 1;
-            transform: scale(1);
-        }
-
-        .roman-char.just-added {
-            background: #3b82f6;
-            color: white;
-            transform: scale(1.15);
-        }
-
-        .roman-char.settled {
-            background: #1e4a3a;
-            color: #10b981;
-        }
-
-        /* INFO PANEL */
-        .info-panel {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-top: 16px;
-            font-size: 0.85rem;
-            color: #94a3b8;
-        }
-
-        .info-panel code {
-            background: #334155;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            color: #a78bfa;
-        }
-    </style>
+  /* ===== light theme + theme toggle (injected) ===== */
+  :root[data-theme="light"]{
+    --bg:#f4f7fc; --bg2:#ffffff; --surface:#ffffff; --surface2:#eef3f9;
+    --border:#e2e8f1; --border2:#cfd9e6;
+    --text:#101826; --muted:#566372; --faint:#8895a6;
+    --blue:#1f6feb; --blue-dim:#dce8ff;
+    --yellow:#a9750b; --yellow-dim:#faedcc;
+    --green:#0e9d68; --green-dim:#d4f4e7;
+    --red:#d12d28;
+    --shadow:0 1px 0 rgba(255,255,255,.7), 0 10px 28px -14px rgba(20,40,70,.22);
+  }
+  :root[data-theme="light"] body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #e7f0ff 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, #efeaff 0%, transparent 55%),
+      var(--bg);
+  }
+  :root[data-theme="light"] .cell.stored, :root[data-theme="light"] .cell.ptr,
+  :root[data-theme="light"] .node.done{color:#1b4fd1;}
+  :root[data-theme="light"] .cell.cur, :root[data-theme="light"] .node.cur{color:#8a5a06;}
+  :root[data-theme="light"] .cell.match, :root[data-theme="light"] .node.written,
+  :root[data-theme="light"] .node.fresh{color:#0a7d57;}
+  :root[data-theme="light"] .chip.add, :root[data-theme="light"] .chip.add span{color:#0a7d57;}
+  :root[data-theme="light"] .chip.hit, :root[data-theme="light"] .chip.hit span{color:#8a5a06;}
+  :root[data-theme="light"] .transport{background:rgba(255,255,255,.86);}
+  :root[data-theme="light"] .code .kw{color:#cf2c6b;}
+  :root[data-theme="light"] .code .fn{color:#1f6feb;}
+  :root[data-theme="light"] .code .nu{color:#7c3aed;}
+  :root[data-theme="light"] .code .cm{color:#7a8694;}
+  :root[data-theme="light"] .code .st{color:#1a7f37;}
+  :root[data-theme="light"] .code .ty{color:#0d8a8a;}
+  .themetoggle{position:fixed; top:20px; right:22px; z-index:40; width:40px; height:40px;
+    border-radius:11px; border:1px solid var(--border2); background:var(--surface); color:var(--muted);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; transition:.15s; box-shadow:var(--shadow);}
+  .themetoggle:hover{color:var(--text); border-color:var(--blue);}
+  .themetoggle svg{width:18px; height:18px;}
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>0012. Integer to Roman</h1>
-        <p>Convert an integer (1-3999) to its Roman numeral representation</p>
+<script>(function(){try{if(localStorage.getItem('lc-anim-theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+<button class="themetoggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme"></button>
+<div class="wrap">
+
+  <div class="head">
+    <button class="back" title="(prototype) back">&#8592;</button>
+    <div>
+      <h1>Integer to Roman<span class="pill med">Medium</span></h1>
+      <div class="tags">
+        <span class="tag">hash table</span>
+        <span class="tag">math</span>
+        <span class="tag">string</span>
+      </div>
+      <p class="lede">Convert an integer (<code>1..3999</code>) into its <b>Roman numeral</b> string.
+      Two approaches, same problem — switch between them and watch each piece become a symbol.</p>
     </div>
+  </div>
 
-    <div class="tabs">
-        <div class="tab active" data-tab="greedy">Greedy (Value Table)</div>
-        <div class="tab" data-tab="digitmap">Digit Mapping</div>
-    </div>
-
-    <div class="container">
-        <!-- Greedy Tab -->
-        <div class="tab-content active" id="tab-greedy">
-            <div class="input-section">
-                <label>Number:</label>
-                <input type="number" id="greedyInput" value="1994" min="1" max="3999" placeholder="1-3999">
-                <button class="btn btn-primary" onclick="runGreedy()">Convert</button>
-                <button class="btn btn-success" onclick="stepGreedy()">Step</button>
-                <button class="btn btn-warning" onclick="resetGreedy()">Reset</button>
-            </div>
-
-            <div class="result-box">
-                <div class="label">ROMAN NUMERAL</div>
-                <div class="value" id="greedyResult">—</div>
-            </div>
-
-            <div class="building-display" id="greedyBuilding"></div>
-
-            <div class="steps-container" id="greedySteps"></div>
-
-            <div class="controls">
-                <div class="speed-control">
-                    <label>Speed:</label>
-                    <input type="range" id="greedySpeed" min="100" max="1500" value="600" step="100">
-                    <label id="greedySpeedLabel">600ms</label>
-                </div>
-            </div>
-
-            <div class="value-table">
-                <h3>Value-Symbol Reference Table</h3>
-                <div class="table-grid" id="greedyTable"></div>
-            </div>
+  <div class="grid">
+    <!-- main -->
+    <div class="card">
+      <div class="pad">
+        <div class="approaches">
+          <div class="segmented" id="approaches"></div>
+          <span class="comp" id="comp"></span>
         </div>
-
-        <!-- Digit Map Tab -->
-        <div class="tab-content" id="tab-digitmap">
-            <div class="input-section">
-                <label>Number:</label>
-                <input type="number" id="digitmapInput" value="1994" min="1" max="3999" placeholder="1-3999">
-                <button class="btn btn-primary" onclick="runDigitMap()">Convert</button>
-                <button class="btn btn-success" onclick="stepDigitMap()">Step</button>
-                <button class="btn btn-warning" onclick="resetDigitMap()">Reset</button>
-            </div>
-
-            <div class="result-box">
-                <div class="label">ROMAN NUMERAL</div>
-                <div class="value" id="digitmapResult">—</div>
-            </div>
-
-            <div class="building-display" id="digitmapBuilding"></div>
-
-            <div class="digit-decomposition" id="digitGroups"></div>
-
-            <div class="steps-container" id="digitmapSteps"></div>
-
-            <div class="controls">
-                <div class="speed-control">
-                    <label>Speed:</label>
-                    <input type="range" id="digitmapSpeed" min="200" max="2000" value="800" step="100">
-                    <label id="digitmapSpeedLabel">800ms</label>
-                </div>
-            </div>
-
-            <div class="info-panel">
-                <strong>Digit Mapping Approach:</strong>
-                Predefine Roman representations for each digit (0-9) at each place value (thousands, hundreds, tens, ones).
-                Decompose the number into its digits and look up each one.
-                Example: <code>1994</code> = <code>thousands[1]</code> + <code>hundreds[9]</code> + <code>tens[9]</code> + <code>ones[4]</code>
-                = <code>M</code> + <code>CM</code> + <code>XC</code> + <code>IV</code> = <code>MCMXCIV</code>
-            </div>
+        <div class="toolbar">
+          <div class="segmented" id="presets">
+            <button data-p="three" class="on">3</button>
+            <button data-p="fifty8">58</button>
+            <button data-p="mcm">1994</button>
+            <button data-p="big">3749</button>
+          </div>
+          <button class="ghost" id="newBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+            New number
+          </button>
         </div>
+      </div>
+
+      <div class="stage" id="stage"></div>
     </div>
 
-    <script>
-        // ============================================================
-        // Value-Symbol Table
-        // ============================================================
-        const VALUE_SYMBOLS = [
-            [1000, "M"],  [900, "CM"], [500, "D"],  [400, "CD"],
-            [100, "C"],   [90, "XC"],  [50, "L"],   [40, "XL"],
-            [10, "X"],    [9, "IX"],   [5, "V"],    [4, "IV"],
-            [1, "I"]
-        ];
+    <!-- side -->
+    <div class="side">
+      <div class="narr"><span class="dotg"></span><span id="narration">Press play to watch the algorithm run.</span></div>
 
-        const THOUSANDS = ["", "M", "MM", "MMM"];
-        const HUNDREDS  = ["", "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM"];
-        const TENS      = ["", "X", "XX", "XXX", "XL", "L", "LX", "LXX", "LXXX", "XC"];
-        const ONES      = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
+      <div class="card pad">
+        <div class="label">Metrics</div>
+        <div class="metrics" id="metrics"></div>
+      </div>
 
-        // ============================================================
-        // Tabs
-        // ============================================================
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-            });
-        });
+      <div class="card pad">
+        <div class="codetabs" id="codetabs">
+          <button data-v="pseudo" class="on">Pseudo</button>
+          <button data-v="py">Python</button>
+          <button data-v="java">Java</button>
+          <button data-v="go">Go</button>
+        </div>
+        <div class="code" id="code"></div>
+      </div>
 
-        // ============================================================
-        // Speed sliders
-        // ============================================================
-        document.getElementById('greedySpeed').addEventListener('input', e => {
-            document.getElementById('greedySpeedLabel').textContent = e.target.value + 'ms';
-        });
-        document.getElementById('digitmapSpeed').addEventListener('input', e => {
-            document.getElementById('digitmapSpeedLabel').textContent = e.target.value + 'ms';
-        });
+      <div class="card pad">
+        <div class="label">Legend</div>
+        <div class="legend" id="legend"></div>
+      </div>
 
-        // ============================================================
-        // Build value table
-        // ============================================================
-        function buildValueTable() {
-            const grid = document.getElementById('greedyTable');
-            grid.innerHTML = '';
-            VALUE_SYMBOLS.forEach(([val, sym]) => {
-                const cell = document.createElement('div');
-                cell.className = 'table-cell';
-                cell.id = 'vtcell-' + val;
-                cell.innerHTML = `<span class="sym">${sym}</span><span class="val">${val}</span>`;
-                grid.appendChild(cell);
-            });
+      <div class="card pad">
+        <div class="label">How it works</div>
+        <div class="how" id="how"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- transport -->
+<div class="transport">
+  <button class="tbtn" id="resetBtn" title="Reset">
+    <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+  </button>
+  <button class="tbtn" id="prevBtn" title="Previous">
+    <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+  </button>
+  <button class="tbtn play" id="playBtn" title="Play / Pause">
+    <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="tbtn" id="nextBtn" title="Next">
+    <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5l11 7-11 7z"/></svg>
+  </button>
+  <div class="scrub"><input type="range" id="scrub" class="track-green" min="0" max="0" value="0"></div>
+  <div class="counter" id="counter">0 / 0</div>
+  <div class="speed">
+    <svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+    <input type="range" id="speed" min="0" max="6" value="3">
+    <span class="mult" id="mult">1&times;</span>
+  </div>
+</div>
+
+<script>
+"use strict";
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ---------- tiny syntax highlighter for the language code views ----------
+const KEYWORDS = {
+  py: new Set(['def','class','return','if','elif','else','for','while','in','is','not','and','or','None','True','False','lambda','import','from','as','with','pass','break','continue','self']),
+  java: new Set(['public','private','protected','class','interface','void','int','long','double','float','boolean','char','byte','short','new','return','if','else','for','while','do','static','final','this','null','true','false','import','package','extends','implements','switch','case','default','break','continue']),
+  go: new Set(['func','range','for','if','else','return','make','map','struct','type','nil','var','const','package','import','chan','go','defer','bool','int','int64','string','true','false','switch','case','default','break','continue','byte','rune'])
+};
+// Types worth tinting (rendered as .ty) when they appear as bare identifiers.
+const TYPES = new Set(['Integer','Map','HashMap','Math','Arrays','List','String','StringBuilder','Object']);
+const RE_PY = /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b\d+\b)|([A-Za-z_]\w*)/g;
+const RE_C  = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|`[^`]*`)|(\b\d+\b)|([A-Za-z_]\w*)/g;
+function highlight(line, lang){
+  const kw = KEYWORDS[lang] || new Set();
+  const re = lang === 'py' ? RE_PY : RE_C;
+  re.lastIndex = 0;
+  let out = '', last = 0, m;
+  while ((m = re.exec(line))){
+    out += esc(line.slice(last, m.index));
+    if (m[1]) out += '<span class="cm">'+esc(m[1])+'</span>';
+    else if (m[2]) out += '<span class="st">'+esc(m[2])+'</span>';
+    else if (m[3]) out += '<span class="nu">'+esc(m[3])+'</span>';
+    else {
+      const w = m[4];
+      if (kw.has(w)) out += '<span class="kw">'+esc(w)+'</span>';
+      else if (TYPES.has(w)) out += '<span class="ty">'+esc(w)+'</span>';
+      else if (/^\s*\(/.test(line.slice(m.index + w.length))) out += '<span class="fn">'+esc(w)+'</span>';
+      else out += esc(w);
+    }
+    last = re.lastIndex;
+    if (re.lastIndex === m.index) re.lastIndex++;
+  }
+  out += esc(line.slice(last));
+  return out || ' ';
+}
+
+// ---------- datasets (a solution is guaranteed to exist) ----------
+const PRESETS = {
+  three:  { num:3    },
+  fifty8: { num:58   },
+  mcm:    { num:1994 },
+  big:    { num:3749 }
+};
+
+// the descending value -> symbol table shared by the greedy approach
+const VALUES  = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
+const SYMBOLS = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+
+// digit-mapping tables shared by approach 2
+const THOUSANDS = ['','M','MM','MMM'];
+const HUNDREDS  = ['','C','CC','CCC','CD','D','DC','DCC','DCCC','CM'];
+const TENS      = ['','X','XX','XXX','XL','L','LX','LXX','LXXX','XC'];
+const ONES      = ['','I','II','III','IV','V','VI','VII','VIII','IX'];
+
+const tableLabel = 'value &rarr; symbol <span style="color:var(--faint)">(descending)</span>';
+
+// ======================================================================
+// APPROACHES — each owns its pseudocode, legend, prose and buildFrames.
+// A frame is approach-agnostic: { rows, metrics, compare, narration, codeLine }.
+//   row = { type:'cells', label, cells:[{value, ix, cls, arrow}] }
+//       | { type:'chips', label, chips:[{key, idx, hl}] }
+// ======================================================================
+const APPROACHES = [
+{
+  id:'greedy', label:'Greedy + Value Table ★', comp:'O(1) time · O(1) space',
+  src:{
+    py:`def intToRoman(self, num):
+    value_symbols = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+        (100, "C"),  (90, "XC"),  (50, "L"),  (40, "XL"),
+        (10, "X"),   (9, "IX"),   (5, "V"),   (4, "IV"),
+        (1, "I"),
+    ]
+    result = []
+    for val, sym in value_symbols:
+        while num >= val:
+            result.append(sym)
+            num -= val
+    return "".join(result)`,
+    java:`public String intToRoman(int num) {
+    int[] values =    {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1};
+    String[] symbols = {"M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"};
+
+    StringBuilder result = new StringBuilder();
+    for (int i = 0; i < values.length; i++) {
+        while (num >= values[i]) {
+            result.append(symbols[i]);
+            num -= values[i];
         }
-        buildValueTable();
+    }
+    return result.toString();
+}`,
+    go:`func intToRoman(num int) string {
+    values := []int{1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1}
+    symbols := []string{"M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"}
 
-        // ============================================================
-        // Helper: render building display
-        // ============================================================
-        function renderBuilding(containerId, chars, justAddedStart) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = '';
-            chars.forEach((ch, i) => {
-                const el = document.createElement('span');
-                el.className = 'roman-char visible';
-                if (justAddedStart !== undefined && i >= justAddedStart) {
-                    el.classList.add('just-added');
-                } else {
-                    el.classList.add('settled');
-                }
-                el.textContent = ch;
-                container.appendChild(el);
-            });
+    result := ""
+    for i, val := range values {
+        for num >= val {
+            result += symbols[i]
+            num -= val
         }
+    }
+    return result
+}`},
+  map:{
+    py:{ 1:2, 2:2, 3:8, 4:9, 5:10, 6:11, 7:12, 8:13 },
+    java:{ 1:2, 2:3, 3:5, 4:6, 5:7, 6:8, 7:9, 8:12 },
+    go:{ 1:2, 2:3, 3:5, 4:6, 5:7, 6:8, 7:9, 8:12 }
+  },
+  legend:[['yellow','Current value being applied'],['blue','Already passed (too big)'],['green','Result complete']],
+  how:'<p>Lay out all <b>13</b> value→symbol pairs in descending order — the 7 base symbols '+
+      'plus the 6 subtractive forms (<code>CM, CD, XC, XL, IX, IV</code>).</p>'+
+      '<p>Walk the table from largest. <b>While</b> the current value still fits in '+
+      '<code>num</code>, append its symbol and subtract. Greedy always takes the biggest '+
+      'symbol that fits, which yields the correct numeral. <b>O(1)</b> — the table is fixed.</p>',
+  code:[
+    [['fn','values'],['op',' = ['],['nu','1000'],['op',', '],['nu','900'],['op',', ..., '],['nu','1'],['op',']']],
+    [['fn','symbols'],['op',' = ['],['st','"M"'],['op',', '],['st','"CM"'],['op',', ..., '],['st','"I"'],['op',']']],
+    [['fn','result'],['op',' = '],['st','""']],
+    [['kw','for'],['op',' i '],['kw','in'],['op',' range('],['nu','13'],['op','):']],
+    [['kw','  while'],['op',' num >= values[i]:']],
+    [['op','    result += symbols[i]']],
+    [['op','    num -= values[i]']],
+    [['kw','  return'],['op',' result']]
+  ],
+  build(num){
+    const frames = [];
+    const target = num;
+    let rem = num, result = '';
+    // a cell per table entry; cls/arrow set per frame
+    const cells = (cur, done) => VALUES.map((v,k)=>{
+      let cls = '';
+      if (done) cls = 'match';
+      else if (k===cur) cls = 'cur';
+      else if (cur!=null && k<cur) cls = 'stored';
+      return { value:SYMBOLS[k], ix:v, cls, arrow:(!done && k===cur) ? 'i' : '' };
+    });
+    const tableRow = (cur, done) => ({ type:'cells', label:tableLabel, cells:cells(cur, done) });
+    const mets = (val, sym, res) => [
+      {k:'remaining',v:rem},
+      {k:'symbol',v:sym},
+      {k:'value',v:val},
+      {k:'result',v:(res===''?'""':'"'+res+'"'), wide:true}
+    ];
+    frames.push({ rows:[tableRow(null,false)], metrics:mets('—','—',result),
+      compare:'num = '+target+'    result = ""',
+      narration:'Convert <code>'+target+'</code>. Scan the value→symbol table from the largest.',
+      codeLine:3 });
+    for (let i=0;i<VALUES.length;i++){
+      const val = VALUES[i], sym = SYMBOLS[i];
+      // visiting this table entry
+      frames.push({ rows:[tableRow(i,false)], metrics:mets(val, sym, result),
+        compare:'num = '+rem+'   '+rem+(rem>=val?' ≥ ':' &lt; ')+val+' ('+sym+')',
+        narration:'Try <code>'+val+' = '+sym+'</code>. '+(rem>=val?'It fits — apply it.':'Too big — skip.'),
+        codeLine:5 });
+      while (rem >= val){
+        const before = rem;
+        result += sym; rem -= val;
+        frames.push({ rows:[tableRow(i,false)], metrics:mets(val, sym, result),
+          compare:'append "'+sym+'"   num = '+before+' − '+val+' = '+rem,
+          narration:'Append <code>'+sym+'</code>, subtract <code>'+val+'</code> &rarr; num = <code>'+rem+'</code>.',
+          codeLine:6 });
+      }
+    }
+    frames.push({ rows:[tableRow(null,true)], metrics:mets('—','—',result),
+      compare:'<span class="ans">✓ "'+esc(result)+'"</span>',
+      narration:'num is 0 — done. The Roman numeral is <code>'+esc(result)+'</code>.',
+      codeLine:8, done:true });
+    return frames;
+  }
+},
+{
+  id:'digitmap', label:'Hardcoded Digit Mapping', comp:'O(1) time · O(1) space',
+  src:{
+    py:`def intToRomanDigitMap(self, num):
+    thousands = ["", "M", "MM", "MMM"]
+    hundreds  = ["", "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM"]
+    tens      = ["", "X", "XX", "XXX", "XL", "L", "LX", "LXX", "LXXX", "XC"]
+    ones      = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]
 
-        // ============================================================
-        // Greedy Approach
-        // ============================================================
-        let greedyState = null;
-        let greedyAnimTimer = null;
+    return thousands[num // 1000] + hundreds[(num % 1000) // 100] + tens[(num % 100) // 10] + ones[num % 10]`,
+    java:`public String intToRomanDigitMap(int num) {
+    String[] thousands = {"", "M", "MM", "MMM"};
+    String[] hundreds  = {"", "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM"};
+    String[] tens      = {"", "X", "XX", "XXX", "XL", "L", "LX", "LXX", "LXXX", "XC"};
+    String[] ones      = {"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"};
 
-        function getGreedySteps(num) {
-            const steps = [];
-            let remaining = num;
-            let result = "";
-            for (let i = 0; i < VALUE_SYMBOLS.length; i++) {
-                const [val, sym] = VALUE_SYMBOLS[i];
-                while (remaining >= val) {
-                    result += sym;
-                    remaining -= val;
-                    steps.push({
-                        valueIndex: i,
-                        value: val,
-                        symbol: sym,
-                        remaining: remaining,
-                        result: result
-                    });
-                }
-            }
-            return steps;
-        }
+    return thousands[num / 1000] + hundreds[(num % 1000) / 100] + tens[(num % 100) / 10] + ones[num % 10];
+}`,
+    go:`func intToRomanDigitMap(num int) string {
+    thousands := []string{"", "M", "MM", "MMM"}
+    hundreds  := []string{"", "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM"}
+    tens      := []string{"", "X", "XX", "XXX", "XL", "L", "LX", "LXX", "LXXX", "XC"}
+    ones      := []string{"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"}
 
-        function resetGreedy() {
-            if (greedyAnimTimer) clearTimeout(greedyAnimTimer);
-            greedyAnimTimer = null;
-            greedyState = null;
-            document.getElementById('greedyResult').textContent = '—';
-            document.getElementById('greedySteps').innerHTML = '';
-            document.getElementById('greedyBuilding').innerHTML = '';
-            document.querySelectorAll('#greedyTable .table-cell').forEach(c => c.classList.remove('highlight'));
-        }
+    return thousands[num/1000] + hundreds[(num%1000)/100] + tens[(num%100)/10] + ones[num%10]
+}`},
+  map:{
+    py:{ 1:2, 2:3, 3:4, 4:5, 5:7, 6:7, 7:7, 8:7, 9:7 },
+    java:{ 1:2, 2:3, 3:4, 4:5, 5:7, 6:7, 7:7, 8:7, 9:7 },
+    go:{ 1:2, 2:3, 3:4, 4:5, 5:7, 6:7, 7:7, 8:7, 9:7 }
+  },
+  legend:[['yellow','Current place value'],['blue','Already concatenated'],['green','Result complete']],
+  how:'<p>Because the input is bounded to <code>1..3999</code>, precompute the Roman string '+
+      'for each digit <code>0..9</code> at each place: thousands, hundreds, tens, ones.</p>'+
+      '<p>Split <code>num</code> into its four decimal digits, index each table, and concatenate. '+
+      'Exactly four lookups — no loops. <b>O(1)</b> time and space.</p>',
+  code:[
+    [['fn','thousands'],['op',' = ['],['st','""'],['op',', '],['st','"M"'],['op',', ..., '],['st','"MMM"'],['op',']']],
+    [['fn','hundreds'],['op',' = ['],['st','""'],['op',', ..., '],['st','"CM"'],['op',']']],
+    [['fn','tens'],['op',' = ['],['st','""'],['op',', ..., '],['st','"XC"'],['op',']']],
+    [['fn','ones'],['op',' = ['],['st','""'],['op',', ..., '],['st','"IX"'],['op',']']],
+    [['op','t  = num // '],['nu','1000']],
+    [['op','h  = (num % '],['nu','1000'],['op',') // '],['nu','100']],
+    [['op','te = (num % '],['nu','100'],['op',') // '],['nu','10']],
+    [['op','o  = num % '],['nu','10']],
+    [['kw','return'],['op',' thousands[t] + hundreds[h] + tens[te] + ones[o]']]
+  ],
+  build(num){
+    const frames = [];
+    const t  = Math.floor(num/1000);
+    const h  = Math.floor((num%1000)/100);
+    const te = Math.floor((num%100)/10);
+    const o  = num%10;
+    const places = [
+      { name:'thousands', digit:t,  sym:THOUSANDS[t],  place:1000, codeLine:5 },
+      { name:'hundreds',  digit:h,  sym:HUNDREDS[h],   place:100,  codeLine:6 },
+      { name:'tens',      digit:te, sym:TENS[te],      place:10,   codeLine:7 },
+      { name:'ones',      digit:o,  sym:ONES[o],       place:1,    codeLine:8 }
+    ];
+    // four cells, one per place value; the symbol is revealed as we go
+    const cells = (cur, done) => places.map((p,k)=>{
+      let cls = '';
+      if (done) cls = 'match';
+      else if (k===cur) cls = 'cur';
+      else if (cur!=null && k<cur) cls = 'stored';
+      const shown = (done || (cur!=null && k<=cur)) ? (p.sym===''?'·':p.sym) : '?';
+      return { value:shown, ix:p.name+' = '+p.digit, cls, arrow:(!done && k===cur) ? p.name[0] : '' };
+    });
+    const row = (cur, done) => ({ type:'cells', label:'place values <span style="color:var(--faint)">(digit shown below)</span>', cells:cells(cur, done) });
+    let result = '';
+    const mets = (place, digit, sym) => [
+      {k:'place',v:place},
+      {k:'digit',v:digit},
+      {k:'symbol',v:(sym==null?'—':(sym===''?'""':'"'+sym+'"'))},
+      {k:'result',v:(result===''?'""':'"'+result+'"'), wide:true}
+    ];
+    frames.push({ rows:[row(null,false)], metrics:mets('—','—',null),
+      compare:'num = '+num+'    result = ""',
+      narration:'Convert <code>'+num+'</code> by decimal place: thousands, hundreds, tens, ones.',
+      codeLine:1 });
+    for (let i=0;i<places.length;i++){
+      const p = places[i];
+      result += p.sym;
+      frames.push({ rows:[row(i,false)], metrics:mets(p.place, p.digit, p.sym),
+        compare:p.name+'['+p.digit+'] = "'+p.sym+'"   result = "'+esc(result)+'"',
+        narration:'<code>'+p.name+'['+p.digit+'] = "'+p.sym+'"</code> &rarr; result = <code>"'+esc(result)+'"</code>.',
+        codeLine:p.codeLine });
+    }
+    frames.push({ rows:[row(null,true)], metrics:mets('—','—',null),
+      compare:'<span class="ans">✓ "'+esc(result)+'"</span>',
+      narration:'Concatenate the four lookups &rarr; <code>'+esc(result)+'</code>.',
+      codeLine:9, done:true });
+    return frames;
+  }
+}
+];
 
-        function initGreedyState() {
-            const num = parseInt(document.getElementById('greedyInput').value) || 1;
-            const clamped = Math.max(1, Math.min(3999, num));
-            document.getElementById('greedyInput').value = clamped;
-            resetGreedy();
-            const steps = getGreedySteps(clamped);
-            greedyState = { steps, currentStep: 0, num: clamped };
-            return greedyState;
-        }
+// ---------- state ----------
+let approach = APPROACHES[0];          // default: greedy
+let presetName = 'big';
+let curNum = PRESETS.big.num;
+let frames = [];
+let idx = 0;
+let playing = false;
+let timer = null;
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4];
+let speedI = 3;
 
-        function showGreedyStep(state) {
-            if (state.currentStep >= state.steps.length) return false;
+// ---------- rendering ----------
+function cellWidth(n){ return n <= 6 ? 78 : n <= 8 ? 64 : 52; }
 
-            const step = state.steps[state.currentStep];
-            const stepsDiv = document.getElementById('greedySteps');
+function cellsRowHTML(row, n){
+  const w = cellWidth(n);
+  const cells = row.cells.map(c=>{
+    const cls = 'cell' + (c.cls ? ' '+c.cls : '');
+    const arrow = c.arrow ? '<span class="arrow below"><b>▲</b>'+c.arrow+'</span>' : '';
+    const ix = (c.ix!=null) ? '<span class="ix">'+c.ix+'</span>' : '';
+    return '<div class="'+cls+'">'+c.value+ix+arrow+'</div>';
+  }).join('');
+  return '<div class="rowlabel">'+row.label+'</div><div class="cells" style="grid-template-columns:repeat('+n+','+w+'px)">'+cells+'</div>';
+}
+function chipsRowHTML(row){
+  const chips = row.chips.length
+    ? row.chips.map(e=>'<div class="chip '+(e.hl||'')+'">'+e.key+'<span>→ '+e.idx+'</span></div>').join('')
+    : '<div class="chip-empty">empty</div>';
+  return '<div class="rowlabel sp">'+row.label+'</div><div class="chips">'+chips+'</div>';
+}
 
-            // Settle previous steps
-            stepsDiv.querySelectorAll('.step.active-step').forEach(s => {
-                s.classList.remove('active-step');
-                s.classList.add('done');
-            });
+// code panel: pseudocode tokens OR a real language; BOTH highlight the active line.
+function codeLinesHTML(view){
+  if (view === 'pseudo'){
+    return approach.code.map((toks,i)=>{
+      const inner = toks.map(([c,t])=>'<span class="'+c+'">'+esc(t)+'</span>').join('');
+      return '<div class="ln" data-line="'+(i+1)+'"><span class="no">'+(i+1)+'</span><span>'+inner+'</span></div>';
+    }).join('');
+  }
+  return (approach.src[view]||'').split('\n').map((ln,i)=>
+    '<div class="ln" data-line="'+(i+1)+'"><span class="no">'+(i+1)+'</span><span>'+highlight(ln, view)+'</span></div>'
+  ).join('');
+}
+function highlightLine(){
+  const f = frames[idx]; if (!f) return;
+  let active = f.codeLine;
+  if (codeView !== 'pseudo'){ const m = approach.map && approach.map[codeView]; active = m ? m[f.codeLine] : -1; }
+  document.querySelectorAll('#code .ln').forEach(ln=>ln.classList.toggle('active', +ln.dataset.line === active));
+}
+function renderCodeView(){
+  document.querySelectorAll('#codetabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===codeView));
+  document.getElementById('code').innerHTML = codeLinesHTML(codeView);
+  highlightLine();
+}
+function renderLegend(){
+  document.getElementById('legend').innerHTML = approach.legend
+    .map(([sw,txt])=>'<div class="it"><span class="sw '+sw+'"></span>'+txt+'</div>').join('');
+}
 
-            // Remove previous table highlight
-            document.querySelectorAll('#greedyTable .table-cell').forEach(c => c.classList.remove('highlight'));
+let codeView = 'pseudo';
+function setCodeView(v){ codeView = v; renderCodeView(); }
 
-            // Highlight current value in table
-            const cell = document.getElementById('vtcell-' + step.value);
-            if (cell) cell.classList.add('highlight');
+function render(){
+  const f = frames[idx];
+  let n = 0;
+  f.rows.forEach(r=>{ if (r.type==='cells') n = Math.max(n, r.cells.length); });
+  document.getElementById('stage').innerHTML =
+    '<div class="compare">'+f.compare+'</div>' +
+    f.rows.map(r => r.type==='cells' ? cellsRowHTML(r,n) : chipsRowHTML(r)).join('');
 
-            // Create step element
-            const stepEl = document.createElement('div');
-            stepEl.className = 'step active-step';
-            stepEl.innerHTML = `
-                <div class="step-number">${state.currentStep + 1}</div>
-                <div class="step-info">
-                    <div class="step-desc">Subtract <strong>${step.value}</strong> (${step.symbol})</div>
-                    <div class="step-values">
-                        remaining: <span class="step-remaining">${step.remaining}</span>
-                    </div>
-                </div>
-                <div class="step-symbol">${step.symbol}</div>
-                <div class="step-result">"${step.result}"</div>
-            `;
-            stepsDiv.appendChild(stepEl);
-            requestAnimationFrame(() => stepEl.classList.add('visible'));
+  document.getElementById('metrics').innerHTML = f.metrics.map(m=>{
+    const wide = m.wide ? ' wide' : '';
+    const vcls = 'v' + (m.v==='—' ? ' muted' : '');
+    return '<div class="metric'+wide+'"><div class="'+vcls+'">'+m.v+'</div><div class="k">'+m.k+'</div></div>';
+  }).join('');
 
-            // Building display
-            const chars = step.result.split('');
-            const prevLen = state.currentStep > 0 ? state.steps[state.currentStep - 1].result.length : 0;
-            renderBuilding('greedyBuilding', chars, prevLen);
+  document.getElementById('narration').innerHTML = f.narration;
 
-            // Update result
-            document.getElementById('greedyResult').textContent = step.result;
+  highlightLine();
 
-            state.currentStep++;
-            return state.currentStep < state.steps.length;
-        }
+  const last = frames.length - 1;
+  const scrub = document.getElementById('scrub');
+  scrub.max = last; scrub.value = idx;
+  scrub.style.setProperty('--p', (last ? idx/last*100 : 0)+'%');
+  document.getElementById('counter').textContent = (idx+1) + ' / ' + (last+1);
+  document.getElementById('prevBtn').disabled = idx === 0;
+  document.getElementById('nextBtn').disabled = idx === last;
+}
 
-        function stepGreedy() {
-            if (!greedyState) initGreedyState();
-            showGreedyStep(greedyState);
-        }
+// ---------- transport ----------
+function goto(i){
+  const last = frames.length - 1;
+  idx = Math.max(0, Math.min(last, i));
+  render();
+  if (idx === last) stop();
+}
+function next(){ if (idx < frames.length-1) goto(idx+1); }
+function prev(){ goto(idx-1); }
+function play(){
+  if (idx >= frames.length-1) idx = 0;
+  playing = true; setPlayIcon(true);
+  const delay = 800 / SPEEDS[speedI];
+  timer = setInterval(()=>{ if (idx >= frames.length-1){ stop(); return; } goto(idx+1); }, delay);
+}
+function stop(){ playing = false; setPlayIcon(false); if (timer){ clearInterval(timer); timer = null; } }
+function toggle(){ playing ? stop() : play(); }
+function setPlayIcon(on){
+  document.getElementById('playIcon').innerHTML = on
+    ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'
+    : '<path d="M8 5v14l11-7z"/>';
+}
 
-        function runGreedy() {
-            const state = initGreedyState();
-            const speed = parseInt(document.getElementById('greedySpeed').value);
+// ---------- build / switch ----------
+function rebuild(){
+  stop();
+  frames = approach.build(curNum);
+  idx = 0;
+  document.getElementById('comp').innerHTML = '<b>'+approach.comp.split('·')[0].trim()+'</b> · '+approach.comp.split('·').slice(1).join('·').trim();
+  render();
+}
+function setApproach(ap){
+  approach = ap;
+  document.querySelectorAll('#approaches button').forEach(b=>b.classList.toggle('on', b.dataset.a===ap.id));
+  renderLegend();
+  document.getElementById('how').innerHTML = ap.how;
+  renderCodeView();
+  rebuild();
+}
+function setPreset(name){
+  presetName = name;
+  curNum = PRESETS[name].num;
+  document.querySelectorAll('#presets button').forEach(b=>b.classList.toggle('on', b.dataset.p===name));
+  rebuild();
+}
+function randomArray(){
+  curNum = 1 + Math.floor(Math.random()*3999);                     // 1..3999
+  document.querySelectorAll('#presets button').forEach(x=>x.classList.remove('on'));
+  rebuild();
+}
 
-            function animate() {
-                const hasMore = showGreedyStep(state);
-                if (hasMore) {
-                    greedyAnimTimer = setTimeout(animate, speed);
-                } else {
-                    // Settle all
-                    document.querySelectorAll('#greedySteps .step.active-step').forEach(s => {
-                        s.classList.remove('active-step');
-                        s.classList.add('done');
-                    });
-                    document.querySelectorAll('#greedyTable .table-cell').forEach(c => c.classList.remove('highlight'));
-                    // Settle building chars
-                    document.querySelectorAll('#greedyBuilding .roman-char').forEach(c => {
-                        c.classList.remove('just-added');
-                        c.classList.add('settled');
-                    });
-                }
-            }
-            animate();
-        }
+// ---------- wiring ----------
+document.getElementById('approaches').innerHTML = APPROACHES
+  .map(a=>'<button data-a="'+a.id+'">'+a.label+'</button>').join('');
+document.getElementById('approaches').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  setApproach(APPROACHES.find(a=>a.id===b.dataset.a));
+});
+document.getElementById('presets').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  setPreset(b.dataset.p);
+});
+document.getElementById('codetabs').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  setCodeView(b.dataset.v);
+});
+document.getElementById('newBtn').addEventListener('click', randomArray);
+document.getElementById('playBtn').addEventListener('click', toggle);
+document.getElementById('nextBtn').addEventListener('click', ()=>{ stop(); next(); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ stop(); prev(); });
+document.getElementById('resetBtn').addEventListener('click', ()=>{ stop(); goto(0); });
+document.getElementById('scrub').addEventListener('input', e=>{ stop(); goto(+e.target.value); });
+document.getElementById('speed').addEventListener('input', e=>{
+  speedI = +e.target.value;
+  document.getElementById('mult').innerHTML = SPEEDS[speedI] + '&times;';
+  if (playing){ stop(); play(); }
+});
+document.addEventListener('keydown', e=>{
+  if (e.key === ' '){ e.preventDefault(); toggle(); }
+  else if (e.key === 'ArrowRight'){ stop(); next(); }
+  else if (e.key === 'ArrowLeft'){ stop(); prev(); }
+});
 
-        // ============================================================
-        // Digit Map Approach
-        // ============================================================
-        let digitmapState = null;
-        let digitmapAnimTimer = null;
-
-        function getDigitMapSteps(num) {
-            const places = [
-                { name: "Thousands", divisor: 1000, mod: 10, table: THOUSANDS },
-                { name: "Hundreds",  divisor: 100,  mod: 10, table: HUNDREDS },
-                { name: "Tens",      divisor: 10,   mod: 10, table: TENS },
-                { name: "Ones",      divisor: 1,    mod: 10, table: ONES },
-            ];
-
-            const steps = [];
-            let result = "";
-            for (const place of places) {
-                const digit = Math.floor(num / place.divisor) % place.mod;
-                const roman = place.table[digit];
-                result += roman;
-                steps.push({
-                    place: place.name,
-                    digit: digit,
-                    digitValue: digit * place.divisor,
-                    roman: roman,
-                    result: result
-                });
-            }
-            return steps;
-        }
-
-        function resetDigitMap() {
-            if (digitmapAnimTimer) clearTimeout(digitmapAnimTimer);
-            digitmapAnimTimer = null;
-            digitmapState = null;
-            document.getElementById('digitmapResult').textContent = '—';
-            document.getElementById('digitmapSteps').innerHTML = '';
-            document.getElementById('digitmapBuilding').innerHTML = '';
-            document.getElementById('digitGroups').innerHTML = '';
-        }
-
-        function initDigitMapState() {
-            const num = parseInt(document.getElementById('digitmapInput').value) || 1;
-            const clamped = Math.max(1, Math.min(3999, num));
-            document.getElementById('digitmapInput').value = clamped;
-            resetDigitMap();
-            const steps = getDigitMapSteps(clamped);
-            digitmapState = { steps, currentStep: 0, num: clamped };
-
-            // Create digit group placeholders
-            const groupsDiv = document.getElementById('digitGroups');
-            steps.forEach((step, i) => {
-                const group = document.createElement('div');
-                group.className = 'digit-group';
-                group.id = 'dgroup-' + i;
-                group.innerHTML = `
-                    <div class="digit-place">${step.place}</div>
-                    <div class="digit-value">${step.digitValue}</div>
-                    <div class="digit-arrow">&#8595;</div>
-                    <div class="digit-roman">${step.roman || '—'}</div>
-                `;
-                groupsDiv.appendChild(group);
-            });
-
-            return digitmapState;
-        }
-
-        function showDigitMapStep(state) {
-            if (state.currentStep >= state.steps.length) return false;
-
-            const step = state.steps[state.currentStep];
-            const stepsDiv = document.getElementById('digitmapSteps');
-
-            // Settle previous
-            stepsDiv.querySelectorAll('.step.active-step').forEach(s => {
-                s.classList.remove('active-step');
-                s.classList.add('done');
-            });
-            document.querySelectorAll('.digit-group.active-group').forEach(g => g.classList.remove('active-group'));
-
-            // Show digit group
-            const group = document.getElementById('dgroup-' + state.currentStep);
-            if (group) {
-                group.classList.add('visible', 'active-group');
-            }
-
-            // Create step element
-            const stepEl = document.createElement('div');
-            stepEl.className = 'step active-step';
-            stepEl.innerHTML = `
-                <div class="step-number">${state.currentStep + 1}</div>
-                <div class="step-info">
-                    <div class="step-desc"><strong>${step.place}</strong>: digit = ${step.digit} (value = ${step.digitValue})</div>
-                    <div class="step-values">
-                        lookup: <code>${step.place.toLowerCase()}[${step.digit}]</code> = <span class="step-symbol">"${step.roman}"</span>
-                    </div>
-                </div>
-                <div class="step-result">"${step.result}"</div>
-            `;
-            stepsDiv.appendChild(stepEl);
-            requestAnimationFrame(() => stepEl.classList.add('visible'));
-
-            // Building display
-            const chars = step.result.split('');
-            const prevLen = state.currentStep > 0 ? state.steps[state.currentStep - 1].result.length : 0;
-            renderBuilding('digitmapBuilding', chars, prevLen);
-
-            // Update result
-            document.getElementById('digitmapResult').textContent = step.result;
-
-            state.currentStep++;
-            return state.currentStep < state.steps.length;
-        }
-
-        function stepDigitMap() {
-            if (!digitmapState) initDigitMapState();
-            showDigitMapStep(digitmapState);
-        }
-
-        function runDigitMap() {
-            const state = initDigitMapState();
-            const speed = parseInt(document.getElementById('digitmapSpeed').value);
-
-            function animate() {
-                const hasMore = showDigitMapStep(state);
-                if (hasMore) {
-                    digitmapAnimTimer = setTimeout(animate, speed);
-                } else {
-                    stepsDiv = document.getElementById('digitmapSteps');
-                    stepsDiv.querySelectorAll('.step.active-step').forEach(s => {
-                        s.classList.remove('active-step');
-                        s.classList.add('done');
-                    });
-                    document.querySelectorAll('.digit-group.active-group').forEach(g => g.classList.remove('active-group'));
-                    document.querySelectorAll('.digit-group').forEach(g => g.classList.add('visible'));
-                    document.querySelectorAll('#digitmapBuilding .roman-char').forEach(c => {
-                        c.classList.remove('just-added');
-                        c.classList.add('settled');
-                    });
-                }
-            }
-            animate();
-        }
-
-        // ============================================================
-        // Enter key support
-        // ============================================================
-        document.getElementById('greedyInput').addEventListener('keydown', e => {
-            if (e.key === 'Enter') runGreedy();
-        });
-        document.getElementById('digitmapInput').addEventListener('keydown', e => {
-            if (e.key === 'Enter') runDigitMap();
-        });
-    </script>
+// ---------- init ----------
+document.getElementById('mult').innerHTML = SPEEDS[speedI] + '&times;';
+setApproach(approach);   // renders code/legend/how + builds frames
+setCodeView('pseudo');
+</script>
+<script>
+(function(){
+  var KEY='lc-anim-theme', root=document.documentElement, b=document.getElementById('themeToggle');
+  if(!b) return;
+  var SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  var MOON='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  function icon(){ b.innerHTML = root.getAttribute('data-theme')==='light' ? MOON : SUN; }
+  function set(t){ if(t==='light') root.setAttribute('data-theme','light'); else root.removeAttribute('data-theme'); try{localStorage.setItem(KEY,t);}catch(e){} icon(); }
+  icon();
+  b.addEventListener('click', function(){ set(root.getAttribute('data-theme')==='light' ? 'dark' : 'light'); });
+})();
+</script>
 </body>
 </html>

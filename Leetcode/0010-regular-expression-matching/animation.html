@@ -1,1351 +1,958 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>0010. Regular Expression Matching — Visual Animation</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regular Expression Matching — Two Approaches</title>
+<style>
+  :root{
+    --bg:#0a0d12; --bg2:#0d1117; --surface:#141a22; --surface2:#1b232e;
+    --border:#222c38; --border2:#2c3848;
+    --text:#e6edf3; --muted:#8b97a6; --faint:#5b6675;
+    --blue:#4f9dff; --blue-dim:#16314f;
+    --yellow:#f4b740; --yellow-dim:#3a2c08;
+    --green:#34d399; --green-dim:#0c2c22;
+    --red:#f85149;
+    --accent:#34d399;
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 8px 24px -12px rgba(0,0,0,.6);
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono','Cascadia Code',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    font-family:var(--sans); background:
+      radial-gradient(1200px 600px at 80% -10%, #10202e 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, #161226 0%, transparent 55%),
+      var(--bg);
+    color:var(--text); min-height:100vh; padding:28px 24px 120px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px; margin:0 auto;}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-            padding: 20px;
-        }
+  /* header */
+  .head{display:flex; align-items:flex-start; gap:14px; margin-bottom:6px;}
+  .back{width:40px; height:40px; flex:none; border-radius:11px; border:1px solid var(--border2);
+    background:var(--surface); color:var(--muted); font-size:1.1rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition:.15s;}
+  .back:hover{color:var(--text); border-color:var(--blue);}
+  h1{font-size:2rem; font-weight:700; letter-spacing:-.02em; line-height:1.1;}
+  .pill{display:inline-flex; align-items:center; padding:3px 11px; border-radius:999px;
+    font-size:.78rem; font-weight:600; vertical-align:middle; margin-left:10px;}
+  .pill.easy{background:rgba(52,211,153,.13); color:var(--green); border:1px solid rgba(52,211,153,.25);}
+  .pill.hard{background:rgba(248,81,73,.13); color:var(--red); border:1px solid rgba(248,81,73,.3);}
+  .tags{display:flex; gap:8px; margin:14px 0 8px;}
+  .tag{padding:5px 13px; border-radius:999px; font-size:.82rem; color:var(--muted);
+    background:var(--surface); border:1px solid var(--border);}
+  .lede{color:var(--muted); font-size:1.02rem; line-height:1.5; max-width:780px; margin-top:4px;}
+  .lede b{color:var(--text); font-weight:600;}
+  .lede code{font-family:var(--mono); color:var(--blue); font-size:.9em;}
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+  /* layout */
+  .grid{display:grid; grid-template-columns:1fr 384px; gap:20px; margin-top:24px;}
+  .card{background:linear-gradient(180deg, var(--surface) 0%, var(--bg2) 100%);
+    border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow);}
+  .card.pad{padding:18px 20px;}
+  .side{display:flex; flex-direction:column; gap:16px;}
+  .label{font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--faint); font-weight:700; margin-bottom:12px;}
 
-        .header h1 {
-            font-size: 1.8rem;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 8px;
-        }
+  /* approach selector */
+  .approaches{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .approaches .segmented{flex-wrap:wrap;}
+  .comp{font-family:var(--mono); font-size:.8rem; color:var(--muted); white-space:nowrap;}
+  .comp b{color:var(--green);}
 
-        .header p { color: #94a3b8; font-size: 0.95rem; }
+  /* presets */
+  .toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .segmented{display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:11px; padding:3px;}
+  .segmented button{border:none; background:transparent; color:var(--muted); font-family:inherit;
+    font-size:.84rem; font-weight:600; padding:7px 14px; border-radius:8px; cursor:pointer; transition:.15s;}
+  .segmented button:hover{color:var(--text);}
+  .segmented button.on{background:var(--surface2); color:var(--text); box-shadow:0 1px 0 rgba(255,255,255,.04);}
+  .ghost{display:inline-flex; align-items:center; gap:7px; border:1px solid var(--border2);
+    background:var(--surface); color:var(--text); font-family:inherit; font-size:.84rem; font-weight:600;
+    padding:8px 14px; border-radius:10px; cursor:pointer; transition:.15s;}
+  .ghost:hover{border-color:var(--blue); color:var(--blue);}
 
-        /* TABS */
-        .tabs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
+  /* stage */
+  .stage{padding:22px 24px 28px; border-top:1px solid var(--border);}
+  .compare{text-align:center; font-family:var(--mono); font-size:1rem; color:var(--yellow);
+    min-height:1.4em; margin-bottom:24px; letter-spacing:.01em;}
+  .compare .dim{color:var(--faint);}
+  .compare .ans{color:var(--green); font-weight:700;}
+  .compare .bad{color:var(--red); font-weight:700;}
+  .rowlabel{font-family:var(--mono); font-size:.78rem; color:var(--faint); margin:0 0 10px 2px;}
+  .rowlabel.sp{margin-top:34px;}
 
-        .tab {
-            padding: 10px 20px;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px 8px 0 0;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.9rem;
-            user-select: none;
-        }
+  .cells{display:grid; gap:12px; justify-content:start;}
+  .cell{position:relative; height:64px; border-radius:12px; border:1.5px solid var(--border2);
+    background:var(--bg); display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:1.15rem; font-weight:600; color:var(--text);
+    transition:transform .2s, background .2s, border-color .2s, box-shadow .2s;}
+  .cell .ix{position:absolute; bottom:-20px; left:0; right:0; text-align:center; font-size:.72rem; color:var(--faint); font-weight:500;}
+  .cell.stored{border-color:var(--blue); background:var(--blue-dim); color:#bdd9ff; opacity:.85;}
+  .cell.ptr{border-color:var(--blue); background:var(--blue-dim); color:#bdd9ff;}
+  .cell.cur{border-color:var(--yellow); background:var(--yellow-dim); color:#ffd887; box-shadow:0 0 0 1px var(--yellow), 0 8px 22px -10px rgba(244,183,64,.5); transform:translateY(-3px);}
+  .cell.match{border-color:var(--green); background:var(--green-dim); color:#9af3d3; box-shadow:0 0 0 1px var(--green), 0 10px 24px -8px rgba(52,211,153,.55); transform:translateY(-3px);}
+  /* truthy / falsy fill tints for the DP grid */
+  .cell.tt{color:#9af3d3; border-color:rgba(52,211,153,.4);}
+  .cell.ff{color:var(--faint);}
+  /* compact mode for the DP table (many rows) */
+  .stage.compact .cell{height:42px; font-size:1rem; border-radius:9px;}
+  .stage.compact .cell .ix{bottom:-17px; font-size:.66rem;}
+  .stage.compact .cells{gap:8px;}
+  .stage.compact .rowlabel{margin-bottom:7px;}
+  .stage.compact .rowlabel.sp{margin-top:18px;}
 
-        .tab:hover { background: #334155; }
+  .arrow{position:absolute; left:0; right:0; text-align:center; font-family:var(--mono); font-size:.74rem; font-weight:700; line-height:1; pointer-events:none; color:var(--blue);}
+  .arrow.below{bottom:-40px;}
+  .arrow b{display:block; font-size:.9rem;}
 
-        .tab.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-            color: white;
-            font-weight: 600;
-        }
+  /* call-stack chips */
+  .chips{display:flex; flex-wrap:wrap; gap:10px; min-height:50px; align-content:flex-start;}
+  .chip{display:inline-flex; align-items:center; gap:6px; padding:9px 13px; border-radius:11px;
+    font-family:var(--mono); font-size:.95rem; font-weight:600; color:var(--text);
+    background:var(--bg); border:1.5px solid var(--border2); transition:.2s;}
+  .chip span{color:var(--faint); font-size:.82rem; font-weight:500;}
+  .chip.add{border-color:var(--green); background:var(--green-dim); color:#9af3d3; box-shadow:0 0 0 1px var(--green), 0 8px 20px -10px rgba(52,211,153,.5);}
+  .chip.add span{color:#5fd3ad;}
+  .chip.hit{border-color:var(--yellow); background:var(--yellow-dim); color:#ffd887; box-shadow:0 0 0 1px var(--yellow), 0 8px 20px -10px rgba(244,183,64,.5);}
+  .chip.hit span{color:#d8b25c;}
+  .chip.bad{border-color:rgba(248,81,73,.5); background:rgba(248,81,73,.1); color:#ffb3ad;}
+  .chip.bad span{color:#d88c87;}
+  .chip-empty{font-family:var(--mono); font-size:.85rem; color:var(--faint); padding:14px 2px;}
 
-        /* CONTAINER */
-        .container {
-            max-width: 95vw;
-            margin: 0 auto;
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 24px;
-            border: 1px solid #334155;
-        }
+  /* transport */
+  .transport{position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+    width:min(1100px, calc(100% - 40px)); z-index:30; display:flex; align-items:center; gap:16px;
+    background:rgba(16,21,28,.92); backdrop-filter:blur(14px); border:1px solid var(--border2);
+    border-radius:18px; padding:12px 18px; box-shadow:0 14px 40px -12px rgba(0,0,0,.75);}
+  .tbtn{width:38px; height:38px; border-radius:50%; border:1px solid var(--border2);
+    background:var(--surface); color:var(--text); cursor:pointer; flex:none;
+    display:flex; align-items:center; justify-content:center; transition:.15s;}
+  .tbtn:hover:not(:disabled){border-color:var(--blue); color:var(--blue);}
+  .tbtn:disabled{opacity:.35; cursor:not-allowed;}
+  .tbtn svg{width:16px; height:16px; fill:currentColor;}
+  .play{width:54px; height:54px; border:none; background:var(--accent); color:#04130d;
+    box-shadow:0 0 0 6px rgba(52,211,153,.13), 0 8px 20px -6px rgba(52,211,153,.5);}
+  .play:hover:not(:disabled){filter:brightness(1.08); border:none; color:#04130d;}
+  .play svg{width:20px; height:20px;}
+  .scrub{flex:1; display:flex; align-items:center;}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:999px;
+    background:var(--border2); outline:none; cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:var(--accent); border:2px solid #04130d; box-shadow:0 0 0 3px rgba(52,211,153,.2);}
+  input[type=range].track-green{background:linear-gradient(90deg, var(--accent) var(--p,0%), var(--border2) var(--p,0%));}
+  .counter{font-family:var(--mono); font-size:.85rem; color:var(--muted); min-width:52px; text-align:center;}
+  .speed{display:flex; align-items:center; gap:8px;}
+  .speed svg{width:15px; height:15px; fill:var(--muted);}
+  .speed input[type=range]{width:92px;}
+  .mult{font-family:var(--mono); font-size:.82rem; color:var(--muted); min-width:42px; text-align:right;}
 
-        /* INPUT */
-        .input-section {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
+  /* side */
+  .narr{display:flex; gap:11px; align-items:flex-start; padding:15px 17px;
+    background:linear-gradient(180deg, var(--surface2), var(--surface)); border:1px solid var(--border2);
+    border-radius:14px; font-size:.92rem; line-height:1.5; color:var(--text);}
+  .narr .dotg{width:9px; height:9px; border-radius:50%; background:var(--green); margin-top:6px; flex:none; box-shadow:0 0 10px var(--green);}
+  .narr code{font-family:var(--mono); color:var(--yellow); font-size:.88em;}
 
-        .input-section label {
-            color: #94a3b8;
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .metric{background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:13px 14px;}
+  .metric .v{font-family:var(--mono); font-size:1.5rem; font-weight:700; line-height:1; color:var(--text);}
+  .metric .v.muted{color:var(--faint);}
+  .metric .k{font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin-top:7px; font-weight:600;}
+  .metric.wide{grid-column:span 3; display:flex; align-items:baseline; gap:10px;}
+  .metric.wide .v{font-size:1.25rem; color:var(--blue);}
 
-        .input-section input {
-            padding: 8px 12px;
-            background: #0f172a;
-            color: #e2e8f0;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-family: 'Courier New', monospace;
-        }
+  .code{font-family:var(--mono); font-size:.83rem; line-height:1.75; overflow-x:auto;}
+  .code .ln{display:flex; gap:14px; padding:1px 8px; border-radius:6px; white-space:pre;}
+  .code .ln .no{color:var(--faint); width:14px; text-align:right; user-select:none; flex:none;}
+  .code .ln.active{background:linear-gradient(90deg, rgba(244,183,64,.14), rgba(244,183,64,.02)); box-shadow:inset 2px 0 0 var(--yellow);}
+  .code .ln.active .no{color:var(--yellow);}
+  .code .kw{color:#ff7b9c;} .code .fn{color:var(--blue);} .code .nu{color:#c3a6ff;} .code .op{color:var(--muted);}
+  .code .cm{color:#6b7889; font-style:italic;} .code .st{color:#9ad07f;} .code .ty{color:#7ee0c8;}
 
-        .input-section input::placeholder { color: #64748b; }
-        #sInput { width: 180px; }
-        #pInput { width: 180px; }
+  .codetabs{display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:3px; gap:2px; margin-bottom:13px;}
+  .codetabs button{border:none; background:transparent; color:var(--muted); font-family:inherit; font-size:.78rem; font-weight:600; padding:5px 11px; border-radius:7px; cursor:pointer; transition:.15s;}
+  .codetabs button:hover{color:var(--text);}
+  .codetabs button.on{background:var(--surface2); color:var(--text); box-shadow:0 1px 0 rgba(255,255,255,.04);}
+  .src{font-family:var(--mono); font-size:.78rem; line-height:1.65; color:#cdd6e0; white-space:pre; overflow:auto; max-height:360px; margin:0;}
+  .src[hidden]{display:none;}
 
-        .btn-apply { background: #8b5cf6; color: white; }
-        .btn-apply:hover { background: #7c3aed; }
+  .legend{display:flex; flex-direction:column; gap:9px;}
+  .legend .it{display:flex; align-items:center; gap:9px; font-size:.85rem; color:var(--muted);}
+  .legend .sw{width:14px; height:14px; border-radius:4px; flex:none;}
+  .sw.blue{background:var(--blue-dim); border:1.5px solid var(--blue);}
+  .sw.yellow{background:var(--yellow-dim); border:1.5px solid var(--yellow);}
+  .sw.green{background:var(--green-dim); border:1.5px solid var(--green);}
 
-        /* PRESET EXAMPLES */
-        .presets {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 16px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
+  .how{font-size:.9rem; line-height:1.6; color:var(--muted);}
+  .how b{color:var(--text); font-weight:600;}
+  .how p+p{margin-top:9px;}
 
-        .preset-btn {
-            padding: 5px 10px;
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 4px;
-            color: #94a3b8;
-            cursor: pointer;
-            font-size: 0.78rem;
-            font-family: 'Courier New', monospace;
-            transition: all 0.2s;
-        }
+  @media (max-width:920px){
+    .grid{grid-template-columns:1fr;}
+    body{padding:20px 14px 130px;}
+    h1{font-size:1.6rem;}
+  }
 
-        .preset-btn:hover { border-color: #60a5fa; color: #60a5fa; }
-        .preset-btn.active { border-color: #3b82f6; color: #3b82f6; background: #1e293b; }
-
-        /* CONTROLS */
-        .controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .btn-play { background: #22c55e; color: white; }
-        .btn-play:hover { background: #16a34a; }
-        .btn-pause { background: #ef4444; color: white; }
-        .btn-pause:hover { background: #dc2626; }
-        .btn-step { background: #3b82f6; color: white; }
-        .btn-step:hover { background: #2563eb; }
-        .btn-reset { background: #6b7280; color: white; }
-        .btn-reset:hover { background: #4b5563; }
-
-        .speed-control { display: flex; align-items: center; gap: 8px; }
-        .speed-control label { color: #94a3b8; font-size: 0.85rem; }
-        .speed-control select {
-            padding: 6px 10px;
-            background: #0f172a;
-            color: #e2e8f0;
-            border: 1px solid #334155;
-            border-radius: 4px;
-            font-size: 0.85rem;
-        }
-
-        /* STATUS */
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding: 10px 16px;
-            background: #0f172a;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .status-bar .step-info { color: #94a3b8; }
-        .status-bar .result-info { font-weight: 600; }
-        .result-true { color: #22c55e; }
-        .result-false { color: #ef4444; }
-        .result-pending { color: #f59e0b; }
-
-        /* STRING DISPLAY */
-        .string-display {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-
-        .string-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .string-label {
-            color: #94a3b8;
-            font-size: 0.85rem;
-            font-weight: 600;
-            min-width: 55px;
-            text-align: right;
-        }
-
-        .string-chars {
-            display: flex;
-            gap: 2px;
-        }
-
-        .char-box {
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            font-size: 1rem;
-            border: 2px solid #334155;
-            background: #0f172a;
-            transition: all 0.3s;
-        }
-
-        .char-box.highlight-s { border-color: #3b82f6; background: #1e3a5f; color: #60a5fa; }
-        .char-box.highlight-p { border-color: #a78bfa; background: #2e1065; color: #c4b5fd; }
-        .char-box.match { border-color: #22c55e; background: #14532d; color: #4ade80; }
-        .char-box.no-match { border-color: #ef4444; background: #450a0a; color: #f87171; }
-        .char-box.star { color: #f59e0b; border-color: #f59e0b; }
-        .char-box.dot { color: #06b6d4; border-color: #06b6d4; }
-        .char-box.consumed { opacity: 0.3; }
-
-        /* DP TABLE */
-        .dp-section {
-            margin-top: 20px;
-        }
-
-        .dp-section h3 {
-            color: #94a3b8;
-            font-size: 0.9rem;
-            margin-bottom: 12px;
-            text-align: center;
-        }
-
-        .dp-table-wrapper {
-            overflow-x: auto;
-            display: flex;
-            justify-content: center;
-        }
-
-        .dp-table {
-            border-collapse: separate;
-            border-spacing: 3px;
-        }
-
-        .dp-table th {
-            padding: 6px 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-            color: #94a3b8;
-            font-weight: 600;
-        }
-
-        .dp-table th.corner { color: #64748b; }
-
-        .dp-table td {
-            width: 42px;
-            height: 42px;
-            text-align: center;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            font-size: 0.85rem;
-            background: #0f172a;
-            border: 2px solid #1e293b;
-            transition: all 0.3s;
-            position: relative;
-        }
-
-        .dp-table td.true-cell { color: #22c55e; }
-        .dp-table td.false-cell { color: #475569; }
-        .dp-table td.current { border-color: #f59e0b; background: #422006; box-shadow: 0 0 8px rgba(245,158,11,0.3); }
-        .dp-table td.just-filled { border-color: #3b82f6; background: #1e3a5f; }
-        .dp-table td.looked-up { border-color: #a78bfa; background: #2e1065; }
-        .dp-table td.answer-cell { border-color: #22c55e; background: #14532d; box-shadow: 0 0 12px rgba(34,197,94,0.4); }
-        .dp-table td.unfilled { color: #334155; }
-
-        .dp-table td .arrow {
-            position: absolute;
-            font-size: 0.6rem;
-            color: #f59e0b;
-        }
-
-        /* EXPLANATION */
-        .explanation {
-            margin-top: 20px;
-            padding: 16px;
-            background: #0f172a;
-            border-radius: 8px;
-            border-left: 3px solid #3b82f6;
-            font-size: 0.88rem;
-            line-height: 1.6;
-            min-height: 60px;
-        }
-
-        .explanation code {
-            background: #1e293b;
-            padding: 2px 6px;
-            border-radius: 4px;
-            color: #60a5fa;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-        }
-
-        .explanation .keyword { color: #a78bfa; font-weight: 600; }
-        .explanation .true-val { color: #22c55e; font-weight: 600; }
-        .explanation .false-val { color: #ef4444; font-weight: 600; }
-
-        /* LEGEND */
-        .legend {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            margin-top: 16px;
-            flex-wrap: wrap;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.78rem;
-            color: #94a3b8;
-        }
-
-        .legend-color {
-            width: 14px;
-            height: 14px;
-            border-radius: 3px;
-            border: 2px solid;
-        }
-
-        /* TAB CONTENT */
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        /* RECURSION TREE */
-        .tree-container {
-            overflow-x: auto;
-            padding: 20px 0;
-        }
-
-        .tree-node {
-            display: inline-flex;
-            flex-direction: column;
-            align-items: center;
-            margin: 0 4px;
-        }
-
-        .tree-label {
-            padding: 6px 10px;
-            background: #0f172a;
-            border: 2px solid #334155;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.7rem;
-            white-space: nowrap;
-            transition: all 0.3s;
-            text-align: center;
-            line-height: 1.3;
-        }
-
-        .tree-label.active { border-color: #f59e0b; background: #422006; }
-        .tree-label.resolved-true { border-color: #22c55e; background: #14532d; color: #4ade80; }
-        .tree-label.resolved-false { border-color: #ef4444; background: #450a0a; color: #f87171; }
-        .tree-label.cached { border-color: #8b5cf6; background: #2e1065; color: #c4b5fd; }
-
-        .tree-children {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-            position: relative;
-        }
-
-        .tree-connector {
-            width: 2px;
-            height: 12px;
-            background: #334155;
-            margin: 0 auto;
-        }
-
-        .btn-generate { background: #8b5cf6; color: white; border-color: #8b5cf6; }
-        .btn-generate:hover { background: #7c3aed; }
-
-        .gen-options {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.85rem;
-            color: #94a3b8;
-        }
-
-        .gen-options select {
-            padding: 6px 10px;
-            background: #0f172a;
-            color: #e2e8f0;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-
-        /* COMPLEXITY CHART */
-        .complexity-chart { margin-top: 20px; background: #0f172a; border-radius: 10px; padding: 18px; border: 1px solid #1e293b; }
-        .chart-title { text-align: center; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
-        .chart-bars { display: flex; flex-direction: column; gap: 12px; }
-        .chart-row { display: flex; align-items: center; gap: 10px; }
-        .chart-label { min-width: 130px; font-size: 0.8rem; color: #94a3b8; text-align: right; flex-shrink: 0; }
-        .chart-bar-wrap { flex: 1; background: #1e293b; border-radius: 5px; height: 24px; overflow: hidden; position: relative; }
-        .chart-bar { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px; font-size: 0.75rem; font-weight: 600; color: white; transition: width 0.8s cubic-bezier(0.16,1,0.3,1); width: 0; white-space: nowrap; position: absolute; }
-        .chart-bar.brute { background: linear-gradient(90deg, #ef4444, #f87171); }
-        .chart-bar.opt-tc { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
-        .chart-bar.optimal { background: linear-gradient(90deg, #22c55e, #4ade80); }
-        .chart-complexity { min-width: 95px; font-size: 0.78rem; font-weight: 600; color: #e2e8f0; flex-shrink: 0; }
-
-        /* RESPONSIVE */
-        @media (max-width: 768px) {
-            body { padding: 10px; }
-            .container { padding: 16px; }
-            .header h1 { font-size: 1.3rem; }
-            .dp-table td { width: 32px; height: 32px; font-size: 0.75rem; }
-            .char-box { width: 30px; height: 30px; font-size: 0.85rem; }
-        }
-        /* NAVIGATION */
-        .nav-links {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 95vw;
-            margin: 0 auto 20px;
-        }
-        .nav-btn {
-            padding: 8px 18px;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            color: #60a5fa;
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: background 0.2s;
-        }
-        .nav-btn:hover { background: #334155; }
-    </style>
+  /* ===== light theme + theme toggle (injected) ===== */
+  :root[data-theme="light"]{
+    --bg:#f4f7fc; --bg2:#ffffff; --surface:#ffffff; --surface2:#eef3f9;
+    --border:#e2e8f1; --border2:#cfd9e6;
+    --text:#101826; --muted:#566372; --faint:#8895a6;
+    --blue:#1f6feb; --blue-dim:#dce8ff;
+    --yellow:#a9750b; --yellow-dim:#faedcc;
+    --green:#0e9d68; --green-dim:#d4f4e7;
+    --red:#d12d28;
+    --shadow:0 1px 0 rgba(255,255,255,.7), 0 10px 28px -14px rgba(20,40,70,.22);
+  }
+  :root[data-theme="light"] body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #e7f0ff 0%, transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, #efeaff 0%, transparent 55%),
+      var(--bg);
+  }
+  :root[data-theme="light"] .cell.stored, :root[data-theme="light"] .cell.ptr,
+  :root[data-theme="light"] .node.done{color:#1b4fd1;}
+  :root[data-theme="light"] .cell.cur, :root[data-theme="light"] .node.cur{color:#8a5a06;}
+  :root[data-theme="light"] .cell.match, :root[data-theme="light"] .node.written,
+  :root[data-theme="light"] .node.fresh{color:#0a7d57;}
+  :root[data-theme="light"] .chip.add, :root[data-theme="light"] .chip.add span{color:#0a7d57;}
+  :root[data-theme="light"] .chip.hit, :root[data-theme="light"] .chip.hit span{color:#8a5a06;}
+  :root[data-theme="light"] .transport{background:rgba(255,255,255,.86);}
+  :root[data-theme="light"] .code .kw{color:#cf2c6b;}
+  :root[data-theme="light"] .code .fn{color:#1f6feb;}
+  :root[data-theme="light"] .code .nu{color:#7c3aed;}
+  :root[data-theme="light"] .code .cm{color:#7a8694;}
+  :root[data-theme="light"] .code .st{color:#1a7f37;}
+  :root[data-theme="light"] .code .ty{color:#0d8a8a;}
+  .themetoggle{position:fixed; top:20px; right:22px; z-index:40; width:40px; height:40px;
+    border-radius:11px; border:1px solid var(--border2); background:var(--surface); color:var(--muted);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; transition:.15s; box-shadow:var(--shadow);}
+  .themetoggle:hover{color:var(--text); border-color:var(--blue);}
+  .themetoggle svg{width:18px; height:18px;}
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>0010. Regular Expression Matching</h1>
-        <p>Step-by-step DP table filling animation</p>
+<script>(function(){try{if(localStorage.getItem('lc-anim-theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+<button class="themetoggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme"></button>
+<div class="wrap">
+
+  <div class="head">
+    <button class="back" title="(prototype) back">&#8592;</button>
+    <div>
+      <h1>Regular Expression Matching<span class="pill hard">Hard</span></h1>
+      <div class="tags">
+        <span class="tag">string</span>
+        <span class="tag">dynamic programming</span>
+        <span class="tag">recursion</span>
+      </div>
+      <p class="lede">Does pattern <b>p</b> (supporting <code>.</code> = any char and <code>x*</code> = zero-or-more of <code>x</code>)
+      match the <b>entire</b> string <b>s</b>? Watch the 2-D DP table fill in cell by cell, or trace the branching recursion.</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- main -->
+    <div class="card">
+      <div class="pad">
+        <div class="approaches">
+          <div class="segmented" id="approaches"></div>
+          <span class="comp" id="comp"></span>
+        </div>
+        <div class="toolbar">
+          <div class="segmented" id="presets">
+            <button data-p="marquee" class="on">aab / c*a*b</button>
+            <button data-p="star">aa / a*</button>
+            <button data-p="dotstar">ab / .*</button>
+            <button data-p="nomatch">aa / a</button>
+          </div>
+          <button class="ghost" id="newBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+            New case
+          </button>
+        </div>
+      </div>
+
+      <div class="stage" id="stage"></div>
     </div>
 
-    <div class="nav-links">
-        <a href="../0009-palindrome-number/animation.html" class="nav-btn">← 0009. Palindrome Number</a>
-        <span></span>
+    <!-- side -->
+    <div class="side">
+      <div class="narr"><span class="dotg"></span><span id="narration">Press play to watch the algorithm run.</span></div>
+
+      <div class="card pad">
+        <div class="label">Metrics</div>
+        <div class="metrics" id="metrics"></div>
+      </div>
+
+      <div class="card pad">
+        <div class="codetabs" id="codetabs">
+          <button data-v="pseudo" class="on">Pseudo</button>
+          <button data-v="py">Python</button>
+          <button data-v="java">Java</button>
+          <button data-v="go">Go</button>
+        </div>
+        <div class="code" id="code"></div>
+      </div>
+
+      <div class="card pad">
+        <div class="label">Legend</div>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div class="card pad">
+        <div class="label">How it works</div>
+        <div class="how" id="how"></div>
+      </div>
     </div>
+  </div>
+</div>
 
-    <!-- TABS -->
-    <div class="tabs">
-        <div class="tab active" data-tab="bottomup">Bottom-up DP</div>
-        <div class="tab" data-tab="memoization">Memoization</div>
-        <div class="tab" data-tab="spaceopt">Space Optimized</div>
-        <div class="tab" data-tab="rules">Rules</div>
-    </div>
+<!-- transport -->
+<div class="transport">
+  <button class="tbtn" id="resetBtn" title="Reset">
+    <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+  </button>
+  <button class="tbtn" id="prevBtn" title="Previous">
+    <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+  </button>
+  <button class="tbtn play" id="playBtn" title="Play / Pause">
+    <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="tbtn" id="nextBtn" title="Next">
+    <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5l11 7-11 7z"/></svg>
+  </button>
+  <div class="scrub"><input type="range" id="scrub" class="track-green" min="0" max="0" value="0"></div>
+  <div class="counter" id="counter">0 / 0</div>
+  <div class="speed">
+    <svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+    <input type="range" id="speed" min="0" max="6" value="3">
+    <span class="mult" id="mult">1&times;</span>
+  </div>
+</div>
 
-    <div class="container">
-        <!-- INPUT -->
-        <div class="input-section">
-            <label>s =</label>
-            <input type="text" id="sInput" value="aab" placeholder="string...">
-            <label>p =</label>
-            <input type="text" id="pInput" value="c*a*b" placeholder="pattern...">
-            <button class="btn btn-apply" onclick="applyInput()">Apply</button>
-            <button class="btn btn-generate" onclick="generateRandom()">🎲 Generate</button>
-            <div class="gen-options">
-                <label>Pattern:</label>
-                <select id="genType">
-                    <option value="simple" selected>Simple *</option>
-                    <option value="dot">With .</option>
-                    <option value="dotstar">.*</option>
-                    <option value="complex">Complex</option>
-                </select>
-            </div>
-        </div>
+<script>
+"use strict";
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-        <!-- PRESETS -->
-        <div class="presets">
-            <button class="preset-btn active" onclick="setPreset(this,'aa','a')">s="aa" p="a"</button>
-            <button class="preset-btn" onclick="setPreset(this,'aa','a*')">s="aa" p="a*"</button>
-            <button class="preset-btn" onclick="setPreset(this,'ab','.*')">s="ab" p=".*"</button>
-            <button class="preset-btn" onclick="setPreset(this,'aab','c*a*b')">s="aab" p="c*a*b"</button>
-            <button class="preset-btn" onclick="setPreset(this,'mississippi','mis*is*p*.')">s="mis..." p="mis*..."</button>
-        </div>
+// ---------- tiny syntax highlighter for the language code views ----------
+const KEYWORDS = {
+  py: new Set(['def','class','return','if','elif','else','for','while','in','is','not','and','or','None','True','False','lambda','import','from','as','with','pass','break','continue','self','range','len','str','bool']),
+  java: new Set(['public','private','protected','class','interface','void','int','long','double','float','boolean','char','byte','short','new','return','if','else','for','while','do','static','final','this','null','true','false','import','package','extends','implements','switch','case','default','break','continue']),
+  go: new Set(['func','range','for','if','else','return','make','map','struct','type','nil','var','const','package','import','chan','go','defer','bool','int','int64','string','true','false','switch','case','default','break','continue','byte','rune','len'])
+};
+// Types worth tinting (rendered as .ty) when they appear as bare identifiers.
+const TYPES = new Set(['Integer','Map','HashMap','Math','Arrays','List','String','Object','Boolean']);
+const RE_PY = /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b\d+\b)|([A-Za-z_]\w*)/g;
+const RE_C  = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|`[^`]*`)|(\b\d+\b)|([A-Za-z_]\w*)/g;
+function highlight(line, lang){
+  const kw = KEYWORDS[lang] || new Set();
+  const re = lang === 'py' ? RE_PY : RE_C;
+  re.lastIndex = 0;
+  let out = '', last = 0, m;
+  while ((m = re.exec(line))){
+    out += esc(line.slice(last, m.index));
+    if (m[1]) out += '<span class="cm">'+esc(m[1])+'</span>';
+    else if (m[2]) out += '<span class="st">'+esc(m[2])+'</span>';
+    else if (m[3]) out += '<span class="nu">'+esc(m[3])+'</span>';
+    else {
+      const w = m[4];
+      if (kw.has(w)) out += '<span class="kw">'+esc(w)+'</span>';
+      else if (TYPES.has(w)) out += '<span class="ty">'+esc(w)+'</span>';
+      else if (/^\s*\(/.test(line.slice(m.index + w.length))) out += '<span class="fn">'+esc(w)+'</span>';
+      else out += esc(w);
+    }
+    last = re.lastIndex;
+    if (re.lastIndex === m.index) re.lastIndex++;
+  }
+  out += esc(line.slice(last));
+  return out || ' ';
+}
 
-        <!-- CONTROLS -->
-        <div class="controls">
-            <button class="btn btn-play" id="playBtn" onclick="play()">Play</button>
-            <button class="btn btn-pause" id="pauseBtn" onclick="pause()" style="display:none;">Pause</button>
-            <button class="btn btn-step" onclick="stepForward()">Step</button>
-            <button class="btn btn-reset" onclick="reset()">Reset</button>
-            <div class="speed-control">
-                <label>Speed:</label>
-                <select id="speedSelect">
-                    <option value="1500">0.5x</option>
-                    <option value="800" selected>1x</option>
-                    <option value="400">2x</option>
-                    <option value="200">4x</option>
-                </select>
-            </div>
-        </div>
+// ---------- datasets (each is a valid (s, p) regex-match case) ----------
+const PRESETS = {
+  marquee: { s:'aab', p:'c*a*b' },   // true  — the classic mixed-'*' example
+  star:    { s:'aa',  p:'a*'    },   // true  — '*' as repetition
+  dotstar: { s:'ab',  p:'.*'    },   // true  — '.*' matches anything
+  nomatch: { s:'aa',  p:'a'     }    // false — pattern must cover the whole string
+};
 
-        <!-- STATUS -->
-        <div class="status-bar">
-            <span class="step-info" id="stepInfo">Step: 0 / 0</span>
-            <span class="result-info result-pending" id="resultInfo">Result: ...</span>
-        </div>
+// safe templates for the "New case" generator (each is guaranteed small)
+const NEW_TEMPLATES = [
+  {s:'aab', p:'c*a*b'}, {s:'aa', p:'a*'}, {s:'ab', p:'.*'}, {s:'aa', p:'a'},
+  {s:'ab', p:'a*b'}, {s:'aaa', p:'a*a'}, {s:'ab', p:'.*c'}, {s:'ab', p:'..'},
+  {s:'a', p:'a'}, {s:'mis', p:'mi*s'}, {s:'cab', p:'c*a*b'}, {s:'bc', p:'a*bc'}
+];
 
-        <!-- TAB CONTENT: BOTTOM-UP DP -->
-        <div class="tab-content active" id="tab-bottomup">
-            <div class="string-display" id="stringDisplay"></div>
-            <div class="dp-section">
-                <h3>DP Table: dp[i][j] = does s[:i] match p[:j]?</h3>
-                <div class="dp-table-wrapper">
-                    <table class="dp-table" id="dpTable"></table>
-                </div>
-            </div>
-            <div class="explanation" id="explanation">
-                <strong>Play</strong> or <strong>Step</strong> to begin.
-            </div>
-            <div class="legend">
-                <div class="legend-item"><div class="legend-color" style="border-color:#f59e0b;background:#422006;"></div>Current cell</div>
-                <div class="legend-item"><div class="legend-color" style="border-color:#3b82f6;background:#1e3a5f;"></div>Newly filled</div>
-                <div class="legend-item"><div class="legend-color" style="border-color:#a78bfa;background:#2e1065;"></div>Looked up</div>
-                <div class="legend-item"><div class="legend-color" style="border-color:#22c55e;background:#14532d;"></div>Answer</div>
-            </div>
-        </div>
+// shared row/metric helpers
+const targetMetric = t => ({ k:'pattern', v:t, wide:true });
+const cell = (val, ix, cls, arrow) => ({ value:val, ix, cls:cls||'', arrow:arrow||'' });
 
-        <!-- TAB CONTENT: MEMOIZATION -->
-        <div class="tab-content" id="tab-memoization">
-            <div class="string-display" id="stringDisplayMemo"></div>
-            <div class="dp-section">
-                <h3>Memo Table: memo[i][j] = isMatch(s[i:], p[j:])</h3>
-                <div class="dp-table-wrapper">
-                    <table class="dp-table" id="memoTable"></table>
-                </div>
-            </div>
-            <div class="explanation" id="explanationMemo">
-                <strong>Play</strong> or <strong>Step</strong> to begin. Memo is filled via top-down recursion.
-            </div>
-            <div class="legend">
-                <div class="legend-item"><div class="legend-color" style="border-color:#f59e0b;background:#422006;"></div>Current call</div>
-                <div class="legend-item"><div class="legend-color" style="border-color:#8b5cf6;background:#2e1065;"></div>Retrieved from cache</div>
-                <div class="legend-item"><div class="legend-color" style="border-color:#22c55e;background:#14532d;"></div>True</div>
-                <div class="legend-item"><div class="legend-color" style="border-color:#ef4444;background:#450a0a;"></div>False</div>
-            </div>
-        </div>
-
-        <!-- TAB CONTENT: SPACE OPTIMIZED -->
-        <div class="tab-content" id="tab-spaceopt">
-            <div class="string-display" id="stringDisplayOpt"></div>
-            <div class="dp-section">
-                <h3>Two rows: prev[] and curr[]</h3>
-                <div id="spaceOptDisplay" style="text-align:center;"></div>
-            </div>
-            <div class="explanation" id="explanationOpt">
-                <strong>Play</strong> or <strong>Step</strong> to begin. Only 2 rows are used.
-            </div>
-        </div>
-
-        <!-- TAB CONTENT: RULES -->
-        <div class="tab-content" id="tab-rules">
-            <div style="padding:20px; line-height:2; font-size:0.95rem;">
-                <h3 style="color:#60a5fa; margin-bottom:16px;">Regex Matching Rulesi</h3>
-
-                <p><code>.</code> — Matches any <strong>single</strong> character.</p>
-                <p style="color:#94a3b8; margin-left:20px;">Example: <code>a.c</code> → "abc", "axc", "a1c" matches</p>
-
-                <p style="margin-top:12px;"><code>*</code> — Repeats the preceding element <strong>zero or more</strong> times.</p>
-                <p style="color:#94a3b8; margin-left:20px;">Example: <code>a*</code> → "", "a", "aa", "aaa", ... matches</p>
-                <p style="color:#94a3b8; margin-left:20px;">Example: <code>.*</code> → har qanday qatormatches (universal)</p>
-
-                <h3 style="color:#60a5fa; margin-top:24px; margin-bottom:16px;">DP Transition Rulesi</h3>
-
-                <div style="background:#0f172a; padding:16px; border-radius:8px; margin-bottom:12px;">
-                    <p><strong style="color:#a78bfa;">If p[j-1] == '*':</strong></p>
-                    <p style="margin-left:20px;">1. <strong>Zero times:</strong> <code>dp[i][j] = dp[i][j-2]</code></p>
-                    <p style="margin-left:20px; color:#94a3b8;">→ We completely skip the "x*" pair</p>
-                    <p style="margin-left:20px;">2. <strong>One+ times:</strong> If <code>s[i-1] == p[j-2]</code> or <code>p[j-2] == '.'</code></p>
-                    <p style="margin-left:40px;"><code>dp[i][j] = dp[i][j] || dp[i-1][j]</code></p>
-                    <p style="margin-left:40px; color:#94a3b8;">→ We "consume" one character from s, pattern stays</p>
-                </div>
-
-                <div style="background:#0f172a; padding:16px; border-radius:8px; margin-bottom:12px;">
-                    <p><strong style="color:#a78bfa;">If s[i-1] == p[j-1] or p[j-1] == '.':</strong></p>
-                    <p style="margin-left:20px;"><code>dp[i][j] = dp[i-1][j-1]</code></p>
-                    <p style="margin-left:20px; color:#94a3b8;">→ Characters match — take the diagonal value</p>
-                </div>
-
-                <div style="background:#0f172a; padding:16px; border-radius:8px;">
-                    <p><strong style="color:#a78bfa;">Otherwise:</strong></p>
-                    <p style="margin-left:20px;"><code>dp[i][j] = false</code></p>
-                    <p style="margin-left:20px; color:#94a3b8;">→ Characters do not match</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="complexity-chart">
-            <div class="chart-title">Algorithm Complexity</div>
-            <div class="chart-bars">
-                <div class="chart-row">
-                    <div class="chart-label">Recursion</div>
-                    <div class="chart-bar-wrap"><div class="chart-bar brute" data-w="95" style="width:0">O(2^(m+n))</div></div>
-                    <div class="chart-complexity">O(2^(m+n)) / O(m+n)</div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-label">DP Bottom-Up</div>
-                    <div class="chart-bar-wrap"><div class="chart-bar optimal" data-w="45" style="width:0">O(m·n)</div></div>
-                    <div class="chart-complexity">O(m·n) / O(m·n)</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // ============================================================
-        // STATE
-        // ============================================================
-        let s = "aab";
-        let p = "c*a*b";
-        let dp = [];
-        let steps = [];
-        let currentStep = -1;
-        let isPlaying = false;
-        let playTimer = null;
-        let activeTab = "bottomup";
-
-        // Memoization state
-        let memoSteps = [];
-        let memoTable = [];
-
-        // Space-opt state
-        let spaceSteps = [];
-
-        // ============================================================
-        // TAB SWITCHING
-        // ============================================================
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                tab.classList.add('active');
-                activeTab = tab.dataset.tab;
-                document.getElementById('tab-' + activeTab).classList.add('active');
-                reset();
-            });
-        });
-
-        // ============================================================
-        // PRESETS
-        // ============================================================
-        function setPreset(btn, newS, newP) {
-            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('sInput').value = newS;
-            document.getElementById('pInput').value = newP;
-            applyInput();
-        }
-
-        function applyInput() {
-            s = document.getElementById('sInput').value;
-            p = document.getElementById('pInput').value;
-            reset();
-        }
-
-        function generateRandom() {
-            const type = document.getElementById('genType').value;
-            const letters = 'abc';
-            const sLen = 2 + Math.floor(Math.random() * 4);
-            let newS = Array.from({length: sLen}, () => letters[Math.floor(Math.random() * letters.length)]).join('');
-            let newP;
-            if (type === 'simple') {
-                newP = newS[0] + '*' + newS.slice(1);
-            } else if (type === 'dot') {
-                newP = '.' + newS.slice(1);
-            } else if (type === 'dotstar') {
-                newP = '.*';
-            } else {
-                newP = newS[0] + '*' + (Math.random() > 0.5 ? '.' : newS[1]) + '*' + newS.slice(2);
-            }
-            document.getElementById('sInput').value = newS;
-            document.getElementById('pInput').value = newP;
-            s = newS;
-            p = newP;
-            reset();
-        }
-
-        // ============================================================
-        // CONTROLS
-        // ============================================================
-        function getSpeed() {
-            return parseInt(document.getElementById('speedSelect').value);
-        }
-
-        function play() {
-            if (isPlaying) return;
-            isPlaying = true;
-            document.getElementById('playBtn').style.display = 'none';
-            document.getElementById('pauseBtn').style.display = '';
-            playNext();
-        }
-
-        function playNext() {
-            if (!isPlaying) return;
-            const totalSteps = getSteps().length;
-            if (currentStep >= totalSteps - 1) {
-                pause();
-                return;
-            }
-            stepForward();
-            playTimer = setTimeout(playNext, getSpeed());
-        }
-
-        function pause() {
-            isPlaying = false;
-            if (playTimer) clearTimeout(playTimer);
-            document.getElementById('playBtn').style.display = '';
-            document.getElementById('pauseBtn').style.display = 'none';
-        }
-
-        function reset() {
-            pause();
-            currentStep = -1;
-
-            if (activeTab === 'bottomup') {
-                generateBottomUpSteps();
-                buildDPTable();
-                renderDPStep(-1);
-            } else if (activeTab === 'memoization') {
-                generateMemoSteps();
-                buildMemoTable();
-                renderMemoStep(-1);
-            } else if (activeTab === 'spaceopt') {
-                generateSpaceOptSteps();
-                renderSpaceOptStep(-1);
-            }
-
-            updateStringDisplay();
-            updateStatus();
-        }
-
-        function stepForward() {
-            const totalSteps = getSteps().length;
-            if (currentStep >= totalSteps - 1) return;
-            currentStep++;
-
-            if (activeTab === 'bottomup') renderDPStep(currentStep);
-            else if (activeTab === 'memoization') renderMemoStep(currentStep);
-            else if (activeTab === 'spaceopt') renderSpaceOptStep(currentStep);
-
-            updateStatus();
-        }
-
-        function getSteps() {
-            if (activeTab === 'bottomup') return steps;
-            if (activeTab === 'memoization') return memoSteps;
-            if (activeTab === 'spaceopt') return spaceSteps;
-            return [];
-        }
-
-        function updateStatus() {
-            const totalSteps = getSteps().length;
-            document.getElementById('stepInfo').textContent = `Step: ${currentStep + 1} / ${totalSteps}`;
-
-            const resultEl = document.getElementById('resultInfo');
-            if (currentStep >= totalSteps - 1 && totalSteps > 0) {
-                const m = s.length, n = p.length;
-                const result = computeDP();
-                resultEl.textContent = `Result: ${result}`;
-                resultEl.className = 'result-info ' + (result ? 'result-true' : 'result-false');
-            } else {
-                resultEl.textContent = 'Result: ...';
-                resultEl.className = 'result-info result-pending';
+// ======================================================================
+// APPROACHES — each owns its pseudocode, legend, prose and buildFrames.
+// A frame is approach-agnostic: { rows, metrics, compare, narration, codeLine }.
+//   row = { type:'cells', label, cells:[{value, ix, cls, arrow}] }
+//       | { type:'chips', label, chips:[{key, idx, hl}] }
+// ======================================================================
+const APPROACHES = [
+{
+  id:'dp', label:'Bottom-up DP ★', comp:'O(m·n) time · O(m·n) space',
+  compact:true,
+  src:{
+    py:`def isMatch(self, s: str, p: str) -> bool:
+    m, n = len(s), len(p)
+    dp = [[False] * (n + 1) for _ in range(m + 1)]
+    dp[0][0] = True
+    for j in range(2, n + 1):
+        if p[j - 1] == '*':
+            dp[0][j] = dp[0][j - 2]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if p[j - 1] == '*':
+                dp[i][j] = dp[i][j - 2]
+                if p[j - 2] == '.' or p[j - 2] == s[i - 1]:
+                    dp[i][j] = dp[i][j] or dp[i - 1][j]
+            elif p[j - 1] == '.' or p[j - 1] == s[i - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+    return dp[m][n]`,
+    java:`public boolean isMatch(String s, String p) {
+    int m = s.length(), n = p.length();
+    boolean[][] dp = new boolean[m + 1][n + 1];
+    dp[0][0] = true;
+    for (int j = 2; j <= n; j++) {
+        if (p.charAt(j - 1) == '*') dp[0][j] = dp[0][j - 2];
+    }
+    for (int i = 1; i <= m; i++) {
+        for (int j = 1; j <= n; j++) {
+            if (p.charAt(j - 1) == '*') {
+                dp[i][j] = dp[i][j - 2];
+                if (p.charAt(j - 2) == '.' || p.charAt(j - 2) == s.charAt(i - 1))
+                    dp[i][j] = dp[i][j] || dp[i - 1][j];
+            } else if (p.charAt(j - 1) == '.' || p.charAt(j - 1) == s.charAt(i - 1)) {
+                dp[i][j] = dp[i - 1][j - 1];
             }
         }
-
-        // ============================================================
-        // BOTTOM-UP DP LOGIC
-        // ============================================================
-        function computeDP() {
-            const m = s.length, n = p.length;
-            const d = Array.from({length: m + 1}, () => Array(n + 1).fill(false));
-            d[0][0] = true;
-            for (let j = 2; j <= n; j++) {
-                if (p[j - 1] === '*') d[0][j] = d[0][j - 2];
-            }
-            for (let i = 1; i <= m; i++) {
-                for (let j = 1; j <= n; j++) {
-                    if (p[j - 1] === '*') {
-                        d[i][j] = d[i][j - 2];
-                        if (s[i - 1] === p[j - 2] || p[j - 2] === '.') {
-                            d[i][j] = d[i][j] || d[i - 1][j];
-                        }
-                    } else if (s[i - 1] === p[j - 1] || p[j - 1] === '.') {
-                        d[i][j] = d[i - 1][j - 1];
-                    }
+    }
+    return dp[m][n];
+}`,
+    go:`func isMatch(s string, p string) bool {
+    m, n := len(s), len(p)
+    dp := make([][]bool, m+1)
+    for i := range dp { dp[i] = make([]bool, n+1) }
+    dp[0][0] = true
+    for j := 2; j <= n; j++ {
+        if p[j-1] == '*' { dp[0][j] = dp[0][j-2] }
+    }
+    for i := 1; i <= m; i++ {
+        for j := 1; j <= n; j++ {
+            if p[j-1] == '*' {
+                dp[i][j] = dp[i][j-2]
+                if p[j-2] == '.' || p[j-2] == s[i-1] {
+                    dp[i][j] = dp[i][j] || dp[i-1][j]
                 }
-            }
-            return d[m][n];
-        }
-
-        function generateBottomUpSteps() {
-            steps = [];
-            const m = s.length, n = p.length;
-            dp = Array.from({length: m + 1}, () => Array(n + 1).fill(false));
-
-            // Step: base case
-            dp[0][0] = true;
-            steps.push({
-                type: 'base',
-                i: 0, j: 0,
-                value: true,
-                lookups: [],
-                explanation: `<code>dp[0][0] = true</code> — Empty string matches empty pattern.`
-            });
-
-            // First row
-            for (let j = 2; j <= n; j++) {
-                if (p[j - 1] === '*') {
-                    dp[0][j] = dp[0][j - 2];
-                    steps.push({
-                        type: 'firstrow',
-                        i: 0, j: j,
-                        value: dp[0][j],
-                        lookups: [{i: 0, j: j - 2}],
-                        explanation: `<code>dp[0][${j}]</code>: p[${j-1}]='*' → <code>dp[0][${j}] = dp[0][${j-2}]</code> = <span class="${dp[0][j]?'true-val':'false-val'}">${dp[0][j]}</span>. "${p.slice(0, j)}" taking "${p[j-2]}*" zero times in the pattern.`
-                    });
-                }
-            }
-
-            // Main loop
-            for (let i = 1; i <= m; i++) {
-                for (let j = 1; j <= n; j++) {
-                    if (p[j - 1] === '*') {
-                        // Zero occurrences
-                        dp[i][j] = dp[i][j - 2];
-                        let lookups = [{i: i, j: j - 2}];
-                        let expl = `<code>dp[${i}][${j}]</code>: p[${j-1}]='*' → `;
-                        expl += `<span class="keyword">Zero times:</span> <code>dp[${i}][${j-2}]</code>=${dp[i][j-2]}`;
-
-                        // One or more
-                        if (s[i - 1] === p[j - 2] || p[j - 2] === '.') {
-                            let prev = dp[i][j];
-                            dp[i][j] = dp[i][j] || dp[i - 1][j];
-                            lookups.push({i: i - 1, j: j});
-                            let charMatch = p[j-2] === '.' ? `'.'=any character` : `'${s[i-1]}'=='${p[j-2]}'`;
-                            expl += ` | <span class="keyword">One+ times:</span> ${charMatch} ✓ → <code>dp[${i-1}][${j}]</code>=${dp[i-1][j]}`;
-                        } else {
-                            expl += ` | <span class="keyword">One+ times:</span> '${s[i-1]}'!='${p[j-2]}' ✗`;
-                        }
-                        expl += ` → <span class="${dp[i][j]?'true-val':'false-val'}">${dp[i][j]}</span>`;
-
-                        steps.push({
-                            type: 'fill', i, j,
-                            value: dp[i][j],
-                            lookups,
-                            si: i, pj: j,
-                            explanation: expl
-                        });
-                    } else if (s[i - 1] === p[j - 1] || p[j - 1] === '.') {
-                        dp[i][j] = dp[i - 1][j - 1];
-                        let charInfo = p[j-1] === '.' ? `'.'=any character belgi` : `'${s[i-1]}'=='${p[j-1]}'`;
-                        steps.push({
-                            type: 'fill', i, j,
-                            value: dp[i][j],
-                            lookups: [{i: i - 1, j: j - 1}],
-                            si: i, pj: j,
-                            explanation: `<code>dp[${i}][${j}]</code>: ${charInfo} ✓ → <code>dp[${i}][${j}] = dp[${i-1}][${j-1}]</code> = <span class="${dp[i][j]?'true-val':'false-val'}">${dp[i][j]}</span>`
-                        });
-                    } else {
-                        dp[i][j] = false;
-                        steps.push({
-                            type: 'fill', i, j,
-                            value: false,
-                            lookups: [],
-                            si: i, pj: j,
-                            explanation: `<code>dp[${i}][${j}]</code>: '${s[i-1]}'!='${p[j-1]}' va '${p[j-1]}'!='*' → <span class="false-val">false</span>`
-                        });
-                    }
-                }
-            }
-
-            // Final step: highlight answer
-            steps.push({
-                type: 'answer',
-                i: m, j: n,
-                value: dp[m][n],
-                lookups: [],
-                explanation: `<strong>Answer:</strong> <code>dp[${m}][${n}]</code> = <span class="${dp[m][n]?'true-val':'false-val'}">${dp[m][n]}</span> — "${s}" ${dp[m][n]?'':'NOT '}matches "${p}".`
-            });
-        }
-
-        function buildDPTable() {
-            const m = s.length, n = p.length;
-            const table = document.getElementById('dpTable');
-            table.innerHTML = '';
-
-            // Header row
-            let headerRow = '<tr><th class="corner"></th><th class="corner"></th>';
-            for (let j = 0; j < n; j++) {
-                let cls = p[j] === '*' ? 'style="color:#f59e0b"' : p[j] === '.' ? 'style="color:#06b6d4"' : '';
-                headerRow += `<th ${cls}>${p[j]}</th>`;
-            }
-            headerRow += '</tr>';
-
-            // Index row
-            let indexRow = '<tr><th class="corner"></th>';
-            for (let j = 0; j <= n; j++) {
-                indexRow += `<th>${j === 0 ? '""' : j}</th>`;
-            }
-            indexRow += '</tr>';
-
-            table.innerHTML = headerRow + indexRow;
-
-            // Data rows
-            for (let i = 0; i <= m; i++) {
-                let row = document.createElement('tr');
-                let labelTh = document.createElement('th');
-                labelTh.textContent = i === 0 ? '""' : s[i - 1];
-                if (i > 0) labelTh.style.color = '#60a5fa';
-                row.appendChild(labelTh);
-
-                for (let j = 0; j <= n; j++) {
-                    let td = document.createElement('td');
-                    td.id = `dp-${i}-${j}`;
-                    td.classList.add('unfilled');
-                    td.textContent = '-';
-                    row.appendChild(td);
-                }
-                table.appendChild(row);
+            } else if p[j-1] == '.' || p[j-1] == s[i-1] {
+                dp[i][j] = dp[i-1][j-1]
             }
         }
+    }
+    return dp[m][n]
+}`},
+  // pseudo line -> 1-based source line
+  map:{
+    py:   {1:2, 2:3, 3:4, 4:7,  5:8,  6:10, 7:11, 8:13, 9:14, 10:15, 11:16},
+    java: {1:2, 2:3, 3:4, 4:6,  5:8,  6:10, 7:11, 8:13, 9:14, 10:15, 11:19},
+    go:   {1:2, 2:3, 3:5, 4:7,  5:9,  6:11, 7:12, 8:14, 9:16, 10:17, 11:21}
+  },
+  legend:[['yellow','Cell dp[i][j] being computed'],['blue','Cells it depends on'],['green','Final answer dp[m][n]']],
+  how:'<p>Let <code>dp[i][j]</code> mean: do the first <b>i</b> chars of <b>s</b> match the first <b>j</b> chars of <b>p</b>? '+
+      'The empty/empty cell <code>dp[0][0]</code> is <b>true</b>; the top row seeds patterns like <code>a*</code> that can vanish to "".</p>'+
+      '<p>For each cell, a <code>*</code> at <code>p[j-1]</code> means either <b>zero</b> copies (look left two, <code>dp[i][j-2]</code>) '+
+      'or <b>one+</b> copies (the char before <code>*</code> matches <code>s[i-1]</code>, then look up, <code>dp[i-1][j]</code>). '+
+      'A plain char or <code>.</code> match copies the diagonal <code>dp[i-1][j-1]</code>.</p>'+
+      '<p><b>O(m·n)</b> cells, each filled once. The answer is the bottom-right cell <code>dp[m][n]</code>.</p>',
+  code:[
+    [['op','m, n = len(s), len(p)']],
+    [['fn','dp'],['op',' = (m+1)×(n+1) table of '],['kw','False']],
+    [['op','dp[0][0] = '],['kw','True']],
+    [['kw','for'],['op',' j '],['kw','in'],['op',' 2..n: '],['kw','if'],['op',' p[j-1]=='],['st',"'*'"],['op',': dp[0][j]=dp[0][j-2]']],
+    [['kw','for'],['op',' i '],['kw','in'],['op',' 1..m, j '],['kw','in'],['op',' 1..n:']],
+    [['kw','  if'],['op',' p[j-1] == '],['st',"'*'"],['op',':']],
+    [['op','    dp[i][j] = dp[i][j-2]'],['cm','   # 0 copies']],
+    [['kw','    if'],['op',' p[j-2] matches s[i-1]: dp[i][j] |= dp[i-1][j]']],
+    [['kw','  elif'],['op',' p[j-1] matches s[i-1]:']],
+    [['op','    dp[i][j] = dp[i-1][j-1]'],['cm','   # diagonal']],
+    [['kw','return'],['op',' dp[m][n]']]
+  ],
+  build(s, p){
+    const m = s.length, n = p.length, frames = [];
+    const dp = Array.from({length:m+1}, ()=>Array(n+1).fill(false));
+    const filled = Array.from({length:m+1}, ()=>Array(n+1).fill(false)); // has this cell been computed yet?
 
-        function renderDPStep(stepIdx) {
-            const m = s.length, n = p.length;
+    // pattern header row: col 0 = ε, col j = p[j-1]
+    const headerRow = (jCur) => ({
+      type:'cells', label:'pattern p  <span style="color:var(--faint)">(column j)</span>',
+      cells: Array.from({length:n+1}, (_,j)=>{
+        const ch = j===0 ? 'ε' : p[j-1];
+        return cell(ch, j, j===jCur ? 'cur' : '', '');
+      })
+    });
+    // one cells row per dp row i
+    const dpRow = (i, cur, deps, ans) => {
+      const sch = i===0 ? 'ε' : s[i-1];
+      const lbl = 's['+i+'] = "'+esc(i===0?'':s.slice(0,i))+'"  <span style="color:var(--faint)">→ '+sch+'</span>';
+      return {
+        type:'cells', label:lbl,
+        cells: Array.from({length:n+1}, (_,j)=>{
+          let cls = '';
+          if (filled[i][j]) cls = dp[i][j] ? 'tt' : 'ff';
+          if (ans && ans[0]===i && ans[1]===j) cls = 'match';
+          else if (cur && cur[0]===i && cur[1]===j) cls = 'cur';
+          else if (deps && deps.some(d=>d[0]===i && d[1]===j)) cls = 'ptr';
+          const v = filled[i][j] ? (dp[i][j] ? 'T' : 'F') : '·';
+          return cell(v, j, cls, '');
+        })
+      };
+    };
+    const rows = (cur, deps, ans) => {
+      const r = [headerRow(cur?cur[1]:null)];
+      for (let i=0;i<=m;i++) r.push(dpRow(i, cur, deps, ans));
+      return r;
+    };
+    const mets = (i,j,extra) => [
+      {k:'i', v:i}, {k:'j', v:j},
+      extra ? {k:'rule', v:extra} : {k:'cells', v:(m+1)*(n+1)},
+      targetMetric('s = "'+s+'"   ·   p = "'+p+'"')
+    ];
 
-            // Clear all highlights
-            for (let i = 0; i <= m; i++) {
-                for (let j = 0; j <= n; j++) {
-                    const cell = document.getElementById(`dp-${i}-${j}`);
-                    if (!cell) continue;
-                    cell.className = '';
-                    cell.classList.add('unfilled');
-                    cell.textContent = '-';
-                }
-            }
+    // intro
+    frames.push({ rows:rows(null,null,null), metrics:mets('—','—','init'),
+      compare:'dp[i][j] = does s[0..i-1] match p[0..j-1] ?',
+      narration:'Build a <code>('+(m+1)+'×'+(n+1)+')</code> table. Each cell asks: do the first i chars of s match the first j chars of p?',
+      codeLine:2 });
 
-            // Replay all steps up to stepIdx
-            for (let si = 0; si <= stepIdx && si < steps.length; si++) {
-                const st = steps[si];
-                const cell = document.getElementById(`dp-${st.i}-${st.j}`);
-                if (!cell) continue;
-                cell.textContent = st.value ? 'T' : 'F';
-                cell.classList.remove('unfilled');
-                cell.classList.add(st.value ? 'true-cell' : 'false-cell');
-            }
+    // base dp[0][0]
+    dp[0][0] = true; filled[0][0] = true;
+    frames.push({ rows:rows([0,0],null,null), metrics:mets(0,0,'base'),
+      compare:'dp[0][0] = <span class="ans">T</span>   (empty matches empty)',
+      narration:'Base case: the empty string matches the empty pattern → <code>dp[0][0] = T</code>.', codeLine:3 });
 
-            // Highlight current step
-            if (stepIdx >= 0 && stepIdx < steps.length) {
-                const st = steps[stepIdx];
-                const cell = document.getElementById(`dp-${st.i}-${st.j}`);
+    // top row: x* can match empty
+    for (let j=2;j<=n;j++){
+      if (p[j-1]==='*'){
+        dp[0][j] = dp[0][j-2]; filled[0][j] = true;
+        frames.push({ rows:rows([0,j],[[0,j-2]],null), metrics:mets(0,j,"'*' empty"),
+          compare:'p[<span class="dim">'+(j-1)+'</span>]=\'*\'  →  dp[0]['+j+'] = dp[0]['+(j-2)+'] = '+(dp[0][j]?'<span class="ans">T</span>':'<span class="bad">F</span>'),
+          narration:'Top row: <code>'+p[j-2]+'*</code> can vanish to "". Copy <code>dp[0]['+(j-2)+']</code> → <code>dp[0]['+j+'] = '+(dp[0][j]?'T':'F')+'</code>.',
+          codeLine:4 });
+      }
+    }
+    // mark remaining top-row cells as visited (they stay false by default)
+    for (let j=1;j<=n;j++) filled[0][j] = true;
 
-                // Clear previous highlights
-                document.querySelectorAll('.dp-table td').forEach(td => {
-                    td.classList.remove('current', 'just-filled', 'looked-up', 'answer-cell');
-                });
-
-                if (st.type === 'answer') {
-                    cell.classList.add('answer-cell');
-                } else {
-                    cell.classList.add('current');
-                }
-
-                // Highlight lookups
-                st.lookups.forEach(lu => {
-                    const luCell = document.getElementById(`dp-${lu.i}-${lu.j}`);
-                    if (luCell) luCell.classList.add('looked-up');
-                });
-
-                // Update explanation
-                const explEl = document.getElementById('explanation');
-                explEl.innerHTML = st.explanation;
-
-                // Update string highlighting
-                updateStringHighlight(st);
-            } else {
-                document.getElementById('explanation').innerHTML = '<strong>Play</strong> or <strong>Step</strong> to begin.';
-            }
+    // main fill
+    for (let i=1;i<=m;i++){
+      for (let j=1;j<=n;j++){
+        const pj = p[j-1];
+        if (pj === '*'){
+          const pPrev = p[j-2];
+          // 0 occurrences
+          dp[i][j] = dp[i][j-2];
+          const charOK = (pPrev==='.' || pPrev===s[i-1]);
+          if (charOK && dp[i-1][j]) dp[i][j] = true;
+          filled[i][j] = true;
+          const deps = charOK ? [[i,j-2],[i-1,j]] : [[i,j-2]];
+          frames.push({ rows:rows([i,j],deps,null), metrics:mets(i,j,"'*'"),
+            compare:'p[<span class="dim">'+(j-1)+'</span>]=\'*\'  →  0 copies dp[i]['+(j-2)+']'+(charOK?'  OR  '+pPrev+'~'+s[i-1]+' dp['+(i-1)+'][j]':'')+'  =  '+(dp[i][j]?'<span class="ans">T</span>':'<span class="bad">F</span>'),
+            narration:'<code>'+pPrev+'*</code>: zero copies → <code>dp[i]['+(j-2)+']='+(dp[i][j-2]?'T':'F')+'</code>'+(charOK?('; or since <code>'+pPrev+'</code> matches <code>'+s[i-1]+'</code>, one+ copies → <code>dp['+(i-1)+'][j]='+(dp[i-1][j]?'T':'F')+'</code>'):('; <code>'+pPrev+'</code> ≠ <code>'+s[i-1]+'</code>, no extra copy'))+'. → <code>'+(dp[i][j]?'T':'F')+'</code>.',
+            codeLine: charOK ? 8 : 7 });
+        } else if (pj==='.' || pj===s[i-1]){
+          dp[i][j] = dp[i-1][j-1]; filled[i][j] = true;
+          frames.push({ rows:rows([i,j],[[i-1,j-1]],null), metrics:mets(i,j,'char'),
+            compare:'p[<span class="dim">'+(j-1)+'</span>]='+(pj==='.'?"'.'":"'"+pj+"'")+' matches s['+(i-1)+']=\''+s[i-1]+'\'  →  diagonal dp['+(i-1)+']['+(j-1)+'] = '+(dp[i][j]?'<span class="ans">T</span>':'<span class="bad">F</span>'),
+            narration:'<code>'+(pj==='.'?'.':pj)+'</code> matches <code>'+s[i-1]+'</code> → copy the diagonal <code>dp['+(i-1)+']['+(j-1)+']='+(dp[i][j]?'T':'F')+'</code>.',
+            codeLine:10 });
+        } else {
+          dp[i][j] = false; filled[i][j] = true;
+          frames.push({ rows:rows([i,j],null,null), metrics:mets(i,j,'no match'),
+            compare:'p[<span class="dim">'+(j-1)+'</span>]=\''+pj+'\' ≠ s['+(i-1)+']=\''+s[i-1]+'\'  →  dp['+i+']['+j+'] = <span class="bad">F</span>',
+            narration:'<code>'+pj+'</code> ≠ <code>'+s[i-1]+'</code> and not <code>*</code>/<code>.</code> → <code>dp['+i+']['+j+'] = F</code>.',
+            codeLine:9 });
         }
+      }
+    }
 
-        // ============================================================
-        // MEMOIZATION LOGIC
-        // ============================================================
-        function generateMemoSteps() {
-            memoSteps = [];
-            const m = s.length, n = p.length;
-            memoTable = Array.from({length: m + 1}, () => Array(n + 1).fill(null));
+    // final answer
+    const res = dp[m][n];
+    frames.push({ rows:rows(null,null,[m,n]), metrics:mets(m,n,res?'true':'false'),
+      compare: res ? '<span class="ans">✓ return dp['+m+']['+n+'] = true</span>'
+                   : '<span class="bad">✗ return dp['+m+']['+n+'] = false</span>',
+      narration: res ? 'Bottom-right cell <code>dp['+m+']['+n+'] = T</code> → "'+s+'" matches "'+p+'". Return <code>true</code>.'
+                     : 'Bottom-right cell <code>dp['+m+']['+n+'] = F</code> → "'+s+'" does not match "'+p+'". Return <code>false</code>.',
+      codeLine:11, done:true });
+    return frames;
+  }
+},
+{
+  id:'rec', label:'Recursion', comp:'O(2^(m+n)) time · O(m+n) space',
+  compact:false,
+  src:{
+    py:`def isMatch(self, s: str, p: str) -> bool:
+    if not p:
+        return not s
+    first_match = bool(s) and (p[0] == '.' or p[0] == s[0])
+    if len(p) >= 2 and p[1] == '*':
+        return (self.isMatch(s, p[2:]) or
+                (first_match and self.isMatch(s[1:], p)))
+    return first_match and self.isMatch(s[1:], p[1:])`,
+    java:`public boolean isMatch(String s, String p) {
+    if (p.isEmpty()) return s.isEmpty();
+    boolean firstMatch = !s.isEmpty() &&
+        (p.charAt(0) == '.' || p.charAt(0) == s.charAt(0));
+    if (p.length() >= 2 && p.charAt(1) == '*') {
+        return isMatch(s, p.substring(2)) ||
+               (firstMatch && isMatch(s.substring(1), p));
+    }
+    return firstMatch && isMatch(s.substring(1), p.substring(1));
+}`,
+    go:`func isMatch(s string, p string) bool {
+    if len(p) == 0 {
+        return len(s) == 0
+    }
+    firstMatch := len(s) > 0 && (p[0] == '.' || p[0] == s[0])
+    if len(p) >= 2 && p[1] == '*' {
+        return isMatch(s, p[2:]) ||
+            (firstMatch && isMatch(s[1:], p))
+    }
+    return firstMatch && isMatch(s[1:], p[1:])
+}`},
+  map:{
+    py:   {1:2, 2:4, 3:4, 4:5, 5:6, 6:8},
+    java: {1:2, 2:3, 3:4, 4:5, 5:6, 6:9},
+    go:   {1:2, 2:5, 3:5, 4:6, 5:7, 6:10}
+  },
+  legend:[['yellow','Current call (s, p)'],['blue','First-char compare s[0] vs p[0]'],['green','Call returned true']],
+  how:'<p>Decompose directly from the definition. If <b>p</b> is empty, the answer is "is <b>s</b> empty too?". '+
+      'Otherwise check the first characters (<code>.</code> matches anything).</p>'+
+      '<p>If <code>p[1]=="*"</code>, branch two ways: <b>skip</b> <code>x*</code> entirely (zero copies, <code>p[2:]</code>) '+
+      'or — when the first char matches — <b>consume</b> one char of <b>s</b> and keep the same pattern. '+
+      'Without a <code>*</code>, both first chars must match and we recurse on the tails.</p>'+
+      '<p>Each <code>*</code> doubles the branching, so worst case is exponential — which is exactly why the DP table memoizes it.</p>',
+  code:[
+    [['kw','if'],['op',' p is empty: '],['kw','return'],['op',' s is empty']],
+    [['op','first = s≠"" '],['kw','and'],['op',' (p[0]==']],
+    [['st',"'.'"],['op',' '],['kw','or'],['op',' p[0]==s[0])']],
+    [['kw','if'],['op',' len(p)≥2 '],['kw','and'],['op',' p[1]==\'*\':']],
+    [['kw','  return'],['op',' isMatch(s, p[2:])  OR  (first '],['kw','and'],['op',' isMatch(s[1:], p))']],
+    [['kw','return'],['op',' first '],['kw','and'],['op',' isMatch(s[1:], p[1:])']]
+  ],
+  build(s, p){
+    const frames = [];
+    const stack = [];   // visualized call stack: {s, p, status:'open'|'true'|'false'}
 
-            function dp(i, j) {
-                if (memoTable[i][j] !== null) {
-                    memoSteps.push({
-                        type: 'cache-hit', i, j,
-                        value: memoTable[i][j],
-                        explanation: `<code>memo[${i}][${j}]</code> found in cache = <span class="${memoTable[i][j]?'true-val':'false-val'}">${memoTable[i][j]}</span>`
-                    });
-                    return memoTable[i][j];
-                }
+    // s/p display rows for the *current* call (top of stack)
+    const strRow = (label, str, hi) => ({
+      type:'cells', label,
+      cells: str.length ? str.split('').map((ch,k)=>cell(ch, k, k===hi?'cur':'', k===hi?(label[0]==='s'?'s[0]':'p[0]'):''))
+                        : [cell('ε', 0, '', '')]
+    });
+    const stackRow = () => ({
+      type:'chips', label:'call stack  <span style="color:var(--faint)">(top = current)</span>',
+      chips: stack.map((c,k)=>({
+        key:'isMatch("'+(c.s||'ε')+'","'+(c.p||'ε')+'")',
+        idx: c.status==='open' ? '…' : (c.status==='true'?'true':'false'),
+        hl: c.status==='open' ? (k===stack.length-1?'hit':'') : (c.status==='true'?'add':'bad')
+      }))
+    });
+    const curCall = () => stack.length ? stack[stack.length-1] : {s,p};
+    const rows = (hi) => {
+      const c = curCall();
+      return [ strRow('s  <span style="color:var(--faint)">(current call)</span>', c.s, hi==='s'?0:null),
+               strRow('p  <span style="color:var(--faint)">(current call)</span>', c.p, hi==='p'?0:null),
+               stackRow() ];
+    };
+    const mets = (depth, calls, res) => [
+      {k:'depth', v:depth}, {k:'calls', v:calls},
+      {k:'result', v:res===null?'—':(res?'true':'false')},
+      targetMetric('s = "'+s+'"   ·   p = "'+p+'"')
+    ];
 
-                let result;
-                if (j === n) {
-                    result = i === m;
-                    memoSteps.push({
-                        type: 'base', i, j,
-                        value: result,
-                        explanation: `<code>dp(${i}, ${j})</code>: Pattern ended → ${i === m ? 'string also ended' : 'string not ended'} → <span class="${result?'true-val':'false-val'}">${result}</span>`
-                    });
-                } else {
-                    let firstMatch = i < m && (s[i] === p[j] || p[j] === '.');
+    let calls = 0, maxDepth = 0;
 
-                    memoSteps.push({
-                        type: 'call', i, j,
-                        value: null,
-                        explanation: `<code>dp(${i}, ${j})</code>: s[${i}:]="${s.slice(i)}", p[${j}:]="${p.slice(j)}" checking...`
-                    });
+    // recursive walk that emits frames
+    function rec(cs, cp){
+      calls++;
+      const node = {s:cs, p:cp, status:'open'};
+      stack.push(node);
+      maxDepth = Math.max(maxDepth, stack.length);
 
-                    if (j + 1 < n && p[j + 1] === '*') {
-                        // Try zero occurrences
-                        let zeroResult = dp(i, j + 2);
-                        if (zeroResult) {
-                            result = true;
-                        } else if (firstMatch) {
-                            result = dp(i + 1, j);
-                        } else {
-                            result = false;
-                        }
-                    } else {
-                        result = firstMatch && dp(i + 1, j + 1);
-                    }
+      // enter / base check
+      if (cp.length === 0){
+        const r = cs.length === 0;
+        node.status = r ? 'true' : 'false';
+        frames.push({ rows:rows(null), metrics:mets(stack.length, calls, r),
+          compare:'p is empty  →  return  '+(r?'<span class="ans">true (s empty)</span>':'<span class="bad">false (s = "'+cs+'")</span>'),
+          narration:'Base case: pattern empty. Is s empty? <code>'+(cs.length?'"'+cs+'" → false':'"" → true')+'</code>.',
+          codeLine:1 });
+        stack.pop();
+        return r;
+      }
 
-                    memoSteps.push({
-                        type: 'resolve', i, j,
-                        value: result,
-                        explanation: `<code>memo[${i}][${j}]</code> = <span class="${result?'true-val':'false-val'}">${result}</span> — result saved.`
-                    });
-                }
+      const firstMatch = cs.length>0 && (cp[0]==='.' || cp[0]===cs[0]);
+      frames.push({ rows:rows('p'), metrics:mets(stack.length, calls, null),
+        compare:'first = '+(cs.length? "s[0]='"+cs[0]+"' vs p[0]='"+cp[0]+"'" : 's empty')+'  →  '+(firstMatch?'<span class="ans">match</span>':'<span class="bad">no</span>'),
+        narration:'Call <code>isMatch("'+(cs||'ε')+'","'+(cp||'ε')+'")</code>: compare first chars'+(cs.length?' <code>'+cp[0]+'</code> vs <code>'+cs[0]+'</code>':' (s empty)')+' → first_match = <code>'+firstMatch+'</code>.',
+        codeLine:2 });
 
-                memoTable[i][j] = result;
-                return result;
-            }
-
-            // Reset memo
-            memoTable = Array.from({length: m + 1}, () => Array(n + 1).fill(null));
-            dp(0, 0);
+      let ret;
+      if (cp.length>=2 && cp[1]==='*'){
+        frames.push({ rows:rows(null), metrics:mets(stack.length, calls, null),
+          compare:'p[1]=\'*\'  →  branch: skip "'+cp[0]+'*"  OR  consume s[0]',
+          narration:'<code>'+cp[0]+'*</code> seen. Try <b>zero copies</b> first (skip <code>'+cp.slice(0,2)+'</code>), else <b>consume</b> one char.',
+          codeLine:4 });
+        const a = rec(cs, cp.slice(2));            // branch A: zero occurrences
+        if (a){ ret = true; }
+        else if (firstMatch){ ret = rec(cs.slice(1), cp); }  // branch B: one+ occurrences
+        else { ret = false; }
+      } else {
+        if (firstMatch){
+          ret = rec(cs.slice(1), cp.slice(1));
+        } else {
+          ret = false;
+          frames.push({ rows:rows('p'), metrics:mets(stack.length, calls, false),
+            compare:'first chars differ  →  return <span class="bad">false</span>',
+            narration:'First chars don\'t match → this branch returns <code>false</code>.',
+            codeLine:6 });
         }
+      }
 
-        function buildMemoTable() {
-            const m = s.length, n = p.length;
-            const table = document.getElementById('memoTable');
-            table.innerHTML = '';
+      node.status = ret ? 'true' : 'false';
+      frames.push({ rows:rows(null), metrics:mets(stack.length, calls, ret),
+        compare:'isMatch("'+(cs||'ε')+'","'+(cp||'ε')+'")  →  '+(ret?'<span class="ans">true</span>':'<span class="bad">false</span>'),
+        narration:'Call <code>isMatch("'+(cs||'ε')+'","'+(cp||'ε')+'")</code> resolves to <code>'+ret+'</code>.',
+        codeLine: (cp.length>=2 && cp[1]==='*') ? 5 : 6 });
+      stack.pop();
+      return ret;
+    }
 
-            let headerRow = '<tr><th class="corner">i\\j</th>';
-            for (let j = 0; j <= n; j++) {
-                headerRow += `<th>${j}</th>`;
-            }
-            headerRow += '</tr>';
-            table.innerHTML = headerRow;
+    // intro frame
+    frames.push({ rows:[{type:'cells',label:'s', cells:(s.length?s.split('').map((c,k)=>cell(c,k,'','')):[cell('ε',0,'','')])},
+                        {type:'cells',label:'p', cells:(p.length?p.split('').map((c,k)=>cell(c,k,'','')):[cell('ε',0,'','')])},
+                        {type:'chips',label:'call stack  <span style="color:var(--faint)">(top = current)</span>',chips:[]}],
+      metrics:mets(0,0,null),
+      compare:'isMatch("'+s+'", "'+p+'")  —  recurse on first char + tail',
+      narration:'Each call peels the first character (or a whole <code>x*</code> group) and recurses on the rest.',
+      codeLine:1 });
 
-            for (let i = 0; i <= m; i++) {
-                let row = document.createElement('tr');
-                let th = document.createElement('th');
-                th.textContent = i;
-                row.appendChild(th);
+    const result = rec(s, p);
 
-                for (let j = 0; j <= n; j++) {
-                    let td = document.createElement('td');
-                    td.id = `memo-${i}-${j}`;
-                    td.classList.add('unfilled');
-                    td.textContent = '-';
-                    row.appendChild(td);
-                }
-                table.appendChild(row);
-            }
-        }
+    frames.push({ rows:[{type:'cells',label:'s', cells:(s.length?s.split('').map((c,k)=>cell(c,k,'match','')):[cell('ε',0,'match','')])},
+                        {type:'cells',label:'p', cells:(p.length?p.split('').map((c,k)=>cell(c,k,'match','')):[cell('ε',0,'match','')])},
+                        {type:'chips',label:'call stack  <span style="color:var(--faint)">(top = current)</span>',chips:[]}],
+      metrics:mets(0, calls, result),
+      compare: result ? '<span class="ans">✓ return true</span>' : '<span class="bad">✗ return false</span>',
+      narration: result ? 'The root call returned <code>true</code> → "'+s+'" matches "'+p+'".'
+                        : 'The root call returned <code>false</code> → "'+s+'" does not match "'+p+'".',
+      codeLine:1, done:true });
+    return frames;
+  }
+}
+];
 
-        function renderMemoStep(stepIdx) {
-            const m = s.length, n = p.length;
+// ---------- state ----------
+let approach = APPROACHES[0];          // default: bottom-up DP
+let presetName = 'marquee';
+let curS = PRESETS.marquee.s;
+let curP = PRESETS.marquee.p;
+let frames = [];
+let idx = 0;
+let playing = false;
+let timer = null;
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4];
+let speedI = 3;
 
-            // Clear
-            for (let i = 0; i <= m; i++) {
-                for (let j = 0; j <= n; j++) {
-                    const cell = document.getElementById(`memo-${i}-${j}`);
-                    if (!cell) continue;
-                    cell.className = 'unfilled';
-                    cell.textContent = '-';
-                }
-            }
+// ---------- rendering ----------
+function cellWidth(n){ return n <= 6 ? 78 : n <= 8 ? 64 : n <= 11 ? 52 : 44; }
 
-            // Replay
-            let filled = {};
-            for (let si = 0; si <= stepIdx && si < memoSteps.length; si++) {
-                const st = memoSteps[si];
-                if ((st.type === 'resolve' || st.type === 'base') && st.value !== null) {
-                    const cell = document.getElementById(`memo-${st.i}-${st.j}`);
-                    if (!cell) continue;
-                    cell.textContent = st.value ? 'T' : 'F';
-                    cell.classList.remove('unfilled');
-                    cell.classList.add(st.value ? 'true-cell' : 'false-cell');
-                    filled[`${st.i}-${st.j}`] = true;
-                }
-            }
+function cellsRowHTML(row, n){
+  const w = cellWidth(n);
+  const cells = row.cells.map(c=>{
+    const cls = 'cell' + (c.cls ? ' '+c.cls : '');
+    const arrow = c.arrow ? '<span class="arrow below"><b>▲</b>'+c.arrow+'</span>' : '';
+    const ix = (c.ix!=null) ? '<span class="ix">'+c.ix+'</span>' : '';
+    return '<div class="'+cls+'">'+c.value+ix+arrow+'</div>';
+  }).join('');
+  return '<div class="rowlabel">'+row.label+'</div><div class="cells" style="grid-template-columns:repeat('+n+','+w+'px)">'+cells+'</div>';
+}
+function chipsRowHTML(row){
+  const chips = row.chips.length
+    ? row.chips.map(e=>'<div class="chip '+(e.hl||'')+'">'+e.key+'<span>→ '+e.idx+'</span></div>').join('')
+    : '<div class="chip-empty">empty</div>';
+  return '<div class="rowlabel sp">'+row.label+'</div><div class="chips">'+chips+'</div>';
+}
 
-            // Highlight current
-            document.querySelectorAll('#memoTable td').forEach(td => {
-                td.classList.remove('current', 'looked-up');
-            });
+// code panel: pseudocode tokens OR a real language; BOTH highlight the active line.
+function codeLinesHTML(view){
+  if (view === 'pseudo'){
+    return approach.code.map((toks,i)=>{
+      const inner = toks.map(([c,t])=>'<span class="'+c+'">'+esc(t)+'</span>').join('');
+      return '<div class="ln" data-line="'+(i+1)+'"><span class="no">'+(i+1)+'</span><span>'+inner+'</span></div>';
+    }).join('');
+  }
+  return (approach.src[view]||'').split('\n').map((ln,i)=>
+    '<div class="ln" data-line="'+(i+1)+'"><span class="no">'+(i+1)+'</span><span>'+highlight(ln, view)+'</span></div>'
+  ).join('');
+}
+function highlightLine(){
+  const f = frames[idx]; if (!f) return;
+  let active = f.codeLine;
+  if (codeView !== 'pseudo'){ const m = approach.map && approach.map[codeView]; active = m ? m[f.codeLine] : -1; }
+  document.querySelectorAll('#code .ln').forEach(ln=>ln.classList.toggle('active', +ln.dataset.line === active));
+}
+function renderCodeView(){
+  document.querySelectorAll('#codetabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===codeView));
+  document.getElementById('code').innerHTML = codeLinesHTML(codeView);
+  highlightLine();
+}
+function renderLegend(){
+  document.getElementById('legend').innerHTML = approach.legend
+    .map(([sw,txt])=>'<div class="it"><span class="sw '+sw+'"></span>'+txt+'</div>').join('');
+}
 
-            if (stepIdx >= 0 && stepIdx < memoSteps.length) {
-                const st = memoSteps[stepIdx];
-                const cell = document.getElementById(`memo-${st.i}-${st.j}`);
-                if (cell) {
-                    if (st.type === 'cache-hit') {
-                        cell.classList.add('looked-up');
-                    } else {
-                        cell.classList.add('current');
-                    }
-                }
-                document.getElementById('explanationMemo').innerHTML = st.explanation;
-            } else {
-                document.getElementById('explanationMemo').innerHTML = '<strong>Play</strong> or <strong>Step</strong> to begin.';
-            }
+let codeView = 'pseudo';
+function setCodeView(v){ codeView = v; renderCodeView(); }
 
-            // Update string display
-            updateStringDisplay();
-        }
+function render(){
+  const f = frames[idx];
+  let n = 0;
+  f.rows.forEach(r=>{ if (r.type==='cells') n = Math.max(n, r.cells.length); });
+  const stage = document.getElementById('stage');
+  stage.classList.toggle('compact', !!approach.compact);
+  stage.innerHTML =
+    '<div class="compare">'+f.compare+'</div>' +
+    f.rows.map(r => r.type==='cells' ? cellsRowHTML(r,n) : chipsRowHTML(r)).join('');
 
-        // ============================================================
-        // SPACE-OPTIMIZED LOGIC
-        // ============================================================
-        function generateSpaceOptSteps() {
-            spaceSteps = [];
-            const m = s.length, n = p.length;
+  document.getElementById('metrics').innerHTML = f.metrics.map(m=>{
+    const wide = m.wide ? ' wide' : '';
+    const vcls = 'v' + (m.v==='—' ? ' muted' : '');
+    return '<div class="metric'+wide+'"><div class="'+vcls+'">'+m.v+'</div><div class="k">'+m.k+'</div></div>';
+  }).join('');
 
-            let prev = Array(n + 1).fill(false);
-            prev[0] = true;
+  document.getElementById('narration').innerHTML = f.narration;
 
-            spaceSteps.push({
-                type: 'init',
-                prev: [...prev],
-                curr: null,
-                i: 0,
-                explanation: `<code>prev[0] = true</code> — Empty string matches empty pattern.`
-            });
+  highlightLine();
 
-            for (let j = 2; j <= n; j++) {
-                if (p[j - 1] === '*') {
-                    prev[j] = prev[j - 2];
-                }
-            }
+  const last = frames.length - 1;
+  const scrub = document.getElementById('scrub');
+  scrub.max = last; scrub.value = idx;
+  scrub.style.setProperty('--p', (last ? idx/last*100 : 0)+'%');
+  document.getElementById('counter').textContent = (idx+1) + ' / ' + (last+1);
+  document.getElementById('prevBtn').disabled = idx === 0;
+  document.getElementById('nextBtn').disabled = idx === last;
+}
 
-            spaceSteps.push({
-                type: 'first-row',
-                prev: [...prev],
-                curr: null,
-                i: 0,
-                explanation: `First row filled: matching empty string with '*'.`
-            });
+// ---------- transport ----------
+function goto(i){
+  const last = frames.length - 1;
+  idx = Math.max(0, Math.min(last, i));
+  render();
+  if (idx === last) stop();
+}
+function next(){ if (idx < frames.length-1) goto(idx+1); }
+function prev(){ goto(idx-1); }
+function play(){
+  if (idx >= frames.length-1) idx = 0;
+  playing = true; setPlayIcon(true);
+  const delay = 800 / SPEEDS[speedI];
+  timer = setInterval(()=>{ if (idx >= frames.length-1){ stop(); return; } goto(idx+1); }, delay);
+}
+function stop(){ playing = false; setPlayIcon(false); if (timer){ clearInterval(timer); timer = null; } }
+function toggle(){ playing ? stop() : play(); }
+function setPlayIcon(on){
+  document.getElementById('playIcon').innerHTML = on
+    ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'
+    : '<path d="M8 5v14l11-7z"/>';
+}
 
-            for (let i = 1; i <= m; i++) {
-                let curr = Array(n + 1).fill(false);
+// ---------- build / switch ----------
+function rebuild(){
+  stop();
+  frames = approach.build(curS, curP);
+  idx = 0;
+  document.getElementById('comp').innerHTML = '<b>'+approach.comp.split('·')[0].trim()+'</b> · '+approach.comp.split('·').slice(1).join('·').trim();
+  render();
+}
+function setApproach(ap){
+  approach = ap;
+  document.querySelectorAll('#approaches button').forEach(b=>b.classList.toggle('on', b.dataset.a===ap.id));
+  renderLegend();
+  document.getElementById('how').innerHTML = ap.how;
+  renderCodeView();
+  rebuild();
+}
+function setPreset(name){
+  presetName = name;
+  curS = PRESETS[name].s;
+  curP = PRESETS[name].p;
+  document.querySelectorAll('#presets button').forEach(b=>b.classList.toggle('on', b.dataset.p===name));
+  rebuild();
+}
+function randomArray(){
+  const t = NEW_TEMPLATES[Math.floor(Math.random()*NEW_TEMPLATES.length)];
+  curS = t.s; curP = t.p;
+  document.querySelectorAll('#presets button').forEach(x=>x.classList.remove('on'));
+  rebuild();
+}
 
-                for (let j = 1; j <= n; j++) {
-                    if (p[j - 1] === '*') {
-                        curr[j] = curr[j - 2];
-                        if (s[i - 1] === p[j - 2] || p[j - 2] === '.') {
-                            curr[j] = curr[j] || prev[j];
-                        }
-                    } else if (s[i - 1] === p[j - 1] || p[j - 1] === '.') {
-                        curr[j] = prev[j - 1];
-                    }
-                }
+// ---------- wiring ----------
+document.getElementById('approaches').innerHTML = APPROACHES
+  .map(a=>'<button data-a="'+a.id+'">'+a.label+'</button>').join('');
+document.getElementById('approaches').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  setApproach(APPROACHES.find(a=>a.id===b.dataset.a));
+});
+document.getElementById('presets').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  setPreset(b.dataset.p);
+});
+document.getElementById('codetabs').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  setCodeView(b.dataset.v);
+});
+document.getElementById('newBtn').addEventListener('click', randomArray);
+document.getElementById('playBtn').addEventListener('click', toggle);
+document.getElementById('nextBtn').addEventListener('click', ()=>{ stop(); next(); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ stop(); prev(); });
+document.getElementById('resetBtn').addEventListener('click', ()=>{ stop(); goto(0); });
+document.getElementById('scrub').addEventListener('input', e=>{ stop(); goto(+e.target.value); });
+document.getElementById('speed').addEventListener('input', e=>{
+  speedI = +e.target.value;
+  document.getElementById('mult').innerHTML = SPEEDS[speedI] + '&times;';
+  if (playing){ stop(); play(); }
+});
+document.addEventListener('keydown', e=>{
+  if (e.key === ' '){ e.preventDefault(); toggle(); }
+  else if (e.key === 'ArrowRight'){ stop(); next(); }
+  else if (e.key === 'ArrowLeft'){ stop(); prev(); }
+});
 
-                spaceSteps.push({
-                    type: 'row',
-                    prev: [...prev],
-                    curr: [...curr],
-                    i: i,
-                    highlightJ: -1,
-                    explanation: `<code>i=${i}</code>, s[${i-1}]='${s[i-1]}': curr row filled, then <code>prev = curr</code>.`
-                });
-
-                prev = [...curr];
-            }
-
-            spaceSteps.push({
-                type: 'answer',
-                prev: [...prev],
-                curr: null,
-                i: m,
-                explanation: `<strong>Answer:</strong> <code>prev[${n}]</code> = <span class="${prev[n]?'true-val':'false-val'}">${prev[n]}</span>`
-            });
-        }
-
-        function renderSpaceOptStep(stepIdx) {
-            const n = p.length;
-            const container = document.getElementById('spaceOptDisplay');
-
-            if (stepIdx < 0 || stepIdx >= spaceSteps.length) {
-                container.innerHTML = '<p style="color:#94a3b8;">Press Play or Step to begin.</p>';
-                document.getElementById('explanationOpt').innerHTML = '<strong>Play</strong> or <strong>Step</strong> to begin.';
-                updateStringDisplay();
-                return;
-            }
-
-            const st = spaceSteps[stepIdx];
-
-            function renderRow(label, arr, highlight) {
-                if (!arr) return '';
-                let html = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0;">`;
-                html += `<span style="color:#94a3b8;min-width:50px;text-align:right;font-size:0.85rem;font-weight:600;">${label}:</span>`;
-                html += `<div style="display:flex;gap:3px;">`;
-                for (let j = 0; j <= n; j++) {
-                    let bg = arr[j] ? '#14532d' : '#0f172a';
-                    let border = arr[j] ? '#22c55e' : '#334155';
-                    let color = arr[j] ? '#4ade80' : '#475569';
-                    if (highlight && j === n && st.type === 'answer') {
-                        border = '#f59e0b';
-                        bg = '#422006';
-                    }
-                    html += `<div style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-family:monospace;font-weight:600;font-size:0.85rem;border:2px solid ${border};background:${bg};color:${color};">${arr[j] ? 'T' : 'F'}</div>`;
-                }
-                html += `</div></div>`;
-                return html;
-            }
-
-            // Pattern header
-            let headerHtml = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px;">`;
-            headerHtml += `<span style="min-width:50px;"></span>`;
-            headerHtml += `<div style="display:flex;gap:3px;">`;
-            for (let j = 0; j <= n; j++) {
-                let label = j === 0 ? '""' : p[j - 1];
-                let color = '#94a3b8';
-                if (j > 0 && p[j-1] === '*') color = '#f59e0b';
-                if (j > 0 && p[j-1] === '.') color = '#06b6d4';
-                headerHtml += `<div style="width:38px;text-align:center;font-family:monospace;font-size:0.8rem;color:${color};font-weight:600;">${label}</div>`;
-            }
-            headerHtml += `</div></div>`;
-
-            container.innerHTML = headerHtml + renderRow('prev', st.prev, false) + (st.curr ? renderRow('curr', st.curr, false) : '') + (st.type === 'answer' ? renderRow('answer', st.prev, true) : '');
-
-            document.getElementById('explanationOpt').innerHTML = st.explanation;
-            updateStringDisplay();
-        }
-
-        // ============================================================
-        // STRING DISPLAY
-        // ============================================================
-        function updateStringDisplay() {
-            const displays = ['stringDisplay', 'stringDisplayMemo', 'stringDisplayOpt'];
-            displays.forEach(id => {
-                const el = document.getElementById(id);
-                if (!el) return;
-
-                let html = '<div class="string-row"><span class="string-label">s =</span><div class="string-chars">';
-                for (let i = 0; i < s.length; i++) {
-                    html += `<div class="char-box" id="${id}-s-${i}">${s[i]}</div>`;
-                }
-                if (s.length === 0) html += `<div class="char-box" style="color:#64748b;">""</div>`;
-                html += '</div></div>';
-
-                html += '<div class="string-row"><span class="string-label">p =</span><div class="string-chars">';
-                for (let j = 0; j < p.length; j++) {
-                    let cls = '';
-                    if (p[j] === '*') cls = ' star';
-                    else if (p[j] === '.') cls = ' dot';
-                    html += `<div class="char-box${cls}" id="${id}-p-${j}">${p[j]}</div>`;
-                }
-                html += '</div></div>';
-
-                el.innerHTML = html;
-            });
-        }
-
-        function updateStringHighlight(step) {
-            if (!step || !step.si || !step.pj) return;
-            const i = step.si - 1;
-            const j = step.pj - 1;
-
-            const sEl = document.getElementById(`stringDisplay-s-${i}`);
-            const pEl = document.getElementById(`stringDisplay-p-${j}`);
-
-            if (sEl) sEl.classList.add('highlight-s');
-            if (pEl) pEl.classList.add('highlight-p');
-
-            // Show match status
-            if (i >= 0 && j >= 0 && i < s.length && j < p.length) {
-                if (p[j] === '*') {
-                    if (pEl) pEl.classList.add('star');
-                } else if (s[i] === p[j] || p[j] === '.') {
-                    if (sEl) sEl.classList.add('match');
-                    if (pEl) pEl.classList.add('match');
-                } else {
-                    if (sEl) sEl.classList.add('no-match');
-                    if (pEl) pEl.classList.add('no-match');
-                }
-            }
-        }
-
-        // ============================================================
-        // INIT
-        // ============================================================
-        function init() {
-            document.getElementById('sInput').value = s;
-            document.getElementById('pInput').value = p;
-            reset();
-        }
-
-        init();
-
-        // Animate complexity chart bars
-        setTimeout(() => {
-            document.querySelectorAll('.chart-bar[data-w]').forEach(bar => {
-                bar.style.width = bar.dataset.w + '%';
-            });
-        }, 400);
-    </script>
+// ---------- init ----------
+document.getElementById('mult').innerHTML = SPEEDS[speedI] + '&times;';
+setApproach(approach);   // renders code/legend/how + builds frames
+setCodeView('pseudo');
+</script>
+<script>
+(function(){
+  var KEY='lc-anim-theme', root=document.documentElement, b=document.getElementById('themeToggle');
+  if(!b) return;
+  var SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  var MOON='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  function icon(){ b.innerHTML = root.getAttribute('data-theme')==='light' ? MOON : SUN; }
+  function set(t){ if(t==='light') root.setAttribute('data-theme','light'); else root.removeAttribute('data-theme'); try{localStorage.setItem(KEY,t);}catch(e){} icon(); }
+  icon();
+  b.addEventListener('click', function(){ set(root.getAttribute('data-theme')==='light' ? 'dark' : 'light'); });
+})();
+</script>
 </body>
 </html>
