@@ -164,9 +164,9 @@ graph TD
 
 ## Status
 
-- ⬜ **Bad Structure** (God Object, Spaghetti Code, Lava Flow, Boat Anchor, Arrow Anti-Pattern) — 0/8 files
-- ⬜ **Bad Shortcuts** (Copy-Paste, Magic Numbers, Hard Coding, Cargo Cult, Pokemon Exception Handling, Stringly-Typed) — 0/8 files
-- ⬜ **Over-Engineering** (Premature Optimization, Speculative Generality, Gold Plating, Yo-yo, Lasagna Code, Accidental Complexity, Soft Coding, Bikeshedding) — 0/8 files
+- ✅ **Bad Structure** (God Object, Spaghetti Code, Lava Flow, Boat Anchor, Arrow Anti-Pattern) — 8/8 files
+- ✅ **Bad Shortcuts** (Copy-Paste, Magic Numbers, Hard Coding, Cargo Cult, Pokemon Exception Handling, Stringly-Typed) — 8/8 files
+- ✅ **Over-Engineering** (Premature Optimization, Speculative Generality, Gold Plating, Yo-yo, Lasagna Code, Accidental Complexity, Soft Coding, Bikeshedding) — 8/8 files
 
 ---
 
