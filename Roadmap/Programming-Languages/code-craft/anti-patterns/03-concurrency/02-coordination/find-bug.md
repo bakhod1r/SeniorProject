@@ -960,7 +960,7 @@ The meta-lesson: **every coordination bug is invisible in any single function.**
 - [`senior.md`](senior.md) — debugging a deadlock in production and refactoring a contended path.
 - [`professional.md`](professional.md) — lock-free alternatives and memory-ordering depth.
 - [`optimize.md`](optimize.md) — implementations to make both safe *and* fast.
-- [Synchronization Misuse → Find the Bug](../01-synchronization-misuse/find-bug.md) — the sibling category (locks and memory primitives applied wrongly).
+- [Synchronization Misuse → Find the Bug](../01-synchronization/find-bug.md) — the sibling category (locks and memory primitives applied wrongly).
 - [Shared State → Find the Bug](../03-shared-state/find-bug.md) — the sibling category (mutable state crossing threads).
 - [Concurrency Roadmap](../../../concurrency/) — the positive patterns and primitives behind these cures.
 - [Async Anti-Patterns](../../04-async/README.md) — the event-loop sibling chapter where deadlocks take an async form.

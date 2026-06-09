@@ -127,9 +127,9 @@ Each subcategory folder contains an **8-file suite**:
 
 ## Status
 
-- ⬜ **Synchronization Misuse** (Double-Checked Locking, Volatile Misuse, Race-Prone Lazy Init) — 0/8 files
-- ⬜ **Coordination** (Lock Ordering Deadlock, Holding Lock During I/O, Wrong Lock Granularity) — 0/8 files
-- ⬜ **Shared State** (Shared Mutable State, Busy Waiting, Thread-Per-Request Unbounded) — 0/8 files
+- ✅ **Synchronization Misuse** (Double-Checked Locking, Volatile Misuse, Race-Prone Lazy Init) — 8/8 files
+- ✅ **Coordination** (Lock Ordering Deadlock, Holding Lock During I/O, Wrong Lock Granularity) — 8/8 files
+- ✅ **Shared State** (Shared Mutable State, Busy Waiting, Thread-Per-Request Unbounded) — 8/8 files
 
 ---
 
