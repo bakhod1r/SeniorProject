@@ -128,9 +128,9 @@ Each subcategory folder contains an **8-file suite**:
 
 ## Status
 
-- ⬜ **Error Handling** (Swallowed Rejection, Floating Promise, Fire-and-Forget, Forgotten Await) — 0/8 files
-- ⬜ **Execution Shape** (await in Loop, Promise Chain Hell, Mixing Callbacks and Promises) — 0/8 files
-- ⬜ **Misuse** (Promise Constructor, async Without await) — 0/8 files
+- ✅ **Error Handling** (Swallowed Rejection, Floating Promise, Fire-and-Forget, Forgotten Await) — 8/8 files
+- ✅ **Execution Shape** (await in Loop, Promise Chain Hell, Mixing Callbacks and Promises) — 8/8 files
+- ✅ **Misuse** (Promise Constructor, async Without await) — 8/8 files
 
 ---
 
