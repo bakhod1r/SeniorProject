@@ -166,9 +166,9 @@ graph TD
 
 ## Status
 
-- ⬜ **OO Misuse** (Anemic Domain Model, BaseBean, Constant Interface, Poltergeist, Object Orgy, Functional Decomposition, Call Super, Magic Container, Flag Arguments, Telescoping Constructor, Fragile Base Class) — 0/8 files
-- ⬜ **Coupling & State** (Singletonitis, Circular Dependency, Action at a Distance, Hidden Dependencies, Sequential Coupling) — 0/8 files
-- ⬜ **Abstraction Failures** (Golden Hammer, Inner-Platform Effect, Interface Bloat, Premature Abstraction) — 0/8 files
+- ✅ **OO Misuse** (Anemic Domain Model, BaseBean, Constant Interface, Poltergeist, Object Orgy, Functional Decomposition, Call Super, Magic Container, Flag Arguments, Telescoping Constructor, Fragile Base Class) — 8/8 files
+- ✅ **Coupling & State** (Singletonitis, Circular Dependency, Action at a Distance, Hidden Dependencies, Sequential Coupling) — 8/8 files
+- ✅ **Abstraction Failures** (Golden Hammer, Inner-Platform Effect, Interface Bloat, Premature Abstraction) — 8/8 files
 
 ---
 
