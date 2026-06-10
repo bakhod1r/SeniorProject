@@ -368,7 +368,7 @@ Professional-level mistakes — sophisticated, and therefore expensive:
 4. **Composing impure functions and expecting fusion.** A stage that mutates shared state breaks the category laws (reordering changes meaning), silently revoking the compiler's license to fuse or reorder. Keep composed stages pure — see [Pure Functions → professional](../02-pure-functions-and-referential-transparency/professional.md).
 5. **Chaining `Map`/`filter` helpers in Go and forgetting each allocates an intermediate.** N stages = N full-length slices and N passes. Fuse into one loop on hot paths; benchmark the allocation drop.
 6. **Over-using point-free style on failure-prone pipelines.** Anonymous lambdas produce anonymous, repeated `andThen`/`<lambda>` stack frames. Name the stages so traces stay debuggable.
-7. **Optimizing composition the profiler never flagged.** In most code the `compose` helper's overhead is irrelevant; manually fusing cold pipelines just uglifies them. Profile first — this is [Premature Optimization](../../anti-patterns/03-over-engineering/professional.md) in a functional costume.
+7. **Optimizing composition the profiler never flagged.** In most code the `compose` helper's overhead is irrelevant; manually fusing cold pipelines just uglifies them. Profile first — this is [Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) in a functional costume.
 8. **Forgetting Python has no inliner.** Treating Python composition like JVM composition: there is no warmup that rescues you. Call count *is* the cost; a manual expression beats a helper on hot Python paths.
 
 ---

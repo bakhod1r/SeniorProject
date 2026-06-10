@@ -299,7 +299,7 @@ for (Raw r : batch) {
 
 > **Illustrative impact (labeled — reproduce, do not trust):** on a 10M-iteration JMH benchmark over already-present data, the collapsed version ran ~2.1× the throughput of the `Optional`-chained version and allocated ~0 B/op vs ~96 B/op, *when escape analysis failed to scalar-replace the chain*. When the chain stayed monomorphic and fully inlined, the gap nearly vanished — the JIT scalar-replaced the intermediates. **The lesson is not "monads are slow"; it is "the abstraction is free only when it inlines, and a profiler tells you whether it did."**
 
-The discipline mirrors the rest of this roadmap: keep the monadic style everywhere it costs nothing (99% of code), and collapse it **only** on a profiled hot path, behind a clean boundary, with a committed benchmark. An un-benchmarked "I de-monadized this for speed" is [Premature Optimization](../../anti-patterns/03-over-engineering/professional.md) in functional clothing.
+The discipline mirrors the rest of this roadmap: keep the monadic style everywhere it costs nothing (99% of code), and collapse it **only** on a profiled hot path, behind a clean boundary, with a committed benchmark. An un-benchmarked "I de-monadized this for speed" is [Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) in functional clothing.
 
 ---
 
@@ -436,7 +436,7 @@ ghc -O2 -ddump-simpl -dsuppress-all App.hs | less
 Professional-level mistakes — subtle, and therefore expensive:
 
 1. **Assuming `flatMap`/`bind` is free.** It allocates a context per step unless the optimizer scalar-replaces or fuses it. Verify with JFR alloc / `+RTS -s` / a JMH `-prof gc` run before claiming a chain is cheap *or* slow.
-2. **De-monadizing a cold path "for speed."** Collapsing binds into early-returns helps only on a *profiled* hot path where escape analysis failed. Everywhere else it just costs readability — [Premature Optimization](../../anti-patterns/03-over-engineering/professional.md) in disguise.
+2. **De-monadizing a cold path "for speed."** Collapsing binds into early-returns helps only on a *profiled* hot path where escape analysis failed. Everywhere else it just costs readability — [Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) in disguise.
 3. **Treating an unlawful type as a monad.** A `bind` that dedups, reorders, or runs effects on construction breaks a law; a refactor that re-groups or hoists a `return` then silently changes behavior. Property-test the three laws on every custom monad.
 4. **Reaching for `Monad` when `Applicative` suffices.** If steps are independent, applicative style preserves batching/parallelism and *accumulates* errors instead of short-circuiting. Monadic style throws that away — use the weakest rung that works.
 5. **Lazy `State` where you needed strict.** The lazy `State` monad builds a thunk tower per `>>=` — an O(N) space leak. Use `Control.Monad.State.Strict`; confirm residency with `+RTS -s`.
@@ -528,5 +528,5 @@ Professional-level mistakes — subtle, and therefore expensive:
 - [Laziness & Streams](../12-laziness-and-streams/professional.md) — fusion and lazy-vs-strict, the same forces that decide a bind chain's cost.
 - [Currying & Partial Application](../07-currying-and-partial-application/professional.md) — Kleisli arrows are curried, composable monadic functions.
 - [Bad Structure → professional](../../anti-patterns/01-development/01-bad-structure/professional.md) — escape analysis, inlining, allocation pressure — the runtime vocabulary reused here.
-- [Over-Engineering → Premature Optimization](../../anti-patterns/03-over-engineering/professional.md) — the counterweight: de-monadize only behind a profiler and a benchmark.
+- [Over-Engineering → Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) — the counterweight: de-monadize only behind a profiler and a benchmark.
 - profiling-techniques · memory-leak-detection · big-o-analysis — the measurement toolkits referenced throughout.

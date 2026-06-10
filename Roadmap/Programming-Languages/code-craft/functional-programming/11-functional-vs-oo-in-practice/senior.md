@@ -45,7 +45,7 @@ This file builds that capability in five moves: the **functional core / imperati
 - **Required:** Fluency with [`middle.md`](middle.md) — you can articulate the trade-offs of immutability, higher-order functions, and composition-over-inheritance in everyday code.
 - **Required:** [Effect Tracking](../10-effect-tracking/senior.md) — the functional-core/imperative-shell pattern at the function level; this file scales it to the system.
 - **Required:** [Algebraic Data Types](../06-algebraic-data-types/senior.md) and [Immutability](../03-immutability/senior.md) — sum/product types and persistent structures are the building blocks of a functional domain model.
-- **Helpful:** Working knowledge of [SOLID and system design](../../../../../Architecture/README.md), and exposure to a real layered or hexagonal architecture.
+- **Helpful:** Working knowledge of SOLID and system design, and exposure to a real layered or hexagonal architecture.
 - **Helpful:** [Composition](../05-composition/senior.md) and [Monads — Plain English](../09-monads-plain-english/senior.md) for how pure pipelines compose and short-circuit.
 
 ---
@@ -437,4 +437,4 @@ Paradigm choice is a *socio-technical* decision, not just a technical one. The m
 - [Monads — Plain English](../09-monads-plain-english/senior.md) — `Result`/`Option` pipelines and railway-oriented workflows.
 - [Composition](../05-composition/senior.md) — how pure pipelines compose, and why composition beats inheritance for behavior.
 - [Bad Structure (anti-patterns)](../../anti-patterns/01-development/01-bad-structure/senior.md) — the reversible-steps, trunk-based discipline that the incremental FP migration borrows.
-- [Architecture → SOLID & System Design](../../../../../Architecture/README.md) — hexagonal/ports-and-adapters, the OO vocabulary for the same core/shell boundary.
+- Architecture → SOLID & System Design — hexagonal/ports-and-adapters, the OO vocabulary for the same core/shell boundary.

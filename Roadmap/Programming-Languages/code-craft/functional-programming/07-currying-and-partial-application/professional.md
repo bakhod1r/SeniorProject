@@ -226,7 +226,7 @@ The structural fact: **on non-curry-native runtimes, an N-argument curried full 
 
 ## Measurement: timeit, Go bench, JMH
 
-The rule from [Premature Optimization](../../anti-patterns/03-over-engineering/professional.md) applies in full: **if you can't name the tool that would falsify your claim, you're guessing.** Here is how to measure currying overhead on each runtime.
+The rule from [Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) applies in full: **if you can't name the tool that would falsify your claim, you're guessing.** Here is how to measure currying overhead on each runtime.
 
 ### Python — `timeit` / `pyperf`
 
@@ -342,7 +342,7 @@ for row in rows:
     out.append(transform(row))
 ```
 
-> **The professional nuance, mirroring the structure work:** sometimes the flat uncurried call *is* the right shape — a proven hot inner loop over a trivial body, where even one closure allocation per iteration is measurable and the specialization currying buys you isn't needed. In that case, write the flat call and *comment why*. But this is the exception. For the 95% of code that runs at human or request rates, currying's allocation is amortized or optimizer-erased, and you choose between curried and flat on **clarity**, not speed. Optimize the curry away only *after* a profiler points at it — anything else is [premature optimization](../../anti-patterns/03-over-engineering/professional.md) wearing a functional costume.
+> **The professional nuance, mirroring the structure work:** sometimes the flat uncurried call *is* the right shape — a proven hot inner loop over a trivial body, where even one closure allocation per iteration is measurable and the specialization currying buys you isn't needed. In that case, write the flat call and *comment why*. But this is the exception. For the 95% of code that runs at human or request rates, currying's allocation is amortized or optimizer-erased, and you choose between curried and flat on **clarity**, not speed. Optimize the curry away only *after* a profiler points at it — anything else is [premature optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) wearing a functional costume.
 
 ---
 
@@ -437,5 +437,5 @@ Professional-level mistakes — the kind that survive review because they sound 
 - [First-Class & Higher-Order Functions → professional](../01-first-class-and-higher-order-functions/professional.md) — closures as heap objects; the allocation model this topic builds on.
 - [Composition → professional](../05-composition/professional.md) — point-free pipelines that consume curried functions; the same closure-allocation cost model applies to composed stages.
 - [Recursion & Tail Calls → professional](../08-recursion-and-tail-calls/professional.md) — the other place FP's runtime cost (stack vs heap) is decided by the compiler, not the source.
-- [Anti-Patterns → Premature Optimization](../../anti-patterns/03-over-engineering/professional.md) — the discipline of profiling before optimizing; the counterweight that governs every cost claim here.
+- [Anti-Patterns → Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) — the discipline of profiling before optimizing; the counterweight that governs every cost claim here.
 - profiling-techniques · memory-leak-detection · big-o-analysis — the measurement vocabulary used throughout this file.

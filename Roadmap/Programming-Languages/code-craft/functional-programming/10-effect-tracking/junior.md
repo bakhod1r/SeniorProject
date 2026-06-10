@@ -214,7 +214,7 @@ assert discounted_price(100, is_friday=True) == 90
 assert discounted_price(100, is_friday=False) == 100
 ```
 
-Compare that with testing the tangled version from the introduction: you'd need to fake `input()`, freeze `datetime.now()`, and capture `print()` output — three pieces of test scaffolding for one rule. Every effect you push out of a function is a mock you no longer have to write. (This is the heart of [unit testing](../../../testing/README.md) discipline and why over-mocking is a smell.)
+Compare that with testing the tangled version from the introduction: you'd need to fake `input()`, freeze `datetime.now()`, and capture `print()` output — three pieces of test scaffolding for one rule. Every effect you push out of a function is a mock you no longer have to write. (This is the heart of unit testing discipline and why over-mocking is a smell.)
 
 ### 2. You can reason about the code locally
 

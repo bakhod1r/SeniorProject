@@ -63,7 +63,7 @@ The payoff of building from composable units is **local reasoning**. If `pipelin
 - You can replace `c` with `c'` and know the blast radius is exactly "anywhere that relied on `c`'s output," which the type system makes explicit.
 - You can reorder, insert, or remove stages by editing the *wiring*, not the stages.
 
-This is the same property [SOLID](../../../../Architecture/README.md)'s Open/Closed and Single-Responsibility principles chase in OO, reached by a shorter road. The God Object fails precisely because none of these hold: you cannot understand one of its methods without understanding the fields the others mutate.
+This is the same property SOLID's Open/Closed and Single-Responsibility principles chase in OO, reached by a shorter road. The God Object fails precisely because none of these hold: you cannot understand one of its methods without understanding the fields the others mutate.
 
 ```mermaid
 graph LR
@@ -227,7 +227,7 @@ def either(a: Validator, b: Validator) -> Validator:
 username = both(non_empty, max_len(20))
 ```
 
-The architectural property here is **closure under composition**: combining two `Validator`s yields a `Validator`, so the result is itself composable, indefinitely. This is what lets a five-primitive library express thousands of rules. It is the [Open/Closed principle](../../../../Architecture/README.md) in its strongest form — the library is closed for modification (you never touch it) yet open for extension (users compose new behavior).
+The architectural property here is **closure under composition**: combining two `Validator`s yields a `Validator`, so the result is itself composable, indefinitely. This is what lets a five-primitive library express thousands of rules. It is the Open/Closed principle in its strongest form — the library is closed for modification (you never touch it) yet open for extension (users compose new behavior).
 
 ### DSLs are combinator libraries with good names
 
@@ -473,4 +473,4 @@ Mistakes seniors make when composition becomes the primary design tool:
 - [Functional vs OO in Practice](../11-functional-vs-oo-in-practice/senior.md) — the hybrid layering of function, object, and inheritance composition.
 - [Design Patterns → Decorator](../../design-patterns/02-structural/04-decorator/junior.md) — middleware pipelines as the OO framing of function composition.
 - [Anti-Patterns → Bad Structure](../../anti-patterns/01-development/01-bad-structure/senior.md) — the temporal-coupling spaghetti that typed composition makes impossible.
-- [Architecture → SOLID & System Design](../../../../Architecture/README.md) — Open/Closed and Dependency Inversion, the OO targets composition reaches by a shorter road.
+- Architecture → SOLID & System Design — Open/Closed and Dependency Inversion, the OO targets composition reaches by a shorter road.

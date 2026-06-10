@@ -206,14 +206,14 @@ Tests pass `roll=0.4` and `roll=0.6` to cover both branches deterministically �
 
 <details><summary>Answer</summary>
 
-Define narrow interfaces (ports) for exactly the operations the core needs — `UserRepo.Get(id)`, `Mailer.Send(msg)` — and have the shell pass concrete implementations in. The core depends on the interface, never on the concrete DB/SMTP client. Crucially, keep these ports *thin and intention-revealing* ("get a user," not "execute this SQL"), so the core speaks in domain terms and the messy details stay in the adapter. This is dependency injection in service of effect isolation: the same interface that decouples you from a vendor is the seam you substitute a fake at in tests. (See [Dependency Injection](../../../system-design/architecture-patterns/dependency-injection/README.md) only if that path exists; otherwise treat as plain DI.)
+Define narrow interfaces (ports) for exactly the operations the core needs — `UserRepo.Get(id)`, `Mailer.Send(msg)` — and have the shell pass concrete implementations in. The core depends on the interface, never on the concrete DB/SMTP client. Crucially, keep these ports *thin and intention-revealing* ("get a user," not "execute this SQL"), so the core speaks in domain terms and the messy details stay in the adapter. This is dependency injection in service of effect isolation: the same interface that decouples you from a vendor is the seam you substitute a fake at in tests. (See Dependency Injection only if that path exists; otherwise treat as plain DI.)
 </details>
 
 **Q18. "Testing without mocks" — what does that actually mean here?**
 
 <details><summary>Answer</summary>
 
-It means most of your tests exercise *pure functions* with plain data, so there's nothing to mock — you assert `output == expected`. Mocks exist to stand in for collaborators that have effects; if the logic has no effects, there are no collaborators to mock. You don't eliminate mocking entirely — the thin shell still gets a few integration tests, sometimes with fakes — but you eliminate the *pervasive* mocking where every unit test wires up five mock objects and asserts on interactions. The functional core moves the bulk of testing from "verify these calls happened in this order" (brittle) to "verify this input maps to this output" (robust). (See [Mocking Strategies](../../../testing/test-doubles/mocking-strategies/README.md) only if that path exists; otherwise plain text.)
+It means most of your tests exercise *pure functions* with plain data, so there's nothing to mock — you assert `output == expected`. Mocks exist to stand in for collaborators that have effects; if the logic has no effects, there are no collaborators to mock. You don't eliminate mocking entirely — the thin shell still gets a few integration tests, sometimes with fakes — but you eliminate the *pervasive* mocking where every unit test wires up five mock objects and asserts on interactions. The functional core moves the bulk of testing from "verify these calls happened in this order" (brittle) to "verify this input maps to this output" (robust). (See Mocking Strategies only if that path exists; otherwise plain text.)
 </details>
 
 **Q19. When you do need a test double, which kind fits effect isolation best?**

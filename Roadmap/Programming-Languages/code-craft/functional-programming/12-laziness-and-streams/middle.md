@@ -547,4 +547,4 @@ Laziness is not free. The middle-level engineer reaches for it deliberately, kno
 - [Immutability → middle](../03-immutability/middle.md) — streams pair with immutable values to keep pipelines safe to share.
 - [Monads — Plain English → middle](../09-monads-plain-english/middle.md) — lazy `IO`/`Stream` as a deferred-effect structure.
 - Same topic, other levels: [`junior.md`](junior.md) (recognizing laziness), `senior.md`, `professional.md`, `interview.md`.
-- Beyond FP: [Concurrency](../../language-internals/concurrency-async-parallel/concurrency/README.md) — Go channels as lazy streams and back-pressure.
+- Beyond FP: Concurrency — Go channels as lazy streams and back-pressure.

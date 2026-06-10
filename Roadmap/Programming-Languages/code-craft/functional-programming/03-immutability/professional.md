@@ -474,8 +474,8 @@ Professional-level mistakes — subtle, and therefore expensive:
 - [Pure Functions & Referential Transparency](../02-pure-functions-and-referential-transparency/professional.md) — immutability is what makes purity affordable; the two reinforce each other.
 - [Laziness & Streams](../12-laziness-and-streams/professional.md) — lazy structures share and defer like persistent ones; complementary allocation trade-offs.
 - [Functional vs OO in Practice](../11-functional-vs-oo-in-practice/professional.md) — the functional-core / imperative-shell split that fences mutation behind immutable boundaries.
-- [Memory Management → Tracing Garbage Collection](../../../language-internals/memory-management/05-tracing-garbage-collection/README.md) — generational GC, young/old generations, why short-lived garbage is cheap.
-- [Memory Management → Escape Analysis](../../../language-internals/memory-management/08-escape-analysis/README.md) — how the compiler decides stack vs heap and can erase allocation cost.
-- [Memory Management → Memory Layout](../../../language-internals/memory-management/09-memory-layout/README.md) — cache lines and locality that make flat arrays beat trees on scans.
+- Memory Management → Tracing Garbage Collection — generational GC, young/old generations, why short-lived garbage is cheap.
+- Memory Management → Escape Analysis — how the compiler decides stack vs heap and can erase allocation cost.
+- Memory Management → Memory Layout — cache lines and locality that make flat arrays beat trees on scans.
 - [Anti-Patterns → Over-Engineering → Premature Optimization](../../anti-patterns/01-development/03-over-engineering/professional.md) — measure before you choose mutable-for-speed.
 - profiling-techniques · memory-leak-detection · big-o-analysis — the measurement toolkit referenced throughout.

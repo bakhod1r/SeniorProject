@@ -44,7 +44,7 @@ Two disciplines define this level:
 ## Prerequisites
 
 - **Required:** Fluent with [`senior.md`](senior.md) — you can rewrite a body-recursive function into accumulator (tail) form and explain tail position.
-- **Required:** A working mental model of the call stack: stack frames, the stack pointer, return addresses, caller- vs callee-saved registers. See [Stack vs Heap](../../../language-internals/memory-management/02-stack-vs-heap/README.md).
+- **Required:** A working mental model of the call stack: stack frames, the stack pointer, return addresses, caller- vs callee-saved registers. See Stack vs Heap.
 - **Required:** You can read a microbenchmark comparison (`benchstat`, JMH, `timeit`) and tell signal from noise.
 - **Helpful:** Basic assembly literacy — the difference between a `call` and a `jmp` instruction.
 - **Helpful:** big-o-analysis and profiling-techniques skills for the space/time vocabulary used throughout.
@@ -418,6 +418,6 @@ Professional-level mistakes — the ones that pass review and fail in production
 - [Map / Filter / Reduce](../04-map-filter-reduce/professional.md) — `foldLeft`/`reduce` are the iterative (accumulator) face of recursion; the same stack-safety story applies.
 - [Immutability](../03-immutability/professional.md) — persistent structures are built by recursion over trees; their depth is the stack hazard discussed here.
 - [Currying & Partial Application](../07-currying-and-partial-application/professional.md) — closures are the building block of the thunks a trampoline allocates.
-- [Stack vs Heap](../../../language-internals/memory-management/02-stack-vs-heap/README.md) — the frame/stack mechanics this file depends on, in full.
+- Stack vs Heap — the frame/stack mechanics this file depends on, in full.
 - [Bad Structure (anti-patterns)](../../anti-patterns/01-development/01-bad-structure/professional.md) — the companion "what does this shape cost the machine, and how do you measure it" treatment for code structure.
 - big-o-analysis · profiling-techniques · dynamic-programming — the complexity, measurement, and memoization toolkits referenced throughout.

@@ -307,7 +307,7 @@ Recursion is not always the more "advanced" choice — it is a tool whose value 
 - **Trees** — file systems, DOM/HTML, JSON, ASTs, B-trees. A node contains nodes; the code mirrors that. `process(node)` calling `process(child)` is the most direct possible expression.
 - **Divide-and-conquer** — mergesort, quicksort, binary search, FFT. "Split in half, solve each half, combine" *is* a recursive sentence; the recursion depth is `O(log n)`, so stack growth is a non-issue even without TCO.
 - **Parsing / grammars** — recursive-descent parsers (above): the code's call graph mirrors the grammar's production rules.
-- **Backtracking** — permutations, N-queens, maze solving: "try a choice, recurse, undo on failure." The implicit call stack *is* the undo trail (see [Recursion & Backtracking in DSA](../../../../Algorithms/README.md), if available — otherwise this is covered under the DSA roadmap).
+- **Backtracking** — permutations, N-queens, maze solving: "try a choice, recurse, undo on failure." The implicit call stack *is* the undo trail (see Recursion & Backtracking in DSA, if available — otherwise this is covered under the DSA roadmap).
 
 **Reach for a loop when the data is linear and depth scales with size:**
 

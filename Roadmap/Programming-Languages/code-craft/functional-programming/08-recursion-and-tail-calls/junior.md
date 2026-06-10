@@ -242,7 +242,7 @@ graph TD
 
 The trace branches instead of running in a straight line: `tree_sum(10)` needs the left subtree `tree_sum(5)` *and* the right subtree `tree_sum(3)`; `tree_sum(5)` in turn needs `tree_sum(2)`. Each `None` child is the base case returning `0`. Total: `10 + 5 + 2 + 3 = 20`.
 
-> **Why this is the headline use of recursion:** the *data* is defined recursively — "a tree is a value plus two smaller trees" — so the *code* that matches its shape is recursive too. The function reads almost exactly like the definition of a tree. That structural match is the deepest reason FP loves recursion. You'll go far deeper in [Tree Traversals](../../../../algorithms-and-data-structures/data-structures/05-trees/README.md).
+> **Why this is the headline use of recursion:** the *data* is defined recursively — "a tree is a value plus two smaller trees" — so the *code* that matches its shape is recursive too. The function reads almost exactly like the definition of a tree. That structural match is the deepest reason FP loves recursion. You'll go far deeper in Tree Traversals.
 
 ---
 

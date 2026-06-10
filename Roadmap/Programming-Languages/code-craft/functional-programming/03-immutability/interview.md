@@ -249,7 +249,7 @@ Event sourcing stores state as an **append-only, immutable log of events** ("Ord
 
 <details><summary>Answer</summary>
 
-You trade simplicity-of-querying and storage for auditability and flexibility. The log grows unboundedly, so you need **snapshots** (a periodic materialized fold) to avoid replaying millions of events on every read. Querying "current state" is no longer a simple `SELECT` — you maintain separate read-models (often via CQRS), which adds eventual-consistency complexity. Schema evolution is subtle: old events are immutable, so you must *upcast* them when their shape changes rather than migrate them. And GDPR "right to be forgotten" clashes with an append-only log (handled via crypto-shredding or tombstones). Powerful, but not free. (See [Event-Driven Architecture](../../../../system-design/event-driven-architecture/README.md) if you want the distributed-systems angle.)
+You trade simplicity-of-querying and storage for auditability and flexibility. The log grows unboundedly, so you need **snapshots** (a periodic materialized fold) to avoid replaying millions of events on every read. Querying "current state" is no longer a simple `SELECT` — you maintain separate read-models (often via CQRS), which adds eventual-consistency complexity. Schema evolution is subtle: old events are immutable, so you must *upcast* them when their shape changes rather than migrate them. And GDPR "right to be forgotten" clashes with an append-only log (handled via crypto-shredding or tombstones). Powerful, but not free. (See Event-Driven Architecture if you want the distributed-systems angle.)
 </details>
 
 **Q26. How does immutability enable cheap snapshots, undo/redo, and time-travel debugging?**
@@ -317,7 +317,7 @@ Three places. (1) **Deep nested updates** — changing one field five levels dow
 
 <details><summary>Answer</summary>
 
-A **Hash Array Mapped Trie** is a tree where the key's hash is chopped into fixed-width chunks (typically 5 bits), and each chunk indexes into a node's child array — giving a wide (32-way) shallow tree. Each node uses a **bitmap** to store only its present children compactly (population count to map a logical index to a packed array slot), so sparse nodes don't waste space. Lookups and updates are O(log₃₂ n) ≈ effectively constant for realistic sizes (depth ≤ ~7 for billions of keys). Crucially, an update copies only the nodes along the path from root to the changed leaf (~7 nodes), sharing everything else — that's what makes immutable maps in Clojure/Scala fast. (See [Hash Array Mapped Trie](../../../../data-structures-and-algorithms/21-advanced-structures/25-hash-array-mapped-trie/README.md).)
+A **Hash Array Mapped Trie** is a tree where the key's hash is chopped into fixed-width chunks (typically 5 bits), and each chunk indexes into a node's child array — giving a wide (32-way) shallow tree. Each node uses a **bitmap** to store only its present children compactly (population count to map a logical index to a packed array slot), so sparse nodes don't waste space. Lookups and updates are O(log₃₂ n) ≈ effectively constant for realistic sizes (depth ≤ ~7 for billions of keys). Crucially, an update copies only the nodes along the path from root to the changed leaf (~7 nodes), sharing everything else — that's what makes immutable maps in Clojure/Scala fast. (See Hash Array Mapped Trie.)
 </details>
 
 **Q34. How does a persistent vector (RRB / bit-partitioned trie) give near-O(1) indexed access *and* cheap immutable updates?**
@@ -630,6 +630,6 @@ A few habits separate a strong answer from a textbook recital:
 - [Effect Tracking](../10-effect-tracking/senior.md) — the functional-core / imperative-shell pattern that contains mutation.
 - [Algebraic Data Types](../06-algebraic-data-types/middle.md) — immutable sum/product types and pattern matching.
 - [Immutability Patterns](../../clean-code/05-objects-and-data-structures/README.md) — the everyday-code view of preventing shared-mutable-state bugs.
-- [Hash Array Mapped Trie](../../../../data-structures-and-algorithms/21-advanced-structures/25-hash-array-mapped-trie/README.md) — the structure under immutable maps.
+- Hash Array Mapped Trie — the structure under immutable maps.
 - [Concurrency](../../../language-internals/concurrency-async-parallel/concurrency/README.md) — why immutable data makes safe concurrency tractable.
-- [Event-Driven Architecture](../../../../system-design/event-driven-architecture/README.md) — event sourcing at distributed-systems scale.
+- Event-Driven Architecture — event sourcing at distributed-systems scale.
