@@ -60,3 +60,6 @@ build.log.txt
 # Claude session/state
 .claude/
 AnkiDroid/
+
+# brainstorming visual companion
+.superpowers/
