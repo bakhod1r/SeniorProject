@@ -72,6 +72,19 @@
 
 ---
 
+## Design & Architecture Chapters (beyond the book)
+
+*The design-level disciplines that decide whether code stays clean as it grows — drawn from Meyer, Ousterhout, Feathers, and Bloch.*
+
+| # | Chapter | Focus |
+|---|---|---|
+| [26](26-design-by-contract/README.md) | Design by Contract | Preconditions, postconditions, invariants; the contract as specification |
+| [27](27-deep-modules-and-complexity/README.md) | Deep Modules & Complexity | Complexity's symptoms & causes, tactical vs strategic programming |
+| [28](28-designing-for-testability/README.md) | Designing for Testability | DI, seams, functional core, Humble Object — the design side of testing |
+| [29](29-api-and-library-design/README.md) | API & Library Design | Minimal surface, easy-right/hard-wrong, SemVer & evolvability |
+
+---
+
 ## Supplementary Materials
 
 | Resource | What it is |
@@ -148,6 +161,12 @@ Comparing the same principle across all three shows what is *universal* in clean
 - ✅ Boy Scout Rule
 - ✅ Clean Commits & Version-Control Hygiene
 - ↗️ Documentation & ADRs — moved to [code-craft/documentation](../documentation/README.md)
+
+### ✅ Design & Architecture Chapters — 4/4
+- ✅ Design by Contract
+- ✅ Deep Modules & Complexity
+- ✅ Designing for Testability
+- ✅ API & Library Design
 
 ### ⏳ Supplementary — PENDING
 - ⬜ Criticisms of Clean Code
