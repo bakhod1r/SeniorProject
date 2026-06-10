@@ -131,23 +131,23 @@ Comparing the same principle across all three shows what is *universal* in clean
 - ✅ Emergent Design
 - ✅ Concurrency
 
-### 🚧 Modern Extension Chapters — 5/7
+### ✅ Modern Extension Chapters — 7/7
 - ✅ Async & Functional
 - ✅ Generics & Types
 - ✅ Immutability
 - ✅ Pure Functions
 - ✅ Defensive vs Offensive
-- ⬜ Abstraction & Information Hiding
-- ⬜ Configuration, Constants & Feature Flags
+- ✅ Abstraction & Information Hiding
+- ✅ Configuration, Constants & Feature Flags
 
-### 🚧 Practice & Meta Chapters — 4/7
+### ✅ Practice & Meta Chapters — 6/6
 - ✅ Code Reviews
 - ✅ Logging & Diagnostics
 - ✅ Modules & Packages
 - ✅ Cognitive Load
-- ⬜ Boy Scout Rule
-- ⬜ Documentation & ADRs
-- ⬜ Clean Commits & Version-Control Hygiene
+- ✅ Boy Scout Rule
+- ✅ Clean Commits & Version-Control Hygiene
+- ↗️ Documentation & ADRs — moved to [code-craft/documentation](../documentation/README.md)
 
 ### ⏳ Supplementary — PENDING
 - ⬜ Criticisms of Clean Code
