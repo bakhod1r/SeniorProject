@@ -49,7 +49,7 @@ Examples in **Go** (limited FP, but `slices` / `maps` packages help), **Java** (
 
 ## Status
 
-⏳ **Structure defined; 12 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
+✅ **Content-complete — all 12 topics written, 5 files each (junior / middle / senior / professional / interview), 60 files.**
 
 ---
 
