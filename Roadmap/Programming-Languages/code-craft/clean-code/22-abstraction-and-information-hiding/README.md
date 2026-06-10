@@ -1,6 +1,6 @@
 # Abstraction & Information Hiding
 
-Status: ⏳ PENDING
+Status: ✅ 8-file suite complete (junior · middle · senior · professional · interview · tasks · find-bug · optimize)
 
 Based on the ideas in Ousterhout's *A Philosophy of Software Design* — **deep modules** (a simple interface over substantial functionality), information hiding, and "complexity = dependencies + obscurity." Distinct from [Modules & Packages](../19-modules-and-packages/README.md) (which is about *physical structure and layering*): this chapter is about the **quality of an abstraction** — how much a module hides and how little it makes its callers know.
 
