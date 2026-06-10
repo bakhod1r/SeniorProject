@@ -219,8 +219,6 @@ def test_rounds_banker():
 
 **What's wrong?**
 
-**What's wrong?**
-
 <details><summary>Answer</summary>
 
 `round_money` takes a `Decimal` and returns a `Decimal` — it *looks* pure. But its result depends on the **mutable module global `config.ROUNDING`**, which is read inside the function and written from elsewhere (admin endpoints, and the tests).

@@ -432,12 +432,6 @@ Both separate *describing* a program from *interpreting* it. You write business 
 
 ### S16. Trade-offs of "purity everywhere" in a performance-critical or memory-constrained system.
 
-<parameter name="content">
-
-</details>
-
-### S16. Trade-offs of "purity everywhere" in a performance-critical or memory-constrained system.
-
 <details><summary>Answer</summary>
 
 Returning new values can allocate heavily; in hot loops or embedded/GC-sensitive contexts this matters. Pragmatic stance: keep the *interface* pure (callers see immutability) but allow controlled local mutation inside (a `builder` mutated then frozen, a buffer reused). This is "pure outside, imperative inside" — the function remains referentially transparent to callers while exploiting mutation for speed. Validate with profiling/escape analysis; don't pay for purity where it's invisible to correctness.
