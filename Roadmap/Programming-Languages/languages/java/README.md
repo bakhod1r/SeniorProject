@@ -15,30 +15,9 @@
 - [1.10 Loops](01-learn-the-basics/10-loops/junior.md)
 - [1.11 Basics of OOP](01-learn-the-basics/11-basics-of-oop/junior.md)
 
-## [2. Object Oriented Programming](02-object-oriented-programming/01-basics-of-oop/01-classes-and-objects/junior.md)
+## 2. Object Oriented Programming
 
-### [2.1 Basics of OOP](02-object-oriented-programming/01-basics-of-oop/01-classes-and-objects/junior.md)
-- [2.1.1 Classes and Objects](02-object-oriented-programming/01-basics-of-oop/01-classes-and-objects/junior.md)
-- [2.1.2 Attributes and Methods](02-object-oriented-programming/01-basics-of-oop/02-attributes-and-methods/junior.md)
-- [2.1.3 Access Specifiers](02-object-oriented-programming/01-basics-of-oop/03-access-specifiers/junior.md)
-- [2.1.4 Static Keyword](02-object-oriented-programming/01-basics-of-oop/04-static-keyword/junior.md)
-- [2.1.5 Final Keyword](02-object-oriented-programming/01-basics-of-oop/05-final-keyword/junior.md)
-- [2.1.6 Nested Classes](02-object-oriented-programming/01-basics-of-oop/06-nested-classes/junior.md)
-- [2.1.7 Packages](02-object-oriented-programming/01-basics-of-oop/07-packages/junior.md)
-
-### [2.2 More about OOP](02-object-oriented-programming/02-more-about-oop/01-object-lifecycle/junior.md)
-- [2.2.1 Object Lifecycle](02-object-oriented-programming/02-more-about-oop/01-object-lifecycle/junior.md)
-- [2.2.2 Inheritance](02-object-oriented-programming/02-more-about-oop/02-inheritance/junior.md)
-- [2.2.3 Abstraction](02-object-oriented-programming/02-more-about-oop/03-abstraction/junior.md)
-- [2.2.4 Method Chaining](02-object-oriented-programming/02-more-about-oop/04-method-chaining/junior.md)
-- [2.2.5 Encapsulation](02-object-oriented-programming/02-more-about-oop/05-encapsulation/junior.md)
-- [2.2.6 Interfaces](02-object-oriented-programming/02-more-about-oop/06-interfaces/junior.md)
-- [2.2.7 Enums](02-object-oriented-programming/02-more-about-oop/07-enums/junior.md)
-- [2.2.8 Record](02-object-oriented-programming/02-more-about-oop/08-record/junior.md)
-- [2.2.9 Method Overloading / Overriding](02-object-oriented-programming/02-more-about-oop/09-method-overloading-overriding/junior.md)
-- [2.2.10 Initializer Block](02-object-oriented-programming/02-more-about-oop/10-initializer-block/junior.md)
-- [2.2.11 Static vs Dynamic Binding](02-object-oriented-programming/02-more-about-oop/11-static-vs-dynamic-binding/junior.md)
-- [2.2.12 Pass by Value / Pass by Reference](02-object-oriented-programming/02-more-about-oop/12-pass-by-value-pass-by-reference/junior.md)
+> **Moved.** The Object-Oriented Programming roadmap is now a top-level, paradigm-level section: [**Programming-Languages → Object-Oriented Programming**](../../object-oriented-programming/). It covers basics of OOP, advanced features, object contracts & semantics, method dispatch & internals, design principles, anti-patterns & code smells, and tactical DDD. Object-thinking (behavior-first, tell-don't-ask, CRC cards) moved to [Engineering Thinking → Object Thinking](../../engineering-thinking/08-object-thinking/).
 
 ## 3. Exception Handling
 
