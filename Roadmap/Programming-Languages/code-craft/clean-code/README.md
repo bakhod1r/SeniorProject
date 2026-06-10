@@ -118,7 +118,7 @@ Comparing the same principle across all three shows what is *universal* in clean
 
 ## Status
 
-### 🚧 Core Chapters — 10/11 (8-file suites)
+### ✅ Core Chapters — 11/11 (8-file suites)
 - ✅ Meaningful Names
 - ✅ Functions
 - ✅ Comments
@@ -129,22 +129,22 @@ Comparing the same principle across all three shows what is *universal* in clean
 - ✅ Unit Tests
 - ✅ Classes
 - ✅ Emergent Design
-- ⬜ Concurrency
+- ✅ Concurrency
 
-### ⏳ Modern Extension Chapters — PENDING (0/7)
-- ⬜ Async & Functional
-- ⬜ Generics & Types
-- ⬜ Immutability
-- ⬜ Pure Functions
-- ⬜ Defensive vs Offensive
+### 🚧 Modern Extension Chapters — 5/7
+- ✅ Async & Functional
+- ✅ Generics & Types
+- ✅ Immutability
+- ✅ Pure Functions
+- ✅ Defensive vs Offensive
 - ⬜ Abstraction & Information Hiding
 - ⬜ Configuration, Constants & Feature Flags
 
-### ⏳ Practice & Meta Chapters — PENDING (0/7)
-- ⬜ Code Reviews
-- ⬜ Logging & Diagnostics
-- ⬜ Modules & Packages
-- ⬜ Cognitive Load
+### 🚧 Practice & Meta Chapters — 4/7
+- ✅ Code Reviews
+- ✅ Logging & Diagnostics
+- ✅ Modules & Packages
+- ✅ Cognitive Load
 - ⬜ Boy Scout Rule
 - ⬜ Documentation & ADRs
 - ⬜ Clean Commits & Version-Control Hygiene
