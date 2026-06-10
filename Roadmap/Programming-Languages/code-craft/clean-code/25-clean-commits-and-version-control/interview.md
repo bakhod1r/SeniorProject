@@ -207,7 +207,7 @@ Replays a range of commits while letting you `pick`, `reword` (edit message), `e
 
 <details><summary>Answer</summary>
 
-`bisect` binary-searches history for the commit that introduced a bug: you mark a known-good and known-bad commit, and Git checks out the midpoint repeatedly (you mark each good/bad) until it pins the culprit in `log₂(n)` steps. It only works if **each commit builds and runs** — if commits are broken half-states or giant kitchen-sink blobs, the result is useless or untestable. Atomic commits make `bisect` precise.
+`bisect` binary-searches history for the commit that introduced a bug: you mark a known-good and known-bad commit, and Git checks out the midpoint repeatedly (you mark each good/bad) until it pins the culprit in `log₂(n)` steps. It only works if **each commit builds and runs** — if commits are broken half-states or giant kitchen-sink blobs, the result is useless or untestable. Atomic commits make `bisect` precise; you can even automate it with `git bisect run <test-script>`.
 
 </details>
 
@@ -241,7 +241,7 @@ A message convention: `type(scope): subject`, e.g. `feat(auth): add refresh-toke
 
 <details><summary>Answer</summary>
 
-If unpushed: create/checkout the right branch from the current commit, then `git reset --hard <previous-sha>` (or `git reset --soft HEAD~1`) on the wrong branch to drop it. Concretely: `git branch feature; git reset --hard HEAD~1; git checkout feature`. Or `git cherry-pick` the commit onto the right branch and reset the wrong one. The reflog has your back if you mis-step.
+If unpushed: create/checkout the right branch from the current commit, then reset the wrong branch back. Concretely `git branch feature; git reset --hard HEAD~1; git checkout feature`. Or `git cherry-pick` the commit onto the right branch and reset the wrong one. The reflog has your back if you mis-step.
 
 </details>
 
@@ -278,9 +278,9 @@ One commit mixing a feature, a refactor, and reformatting. It's unreviewable (re
 <details><summary>Answer</summary>
 
 1. **Rotate first.** The credential is compromised the moment it hit a remote; revoke/regenerate it before anything else. Purging history without rotating is theater.
-2. **Rewrite history** to remove the blob, with `git filter-repo --path secrets.env --invert-paths` (preferred) or BFG Repo-Cleaner (`bfg --delete-files secrets.env`). `git filter-branch` is deprecated/slow.
+2. **Rewrite history** to remove the blob, with `git filter-repo --path secrets.env --invert-paths` (preferred) or BFG Repo-Cleaner (`bfg --delete-files secrets.env`). `git filter-branch` is deprecated and slow.
 3. **Force-push** all rewritten refs and tags; have collaborators **re-clone** (their old history still contains the secret).
-4. **Invalidate caches** — GitHub etc. may keep the old object reachable via cached views/forks; contact support if needed and assume the secret is public.
+4. **Invalidate caches** — GitHub and similar may keep the old object reachable via cached views or forks; contact support if needed and assume the secret is public.
 
 > **What the interviewer is really checking:** that "rotate the credential" is your *first* word, not "rewrite history." The history is the lesser problem; the live key is the breach.
 
@@ -335,7 +335,7 @@ Yes — on **your own** unshared branch (e.g., after rebasing your PR branch to 
 
 <details><summary>Answer</summary>
 
-A GPG/SSH/S-MIME signature cryptographically binds a commit to an identity, proving authorship and integrity. Commit authorship is otherwise just a freely-set name/email — trivially spoofable. Signed commits (with `git config commit.gpgsign true`, surfaced as "Verified" on GitHub, enforceable via branch protection) defend the supply chain against impersonation and tampering.
+A GPG/SSH/S-MIME signature cryptographically binds a commit to an identity, proving authorship and integrity. Commit authorship is otherwise just a freely-set name and email — trivially spoofable. Signed commits (`git config commit.gpgsign true`, surfaced as "Verified" on GitHub, enforceable via branch protection) defend the supply chain against impersonation and tampering.
 
 </details>
 
@@ -352,8 +352,8 @@ Tools like `semantic-release`, `release-please`, and `changesets` parse commit t
 <details><summary>Answer</summary>
 
 Layer the checks so humans aren't the gate:
-- **Local pre-commit hooks** (e.g., `pre-commit`, `lefthook`, Husky): lint, format, secret-scan (`gitleaks`, `detect-secrets`), reject WIP messages.
-- **commit-msg hook** (`commitlint`): enforce Conventional Commits / 50-char subject.
+- **Local pre-commit hooks** (`pre-commit`, `lefthook`, Husky): lint, format, secret-scan (`gitleaks`, `detect-secrets`), reject WIP messages.
+- **commit-msg hook** (`commitlint`): enforce Conventional Commits and the 50-char subject.
 - **CI checks**: re-run the same gates server-side (hooks are bypassable with `--no-verify`).
 - **Branch protection**: make those CI checks required to merge.
 
@@ -373,7 +373,7 @@ The commits aren't gone, just unreferenced. Find your old tip in `git reflog` (o
 
 <details><summary>Answer</summary>
 
-Avoid the "Merge branch 'main' into feature" churn by **rebasing your branch onto `main`** instead of repeatedly merging `main` into it. When you do create a merge commit (integrating a PR), write a real message summarizing the change set, not the default. Prefer rebase-to-update + squash-or-merge-to-integrate so history reads as a sequence of meaningful changes, not a tangle of catch-up merges.
+Avoid the "Merge branch 'main' into feature" churn by **rebasing your branch onto `main`** instead of repeatedly merging `main` into it. When you do create a merge commit (integrating a PR), write a real message summarizing the change set, not the default. Prefer rebase-to-update plus squash-or-merge-to-integrate so history reads as a sequence of meaningful changes, not a tangle of catch-up merges.
 
 </details>
 
@@ -402,7 +402,7 @@ Avoid the "Merge branch 'main' into feature" churn by **rebasing your branch ont
 
 <details><summary>Answer</summary>
 
-Trunk-based on a single `main`; short-lived branches; **merge queue** mandatory to keep `main` green under high concurrency; CI sharded and affected-targets-only (Bazel/Nx) so checks stay fast; feature flags for incomplete work; CODEOWNERS routing reviews per directory; required signed commits; secret-scanning and commit-lint as required checks; squash-merge to keep `main` history one-commit-per-PR and revertable. Tag and release via Conventional-Commit-driven tooling per affected package.
+Trunk-based on a single `main`; short-lived branches; a **merge queue** mandatory to keep `main` green under high concurrency; CI sharded and affected-targets-only (Bazel/Nx) so checks stay fast; feature flags for incomplete work; CODEOWNERS routing reviews per directory; required signed commits; secret-scanning and commit-lint as required checks; squash-merge to keep `main` history one-commit-per-PR and revertable. Tag and release via Conventional-Commit-driven tooling per affected package.
 
 > **What the interviewer is really checking:** can you reason about scale — merge-queue throughput, CI cost, review routing, flag discipline — rather than reciting `git` commands.
 
@@ -412,7 +412,7 @@ Trunk-based on a single `main`; short-lived branches; **merge queue** mandatory 
 
 <details><summary>Answer</summary>
 
-No, not universally. Squash when the branch's intermediate commits are noise ("wip", "address review"). **Don't** squash a branch whose commits are already atomic and tell a story (e.g., "extract interface" then "swap implementation" then "delete old") — squashing destroys bisect granularity and the reasoning trail. The right rule: *one logical change per commit on `main`*. Sometimes that's one commit per PR; sometimes a PR is several logical changes that each deserve to survive.
+No, not universally. Squash when the branch's intermediate commits are noise ("wip", "address review"). **Don't** squash a branch whose commits are already atomic and tell a story (e.g., "extract interface", then "swap implementation", then "delete old") — squashing destroys bisect granularity and the reasoning trail. The right rule: *one logical change per commit on `main`*. Sometimes that's one commit per PR; sometimes a PR is several logical changes that each deserve to survive.
 
 > **What the interviewer is really checking:** that you optimize for the *future reader and bisector*, not for a uniform-looking log. "Always squash" and "never squash" are both wrong.
 
@@ -426,6 +426,141 @@ It's a false binary; the answer is a policy. **Rebase to update** a branch you o
 
 </details>
 
-### ST4. What is "what makes a commit atomic" really testing?
+### ST4. What is "what makes a commit atomic?" really testing?
 
-<parameter name="">undefined
+<details><summary>Answer</summary>
+
+Whether you understand a commit as a *unit of reasoning and recovery*, not a unit of saving. Atomic means: self-contained (builds and tests pass at that commit), single-purpose (one logical change), and reversible (can be reverted or bisected without collateral damage). The test behind the question is whether you can split your work that way under `git add -p` and `rebase -i`, not just whether you can recite the definition.
+
+</details>
+
+### ST5. How do you keep `main` releasable at all times?
+
+<details><summary>Answer</summary>
+
+Every merge to `main` is a candidate release: enforce green CI via merge queue, gate behind branch protection, decouple deploy from release using feature flags (merge dark, ramp later), keep migrations backward-compatible (expand/contract), and make rollback a `git revert` plus redeploy rather than a panic. Continuous integration in the literal sense — small changes, integrated often — is what keeps `main` shippable.
+
+</details>
+
+### ST6. A `fix` commit corrupted prod and history is messy. Roll back safely.
+
+<details><summary>Answer</summary>
+
+On a shared branch, use `git revert <sha>` (or `git revert -m 1 <merge-sha>` for a merge commit) so the rollback is itself a recorded, forward-moving commit — never `reset`/force-push shared history. If the culprit isn't obvious, `git bisect run ./repro.sh` to pin it. Then deploy the revert. The incident also exposes a process gap: that "fix" commit should never have reached `main` without CI and review.
+
+</details>
+
+### ST7. How do you migrate a team off long-lived branches and merge hell?
+
+<details><summary>Answer</summary>
+
+Move to trunk-based incrementally: cap branch lifetime, introduce feature flags so incomplete work can merge, require daily rebase onto `main`, add a merge queue to remove merge anxiety, and break big changes via branch-by-abstraction so they land in small reviewable commits. Pair this with CI fast enough that integrating often isn't painful — the technical and cultural changes have to land together.
+
+</details>
+
+### ST8. What's the relationship between commit hygiene and supply-chain security?
+
+<details><summary>Answer</summary>
+
+History is an attack surface. Required signed commits and tags prevent identity spoofing; protected branches plus merge queues prevent unreviewed code reaching `main`; secret-scanning hooks keep credentials out of the tree; reproducible, atomic commits make it auditable *which* change introduced *what* (provenance, SLSA). A clean, signed, reviewed history is a precondition for trusting your build artifacts.
+
+</details>
+
+### ST9. When is rewriting *shared* history ever justified, and how?
+
+<details><summary>Answer</summary>
+
+Only for a genuine emergency that outweighs the disruption — most commonly **purging a leaked secret or illegal/PII content** that must not persist in any clone. It's a coordinated operation: freeze the repo, rewrite with `git filter-repo`, force-push, and require every collaborator to re-clone (rebasing existing local work onto the rewritten history). It's a controlled outage, not a routine tool — and even then you rotate the secret first.
+
+</details>
+
+### ST10. How do you handle large binaries and generated files in a repo?
+
+<details><summary>Answer</summary>
+
+Keep them out of the object database: `.gitignore` generated artifacts, use **Git LFS** (or an artifact store) for genuinely needed large binaries so the blobs live outside normal history, and never commit build output. Binaries committed normally bloat every clone forever (Git stores full snapshots of binary blobs, which don't delta well). If they're already in, purge with `filter-repo`/BFG and migrate to LFS.
+
+</details>
+
+### ST11. How do you make `git bisect` a routine debugging tool, not a last resort?
+
+<details><summary>Answer</summary>
+
+Two preconditions: atomic commits that each build, and a scriptable reproduction. Then `git bisect start bad good; git bisect run ./repro.sh` automates the whole search — exit 0 = good, non-zero = bad, 125 = skip (untestable commit). The cultural investment is keeping commits small and CI-green so every commit is bisectable; the payoff is finding regressions in `log₂(n)` automated steps instead of manual archaeology.
+
+</details>
+
+### ST12. Define your team's "definition of done" for a commit and a PR.
+
+<details><summary>Answer</summary>
+
+**Commit:** atomic, builds and tests pass at that commit, imperative ≤50-char Conventional-Commit subject, body explaining *why*, no secrets, no commented-out code, signed. **PR:** small enough to review in one sitting, green CI, history rebased and clean (fixups squashed), description linking the issue and explaining intent and trade-offs, approved by required reviewers/CODEOWNERS, merged via the agreed strategy (squash or merge) through the protected-branch gate. Codify it so it's enforced by tooling, not memory.
+
+</details>
+
+---
+
+## Rapid-Fire
+
+| Question | One-line answer |
+|---|---|
+| Subject length limit? | 50 characters. |
+| Body wrap width? | 72 columns. |
+| Subject mood? | Imperative ("Add", not "Added"). |
+| Message records what or why? | **Why** — the diff shows what. |
+| Undo a pushed commit safely? | `git revert`, never `reset` on shared. |
+| Recover a lost commit? | `git reflog` → `git reset --hard <sha>`. |
+| Fold a forgotten change into commit N? | `git commit --fixup=N` + `rebase -i --autosquash`. |
+| Golden rule of rebase? | Never rewrite shared history. |
+| Force-push allowed where? | Your own branch, `--force-with-lease` only. |
+| Stage part of a file? | `git add -p`. |
+| Purge a committed secret? | Rotate first, then `git filter-repo`/BFG, force-push, re-clone. |
+| Keep `main` green under load? | Merge queue. |
+| Make a regression searchable? | Atomic commits + `git bisect run`. |
+| Conventional Commit for a feature? | `feat(scope): ...` → minor bump. |
+| Always squash PRs? | No — preserve commits that tell a story. |
+
+---
+
+## Summary
+
+Clean version control is clean code applied to *history*. The through-line across tiers:
+
+- **The commit is a unit of reasoning** — atomic, building, single-purpose, with a message that records *why* (50/72, imperative, Conventional Commits where adopted).
+- **Local history is malleable; shared history is sacred.** Rebase, amend, and fixup your own commits freely; on shared branches use only additive operations (merge, revert). That single distinction resolves "rebase or merge?", "is force-push OK?", and "amend or not?".
+- **Atomicity pays off downstream** in `bisect`, `blame`, and clean reverts — which is why "always squash" is as wrong as "never squash."
+- **The reflog is your safety net**; almost nothing in Git is truly lost.
+- **Secrets are forever once pushed** — rotate first, then purge with `filter-repo`/BFG.
+- **Hygiene scales through tooling**, not vigilance: hooks, commit-lint, secret-scanning, branch protection, merge queues, and signed commits.
+
+The shape of the record you hand the next engineer — including future-you — is part of the craft.
+
+```mermaid
+flowchart TD
+    Q{Has anyone else<br/>based work on<br/>these commits?}
+    Q -->|No: local / your branch| L[Rewrite freely:<br/>rebase -i, amend,<br/>fixup, force-with-lease]
+    Q -->|Yes: shared / main| S[Additive only:<br/>merge, revert]
+    L --> P[Polished, atomic history → PR]
+    S --> P
+```
+
+---
+
+## Further Reading
+
+- *Pro Git* (Chacon & Straub) — chapters on Branching, Rewriting History, and Distributed Workflows.
+- [conventionalcommits.org](https://www.conventionalcommits.org/) — the Conventional Commits specification.
+- Tim Pope, ["A Note About Git Commit Messages"](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html) — origin of the 50/72 convention.
+- `git filter-repo` documentation and BFG Repo-Cleaner — history rewriting and secret purging.
+- Paul Hammant, *Trunk-Based Development* ([trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/)).
+- Martin Fowler, ["Branching Patterns"](https://martinfowler.com/articles/branching-patterns.html).
+
+---
+
+## Related Topics
+
+- [Chapter overview: README](../README.md)
+- [Junior guide](junior.md) · [Professional guide](professional.md)
+- [Code Reviews](../17-code-reviews/README.md) — the etiquette and tempo of reviewing the history you produce here
+- [Refactoring](../../refactoring/README.md) — atomic, behavior-preserving steps map directly onto atomic commits
+- [Design Patterns](../../design-patterns/README.md) — branch-by-abstraction and Strangler Fig pair with short-lived branches

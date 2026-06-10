@@ -45,7 +45,7 @@ graph BT
     subgraph Objects["Content-addressable object store"]
         b1[blob a1b2: README]
         b2[blob c3d4: main.go]
-        t1[tree e5f6 → README, main.go]
+        t1[tree e5f6 to README and main.go]
         c1[commit 1111<br/>tree e5f6<br/>parent none]
         c2[commit 2222<br/>tree 9abc<br/>parent 1111]
         t1 --> b1
@@ -53,8 +53,8 @@ graph BT
         c1 --> t1
         c2 --> c1
     end
-    main[ref: refs/heads/main] -.points to.-> c2
-    HEAD[HEAD] -.->|symref| main
+    main[ref refs/heads/main] -.points to.-> c2
+    HEAD[HEAD] -.symref.-> main
 ```
 
 Inspect it directly — this is not a metaphor:
@@ -68,7 +68,7 @@ git rev-parse HEAD            # the 40-char (SHA-1) object name
 
 A **branch is a 41-byte file** (`refs/heads/main`) containing a hash. `HEAD` is usually a symbolic ref pointing at a branch. "Switching branches" rewrites one small file and checks out the corresponding tree. Understanding this dissolves most git mysticism: branches are cheap because they are just labels on an immutable DAG.
 
-> Reference: the Git internals chapter of *Pro Git* (Chacon & Straub, 2nd ed., ch. 10) is the canonical description of the object model and is freely available at <https://git-scm.com/book/en/v2/Git-Internals-Git-Objects>.
+> Reference: the Git internals chapter of *Pro Git* (Chacon & Straub, 2nd ed., ch. 10), the canonical description of the object model, freely available at <https://git-scm.com/book/en/v2/Git-Internals-Git-Objects>.
 
 ---
 
@@ -93,13 +93,13 @@ git reflog                       # find the pre-reset HEAD@{1}
 git reset --hard HEAD@{1}        # they are back
 ```
 
-Unreachable objects are not collected immediately. They survive until `git gc` runs and the grace period (`gc.reflogExpireUnreachable`, default **30 days**; reachable reflog entries expire at `gc.reflogExpire`, default **90 days**) passes. To hunt for a commit that isn't even in the reflog (e.g. a dropped stash), use:
+Unreachable objects are not collected immediately. They survive until `git gc` runs and a grace period passes (`gc.reflogExpireUnreachable`, default **30 days**; reachable reflog entries expire at `gc.reflogExpire`, default **90 days**). To hunt for a commit not even in the reflog (e.g. a dropped stash):
 
 ```bash
 git fsck --lost-found --no-reflogs   # dangling commits/blobs land in .git/lost-found
 ```
 
-> **Professional mental model:** in git, "destructive" operations are destructive to *reachability*, not to *objects*. The reflog is local-only and per-clone — it does **not** travel on push/fetch. This asymmetry is the seed of the force-push danger below.
+> **Professional mental model:** in git, "destructive" operations are destructive to *reachability*, not to *objects*. The reflog is local-only and per-clone — it does **not** travel on push/fetch. That asymmetry is the seed of the force-push danger below.
 
 ---
 
@@ -138,7 +138,7 @@ The professional rules:
 git push --force-with-lease --force-if-includes origin feature
 ```
 
-> Reference: `git help push` (the `--force-with-lease` and `--force-if-includes` sections); Atlassian's "Rewriting history" tutorial, <https://www.atlassian.com/git/tutorials/rewriting-history>.
+> Reference: `git help push` (`--force-with-lease`, `--force-if-includes`); Atlassian's "Rewriting history" tutorial, <https://www.atlassian.com/git/tutorials/rewriting-history>.
 
 ---
 
@@ -199,7 +199,7 @@ git log -L 40,55:app/server.go                  # history of a line range
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 ```
 
-GitHub honors this file automatically; blame then skips through the formatting commit to the real author of the logic. (Introduced in Git 2.23 via `git blame --ignore-revs-file`.)
+GitHub honors this file automatically; blame then skips through the formatting commit to the real author of the logic. (`git blame --ignore-revs-file` arrived in Git 2.23.)
 
 ### Atomic, revertable commits in incident response
 
@@ -220,7 +220,7 @@ This is a genuine engineering trade-off, not a style war — and the right answe
 
 ### Two philosophies
 
-**The Linux-kernel / "every commit must build" school** treats history as a curated narrative for `git bisect` and `git blame`. Contributors rebase and clean their series *before* it is accepted; the maintainer's tree stays close to linear per topic. Linus Torvalds' position is precise: rebasing your *own* not-yet-published work is good hygiene; rebasing work *others have pulled* is the unforgivable act. (See the linux kernel `Documentation/maintainer/rebasing-and-merging.rst`.)
+**The Linux-kernel / "every commit must build" school** treats history as a curated narrative for `git bisect` and `git blame`. Contributors rebase and clean their series *before* it is accepted; the maintainer's tree stays close to linear per topic. Linus Torvalds' position is precise: rebasing your *own* not-yet-published work is good hygiene; rebasing work *others have pulled* is the unforgivable act. (See `Documentation/maintainer/rebasing-and-merging.rst` in the kernel source.)
 
 **The "GitHub-flow / true history" school** merges feature branches with explicit merge commits and never rebases shared work. The log shows topology that actually happened — when each branch forked and joined. This loses linearity but preserves audit fidelity and avoids any history rewriting.
 
@@ -278,9 +278,9 @@ Signed-off-by: Bakhodir Yashin Mansur <byashin@example.com>
 The [Conventional Commits](https://www.conventionalcommits.org/) spec makes the subject line a typed grammar — `<type>(<scope>)!: <description>` — that tooling parses to **derive the next version automatically**:
 
 ```
-feat(api): add idempotency key support      → MINOR bump (new feature)
-fix(retry): clamp backoff to 30s            → PATCH bump
-refactor(db)!: drop legacy connection pool  → MAJOR bump (! = breaking)
+feat(api): add idempotency key support      -> MINOR bump (new feature)
+fix(retry): clamp backoff to 30s            -> PATCH bump
+refactor(db)!: drop legacy connection pool  -> MAJOR bump (! = breaking)
 ```
 
 `semantic-release`, `release-please`, and `git-cliff` read the log, compute the next version per SemVer, generate a grouped CHANGELOG, tag, and publish — with zero human version-bumping. The discipline of the commit message *becomes* the release pipeline. The flip side: this only works if commits are atomic and correctly typed, which is why CI lints commit messages (`commitlint`, `gitlint`) and the squash-merge title becomes the canonical typed message.
@@ -296,21 +296,21 @@ Hashes make history *tamper-evident*; signatures make authorship *non-repudiable
 ### Signing mechanisms
 
 ```bash
-git config commit.gpgsign true                  # sign all commits
-git config gpg.format ssh                        # sign with an SSH key instead of GPG (Git 2.34+)
+git config commit.gpgsign true                   # sign all commits
+git config gpg.format ssh                         # sign with an SSH key instead of GPG (Git 2.34+)
 git config user.signingkey ~/.ssh/id_ed25519.pub
-git log --show-signature                         # verify
+git log --show-signature                          # verify
 ```
 
 Three signing backends are in common use:
 
 - **GPG** — the historical default; key-management burden is real.
-- **SSH signing** (Git 2.34+) — reuse the key you already have; `allowed_signers` file maps identities to keys.
+- **SSH signing** (Git 2.34+) — reuse the key you already have; an `allowed_signers` file maps identities to keys.
 - **gitsign / Sigstore** — **keyless** signing. You authenticate via OIDC (your Google/GitHub identity); Sigstore's Fulcio issues a short-lived (~10 min) certificate, the signature is recorded in the **Rekor** transparency log, and the ephemeral key is discarded. No long-lived private key to leak. This is the model behind modern supply-chain attestation.
 
 ### SLSA and provenance
 
-**SLSA** (Supply-chain Levels for Software Artifacts) defines build-integrity levels. Signed, verified commits feed the chain: a verified commit → a build with signed provenance (who built what, from which source, with which toolchain) → an artifact whose origin can be cryptographically traced. GitHub's **vigilant mode** flags any unsigned or unverifiable commit on your account, closing the "spoofed author email" gap (anyone can set `user.email` to yours — only a signature proves it was you).
+**SLSA** (Supply-chain Levels for Software Artifacts) defines build-integrity levels. Signed, verified commits feed the chain: a verified commit -> a build with signed provenance (who built what, from which source, with which toolchain) -> an artifact whose origin can be cryptographically traced. GitHub's **vigilant mode** flags any unsigned or unverifiable commit on your account, closing the "spoofed author email" gap: anyone can set `user.email` to yours; only a signature proves it was you.
 
 > SLSA: <https://slsa.dev/>. Sigstore/gitsign: <https://docs.sigstore.dev/>. GitHub commit-signature verification: <https://docs.github.com/en/authentication/managing-commit-signature-verification>.
 
@@ -322,7 +322,7 @@ Git was designed for the kernel: large, but text, and *fully cloned*. At Google/
 
 ### Where git hurts at scale
 
-- **`git status` / `git checkout`** are `O(working-tree size)` — they `lstat` every tracked file. Millions of files → multi-second status.
+- **`git status` / `git checkout`** are `O(working-tree size)` — they `lstat` every tracked file. Millions of files means multi-second status.
 - **`clone`** copies the *entire* object history. A repo with a long binary-heavy past makes initial clone enormous.
 - **Pack/graph walks** for `git log --graph` get slow without precomputed structures.
 
@@ -330,16 +330,16 @@ Git was designed for the kernel: large, but text, and *fully cloned*. At Google/
 
 | Technique | What it does | Command |
 |---|---|---|
-| **Partial clone** | Skip downloading blobs until needed (lazy fetch on access) | `git clone --filter=blob:none <url>` |
+| **Partial clone** | Skip downloading blobs until accessed (lazy fetch) | `git clone --filter=blob:none <url>` |
 | **Shallow clone** | Truncate history to recent commits | `git clone --depth=1 <url>` |
 | **Sparse checkout** | Materialize only a subtree of the working dir | `git sparse-checkout set <dirs>` |
-| **commit-graph** | Precomputed cache of commit metadata + generation numbers; makes `git log`/merge-base near-instant | `git commit-graph write --reachable` |
-| **FS Monitor** | Use OS file-watching (Watchman / built-in fsmonitor) so `status` skips unchanged dirs | `git config core.fsmonitor true` |
+| **commit-graph** | Precomputed commit metadata + generation numbers; near-instant `git log`/merge-base | `git commit-graph write --reachable` |
+| **FS Monitor** | OS file-watching (Watchman / built-in fsmonitor) so `status` skips unchanged dirs | `git config core.fsmonitor true` |
 | **multi-pack-index** | Index across many packfiles for fast lookup | `git multi-pack-index write` |
 
 **Scalar** (now shipped *with* git) is the umbrella that turns all of these on with sane defaults — `scalar clone <url>` sets up partial clone + sparse checkout + background maintenance. It is the productized descendant of Microsoft's **GVFS** (Git Virtual File System), built so that the Windows source tree (~3.5M files, ~300 GB) could live in a single git repo by virtualizing the working directory and fetching objects on demand.
 
-> Microsoft's scaling story: Beller & Harry, "The largest Git repo on the planet," <https://devblogs.microsoft.com/bharry/the-largest-git-repo-on-the-planet/>. Scalar docs: <https://git-scm.com/docs/scalar>. commit-graph design: `Documentation/technical/commit-graph.txt` in git's source.
+> Microsoft's scaling story: Brian Harry, "The largest Git repo on the planet," <https://devblogs.microsoft.com/bharry/the-largest-git-repo-on-the-planet/>. Scalar docs: <https://git-scm.com/docs/scalar>. commit-graph design: `Documentation/technical/commit-graph.txt` in git's source.
 
 **The hygiene angle:** large binaries and generated files are the usual reason a repo bloats past comfort. They belong in **Git LFS** (pointer files in git, blobs in a separate store) or out of the repo entirely. A `.gitignore` for build artifacts and a `.gitattributes` routing binaries to LFS *before* the first commit is far cheaper than the history rewrite required to remove them later.
 
@@ -351,7 +351,7 @@ Sometimes you must rewrite *published* history: a private key, an AWS credential
 
 ### The right tools — never `filter-branch`
 
-`git filter-branch` is officially discouraged (it is slow, dangerously easy to misuse, and the man page now recommends against it). Use:
+`git filter-branch` is officially discouraged (slow, dangerously easy to misuse; the man page now recommends against it). Use:
 
 - **git-filter-repo** (the recommended modern tool) — fast, written for exactly this:
 
@@ -376,21 +376,21 @@ Rewriting history is irreversible coordination work, and the chapter's golden ru
 3. **Hosting platforms cache aggressively.** GitHub keeps unreachable commits accessible via direct SHA URLs and in forks for a long time; you must contact support to purge cached views and ask forks to be removed.
 4. **`git filter-repo` deliberately removes the origin remote** after rewriting, to force you to confirm before pushing the rewritten history — a guardrail against accidentally clobbering the wrong remote.
 
-> GitHub's own runbook: "Removing sensitive data from a repository," <https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository>. git-filter-repo: <https://github.com/newren/git-filter-repo>. The deeper fix is prevention — pre-commit secret scanning (`gitleaks`, `git-secrets`, GitHub push protection) keeps the blob from ever entering the object store.
+> GitHub's runbook: "Removing sensitive data from a repository," <https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository>. git-filter-repo: <https://github.com/newren/git-filter-repo>. The deeper fix is prevention — pre-commit secret scanning (`gitleaks`, `git-secrets`, GitHub push protection) keeps the blob from ever entering the object store.
 
 ---
 
 ## Common Mistakes
 
-1. **Force-pushing a shared branch.** Using `git push --force` instead of `--force-with-lease` on a branch others build on; rewriting `main`'s published history. The fix to a bad commit on a public branch is `git revert`, never `reset`+`force`.
-2. **Believing `reset --hard` lost the work.** Panicking instead of checking `git reflog`, where the pre-reset HEAD is sitting at `HEAD@{1}` for 30–90 days.
+1. **Force-pushing a shared branch.** Using `git push --force` instead of `--force-with-lease` on a branch others build on; rewriting `main`'s published history. The fix to a bad commit on a public branch is `git revert`, never `reset` + `force`.
+2. **Believing `reset --hard` lost the work.** Panicking instead of checking `git reflog`, where the pre-reset HEAD sits at `HEAD@{1}` for 30–90 days.
 3. **Kitchen-sink commits that destroy bisectability.** Mixing a reformat, a feature, and a refactor in one commit so `git bisect` and `git revert` land on a giant blast radius.
 4. **What-not-why messages.** "Updated retry logic" restates the diff. The reader can see *what* changed; only the message can record *why* (the incident, the constraint, the rejected alternative).
 5. **Committing secrets, then "deleting" them in a follow-up commit.** The blob remains in history. Real fix: rotate the credential, then `filter-repo`/BFG, and add push protection.
 6. **Reformatting the world without `.git-blame-ignore-revs`.** A repo-wide `gofmt`/Prettier commit makes `git blame` useless until you register the noise commit in the ignore-revs file.
 7. **Squash-merging everything reflexively.** Discarding genuinely meaningful intra-PR history. Squash is for noise, not for well-curated commit series.
 8. **Long-lived feature branches.** Weeks of drift from `main` turn the eventual merge into a high-risk conflict marathon. Integrate small and often; rebase onto fresh trunk.
-9. **Untyped or lint-free commit subjects in a Conventional-Commits pipeline.** A mistyped `feat:` vs `fix:` silently produces the wrong semver bump and a wrong changelog entry.
+9. **Untyped or unlinted commit subjects in a Conventional-Commits pipeline.** A mistyped `feat:` vs `fix:` silently produces the wrong semver bump and a wrong changelog entry.
 
 ---
 
@@ -402,24 +402,128 @@ Rewriting history is irreversible coordination work, and the chapter's golden ru
 A commit's hash is computed over its content *including its tree hash, parent hashes, and full metadata (author, committer, message)*. Change the message and the commit's own hash changes. Every child commit stored its parent's *old* hash, so to point at the rewritten commit each child must itself be rewritten — and so on transitively up to the branch tip. Git's Merkle-DAG structure makes history tamper-evident exactly because of this propagation. You are never editing; you are creating a new chain of objects and moving a ref to it.
 </details>
 
-2. **A teammate rebased and `git push --force` d a shared branch; your local commits on the old base are "gone" from the remote. How do you recover, and what should they have done?**
+2. **A teammate rebased and `git push --force`-ed a shared branch; your local commits on the old base vanished from the remote. How do you recover, and what should they have done?**
 
 <details><summary>Answer</summary>
-Your commits are not gone locally — `git reflog` (or the branch's own reflog) still has them, and they're reachable as objects for 30+ days. Find your last good commit and rebase it onto the new remote tip (`git rebase --onto origin/feature <old-base> <your-work>`). The teammate should have (a) not rewritten a shared branch at all, or (b) at minimum used `--force-with-lease` so the push would have been *rejected* because the remote moved under them, and coordinated the rewrite explicitly.
+Your commits are not gone locally — `git reflog` (or the branch's own reflog) still has them, and they're reachable as objects for 30+ days. Find your last good commit and replay it onto the new remote tip (`git rebase --onto origin/feature <old-base> <your-work>`). The teammate should have (a) not rewritten a shared branch at all, or (b) at minimum used `--force-with-lease` so the push would have been *rejected* because the remote moved under them, then coordinated the rewrite explicitly.
 </details>
 
 3. **What does `git bisect run ./test.sh` require of your commit history to be effective, and what is exit code 125 for?**
 
 <details><summary>Answer</summary>
-It requires that commits be **atomic and individually buildable/testable** — each commit a single logical change. If commits mix concerns or don't compile, bisect either lands you on a huge multi-purpose diff or can't test a midpoint at all. Exit code **125** is the "untestable — skip this commit" signal (e.g. it doesn't compile); git excludes it from the search and picks an adjacent commit. Exit 0 = good, 1–124/126–127 = bad.
+It requires that commits be **atomic and individually buildable/testable** — each commit one logical change. If commits mix concerns or don't compile, bisect either lands you on a huge multi-purpose diff or can't test a midpoint at all. Exit code **125** is the "untestable — skip this commit" signal (e.g. it doesn't compile); git excludes it and picks an adjacent commit. Exit 0 = good; 1–124 and 126–127 = bad.
 </details>
 
-4. **In a merge commit, what is the difference between parent 1 and parent 2, and why does `git log --first-parent` matter for incident response?**
+4. **In a merge commit, what distinguishes parent 1 from parent 2, and why does `git log --first-parent` matter for incident response?**
 
 <details><summary>Answer</summary>
-Parent 1 is the commit you were *on* when you merged (the trunk/mainline); parent 2 is the tip of the branch you merged *in*. `git log --first-parent main` follows only parent 1, collapsing each merged PR to one line — giving a clean, PR-granular trunk history. For incidents this means `git bisect --first-parent` searches at PR granularity (find the bad PR fast) instead of wading through every intra-PR commit, and `git revert -m 1 <merge>` cleanly backs out a whole PR while keeping the mainline parent.
+Parent 1 is the commit you were *on* when you merged (the trunk/mainline); parent 2 is the tip of the branch you merged *in*. `git log --first-parent main` follows only parent 1, collapsing each merged PR to one line — a clean, PR-granular trunk history. For incidents this means `git bisect --first-parent` searches at PR granularity (find the bad PR fast) instead of wading through every intra-PR commit, and `git revert -m 1 <merge>` cleanly backs out a whole PR while keeping the mainline parent.
 </details>
 
 5. **Why does deleting a leaked secret in a new commit fail to remediate the leak, and what is the correct sequence?**
 
-<parameter name="content">
+<details><summary>Answer</summary>
+A commit is a snapshot; the old commit (and its blob containing the secret) remains permanently in history and is trivially recovered with `git log -S`, `git show <old-sha>`, or any existing clone/fork. The correct sequence: (1) **rotate the credential immediately** — once it hit a remote, treat it as compromised; the rewrite cannot un-leak it. (2) Excise the blob from all history with `git filter-repo` or BFG. (3) Force-push the rewrite (coordinated, since every downstream hash changes) and ask the host to purge caches/forks. (4) Add prevention: push protection / `gitleaks` so it never re-enters.
+</details>
+
+6. **Your team wants both clean per-commit history for `git bisect` and a readable PR-granular trunk. Which integration strategy delivers both, and why not squash?**
+
+<details><summary>Answer</summary>
+Rebase the feature branch onto fresh trunk to curate clean atomic commits, then integrate with a **`--no-ff` merge commit**. `git log --first-parent` then reads as one line per PR, while the individual commits remain for fine-grained bisect/blame. Squash discards the intra-PR commits permanently, so you lose the ability to bisect *within* a PR and to revert a sub-change independently — fine when the intra-PR commits were noise, harmful when they were a curated narrative.
+</details>
+
+7. **What single git feature most improves `git status` latency in a multi-million-file monorepo, and what does Scalar add on top?**
+
+<details><summary>Answer</summary>
+`core.fsmonitor` (FS Monitor) — using OS file-change notifications (Watchman or the built-in monitor) so `git status` only stats the directories that actually changed, instead of `lstat`-ing every tracked file. Scalar bundles this with partial clone (`--filter=blob:none`), sparse checkout, commit-graph, and scheduled background maintenance, giving the GVFS-style experience without manual configuration. The combination is what makes the Windows/Office monorepos usable in git.
+</details>
+
+8. **Why is `.git-blame-ignore-revs` necessary, and what is its limitation?**
+
+<details><summary>Answer</summary>
+A bulk-formatting commit (e.g. a repo-wide `gofmt`) rewrites every line, so `git blame` attributes all logic to that mechanical commit instead of the real author. Listing those commit SHAs in `.git-blame-ignore-revs` and setting `blame.ignoreRevsFile` makes blame skip *through* them to the prior meaningful change; GitHub honors it automatically. Limitation: it only helps when the ignored commit is purely mechanical (no logic change) — and you must keep adding new format-sweep SHAs to the file as they happen.
+</details>
+
+---
+
+## Cheat Sheet
+
+```bash
+# --- Inspect the data model ---
+git cat-file -p HEAD                 # commit object (tree, parent, author, message)
+git rev-parse HEAD                   # object name (hash)
+
+# --- Recovery / safety net ---
+git reflog                           # every position HEAD has held (local, 30-90d)
+git reset --hard HEAD@{1}            # undo a bad reset/rebase
+git fsck --lost-found --no-reflogs   # find dangling objects
+
+# --- Safe sharing ---
+git push --force-with-lease --force-if-includes origin feature
+git revert <sha>                     # forward-fix a public mistake (never reset+force)
+git revert -m 1 <merge-sha>          # back out an entire merged PR
+
+# --- Forensics ---
+git bisect start && git bisect bad && git bisect good <tag>
+git bisect run ./repro.sh            # automated regression hunt (exit 125 = skip)
+git log -S '<literal>' --oneline     # when a string was added/removed (pickaxe)
+git log -G '<regex>'  --oneline      # when a diff matched a regex
+git log -L :func:file.go             # history of one function
+git log --first-parent --oneline     # PR-granular trunk view
+
+# --- Messages as data ---
+git interpret-trailers --trailer 'Fixes: INC-2241'
+# Conventional Commits: feat / fix / refactor(scope)!: ...  -> semver + changelog
+
+# --- Provenance ---
+git config commit.gpgsign true
+git config gpg.format ssh            # SSH signing (Git 2.34+); or gitsign for keyless
+
+# --- Scale ---
+git clone --filter=blob:none <url>   # partial clone
+git sparse-checkout set <dirs>
+git commit-graph write --reachable
+scalar clone <url>                   # all of the above, configured
+
+# --- Rewrite (last resort) ---
+git filter-repo --invert-paths --path secrets.yml   # purge a file from ALL history
+bfg --delete-files id_rsa
+# then: ROTATE the credential, force-push, purge host caches
+```
+
+---
+
+## Summary
+
+- **The model explains the rules.** Git is a Merkle DAG of immutable, content-addressed objects; refs are mutable labels. Rebase *copies* commits into new objects; force-push *moves a shared label* out from under collaborators — that is the whole danger.
+- **Nothing is lost locally.** The reflog and `git fsck` recover almost any "destroyed" work for 30–90 days. The reflog is per-clone and never pushed, which is exactly why rewriting *published* history is unrecoverable for others.
+- **Clean history is a forensic instrument.** Atomic commits make `git bisect`, `git revert`, and `git blame` precise. `git log -S/-G/-L` turns the log into a code-archaeology engine. `.git-blame-ignore-revs` keeps blame honest.
+- **Rebase vs. merge is about topology, not taste.** `--first-parent` + `--no-ff` merges give a PR-granular trunk *and* full intra-PR detail; squash trades that detail for linearity.
+- **Messages are data.** Trailers and Conventional Commits drive credit, DCO, semver, and changelogs automatically — but only if commits are atomic and typed correctly, so CI lints them.
+- **Signatures and provenance** (GPG/SSH/gitsign + SLSA + Rekor) make authorship non-repudiable and supply chains traceable.
+- **Git breaks at monorepo scale**; partial clone, sparse checkout, commit-graph, FS Monitor, and Scalar/GVFS push that limit out.
+- **History rewriting is a last resort.** For leaked secrets the real fix is *rotation*; `filter-repo`/BFG is cleanup, and it invalidates every downstream hash, so coordinate it.
+
+---
+
+## Further Reading
+
+- Chacon & Straub, *Pro Git*, 2nd ed. — esp. ch. 7 (Tools) and ch. 10 (Internals): <https://git-scm.com/book/en/v2>
+- Linux kernel, "Rebasing and merging" (maintainer docs): <https://www.kernel.org/doc/html/latest/maintainer/rebasing-and-merging.html>
+- Atlassian, "Merging vs. Rebasing" and "Rewriting history": <https://www.atlassian.com/git/tutorials/merging-vs-rebasing>
+- Conventional Commits 1.0.0: <https://www.conventionalcommits.org/en/v1.0.0/> · Semantic Versioning 2.0.0: <https://semver.org/>
+- Tim Pope, "A Note About Git Commit Messages": <https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html>
+- SLSA framework: <https://slsa.dev/> · Sigstore / gitsign: <https://docs.sigstore.dev/>
+- Brian Harry, "The largest Git repo on the planet" (GVFS): <https://devblogs.microsoft.com/bharry/the-largest-git-repo-on-the-planet/> · Scalar: <https://git-scm.com/docs/scalar>
+- git-filter-repo: <https://github.com/newren/git-filter-repo> · GitHub, "Removing sensitive data from a repository": <https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository>
+
+---
+
+## Related Topics
+
+- [Clean Commits & Version-Control — Senior](senior.md) — workflow-level practice: atomic commits, message conventions, branch strategy in a team.
+- [Clean Commits & Version-Control — Interview](interview.md) — Q&A across all levels.
+- [Chapter README](../README.md) — the positive rules of clean commits.
+- [Code Reviews](../17-code-reviews/README.md) — the etiquette and tempo of reviewing the history you produce.
+- [Boy Scout Rule](../21-boy-scout-rule/README.md) — leave the code (and the history) cleaner than you found it.
+- [Refactoring](../../refactoring/README.md) — why atomic, revertable commits make large refactors safe.

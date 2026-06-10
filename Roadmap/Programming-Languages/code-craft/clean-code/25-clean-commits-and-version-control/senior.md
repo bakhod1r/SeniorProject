@@ -50,13 +50,13 @@ gitGraph
     commit id: "main"
     branch feat/checkout-tax
     checkout feat/checkout-tax
-    commit id: "feat: add tax calc"
-    commit id: "test: tax edge cases"
+    commit id: "feat: tax calc"
+    commit id: "test: tax edges"
     checkout main
     merge feat/checkout-tax tag: "deployed"
     branch feat/refunds
     checkout feat/refunds
-    commit id: "feat: partial refunds"
+    commit id: "feat: refunds"
     checkout main
     merge feat/refunds tag: "deployed"
 ```
@@ -110,11 +110,10 @@ flowchart LR
     F --> B
 ```
 
-GitHub merge queue config (`.github/settings.yml` via the settings app, or branch-protection API):
+GitHub merge queue configuration (enabled in the `main` branch-protection rule):
 
 ```yaml
-# Enabled in repo Settings -> Branches -> branch protection rule for `main`
-# "Require merge queue" with:
+# Settings -> Branches -> branch protection for `main`: "Require merge queue"
 merge_queue:
   merge_method: squash            # one tidy commit per PR on main
   min_entries_to_merge: 1
@@ -168,7 +167,7 @@ module.exports = {
       'feat', 'fix', 'docs', 'style', 'refactor',
       'perf', 'test', 'build', 'ci', 'chore', 'revert',
     ]],
-    'scope-empty': [2, 'never'],           // require a scope
+    'scope-empty': [2, 'never'],            // require a scope
     'subject-case': [2, 'never', ['sentence-case', 'start-case', 'pascal-case', 'upper-case']],
     'subject-full-stop': [2, 'never', '.'], // no trailing period
     'header-max-length': [2, 'always', 72],
@@ -246,7 +245,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
 
-The payoff: a `fix:` commit silently ships a patch; a `feat:` ships a minor; a `BREAKING CHANGE:` footer ships a major and headlines the changelog. The convention is no longer paperwork — it *is* the release pipeline. This closes the loop with squash-merge (each PR becomes one Conventional Commit on `main`, so the PR title is the unit semantic-release reads).
+The payoff: a `fix:` commit silently ships a patch; a `feat:` ships a minor; a `BREAKING CHANGE:` footer ships a major and headlines the changelog. The convention is no longer paperwork — it *is* the release pipeline. This closes the loop with squash-merge: each PR becomes one Conventional Commit on `main`, so the PR title is the unit semantic-release reads.
 
 ---
 
@@ -255,7 +254,7 @@ The payoff: a `fix:` commit silently ships a patch; a `feat:` ships a minor; a `
 Branch protection is the policy layer that makes the rules above non-optional.
 
 ```yaml
-# Branch protection for `main` (GitHub REST: PUT /repos/{o}/{r}/branches/main/protection)
+# Branch protection for `main` (GitHub REST: PUT /repos/{owner}/{repo}/branches/main/protection)
 required_status_checks:
   strict: true                      # branch must be up to date before merge
   contexts:
@@ -282,9 +281,11 @@ Key choices and why:
 - **`required_linear_history`** — keeps `main` a straight line, which is what makes `git bisect` and `git log --oneline` legible. Pairs with squash or rebase merging.
 - **`require_code_owner_reviews`** — the people who own a path must sign off on changes to it (see CODEOWNERS below).
 
+Branch protection is what mechanically enforces "never rewrite shared history" — the rule introduced in [`junior.md`](junior.md) becomes server-side policy rather than a hope.
+
 ### Signed commits
 
-Signing proves *who* authored a commit — Git's `author` field is free text and trivially forged (`git commit --author="Linus Torvalds <...>"`). Two mechanisms:
+Signing proves *who* authored a commit — Git's `author` field is free text and trivially forged (`git commit --author="Linus Torvalds <torvalds@example.com>"`). Two mechanisms:
 
 ```bash
 # GPG signing
@@ -297,7 +298,7 @@ git config --global user.signingkey ~/.ssh/id_ed25519.pub
 git config --global commit.gpgsign true
 ```
 
-With `required_signatures: true`, GitHub shows a green **Verified** badge and *rejects* unsigned pushes to `main`. For supply-chain integrity, pair with [Sigstore `gitsign`](https://docs.sigstore.dev/) for keyless signing (ephemeral certs tied to OIDC identity — no long-lived keys to leak).
+With `required_signatures: true`, GitHub shows a green **Verified** badge and *rejects* unsigned pushes to `main`. For supply-chain integrity, pair with Sigstore `gitsign` for keyless signing — ephemeral certs tied to an OIDC identity, so there are no long-lived keys to leak.
 
 ---
 
@@ -323,7 +324,7 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 GitHub's blame view honors this file automatically. Now `git blame` skips the reformat commit and shows the *real* last author of each line's content. This is what lets you treat formatting as a settled, automated concern (see [`../04-formatting/README.md`](../04-formatting/README.md)) without sacrificing history.
 
-> **Discipline:** a commit listed here must be **purely** mechanical — formatter output only, zero logic changes. Mixing a real change into a format commit poisons the well: blame skips it, hiding a genuine authorship. Keep format commits separate and atomic (the cardinal rule from [`junior.md`](junior.md)).
+> **Discipline:** a commit listed here must be **purely** mechanical — formatter output only, zero logic changes. Mixing a real change into a format commit poisons the well: blame skips it, hiding a genuine authorship. Keep format commits separate and atomic.
 
 ---
 
@@ -449,13 +450,13 @@ git gc --prune=now --aggressive
 git push --force --all     # rewrites history — coordinate with the whole team
 ```
 
-> **Order of operations:** **rotate first, purge second.** History rewriting is destructive and disruptive (everyone must re-clone or hard-reset), and it does nothing about copies already pulled by attackers. The leaked key must be dead before you spend a minute on the rewrite. Modern alternative to BFG: `git filter-repo` (the maintained successor to `filter-branch`).
+> **Order of operations:** **rotate first, purge second.** History rewriting is destructive and disruptive (everyone must re-clone or hard-reset), and it does nothing about copies already pulled by attackers. The leaked key must be dead before you spend a minute on the rewrite. Modern alternative to BFG: `git filter-repo` (the maintained successor to `git filter-branch`).
 
 ---
 
 ## Bisect-driven debugging on a clean history
 
-`git bisect` binary-searches your history for the commit that introduced a bug: O(log n) commits to find the culprit among n. A regression hidden somewhere in 1,000 commits is found in ~10 steps. **But bisect is only as good as your history.** Every kitchen-sink commit, every red `main`, every "WIP" commit degrades or breaks it — which is the practical, dollars-and-cents argument for atomic commits and a green trunk.
+`git bisect` binary-searches your history for the commit that introduced a bug: O(log n) commits to check among n. A regression hidden somewhere in 1,000 commits is found in ~10 steps. **But bisect is only as good as your history.** Every kitchen-sink commit, every red `main`, every "WIP" commit degrades or breaks it — which is the practical, dollars-and-cents argument for atomic commits and a green trunk.
 
 ```bash
 git bisect start
@@ -514,7 +515,7 @@ Annotated + signed tags are the verifiable anchor a release artifact is built fr
 
 - **Treating branching strategy as a style choice.** It's a delivery-performance decision with DORA evidence behind it. Defaulting to GitFlow for a SaaS app that deploys daily imposes integration ceremony the team doesn't need and pays for in lead time.
 - **Trusting "CI green on the branch" to keep `main` green.** It only proves the branch passed against an *old* `main`. Semantic conflicts merge cleanly and break trunk. A merge queue testing the post-merge candidate is the only real guarantee.
-- **Enforcing commit conventions by code review.** Humans policing `feat:` vs `fix:` is wasted review bandwidth and inconsistent. Machine-enforce with commitlint locally *and* in CI (local hooks are skippable).
+- **Enforcing commit conventions by code review.** Humans policing `feat:` vs `fix:` is wasted review bandwidth and inconsistent. Machine-enforce with commitlint locally *and* in CI (local hooks are skippable with `--no-verify`).
 - **Leaving `enforce_admins` off.** Branch protection that admins can bypass is theater. The bypass *will* be used under deadline pressure, by exactly the senior people whose mistakes are costliest.
 - **Bulk-reformatting without `.git-blame-ignore-revs`.** One Prettier/Black commit destroys years of blame context. Always pair a mechanical reformat with a blame-ignore entry — and keep that commit free of any logic change.
 - **Hiding a leaked secret by force-pushing.** The credential is already compromised the moment it's pushed. Rotate first, always; purge history second; never assume the rewrite "cleaned" it.
@@ -550,7 +551,7 @@ Batching builds one candidate = `main` + all five queued PRs and runs CI once in
 
 </details>
 
-4. **A developer applies Black across the entire repo in one commit. Six months later you `git blame` a file to understand why a line exists and every line points to that reformat commit. What went wrong and what's the fix?**
+4. **A developer applies Black across the entire repo in one commit. Six months later you `git blame` a file and every line points to that reformat commit. What went wrong and what's the fix?**
 
 <details><summary>Answer</summary>
 
@@ -562,11 +563,86 @@ The bulk reformat rewrote every line, so blame attributes all content to the for
 
 <details><summary>Answer</summary>
 
-(1) **Rotate the credential immediately** — it's compromised the moment it's pushed; anyone who fetched, or any mirror/log, may have it. (2) **Purge it from history** with BFG or `git filter-repo`, then `reflog expire` + `gc --prune=now` + force-push, coordinating with the team to re-clone. (3) **Add prevention** so it can't recur: pre-commit gitleaks hook, CI scan, and GitHub push protection. Rotation is first because history rewriting is destructive, disruptive, and does *nothing* about copies already taken — only killing the live credential actually closes the exposure.
+(1) **Rotate the credential immediately** — it's compromised the moment it's pushed; anyone who fetched it, or any mirror/log, may have it. (2) **Purge it from history** with BFG or `git filter-repo`, then `reflog expire` + `gc --prune=now` + force-push, coordinating with the team to re-clone. (3) **Add prevention** so it can't recur: pre-commit gitleaks hook, CI scan, and GitHub push protection. Rotation is first because history rewriting is destructive, disruptive, and does *nothing* about copies already taken — only killing the live credential actually closes the exposure.
 
 </details>
 
 6. **Explain concretely how atomic commits and a green `main` change the cost of finding a regression introduced somewhere in the last 1,000 commits.**
 
-<invoke name="Read">
-<parameter name="file_path">/dev/null
+<details><summary>Answer</summary>
+
+`git bisect` binary-searches the range, so it finds the culprit in ~log₂(1000) ≈ 10 checks regardless of range size. Two hygiene properties make that work. **Green `main`** guarantees every midpoint commit builds and runs, so `git bisect run <script>` can drive the whole search automatically instead of stalling on commits that don't compile. **Atomic commits** mean the commit `bisect` names is a single logical change — you immediately know *what* broke. Without them, bisect either stalls on broken midpoints or fingers a kitchen-sink commit that did five things, leaving you no wiser. So clean history turns an O(n) manual hunt into an O(log n) automated one.
+
+</details>
+
+7. **Why enforce commit conventions in CI when you already have a local Husky `commit-msg` hook?**
+
+<details><summary>Answer</summary>
+
+Local hooks are advisory — any developer can bypass them with `git commit --no-verify`, and they don't run at all for commits made via the web UI or other tooling. CI runs on the server where it can't be skipped, so it's the actual gate. The local hook gives fast feedback (catch it before pushing); the CI check gives the guarantee. You want both: the hook for ergonomics, the CI check (wired into branch protection's `required_status_checks`) for enforcement. Because semantic-release derives versions from those messages, an unchecked bad message can corrupt the release pipeline.
+
+</details>
+
+8. **When is GitFlow the right choice over trunk-based development, despite its weaker DORA numbers?**
+
+<details><summary>Answer</summary>
+
+When you ship versioned, installed artifacts to customers (desktop apps, libraries, on-prem appliances, firmware) and must maintain multiple released versions in parallel — e.g., security patches to 1.x while 2.x is in development. There, `release/*` and `hotfix/*` branches model genuinely long-lived release lines, not ceremony. DORA's deploy-frequency advantage assumes you *can* deploy continuously to one production environment; a vendor maintaining five supported major versions in the field has a different problem that long-lived branches actually fit. The lesson is to match the model to the delivery context, not to cargo-cult either one.
+
+</details>
+
+---
+
+## Cheat Sheet
+
+| Concern | Tool / mechanism | Key setting |
+|---|---|---|
+| Branching model | Trunk-based + short-lived branches | Branch lifetime < 1 day; merge behind feature flags |
+| Keep `main` green | Merge queue (GitHub / Mergify / bors) | Test the post-merge candidate; batch + bisect on failure |
+| Commit grammar | Conventional Commits + commitlint | `commit-msg` hook **and** CI check |
+| Automated releases | semantic-release | Version derived from `fix:`/`feat:`/`BREAKING CHANGE:` |
+| Branch policy | GitHub branch protection | `enforce_admins`, `required_signatures`, `required_linear_history`, no force-push |
+| Authorship integrity | GPG / SSH / Sigstore `gitsign` | `commit.gpgsign true` + `required_signatures` |
+| Honest blame | `.git-blame-ignore-revs` | `git config blame.ignoreRevsFile`; format commits only |
+| Monorepo clone size | Partial clone + sparse-checkout | `--filter=blob:none --sparse`; cone mode |
+| Monorepo ownership | CODEOWNERS + `require_code_owner_reviews` | Last matching pattern wins |
+| Monorepo CI cost | Path-based triggers / Bazel/Nx affected graph | `on.pull_request.paths` or dependency DAG |
+| Stop secrets | pre-commit gitleaks/detect-secrets + CI scan + push protection | `fetch-depth: 0` for history scans |
+| Verify secrets | trufflehog | Live-API verification cuts false positives |
+| Purge a leak | Rotate first, then BFG / `git filter-repo` | `reflog expire` + `gc --prune=now` + force-push |
+| Find a regression | `git bisect run <script>` | Needs green, atomic, linear history |
+| Release marking | Annotated **signed** tags + SemVer | `git tag -s`; never move a published tag |
+
+---
+
+## Summary
+
+At senior scale, version-control hygiene is a system you design, not a habit you practice. The branching model is a delivery decision with DORA evidence behind it: trunk-based development with short-lived branches and feature flags drives deploy frequency and lead time, while GitFlow earns its keep only for versioned, installed software with parallel release lines. A green `main` is the load-bearing invariant, and the not-rocket-science rule — test the post-merge candidate, never the isolated branch — implemented by a merge queue is what guarantees it against semantic conflicts that pass on each branch alone. Conventions stop being suggestions when commitlint enforces Conventional Commits both locally and in CI, and that structure pays for itself by powering automated changelogs and semantic-release. Protected branches (`enforce_admins`, signed commits, linear history, no force-push) make the rules non-optional; `.git-blame-ignore-revs` keeps blame honest through unavoidable reformats; monorepo hygiene (partial clone, sparse-checkout, CODEOWNERS, path-based CI) keeps a giant repo fast and accountable. Layered secret defenses — and a rotate-first purge runbook — keep credentials out of history. The dividend on all of it is `git bisect`: a clean, atomic, green, linear history turns a 3 a.m. regression hunt into a ten-minute automated search.
+
+---
+
+## Further Reading
+
+- *Accelerate: The Science of Lean Software and DevOps* — Forsgren, Humble, Kim. The empirical basis for trunk-based development's delivery advantages.
+- Google's annual *State of DevOps* (DORA) reports — branching and delivery metrics over time.
+- "The Not Rocket Science Rule of Software Engineering" — Graydon Hoare's original post on always-green repositories.
+- Conventional Commits specification — `conventionalcommits.org`.
+- semantic-release documentation — automated, commit-driven releases.
+- "Trunk-Based Development" — Paul Hammant, `trunkbaseddevelopment.com`.
+- Pro Git, chapters on `git bisect`, signed tags, and history rewriting.
+- gitleaks, trufflehog, and BFG Repo-Cleaner project documentation; GitHub secret scanning + push protection docs.
+- Sigstore `gitsign` — keyless commit signing tied to OIDC identity.
+
+---
+
+## Related Topics
+
+- [`junior.md`](junior.md) — atomic commits, message anatomy, never rewriting shared history.
+- [`middle.md`](middle.md) — interactive rebase, squashing, conflict resolution, PR hygiene.
+- [`professional.md`](professional.md) — org-wide policy, supply-chain provenance, governance at scale.
+- [`../README.md`](../README.md) — the Clean Code chapter index and positive rules for commits.
+- [`../17-code-reviews/README.md`](../17-code-reviews/README.md) — the etiquette and tempo of reviewing; this chapter shapes the record you hand the reviewer.
+- [`../04-formatting/README.md`](../04-formatting/README.md) — automated formatting, the precondition for clean format-only commits and `.git-blame-ignore-revs`.
+- [`../23-configuration-and-feature-flags/README.md`](../23-configuration-and-feature-flags/README.md) — feature flags, the practice that makes short-lived trunk branches safe.
+- [`../../refactoring/README.md`](../../refactoring/README.md) — refactors belong in their own commits, separate from behavior changes.
+- [`../../anti-patterns/README.md`](../../anti-patterns/README.md) — the smells (kitchen-sink commits, commented-out code) this chapter prevents.

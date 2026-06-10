@@ -1,6 +1,6 @@
 # Clean Commits & Version-Control Hygiene
 
-Status: ⏳ PENDING
+Status: ✅ 8-file suite complete (junior · middle · senior · professional · interview · tasks · find-bug · optimize)
 
 Clean code includes a clean **history**. This chapter covers the craft of the commit and the branch — atomic changes, messages that explain *why*, and a trail that stays bisectable and reviewable. Distinct from [Code Reviews](../17-code-reviews/README.md) (the etiquette and tempo of *reviewing*): this chapter is about the **shape of the record** you hand the reviewer and every future archaeologist of the codebase.
 
