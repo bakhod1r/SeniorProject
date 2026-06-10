@@ -137,7 +137,7 @@ Because `os.getenv("TIMEOUT")` sprinkled across the codebase has no central vali
 
 <details><summary>Answer</summary>
 
-Factor III of the 12-factor methodology: store config that varies between deploys (credentials, hostnames, resource handles) in **environment variables**, not in code or committed config files. Benefits: a strict separation between code and config, language-agnostic access, no risk of committing a prod config file, and the same build artifact promoted unchanged from staging to prod. The litmus test: *could you open-source the repo right now without leaking credentials?*
+Factor III of the 12-factor methodology: store config that varies between deploys (credentials, hostnames, resource handles) in **environment variables**, not in code or committed config files. Benefits: strict separation of code and config, language-agnostic access, no risk of committing a prod config file, and the same build artifact promoted unchanged from staging to prod. The litmus test: *could you open-source the repo right now without leaking credentials?*
 
 </details>
 
@@ -145,7 +145,7 @@ Factor III of the 12-factor methodology: store config that varies between deploy
 
 <details><summary>Answer</summary>
 
-Env vars are a flat, untyped, string-only namespace with no structure, no comments, no nesting, and a low limit on practical size. For large config (dozens of nested settings, lists, per-tenant maps) they get unwieldy and error-prone. Many teams use a hybrid: structured config files (YAML/TOML) for the *shape*, env vars (or a secrets store) for *secrets and per-environment overrides*. 12-factor's "everything in env" is a guideline, not dogma.
+Env vars are a flat, untyped, string-only namespace with no structure, no comments, no nesting. For large config (dozens of nested settings, lists, per-tenant maps) they get unwieldy and error-prone. Many teams use a hybrid: structured config files (YAML/TOML) for the *shape*, env vars (or a secrets store) for *secrets and per-environment overrides*. 12-factor's "everything in env" is a guideline, not dogma.
 
 </details>
 
@@ -165,10 +165,10 @@ Parse the raw key-value soup *once* into a struct with real types, then pass tha
 
 ```go
 type Config struct {
-    Port      int           `env:"PORT" default:"8080"`
-    Timeout   time.Duration `env:"TIMEOUT" default:"30s"`
-    DBURL     string        `env:"DATABASE_URL,required"`
-    Debug     bool          `env:"DEBUG" default:"false"`
+    Port    int           `env:"PORT" default:"8080"`
+    Timeout time.Duration `env:"TIMEOUT" default:"30s"`
+    DBURL   string        `env:"DATABASE_URL,required"`
+    Debug   bool          `env:"DEBUG" default:"false"`
 }
 ```
 
@@ -180,7 +180,7 @@ A parse failure (`PORT=abc`) is caught at load time, in one place, with a clear 
 
 <details><summary>Answer</summary>
 
-A **release flag** (a.k.a. release toggle) hides in-progress work and enables gradual rollout of a new feature; it is *short-lived* and should be removed once the feature is fully shipped. An **ops flag** (operational toggle / kill switch) lets operators degrade or disable a subsystem under load or during an incident; it may live *for the lifetime of the subsystem*. They have opposite lifetimes, which is why conflating "all flags" into one bucket leads to flag debt.
+A **release flag** hides in-progress work and enables gradual rollout of a new feature; it is *short-lived* and should be removed once the feature is fully shipped. An **ops flag** (operational toggle / kill switch) lets operators degrade or disable a subsystem under load or during an incident; it may live for the *lifetime of the subsystem*. They have opposite lifetimes, which is why conflating "all flags" into one bucket leads to flag debt.
 
 </details>
 
@@ -205,7 +205,7 @@ The mistake is treating a release flag like a permanent one — it should die, n
 
 <details><summary>Answer</summary>
 
-Flag debt is the accumulation of flags that have outlived their purpose: each adds a branch, doubles the logical test matrix, and rots into dead-but-scary code nobody dares delete. Control it by treating every release/experiment flag as *temporary by construction*: give it an owner and an expiry date at creation, file a retirement ticket the moment it's launched, alert on flags older than N days, and make removing the flag part of the feature's "definition of done."
+Flag debt is the accumulation of flags that have outlived their purpose: each adds a branch, doubles the logical test matrix, and rots into dead-but-scary code nobody dares delete. Control it by treating every release/experiment flag as *temporary by construction*: give it an owner and an expiry date at creation, file a retirement ticket the moment it launches, alert on flags older than N days, and make removing the flag part of the feature's "definition of done."
 
 </details>
 
@@ -216,7 +216,7 @@ Flag debt is the accumulation of flags that have outlived their purpose: each ad
 1. Confirm the flag is fully rolled out (100% on) and stable for a soak period.
 2. Delete the *losing* branch and the conditional, keeping only the winning path.
 3. Remove the flag's definition from the flag system.
-4. Delete any config, tests, and dashboards referencing it.
+4. Delete config, tests, and dashboards referencing it.
 
 Do it as a dedicated PR, not bundled with new work, so it's trivially reviewable and revertible. The hardest part is organizational: someone must own the deletion, or it never happens.
 
@@ -250,7 +250,7 @@ No. Every config knob is a surface for misconfiguration, a branch to test, and a
 
 <details><summary>Answer</summary>
 
-No. Each flag adds a code branch, doubles the test combinations for that path (2 flags = 4 paths, 10 flags = 1024), adds a lookup at runtime, and creates debt that must be actively retired. Flags are a powerful tool with a *carrying cost* — the cost is paid over the flag's whole life, not just at creation. The free-feeling part (adding the `if`) is the cheapest moment; deleting it later is the expensive part everyone forgets to budget for.
+No. Each flag adds a code branch, doubles the test combinations for that path (2 flags = 4 paths, 10 flags = 1024), adds a lookup at runtime, and creates debt that must be actively retired. Flags are a powerful tool with a *carrying cost* paid over the flag's whole life, not just at creation. Adding the `if` is the cheapest moment; deleting it later is the expensive part everyone forgets to budget for.
 
 </details>
 
@@ -258,7 +258,7 @@ No. Each flag adds a code branch, doubles the test combinations for that path (2
 
 <details><summary>Answer</summary>
 
-It depends on the value's nature, and the honest answer is "usually both." **Env vars** for per-deploy secrets and environment-specific handles (12-factor) — they're injectable and never committed. **Config files** for structured, non-secret, version-controllable settings (feature defaults, route tables, log formats) where you want comments, nesting, and a reviewable diff. The anti-pattern is forcing all config into one mechanism: secrets in a committed YAML file, or a 40-field nested structure flattened into 40 env vars.
+It depends on the value's nature, and the honest answer is "usually both." **Env vars** for per-deploy secrets and environment-specific handles (12-factor) — injectable, never committed. **Config files** for structured, non-secret, version-controllable settings (feature defaults, route tables, log formats) where you want comments, nesting, and a reviewable diff. The anti-pattern is forcing all config into one mechanism: secrets in a committed YAML file, or a 40-field nested structure flattened into 40 env vars.
 
 </details>
 
@@ -266,7 +266,7 @@ It depends on the value's nature, and the honest answer is "usually both." **Env
 
 <details><summary>Answer</summary>
 
-When the literal is *self-explanatory in context* and naming it would add indirection without clarity. `for (i = 0; i < n; i++)`, `array[len - 1]`, `x / 2`, `status == 200` in an HTTP client — extracting `LOOP_START`, `HALF_DIVISOR`, or `HTTP_OK` (when used once, locally, obviously) can hurt readability. Extract when the value (a) recurs, (b) carries non-obvious domain meaning, or (c) is likely to change. A single, obvious, locally-scoped literal can stay inline.
+When the literal is *self-explanatory in context* and naming it would add indirection without clarity. `for (i = 0; i < n; i++)`, `array[len - 1]`, `x / 2` — extracting `LOOP_START`, `HALF_DIVISOR` hurts readability. Extract when the value (a) recurs, (b) carries non-obvious domain meaning, or (c) is likely to change. A single, obvious, locally-scoped literal can stay inline.
 
 </details>
 
@@ -274,7 +274,7 @@ When the literal is *self-explanatory in context* and naming it would add indire
 
 <details><summary>Answer</summary>
 
-Non-determinism. If config is a mutable global that any code can read at any moment — and something can mutate it mid-flight — two requests in the same process can see different values, and behavior depends on *when* the read happened relative to the write. This produces Heisenbugs that vanish on retry. Cure: load config into an **immutable** object at startup; if it must change at runtime (e.g., flags), make updates atomic and snapshot the value at the start of a request so one request sees one consistent view.
+Non-determinism. If config is a mutable global that any code can read at any moment — and something can mutate it mid-flight — two requests in the same process can see different values, and behavior depends on *when* the read happened relative to the write. This produces Heisenbugs that vanish on retry. Cure: load config into an **immutable** object at startup; if it must change at runtime (flags), make updates atomic and snapshot the value at the start of a request so one request sees one consistent view.
 
 </details>
 
@@ -296,7 +296,7 @@ if cfg.Timeout <= 0 { errs = append(errs, "TIMEOUT must be positive") }
 if len(errs) > 0 { log.Fatalf("invalid config:\n  - %s", strings.Join(errs, "\n  - ")) }
 ```
 
-> **What the interviewer is really checking:** do you understand that operator experience is part of reliability? Dying with "PORT must be 1–65535; DATABASE_URL is required" in one shot lets an operator fix everything in one edit. Dying on the first error forces N restart cycles. Validation is a UX surface for whoever boots the service.
+> **What the interviewer is really checking:** do you treat operator experience as part of reliability? Dying with all errors in one shot lets an operator fix everything in one edit; dying on the first error forces N restart cycles. Validation is a UX surface for whoever boots the service.
 
 </details>
 
@@ -304,10 +304,273 @@ if len(errs) > 0 { log.Fatalf("invalid config:\n  - %s", strings.Join(errs, "\n 
 
 <details><summary>Answer</summary>
 
-Options, roughly in order of scale: (1) a **shared library/package** of constants imported by each service (works in a monorepo, same language); (2) a **generated artifact** — define values once in a schema (protobuf, JSON Schema) and code-gen typed constants per language; (3) a **central config service** (Consul, etcd, AppConfig) services fetch at startup, with the schema versioned. The trap to avoid is duplication-by-copy across repos. Whatever the mechanism, exactly one place is authoritative and the rest *derive* from it.
+Options, roughly by scale: (1) a **shared library** of constants imported by each service (monorepo, same language); (2) a **generated artifact** — define values once in a schema (protobuf, JSON Schema) and code-gen typed constants per language; (3) a **central config service** (Consul, etcd, AppConfig) services fetch at startup, with the schema versioned. The trap is duplication-by-copy across repos. Whatever the mechanism, exactly one place is authoritative and the rest *derive* from it.
 
 </details>
 
 ### S3. How do you do percentage-based / canary rollout with a flag?
 
-<parameter name="old_string">
+<details><summary>Answer</summary>
+
+Hash a stable key (user ID) into a bucket 0–99 and compare against the rollout percentage: `bucket(userID) < rolloutPct`. Hashing the *user* (not a random number) ensures a given user gets a *consistent* experience across requests — sticky, not flickering. Ramp the percentage up (1% → 5% → 25% → 100%) while watching error rates and latency, ready to drop back to 0% instantly. This is the mechanical core of progressive delivery.
+
+</details>
+
+### S4. What is progressive delivery?
+
+<details><summary>Answer</summary>
+
+The practice of rolling out changes *gradually* and *controllably* rather than to everyone at once — canary releases, percentage rollouts, ring deployments (internal → beta → general), and automatic rollback gated on metrics. Feature flags are the control plane; observability is the feedback loop. The goal is to limit the blast radius of a bad change to a small population you can recover before it becomes an incident.
+
+</details>
+
+### S5. How do you make feature-flag evaluation testable?
+
+<details><summary>Answer</summary>
+
+Hide the flag system behind an interface (`FlagProvider.enabled(key, context)`) and inject it. Tests supply a fake provider with flags pinned on/off, so you can test both branches deterministically without touching the real flag service. The corollary: don't call a global flag singleton directly from business logic — that's an untestable hidden dependency, the flag equivalent of a hard-coded global.
+
+</details>
+
+### S6. How should config errors be surfaced in observability?
+
+<details><summary>Answer</summary>
+
+(1) Log the full effective config at boot with secrets **redacted**, so an incident responder can confirm what's actually in effect. (2) Emit a metric/event on every flag flip and config reload, with who/what/when, so a config change is correlatable with a metrics anomaly. (3) Tag spans/logs with the active flag variants. Because config changes cause outages disproportionately, "what config was live at time T?" must be answerable from telemetry, not from guessing.
+
+</details>
+
+### S7. A required secret is missing in prod. Fail fast or use a default? (trick)
+
+<details><summary>Answer</summary>
+
+Fail fast — crash at boot with a loud, specific error. A "silent default" for a *required* secret (an empty string, a dummy key) is the worst case: the service starts, looks healthy, and fails subtly later — authenticating as nobody, writing to the wrong store, or serving with security disabled. A missing *required* setting should fail closed and loud. Defaults are only legitimate for genuinely *optional* settings with a safe fallback.
+
+</details>
+
+### S8. How do you handle config changes without a redeploy, safely?
+
+<details><summary>Answer</summary>
+
+Watch the source (a file, a config service, a flag SDK with streaming) and reload atomically into a *new* immutable config object, then swap the pointer in one operation — never mutate fields in place. **Validate the new config before swapping**, and reject the reload (keeping the old config) if validation fails, logging loudly. The dangerous version is partial in-place mutation that leaves the system in a half-old, half-new state mid-request.
+
+</details>
+
+### S9. Flag in the data layer or in the application layer?
+
+<details><summary>Answer</summary>
+
+Generally the application layer, as high up the call stack as practical — ideally one clear branch point near the request boundary, not flag checks scattered through deep functions. A flag sprinkled across ten call sites is ten places to get the logic wrong and ten things to delete at retirement. Concentrate the toggle: one `if` selecting a strategy/implementation, with the two paths cleanly separated, so retirement is "delete one branch."
+
+</details>
+
+### S10. How do you avoid a combinatorial explosion of flag interactions?
+
+<details><summary>Answer</summary>
+
+Keep flags **independent** (orthogonal) by design; avoid flags whose correct value depends on another flag's value. Minimize the number of *simultaneously active* release flags (retire aggressively). Test the *realistic* combinations, not all 2^n — the on/on and the current-prod state plus the target state. If two flags are genuinely coupled, that's a smell that they should be one flag with an enum variant, not two booleans.
+
+</details>
+
+### S11. What's the difference between a flag and a config setting?
+
+<details><summary>Answer</summary>
+
+Overlapping but distinct. A **feature flag** is typically boolean/enum, often evaluated per-request with targeting (this user, this region), and frequently *temporary*. A **config setting** is typically a typed scalar/structure, evaluated per-deploy or per-process, and *long-lived*. A flag system adds targeting, gradual rollout, and audit on top of plain config. Using a heavyweight flag platform for a static timeout is overkill; using a static config value for a per-user A/B test doesn't work.
+
+</details>
+
+### S12. How do constants interact with API/wire compatibility?
+
+<details><summary>Answer</summary>
+
+A constant that is *purely internal* can change freely. A constant that crosses a boundary — serialized into a message, persisted to a DB, exposed in an API, or used as an enum's wire value — is part of a **contract**. Changing `STATUS_ACTIVE = 1` to `2` silently breaks every persisted row and every client. Such "constants" must be versioned and migrated like schema, never edited in place. Know which of your constants are private and which are contracts.
+
+</details>
+
+### S13. How do you prevent config drift across environments?
+
+<details><summary>Answer</summary>
+
+Make config declarative and version-controlled (config-as-code / GitOps): the environments differ only by a small, explicit set of overrides layered on a shared base, and all of it is reviewed and diffable. Periodically reconcile actual running config against the declared source and alert on drift. The failure mode to prevent is someone hand-editing prod config via a console, after which prod no longer matches what's in Git and nobody knows the real state.
+
+</details>
+
+### S14. Where do you draw the line between a constant and an enum?
+
+<details><summary>Answer</summary>
+
+When a set of related named constants represents a *closed set of mutually exclusive values* (order states, log levels, currencies), promote them from scattered `int`/`String` constants to an **enum**. The enum gives exhaustiveness checking (the compiler flags an unhandled case), type safety (you can't pass an arbitrary int), and a natural home for per-value behavior. Loose `int` constants for a closed set are a flavor of Primitive Obsession.
+
+</details>
+
+---
+
+## Staff (10 questions)
+
+### S15. Design a feature-flag platform for a 200-engineer org. What are the non-negotiables?
+
+<details><summary>Answer</summary>
+
+- **Targeting**: by user, segment, percentage, region, plan — evaluated client-side from a streamed ruleset for low latency.
+- **Audit**: every flag change records who/what/when/why; flips are first-class events correlatable with metrics.
+- **Lifecycle governance**: required owner + type + expiry at creation; automated nagging/reporting on stale flags; CI check that fails on flags past expiry.
+- **Safe defaults & fallbacks**: if the flag service is unreachable, the SDK serves a baked-in default — never blocks or crashes the app.
+- **Consistency**: same evaluation logic across languages (shared SDK / spec), so a flag means the same thing everywhere.
+- **Local & test overrides**: trivially force flag states in tests and locally.
+
+> **What the interviewer is really checking:** that you treat flags as a *governed system with a lifecycle*, not a key-value bag — and that resilience (fail-open to a default) and debt control are designed in, not bolted on.
+
+</details>
+
+### S16. A bad config push takes down prod. How do you make config changes as safe as code changes?
+
+<details><summary>Answer</summary>
+
+Treat config as a first-class deployable: version it in Git, require code review, validate it in CI (schema + semantic checks), and roll it out *progressively* with automatic rollback gated on health metrics — exactly like canary code deploys. Config should never bypass the safety machinery that code goes through. Add a fast, well-rehearsed rollback (revert the previous known-good config in one action). Historically, more outages come from config than code precisely *because* config often skips review and canary — close that gap.
+
+</details>
+
+### S17. How do you migrate from a stringly-typed config blob to typed config across a large legacy codebase?
+
+<details><summary>Answer</summary>
+
+Strangler-fig style: introduce a typed `Config` object that parses/validates the existing blob at startup, then migrate consumers from `config.get("x")` to `cfg.X` PR by PR. The typed object reads the *same* underlying source initially, so there's no behavior change — only the access pattern migrates. Once all consumers use the typed object, you can change the underlying source freely. Add a lint rule banning new raw `config.get(...)` calls so the legacy access doesn't grow back.
+
+</details>
+
+### S18. When is the configuration complexity clock telling you to stop and ship code instead?
+
+<details><summary>Answer</summary>
+
+When you find yourself building conditionals, expression evaluation, or a mini-language *inside* config to express logic. That's the clock striking noon: you've reinvented programming, badly, in YAML. At that point the simplest, most testable, most debuggable option is to express the logic in actual code (behind a flag if it needs to vary). Config should hold *values and switches*, not *behavior*. The signal is "our config file now needs its own test suite."
+
+</details>
+
+### S19. How do you reason about flag evaluation latency and resilience at scale?
+
+<details><summary>Answer</summary>
+
+Flag checks are on the request hot path, so evaluation must be **local and in-memory**: the SDK streams the ruleset and evaluates with no network call per check. The flag service is therefore a *control plane*, not a data-plane dependency. Critically, the SDK must **fail open to a configured default** if it can't reach the service or has no cached ruleset — a flag platform outage must never cascade into an application outage. You design the default value of every flag for the "flag system is down" scenario.
+
+</details>
+
+### S20. How do constants and config relate to deterministic, reproducible builds?
+
+<details><summary>Answer</summary>
+
+Constants are part of the build artifact; config is injected at runtime. For reproducibility, the *same artifact* must run in every environment, with all environment-specific values supplied externally (12-factor). If environment-specific values get *baked into the build* (a prod URL compiled in), you now have N artifacts, can't promote staging-to-prod with confidence, and lose the "test exactly what you ship" guarantee. The dividing line — compile-time constant vs runtime config — is precisely the line between "same everywhere" and "varies per deploy."
+
+</details>
+
+### S21. An ops flag (kill switch) hasn't been touched in two years. Delete it? (trick)
+
+<details><summary>Answer</summary>
+
+No — not on age alone. Unlike release flags, an ops kill switch is *meant* to be long-lived; its value is precisely that it's there, unused, until the incident when you desperately need it. "Hasn't been flipped in two years" is a feature, not flag debt. The age-based retirement heuristic applies to *release and experiment* flags. This is why typing your flags matters: the retirement policy is type-dependent, and a blanket "delete old flags" job would remove your emergency brakes.
+
+</details>
+
+### S22. How do you handle secrets rotation without downtime?
+
+<details><summary>Answer</summary>
+
+Support *two valid secrets at once* during the rotation window: the service accepts both the old and new credential, you roll the new one out everywhere, then retire the old. For outbound credentials, fetch from a secrets manager that supports versioned secrets and short-lived/leased credentials (Vault dynamic secrets), so rotation is the manager's job and the app just re-reads. The anti-pattern is a hard cutover that assumes every node updates atomically — it never does, and the gap is an outage.
+
+</details>
+
+### S23. How do you audit config and flags for security and compliance?
+
+<details><summary>Answer</summary>
+
+(1) Secret scanning in CI and pre-commit (gitleaks, trufflehog) to block secrets from ever entering history. (2) An immutable audit log of every config/flag change (who, what, when) for compliance and incident forensics. (3) Least-privilege access to the secrets store and flag console, separated from code access. (4) Periodic review of permission-type flags (they encode authorization and never expire, so they accumulate quietly). Config and flags are an attack surface and a compliance scope, not just developer convenience.
+
+</details>
+
+### S24. Your org has 4,000 live flags. Diagnose and fix.
+
+<details><summary>Answer</summary>
+
+That's pathological flag debt — flags were created freely and never retired. Fix culturally and structurally: (1) classify every flag by type (most "release" flags are long-overdue for deletion); (2) require owner + expiry on all *new* flags and block creation without them; (3) build a dashboard of stale flags and assign retirement to owning teams with a deadline; (4) add a CI gate failing on expired flags; (5) make flag removal part of "done." The root cause is always organizational: creating flags is rewarded (ships features), deleting them is invisible work — so make deletion visible, owned, and required.
+
+</details>
+
+---
+
+## Rapid-Fire
+
+| Question | Answer |
+|---|---|
+| Magic number cure? | Named constant at the right scope |
+| Secrets in Git? | Never — inject at runtime; rotate if leaked |
+| 12-factor config rule? | Config in the environment, separate from code |
+| Fail fast on config means? | Validate at startup, crash loud if invalid |
+| Stringly-typed config cure? | Parse once into a typed struct |
+| Four flag types? | Release, Experiment, Ops, Permission |
+| Shortest-lived flag? | Release / Experiment (delete after launch) |
+| Longest-lived flag? | Ops kill switch / Permission |
+| Flag debt cure? | Owner + expiry at creation; retire aggressively |
+| Knight Capital cause? | Reused an old flag's meaning; per-node deploy mismatch |
+| Complexity clock peak? | A DSL that became a bad programming language |
+| Everything configurable? | No — every knob has a carrying cost |
+| Is a flag free? | No — branch + test matrix + retirement debt |
+| Config file vs env var? | Both — files for structure, env for secrets/overrides |
+| Constant inline when? | Self-explanatory, local, single-use, won't change |
+| Missing required secret? | Fail fast, never silent default |
+| Canary rollout key? | Hash a stable user ID into buckets (sticky) |
+| Flag SDK loses connection? | Fail open to a baked-in default |
+| Boolean-trap cure? | Named enums/options or separate methods |
+| Config change safety? | Treat like code: review, validate, canary, rollback |
+
+---
+
+## Summary
+
+Configuration discipline is lifecycle discipline. A value's journey — *where it lives, who may change it, when it is read, and (for flags) when it must die* — matters more than its momentary value.
+
+```mermaid
+flowchart TD
+    L["Literal in code"] -->|"recurs / domain meaning"| C["Named constant"]
+    C -->|"varies per environment"| CFG["Configuration"]
+    CFG -->|"secret?"| SEC["Secrets manager<br/>(never in VCS)"]
+    CFG -->|"per-deploy value"| ENV["Environment / config file"]
+    CFG -->|"runtime switch"| FLAG["Feature flag"]
+    ENV --> VAL{"Validate at startup<br/>(fail fast)"}
+    SEC --> VAL
+    VAL -->|"invalid"| CRASH["Crash loud,<br/>aggregate errors"]
+    VAL -->|"valid"| RUN["Immutable typed config<br/>passed through app"]
+    FLAG --> TYPE{"Flag type?"}
+    TYPE -->|"Release / Experiment"| TEMP["Short-lived:<br/>owner + expiry → RETIRE"]
+    TYPE -->|"Ops / Permission"| LONG["Long-lived:<br/>kept, audited"]
+    TEMP -->|"not retired"| DEBT["Flag debt:<br/>dead branches, test blowup"]
+```
+
+The throughlines:
+
+1. **Name what matters; inline what's obvious.** Constants document intent and centralize change, but `i = 0` needs no name.
+2. **Single source of truth.** Every value declared once; everything else derives from it.
+3. **Config in the environment, validated fast, typed once.** The same artifact runs everywhere; bad config dies at boot, loudly and completely.
+4. **Secrets never touch source control.** Inject at runtime; rotate, don't just delete, on leak.
+5. **Flags have types and lifetimes.** Release and experiment flags are *temporary by construction*; ops and permission flags are long-lived. Reusing or mislabeling a flag is how Knight Capital lost $440M.
+6. **Nothing is free.** Every knob and every flag carries a cost paid over its whole life — configurability and toggles are tools, not defaults. Treat config changes with the same review/canary/rollback rigor as code, because config causes outages disproportionately.
+
+---
+
+## Further Reading
+
+- *The Twelve-Factor App* — Factor III: Config (Adam Wiggins)
+- "Feature Toggles (aka Feature Flags)" — Pete Hodgson, martinfowler.com (the canonical taxonomy)
+- "The Configuration Complexity Clock" — Mike Hadlow
+- SEC report on the Knight Capital 2012 trading incident
+- *Release It!* — Michael Nygard (stability patterns, config as an outage source)
+- *Clean Code* — Robert C. Martin, Ch. 17 (smells: magic numbers, configuration)
+
+---
+
+## Related Topics
+
+- [Junior questions](junior.md) · [Professional questions](professional.md) — same chapter, by depth
+- [Chapter README](../README.md) — positive rules for configuration, constants, and flags
+- [Defensive vs Offensive Programming](../16-defensive-vs-offensive/README.md) — fail-fast validation as a discipline
+- [Anti-Patterns](../../anti-patterns/README.md) — magic numbers, hard-coded environment checks, mutable global config
+- [Refactoring — Code Smells](../../refactoring/README.md) — Primitive Obsession and the boolean-trap parameter

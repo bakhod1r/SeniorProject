@@ -1,6 +1,6 @@
 # Configuration, Constants & Feature Flags
 
-Status: ⏳ PENDING
+Status: ✅ 8-file suite complete (junior · middle · senior · professional · interview · tasks · find-bug · optimize)
 
 The clean handling of everything that *isn't logic but governs it* — named constants, environment configuration, and feature flags. Distinct from [Meaningful Names](../01-meaningful-names/README.md) (mechanical naming of code symbols): this chapter is about the **lifecycle of a setting** — where a value lives, who may change it, when it is read, and when a flag must die.
 
