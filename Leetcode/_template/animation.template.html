@@ -1,8 +1,43 @@
 <!DOCTYPE html>
+<!--
+  ============================================================================
+  LeetCode animation — SVG-merge TEMPLATE  (canonical reference: this file is
+  shown FILLED IN for "Two Sum" so you can see every piece working).
+
+  HOW TO MAKE A NEW PROBLEM (only touch the parts marked "FILL"):
+    1. <title> + header  ........  h1 name, difficulty pill (easy|med|hard),
+                                    <tag>s, and the <p class="lede"> blurb.
+    2. PRESETS  .................  a few named inputs; a solution must exist for
+                                    each (the final frame shows the answer).
+    3. APPROACHES  ..............  one object per algorithm approach. Each owns:
+         id, label, comp ('O(n) time · O(1) space'),
+         src:{py,java,go}   real, trimmed solution code (template strings),
+         map:{py,java,go}   {pseudoLine: languageLine} so every code view
+                            highlights the executing line in sync,
+         code:[ token rows ]  the Pseudo view, rows of ['kw'|'fn'|'nu'|'op', text],
+         legend:[[swatch,text]]  swatch ∈ amber→'yellow', blue→'blue', green→'green',
+         how:'<p>…</p>'     prose explainer,
+         build(input){…}    precompute frames[]. A frame is a SNAPSHOT:
+            { rows, metrics, compare, narration, codeLine, done }
+            rows: { type:'cells', label, cells:[{value, ix, cls, arrow}] }
+                | { type:'chips', label, chips:[{key, idx, hl}] }
+            cls   ∈ '' | 'cur'(amber) | 'ptr'/'stored'(blue) | 'match'(green)
+            hl    ∈ '' | 'add'(green) | 'hit'(amber)
+            arrow : pointer label drawn above the cell ('i','j','l','r',…)
+            compare: the centered banner; the DONE frame MUST end with
+                     '<span class="ans">✓ return …</span>'.
+
+  GENERIC ENGINE — DO NOT EDIT: buildSVG(), the code panel, transport,
+  syntax highlighter, dark/light theme. buildSVG renders 'cells' + 'chips'
+  rows out of the box. Other structures (linked list, 2-D grid, intervals,
+  tree) need extra SVG primitives — extend buildSVG for those, keep the rest.
+  ============================================================================
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- FILL 1 · title -->
 <title>Two Sum — Four Approaches</title>
 <style>
   :root{
@@ -40,6 +75,8 @@
   .pill{display:inline-flex; align-items:center; padding:3px 11px; border-radius:999px;
     font-size:.78rem; font-weight:600; vertical-align:middle; margin-left:10px;}
   .pill.easy{background:rgba(52,211,153,.13); color:var(--green); border:1px solid rgba(52,211,153,.25);}
+  .pill.med{background:rgba(244,183,64,.13); color:var(--yellow); border:1px solid rgba(244,183,64,.28);}
+  .pill.hard{background:rgba(248,81,73,.13); color:var(--red); border:1px solid rgba(248,81,73,.28);}
   .tags{display:flex; gap:8px; margin:14px 0 8px;}
   .tag{padding:5px 13px; border-radius:999px; font-size:.82rem; color:var(--muted);
     background:var(--surface); border:1px solid var(--border);}
@@ -234,6 +271,7 @@
   <div class="head">
     <button class="back" title="(prototype) back">&#8592;</button>
     <div>
+      <!-- FILL 1 · header: name, pill (easy|med|hard), tags, lede -->
       <h1>Two Sum<span class="pill easy">Easy</span></h1>
       <div class="tags">
         <span class="tag">array</span>
@@ -363,7 +401,8 @@ function highlight(line, lang){
   return out || ' ';
 }
 
-// ---------- datasets (a solution is guaranteed to exist) ----------
+// ===== FILL 2 · PRESETS — named inputs; each must have a solution =====
+// (the preset <button data-p="…"> labels live in the toolbar markup above)
 const PRESETS = {
   leet:   { nums:[2, 7, 11, 15],   target:9  },
   mixed:  { nums:[3, 2, 4],        target:6  },
@@ -377,8 +416,10 @@ const seenLabel = 'seen <span style="color:var(--faint)">(value &rarr; index)</s
 const targetMetric = t => ({ k:'target', v:'target = '+t, wide:true });
 
 // ======================================================================
-// APPROACHES — each owns its pseudocode, legend, prose and buildFrames.
-// A frame is approach-agnostic: { rows, metrics, compare, narration, codeLine }.
+// ===== FILL 3 · APPROACHES (problem-specific) — Two Sum shown as a =====
+// ===== complete worked example. Replace with your problem's approaches. ==
+// Each owns its pseudocode, legend, prose and build(). A frame is
+// approach-agnostic: { rows, metrics, compare, narration, codeLine }.
 //   row = { type:'cells', label, cells:[{value, ix, cls, arrow}] }
 //       | { type:'chips', label, chips:[{key, idx, hl}] }
 // ======================================================================
