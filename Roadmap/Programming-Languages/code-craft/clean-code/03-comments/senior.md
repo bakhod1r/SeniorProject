@@ -424,7 +424,7 @@ This gives you the best of both: the code stays terse, the rationale lives in a 
 
 > **Boundary test:** if a comment would still be true and useful after the surrounding function is rewritten, it might belong in an ADR or package doc, not glued to a specific line.
 
-See the dedicated chapter [`../24-documentation-and-adrs/README.md`](../24-documentation-and-adrs/README.md) for ADR templates and lifecycle.
+See the dedicated chapter [`../../documentation/README.md`](../../documentation/README.md) for ADR templates and lifecycle.
 
 ---
 
@@ -591,6 +591,6 @@ At senior scale, comment quality stops being a matter of individual taste and be
 - [professional.md](professional.md) — comment style on a single codebase, IDE/doc tooling for one project.
 - [Chapter README](../README.md) — the positive comment rules this level enforces.
 - [Code Reviews](../17-code-reviews/README.md) — the review process the comment heuristics plug into.
-- [Documentation and ADRs](../24-documentation-and-adrs/README.md) — where decision rationale lives instead of code comments.
+- [Documentation and ADRs](../../documentation/README.md) — where decision rationale lives instead of code comments.
 - [Refactoring](../../refactoring/README.md) — "delete the comment, improve the code" is a refactoring move.
 - [Anti-Patterns](../../anti-patterns/README.md) — comment smells as recognized anti-patterns.

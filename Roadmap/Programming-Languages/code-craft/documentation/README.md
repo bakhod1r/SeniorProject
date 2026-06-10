@@ -45,12 +45,10 @@ Code says *what* it does; documentation says *why it exists, how to use it, and 
 
 | Looks similar to | But here we cover | Lives in |
 |---|---|---|
-| `05-architecture-decision-records-adrs` | ADRs as an engineering practice | supersedes the stub at [Clean Code → 24](../clean-code/24-documentation-and-adrs/) |
+| `05-architecture-decision-records-adrs` | ADRs as an engineering practice | (replaces the former Clean Code ch. 24 stub, now removed) |
 | `02-code-comments-and-docstrings` | docstrings & doc generation | inline comment *style* → [Clean Code → Comments](../clean-code/03-comments/) |
 | `04-api-and-reference-documentation` | reference docs as a craft | API-doc *tooling* → [Backend → API Documentation Tools](../../../Backend/api-design/05-api-documentation-tools/) |
 | whole roadmap | the engineer's documentation practice | the *writing career* → [Soft-Skills → Technical Writer](../../../Soft-Skills/technical-writer/) |
-
-> **Note:** [Clean Code → 24 Documentation & ADRs](../clean-code/24-documentation-and-adrs/) is a single stub topic that this section supersedes. Recommend converting it to a pointer here (left as-is for now to preserve clean-code numbering).
 
 ---
 

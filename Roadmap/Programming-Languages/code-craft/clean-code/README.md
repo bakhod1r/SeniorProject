@@ -67,7 +67,7 @@
 | [19](19-modules-and-packages/README.md) | Modules & Packages | Public/private boundary, circular deps, layering, package-by-feature |
 | [20](20-cognitive-load/README.md) | Cognitive Load | Cyclomatic/cognitive complexity metrics, rule of 7±2, measuring "clean" |
 | [21](21-boy-scout-rule/README.md) | Boy Scout Rule | "Leave it cleaner than you found it" — incremental, continuous cleanup as habit |
-| [24](24-documentation-and-adrs/README.md) | Documentation & ADRs | READMEs, runbooks, decision records — the *why* outside the code |
+| 24 | Documentation & ADRs → *moved* | Now its own section: [code-craft/documentation](../documentation/README.md) |
 | [25](25-clean-commits-and-version-control/README.md) | Clean Commits & VCS Hygiene | Atomic commits, intent-revealing messages, bisectable history |
 
 ---

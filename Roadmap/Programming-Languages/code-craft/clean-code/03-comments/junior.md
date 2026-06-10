@@ -360,7 +360,7 @@ def transfer(from_acct: AccountId, to_acct: AccountId, amount: int) -> Transacti
     ...
 ```
 
-> **Scope note:** document **public** API surfaces. Private helpers usually don't need doc comments — if a private function needs a paragraph to explain it, that's a hint to rename or split it instead. Deeper treatment of API docs lives in [../24-documentation-and-adrs/README.md](../24-documentation-and-adrs/README.md).
+> **Scope note:** document **public** API surfaces. Private helpers usually don't need doc comments — if a private function needs a paragraph to explain it, that's a hint to rename or split it instead. Deeper treatment of API docs lives in [../../documentation/README.md](../../documentation/README.md).
 
 ---
 
@@ -760,6 +760,6 @@ It's **good** when it's short-lived, explains what's missing and why it's deferr
 - [senior.md](senior.md) — comments as a design signal, API documentation strategy, and team-level conventions.
 - [Chapter README](../README.md) — the full scope of the Comments chapter.
 - [Meaningful Names](../01-meaningful-names/README.md) — the first line of defense: a good name removes the need for a comment.
-- [Documentation and ADRs](../24-documentation-and-adrs/README.md) — where larger, durable documentation (beyond inline comments) belongs.
+- [Documentation and ADRs](../../documentation/README.md) — where larger, durable documentation (beyond inline comments) belongs.
 - [Refactoring](../../refactoring/README.md) — Extract Method and Rename are how you "delete a comment by improving the code."
 - [Anti-Patterns](../../anti-patterns/README.md) — commented-out code, journal comments, and friends as recognized anti-patterns.

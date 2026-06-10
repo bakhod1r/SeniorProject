@@ -462,6 +462,6 @@ Two populations of comments obey opposite economics: **public doc-comments** are
 - [`senior.md`](senior.md) — comments as architecture: ADRs, doc generation in CI, doc-comment linting, organization-wide conventions.
 - [Comments — chapter README](../README.md) — the positive rules and the anti-pattern catalog.
 - [Meaningful Names](../01-meaningful-names/README.md) — the first line of defense: a good name removes the need for a comment.
-- [Documentation and ADRs](../24-documentation-and-adrs/README.md) — where the big WHYs live when they outgrow a source comment.
+- [Documentation and ADRs](../../documentation/README.md) — where the big WHYs live when they outgrow a source comment.
 - [Code Reviews](../17-code-reviews/README.md) — reviewing comments against code, and routing journal info to commit messages.
 - [Refactoring](../../refactoring/README.md) — "replace comment with a well-named extraction" is a core refactoring move.

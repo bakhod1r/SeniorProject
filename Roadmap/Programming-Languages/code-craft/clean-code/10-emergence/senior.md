@@ -443,6 +443,6 @@ At team scale, emergent design is a *funded bet* that changing your mind stays c
 - [professional.md](professional.md) — emergent design as an individual practice across a service
 - [Chapter README](../README.md) — the positive rules of emergent design
 - [Classes (clean-code ch. 09)](../09-classes/README.md) — cohesion and SRP, the unit that emerges
-- [Documentation and ADRs (clean-code ch. 24)](../24-documentation-and-adrs/README.md) — recording deliberate decisions in depth
+- [Documentation & ADRs (code-craft/documentation)](../../documentation/README.md) — recording deliberate decisions in depth
 - [Refactoring](../../refactoring/README.md) — the mechanics that keep design changeable
 - [Anti-Patterns](../../anti-patterns/README.md) — speculative generality, the Big Ball of Mud, and the wrong abstraction as named smells
