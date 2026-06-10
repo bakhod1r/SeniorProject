@@ -4,686 +4,176 @@
   {{ super() }}
   <style>
     /* ================================================================
-       Senior Project — terminal / phosphor hacker theme
-       Pure dark + monospace + phosphor green accent
+       Senior Stack — roadmap.sh-style home (dark-first, green accent,
+       monospace). Tokens vary per palette (slate / default / sepia).
        ================================================================ */
-
     .sp-home {
-      /* dark / phosphor — default tokens (slate scheme) */
-      --sp-bg:      #050505;
-      --sp-bg-soft: #0a0a0a;
-      --sp-fg:      #d4d4d4;
-      --sp-fg-dim:  #909090;
-      --sp-fg-deep: #3a3a3a;
-      --sp-line:    #1a1a1a;
-      --sp-line-strong: #2a2a2a;
-      --sp-green:   #39ff7a;
-      --sp-green-dim: #1f8a3e;
-
-      /* surface tokens — vary per scheme */
-      --sp-window-bg:   rgba(10, 10, 10, 0.85);
-      --sp-cell-bg:     rgba(20, 20, 20, 0.4);
-      --sp-titlebar-bg: linear-gradient(to bottom, #1a1a1a, #0e0e0e);
-      --sp-path:        #6fa8dc;
-      --sp-shadow:      0 30px 80px rgba(0, 0, 0, 0.6);
-
-      /* hacker-only visual effects (rain / scanlines / vignette) */
-      --sp-rain-display:      block;
-      --sp-scanlines-display: block;
-      --sp-vignette-display:  block;
+      --sp-bg:        #0a0a0c;
+      --sp-bg-soft:   #101013;
+      --sp-surface:   #15161a;
+      --sp-surface-soft: #0f1012;
+      --sp-fg:        #e6e6e6;
+      --sp-fg-dim:    #8a8f98;
+      --sp-fg-deep:   #565b63;
+      --sp-line:      #2a2d35;
+      --sp-line-soft: #1d1f25;
+      --sp-green:     #39ff7a;
 
       position: relative;
-      isolation: isolate;
       min-height: calc(100vh - 3rem);
-      padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem) clamp(2.5rem, 7vw, 5rem);
+      padding: 0 0 3rem;
       background: var(--sp-bg);
       color: var(--sp-fg);
       font-family: "Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 14px;
-      line-height: 1.55;
-      overflow: hidden;
-    }
-
-    /* light scheme — warm off-white, darker phosphor */
-    [data-md-color-scheme="default"] .sp-home {
-      --sp-bg:      #fafaf7;
-      --sp-bg-soft: #f0f0eb;
-      --sp-fg:      #1a1a1a;
-      --sp-fg-dim:  #4a4a4a;
-      --sp-fg-deep: #8a8a82;
-      --sp-line:    #e4e4dc;
-      --sp-line-strong: #d8d8d2;
-      --sp-green:   #1f8a3e;
-      --sp-green-dim: #15662c;
-
-      --sp-window-bg:   #ffffff;
-      --sp-cell-bg:     #f4f4ef;
-      --sp-titlebar-bg: linear-gradient(to bottom, #ebebe5, #f0f0eb);
-      --sp-path:        #1a6bb8;
-      --sp-shadow:      0 18px 50px rgba(40, 40, 30, 0.10);
-
-      --sp-rain-display:      none;
-      --sp-scanlines-display: none;
-      --sp-vignette-display:  none;
-    }
-
-    /* sepia scheme — paper / warm reading mode */
-    [data-md-color-scheme="senior-sepia"] .sp-home {
-      --sp-bg:      #f5ecd9;
-      --sp-bg-soft: #ece2c8;
-      --sp-fg:      #2a2a24;
-      --sp-fg-dim:  #4a4a3e;
-      --sp-fg-deep: #8a8868;
-      --sp-line:    #e2d6b8;
-      --sp-line-strong: #d8cdb2;
-      --sp-green:   #7a4a1f;
-      --sp-green-dim: #5a3413;
-
-      --sp-window-bg:   #fbf5e6;
-      --sp-cell-bg:     #ece2c8;
-      --sp-titlebar-bg: linear-gradient(to bottom, #e2d6b8, #ece2c8);
-      --sp-path:        #5a3413;
-      --sp-shadow:      0 18px 50px rgba(80, 60, 30, 0.10);
-
-      --sp-rain-display:      none;
-      --sp-scanlines-display: none;
-      --sp-vignette-display:  none;
-    }
-
-    /* Three.js canvas — hacker rain, dark scheme only */
-    .sp-canvas {
-      display: var(--sp-rain-display);
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 0;
-      opacity: 0;
-      transition: opacity 1.6s ease-out;
-    }
-    .sp-canvas.is-ready { opacity: 0.18; }
-
-    /* CRT scanlines + vignette — dark scheme only */
-    .sp-scanlines {
-      display: var(--sp-scanlines-display);
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 1;
-      background:
-        repeating-linear-gradient(
-          to bottom,
-          transparent 0,
-          transparent 2px,
-          rgba(255, 255, 255, 0.018) 2px,
-          rgba(255, 255, 255, 0.018) 3px
-        );
-      mix-blend-mode: screen;
-    }
-    .sp-vignette {
-      display: var(--sp-vignette-display);
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 1;
-      background: radial-gradient(
-        ellipse at center,
-        transparent 30%,
-        rgba(0, 0, 0, 0.7) 100%
-      );
-    }
-
-    .sp-shell {
-      position: relative;
-      z-index: 2;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    /* ---- terminal window frame ---- */
-    .sp-window {
-      border: 1px solid var(--sp-line-strong);
-      border-radius: 8px;
-      background: var(--sp-window-bg);
-      backdrop-filter: blur(8px);
-      box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--sp-green) 4%, transparent),
-        var(--sp-shadow),
-        0 8px 24px color-mix(in srgb, var(--sp-green) 5%, transparent);
-      overflow: hidden;
-      animation: sp-fade 0.6s 0.05s both ease-out;
-    }
-    .sp-titlebar {
-      display: flex;
-      align-items: center;
-      gap: 0.85rem;
-      padding: 0.55rem 0.9rem;
-      background: var(--sp-titlebar-bg);
-      border-bottom: 1px solid var(--sp-line-strong);
-      font-size: 0.72rem;
-      color: var(--sp-fg-dim);
-      letter-spacing: 0.05em;
-    }
-    .sp-dots {
-      display: inline-flex;
-      gap: 6px;
-    }
-    .sp-dots .dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-    .sp-dots .dot-r { background: #ff5f57; }
-    .sp-dots .dot-y { background: #febc2e; }
-    .sp-dots .dot-g { background: #28c840; }
-    .sp-titlebar-title {
-      flex: 1;
-      text-align: center;
-      color: var(--sp-fg);
-      font-weight: 500;
-    }
-    .sp-titlebar-meta {
-      color: var(--sp-fg-deep);
-      font-size: 0.7rem;
-    }
-    .sp-window-pane {
-      padding: clamp(1rem, 2.5vw, 1.75rem);
-    }
-
-    /* ---- inline typer cursor ---- */
-    .sp-cursor-inline {
-      width: 0.55em;
-      height: 1em;
-      vertical-align: -0.18em;
-      margin-left: 0.05em;
-      background: var(--sp-green);
-      box-shadow: 0 0 8px color-mix(in srgb, var(--sp-green) 60%, transparent);
-      display: inline-block;
-      animation: sp-blink 1.05s steps(2) infinite;
-    }
-    .sp-typer-line {
-      min-height: 1.5em;
-    }
-    .sp-typer-line .cmd {
-      color: var(--sp-fg);
-    }
-
-    /* ---- card "is-active" glow when its command is being typed ---- */
-    .sp-chapter.is-active {
-      border-color: var(--sp-green) !important;
-      box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--sp-green) 50%, transparent),
-        0 0 18px color-mix(in srgb, var(--sp-green) 18%, transparent) inset,
-        0 0 30px color-mix(in srgb, var(--sp-green) 15%, transparent);
-      transform: translateY(-3px);
-    }
-    .sp-chapter.is-active .sp-chapter-title {
-      color: var(--sp-green);
-      text-shadow: 0 0 10px color-mix(in srgb, var(--sp-green) 50%, transparent);
-    }
-    .sp-chapter.is-active .sp-window-title::before {
-      color: var(--sp-green);
-    }
-    .sp-chapter.is-active .sp-chapter-arrow {
-      color: var(--sp-green);
-      transform: translateX(6px);
-    }
-    .sp-chapter {
-      transition:
-        border-color 0.4s ease,
-        transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
-        box-shadow 0.4s ease;
-    }
-
-    /* status bar */
-    .sp-statusbar {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-      padding: 0.5rem 0.85rem;
-      border: 1px solid var(--sp-line-strong);
-      background: var(--sp-bg-soft);
-      font-size: 0.72rem;
-      color: var(--sp-fg-dim);
-      letter-spacing: 0.06em;
-      margin-bottom: 1.5rem;
-      animation: sp-fade 0.5s ease-out;
-    }
-    .sp-statusbar .sp-led {
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--sp-green);
-      box-shadow: 0 0 6px color-mix(in srgb, var(--sp-green) 70%, transparent);
-      margin-right: 0.5em;
-      vertical-align: middle;
-      animation: sp-blink 2s steps(2) infinite;
-    }
-    .sp-statusbar .ok { color: var(--sp-green); }
-    .sp-statusbar .v { color: var(--sp-fg); }
-
-    /* boot lines */
-    .sp-boot {
-      margin: 0 0 1.4rem;
-      color: var(--sp-fg-dim);
-      font-size: 0.84rem;
-      list-style: none;
-      padding: 0;
-    }
-    .sp-boot li {
-      opacity: 0;
-      transform: translateY(4px);
-      animation: sp-line-in 0.45s forwards ease-out;
-    }
-    .sp-boot li:nth-child(1) { animation-delay: 0.10s; }
-    .sp-boot li:nth-child(2) { animation-delay: 0.30s; }
-    .sp-boot li:nth-child(3) { animation-delay: 0.50s; }
-    .sp-boot li:nth-child(4) { animation-delay: 0.70s; }
-    .sp-boot li:nth-child(5) { animation-delay: 0.90s; }
-    .sp-boot .ok { color: var(--sp-green); }
-    .sp-boot .num { color: var(--sp-fg); }
-    .sp-boot .arr { color: var(--sp-green-dim); margin-right: 0.6em; }
-
-    /* prompt + command */
-    .sp-prompt {
-      margin: 0 0 0.4rem;
-      font-size: 0.92rem;
-      color: var(--sp-fg);
-      animation: sp-fade 0.5s 1.0s both ease-out;
-    }
-    .sp-prompt .user { color: var(--sp-green); }
-    .sp-prompt .at, .sp-prompt .colon, .sp-prompt .path { color: var(--sp-fg-dim); }
-    .sp-prompt .path { color: var(--sp-path); } /* small blue for path, allowed for terminal feel */
-    .sp-prompt .dollar { color: var(--sp-green); margin: 0 0.5em; }
-    .sp-prompt .cmd { color: var(--sp-fg); }
-
-    /* MOTD-style login banner (replaces the old huge prompt h1) */
-    .sp-motd {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      margin: 1rem 0 0.8rem;
-      padding: 0.6rem 0.85rem;
-      border-top: 1px solid var(--sp-line);
-      border-bottom: 1px solid var(--sp-line);
-      background: color-mix(in srgb, var(--sp-green) 1.5%, transparent);
-      font-family: "Intel One Mono", ui-monospace, monospace;
-      font-weight: 400;
-      font-size: 0.84rem;
-      line-height: 1.55;
-      color: var(--sp-fg);
-      letter-spacing: 0;
-      animation: sp-fade 0.6s 1.05s both ease-out;
-    }
-    .sp-motd-line { display: block; }
-    .sp-motd .dim { color: var(--sp-fg-dim); }
-    .sp-motd .green { color: var(--sp-green); }
-    .sp-cursor {
-      display: inline-block;
-      width: 0.5em;
-      height: 0.95em;
-      background: var(--sp-green);
-      vertical-align: -0.05em;
-      margin-left: 0.05em;
-      box-shadow: 0 0 8px color-mix(in srgb, var(--sp-green) 60%, transparent);
-      animation: sp-blink 1.05s steps(2) infinite;
-    }
-
-    .sp-tagline {
-      max-width: 70ch;
-      margin: 0 0 1.4rem;
-      color: var(--sp-fg-dim);
-      font-size: 0.92rem;
       line-height: 1.6;
-      animation: sp-fade 0.6s 1.4s both ease-out;
     }
-    .sp-tagline strong { color: var(--sp-fg); font-weight: 500; }
-
-    /* stats panel */
-    .sp-stats {
-      margin: 1.4rem 0 2rem;
-      padding: 0.85rem 1rem;
-      border: 1px solid var(--sp-line-strong);
-      background: color-mix(in srgb, var(--sp-green) 2%, transparent);
-      font-size: 0.84rem;
-      animation: sp-fade 0.6s 1.6s both ease-out;
+    [data-md-color-scheme="default"] .sp-home {
+      --sp-bg:        #fafaf7;
+      --sp-bg-soft:   #f0f0eb;
+      --sp-surface:   #ffffff;
+      --sp-surface-soft: #f4f4ef;
+      --sp-fg:        #1a1a1a;
+      --sp-fg-dim:    #5a5f55;
+      --sp-fg-deep:   #8a8f82;
+      --sp-line:      #d8d8d2;
+      --sp-line-soft: #e4e4dc;
+      --sp-green:     #1f8a3e;
     }
-    .sp-stats .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0 2rem;
-      row-gap: 0.3rem;
-      color: var(--sp-fg-dim);
-    }
-    .sp-stats strong {
-      color: var(--sp-green);
-      font-weight: 500;
-      font-variant-numeric: tabular-nums;
-      margin-right: 0.5em;
-    }
-
-    /* chapter prompt + grid */
-    .sp-cmd-line {
-      margin: 2.3rem 0 0.8rem;
-      color: var(--sp-fg-dim);
-      font-size: 0.86rem;
-      animation: sp-fade 0.6s 1.8s both ease-out;
-    }
-    .sp-cmd-line .dollar { color: var(--sp-green); }
-    .sp-cmd-line .cmd { color: var(--sp-fg); }
-    .sp-cmd-line .user  { color: var(--sp-green); }
-    .sp-cmd-line .host  { color: var(--sp-fg); }
-    .sp-cmd-line .path  { color: var(--sp-path); }
-    .sp-cmd-line .dim   { color: var(--sp-fg-dim); }
-    .sp-cmd-line .green { color: var(--sp-green); margin-right: 0.5em; }
-
-    .sp-chapters {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.9rem;
-    }
-    @media (max-width: 900px) {
-      .sp-chapters { grid-template-columns: 1fr; }
+    [data-md-color-scheme="senior-sepia"] .sp-home {
+      --sp-bg:        #f5ecd9;
+      --sp-bg-soft:   #ece2c8;
+      --sp-surface:   #fbf5e6;
+      --sp-surface-soft: #ece2c8;
+      --sp-fg:        #2a2a24;
+      --sp-fg-dim:    #5a5848;
+      --sp-fg-deep:   #8a8868;
+      --sp-line:      #d8cdb2;
+      --sp-line-soft: #e2d6b8;
+      --sp-green:     #7a4a1f;
     }
 
-    /* chapter window: TUI-style panel */
-    .sp-chapter {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      min-height: 240px;
-      background: var(--sp-bg-soft);
-      border: 1px solid var(--sp-line-strong);
-      color: var(--sp-fg);
-      text-decoration: none;
-      transition: border-color 0.2s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-      animation: sp-rise 0.7s both cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* hero */
+    .sp-hero {
+      text-align: center;
+      padding: clamp(2.5rem, 6vw, 4rem) 1.25rem clamp(2rem, 5vw, 3rem);
+      background: radial-gradient(120% 100% at 50% 0, var(--sp-bg-soft) 0, var(--sp-bg) 65%);
     }
-    .sp-chapter:nth-child(1) { animation-delay: 1.95s; }
-    .sp-chapter:nth-child(2) { animation-delay: 2.05s; }
-    .sp-chapter:nth-child(3) { animation-delay: 2.15s; }
-
-    .sp-chapter:hover {
-      border-color: var(--sp-green);
-      transform: translateY(-2px);
-    }
-    .sp-chapter:hover .sp-chapter-title { color: var(--sp-green); text-shadow: 0 0 8px color-mix(in srgb, var(--sp-green) 40%, transparent); }
-    .sp-chapter:hover .sp-chapter-arrow { color: var(--sp-green); transform: translateX(6px); }
-    .sp-chapter:hover .sp-window-title::before { color: var(--sp-green); }
-
-    /* TUI window title bar */
-    .sp-window-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.5rem 0.85rem;
-      border-bottom: 1px solid var(--sp-line-strong);
-      font-size: 0.72rem;
-      color: var(--sp-fg-dim);
-      letter-spacing: 0.08em;
-    }
-    .sp-window-title::before {
-      content: "▶";
-      color: var(--sp-fg-deep);
-      margin-right: 0.55em;
-      transition: color 0.2s ease;
-    }
-    .sp-window-title .ord {
-      color: var(--sp-green);
-      font-weight: 500;
-    }
-
-    .sp-window-body {
-      padding: 1.1rem 0.85rem 0.85rem;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 0.85rem;
-    }
-
-    .sp-chapter-title {
-      font-family: "Intel One Mono", ui-monospace, monospace;
-      font-weight: 600;
-      font-size: clamp(1.25rem, 2vw, 1.65rem);
-      line-height: 1.1;
-      letter-spacing: -0.02em;
-      margin: 0;
-      color: var(--sp-fg);
-      transition: color 0.25s ease, text-shadow 0.25s ease;
-    }
-
-    .sp-chapter-lead {
-      font-size: 0.82rem;
-      line-height: 1.55;
-      color: var(--sp-fg-dim);
-      margin: 0;
-      flex: 1;
-    }
-
-    .sp-chapter-foot {
-      display: flex;
-      align-items: center;
-      gap: 0.55rem;
-      padding-top: 0.55rem;
-      border-top: 1px dashed var(--sp-line-strong);
-      font-size: 0.74rem;
-      color: var(--sp-fg);
-      letter-spacing: 0.06em;
-    }
-    .sp-chapter-foot .arrow-prompt { color: var(--sp-green); margin-right: 0.4em; }
-    .sp-chapter-arrow {
-      margin-left: auto;
-      color: var(--sp-fg-dim);
-      transition: transform 0.35s ease, color 0.2s ease;
-    }
-
-    /* footer / colophon */
-    .sp-footer {
-      display: flex;
-      justify-content: space-between;
-      gap: 1.5rem;
-      flex-wrap: wrap;
-      margin-top: 2.5rem;
-      padding-top: 0.85rem;
-      border-top: 1px dashed var(--sp-line-strong);
-      font-size: 0.72rem;
-      color: var(--sp-fg-deep);
-      letter-spacing: 0.05em;
-      animation: sp-fade 0.6s 2.4s both ease-out;
-    }
-    .sp-footer a {
-      color: var(--sp-fg-dim);
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: color 0.2s ease, border-color 0.2s ease;
-    }
-    .sp-footer a:hover {
-      color: var(--sp-green);
-      border-color: var(--sp-green);
-    }
-
-    /* expanded directory listings — sections under chapter cards */
-    .sp-section {
-      margin-top: 1.6rem;
-      animation: sp-fade 0.7s 2.3s both ease-out;
-    }
-    .sp-section-prompt {
-      font-size: 0.78rem;
-      color: var(--sp-fg-dim);
-      margin: 0 0 0.5rem 0.1rem;
-      letter-spacing: 0.04em;
-    }
-    .sp-section-prompt .user  { color: var(--sp-green); }
-    .sp-section-prompt .host  { color: var(--sp-fg); }
-    .sp-section-prompt .path  { color: var(--sp-path); }
-    .sp-section-prompt .dim   { color: var(--sp-fg-dim); }
-    .sp-section-prompt .green { color: var(--sp-green); margin-right: 0.5em; }
-    .sp-section-prompt .cmd   { color: var(--sp-fg); }
-    .sp-section-prompt .arg   { color: var(--sp-path); }
-
-    .sp-listing-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 0.65rem;
-      padding: 0.95rem 0.85rem;
-    }
-    .sp-listing-cell {
-      border: 1px solid var(--sp-line);
-      background: var(--sp-cell-bg);
-      padding: 0.6rem 0.7rem;
-      transition: border-color 0.2s ease;
-    }
-    .sp-listing-cell:hover { border-color: var(--sp-line-strong); }
-    .sp-listing-cell .head {
-      color: var(--sp-green);
-      font-weight: 600;
-      font-size: 0.74rem;
-      letter-spacing: 0.06em;
-      display: block;
-      margin-bottom: 0.45rem;
-      padding-bottom: 0.3rem;
-      border-bottom: 1px dashed var(--sp-line-strong);
-    }
-    .sp-listing-cell ul {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-    }
-    .sp-listing-cell li {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 0.5rem;
-      padding: 0.5rem 0;
-      font-size: 0.75rem;
-      color: var(--sp-fg-dim);
-    }
-    .sp-listing-cell li a {
-      color: var(--sp-fg);
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: color 0.2s ease, border-color 0.2s ease;
-    }
-    .sp-listing-cell li a:hover {
-      color: var(--sp-green);
-      border-color: var(--sp-green);
-    }
-    .sp-listing-cell li .tag {
-      flex-shrink: 0;
-      font-size: 0.66rem;
-      letter-spacing: 0.06em;
-      color: var(--sp-fg-deep);
-    }
-    .sp-listing-cell li .tag.live { color: var(--sp-green); }
-
-    /* system design — 4 levels grid */
-    .sp-levels {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0.65rem;
-      padding: 0.95rem 0.85rem;
-    }
-    @media (max-width: 900px) { .sp-levels { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 520px) { .sp-levels { grid-template-columns: 1fr; } }
-    .sp-level {
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-      border: 1px solid var(--sp-line);
-      background: var(--sp-cell-bg);
-      padding: 0.7rem 0.75rem;
-      text-decoration: none;
-      color: var(--sp-fg);
-      transition: border-color 0.2s ease, transform 0.2s ease;
-    }
-    .sp-level:hover {
-      border-color: var(--sp-green);
-      transform: translateY(-2px);
-    }
-    .sp-level:hover .name { color: var(--sp-green); }
-    .sp-level .ord {
-      color: var(--sp-green);
+    .sp-pill {
+      display: inline-block;
       font-size: 0.7rem;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--sp-green);
+      border: 1px solid var(--sp-line);
+      border-radius: 999px;
+      padding: 5px 13px;
+      margin-bottom: 1.25rem;
     }
-    .sp-level .name {
-      font-size: 0.95rem;
-      font-weight: 600;
-      transition: color 0.2s ease;
-    }
-    .sp-level .lead {
-      font-size: 0.74rem;
-      color: var(--sp-fg-dim);
-      line-height: 1.5;
-    }
-
-    /* leetcode — latest problems table */
-    .sp-leet { padding: 0.65rem 0.85rem 0.95rem; }
-    .sp-leet table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.78rem;
-    }
-    .sp-leet th {
-      text-align: left;
-      font-size: 0.68rem;
-      letter-spacing: 0.08em;
-      color: var(--sp-fg-deep);
-      font-weight: 500;
-      padding: 0.4rem 0.6rem;
-      border-bottom: 1px dashed var(--sp-line-strong);
-    }
-    .sp-leet td {
-      padding: 0.36rem 0.6rem;
-      border-bottom: 1px solid var(--sp-line);
-      color: var(--sp-fg-dim);
-    }
-    .sp-leet tr:last-child td { border-bottom: none; }
-    .sp-leet td a {
+    .sp-hero h1 {
+      font-family: "Intel One Mono", ui-monospace, monospace;
+      font-size: clamp(2rem, 5vw, 2.7rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.05;
+      margin: 0 0 1rem;
       color: var(--sp-fg);
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: color 0.2s ease, border-color 0.2s ease;
     }
-    .sp-leet td a:hover {
-      color: var(--sp-green);
-      border-color: var(--sp-green);
-    }
-    .sp-leet .num {
-      color: var(--sp-green);
-      font-variant-numeric: tabular-nums;
-      width: 3.5rem;
-    }
-    .sp-leet .diff {
-      width: 4.5rem;
-      font-size: 0.68rem;
-      letter-spacing: 0.06em;
-      text-align: right;
-    }
-    .sp-leet .diff.easy   { color: var(--sp-green); }
-    .sp-leet .diff.medium { color: #f5d76e; }
-    .sp-leet .diff.hard   { color: #ff6b6b; }
-    .sp-leet-foot {
-      display: flex;
-      justify-content: space-between;
-      gap: 0.5rem;
-      margin: 0.7rem 0.05rem 0;
-      padding-top: 0.55rem;
-      border-top: 1px dashed var(--sp-line-strong);
-      font-size: 0.74rem;
+    .sp-hero h1::before { content: none; }   /* override site h1 "// " */
+    .sp-hero p {
+      max-width: 580px;
+      margin: 0 auto 1.6rem;
       color: var(--sp-fg-dim);
+      font-size: 0.95rem;
     }
-    .sp-leet-foot a {
-      color: var(--sp-green);
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
+    .sp-cta { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+    .sp-btn-primary {
+      background: var(--sp-green); color: var(--sp-bg);
+      font-weight: 700; font-size: 0.88rem;
+      padding: 12px 22px; border-radius: 8px; text-decoration: none;
+      transition: box-shadow 0.2s ease;
+    }
+    .sp-btn-primary:hover { box-shadow: 0 0 24px color-mix(in srgb, var(--sp-green) 35%, transparent); }
+    .sp-btn-ghost {
+      background: var(--sp-surface); color: var(--sp-fg);
+      font-weight: 600; font-size: 0.88rem;
+      padding: 12px 22px; border-radius: 8px;
+      border: 1px solid var(--sp-line); text-decoration: none;
       transition: border-color 0.2s ease;
     }
-    .sp-leet-foot a:hover { border-color: var(--sp-green); }
+    .sp-btn-ghost:hover { border-color: var(--sp-green); }
+    .sp-stats {
+      display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap;
+      margin-top: 2rem; color: var(--sp-fg-deep); font-size: 0.82rem;
+    }
+    .sp-stats b { color: var(--sp-green); font-size: 1.2rem; font-variant-numeric: tabular-nums; margin-right: 0.3em; }
+
+    /* accordion column */
+    .sp-wrap {
+      max-width: 920px; margin: 0 auto;
+      padding: 2rem 1.25rem 0;
+      display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    .sp-acc {
+      border: 1px solid var(--sp-line);
+      border-radius: 12px;
+      background: var(--sp-surface);
+      overflow: hidden;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .sp-acc.is-open {
+      border-color: color-mix(in srgb, var(--sp-green) 40%, var(--sp-line));
+      box-shadow: 0 0 24px color-mix(in srgb, var(--sp-green) 8%, transparent);
+    }
+    .sp-acc-head {
+      display: flex; align-items: center; gap: 0.85rem;
+      padding: 1rem 1.25rem; cursor: pointer; user-select: none;
+      background: none; border: 0; width: 100%; text-align: left;
+      font: inherit; color: inherit;
+    }
+    .sp-acc-head:hover .sp-acc-title { color: var(--sp-green); }
+    .sp-acc-chev { color: var(--sp-fg-deep); font-size: 0.8rem; transition: transform 0.25s ease, color 0.2s ease; }
+    .sp-acc.is-open .sp-acc-chev { transform: rotate(90deg); color: var(--sp-green); }
+    .sp-acc-title { font-weight: 700; font-size: 0.95rem; color: var(--sp-fg); transition: color 0.2s ease; letter-spacing: -0.01em; }
+    .sp-acc-meta { margin-left: auto; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sp-fg-deep); }
+    .sp-acc-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.28s ease; }
+    .sp-acc.is-open .sp-acc-body { grid-template-rows: 1fr; }
+    .sp-acc-inner { overflow: hidden; }
+
+    .sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; padding: 0.25rem 1rem 1.1rem; }
+    @media (max-width: 760px) { .sp-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .sp-grid { grid-template-columns: 1fr; } }
+
+    .sp-card {
+      background: var(--sp-surface-soft);
+      border: 1px solid var(--sp-line);
+      border-radius: 9px;
+      padding: 0.85rem 0.95rem;
+      font-weight: 600; font-size: 0.85rem; color: var(--sp-fg);
+      text-decoration: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+      transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+    .sp-card:hover { border-color: var(--sp-green); transform: translateY(-2px); }
+    .sp-card .sp-arrow { color: var(--sp-fg-deep); transition: transform 0.18s ease, color 0.18s ease; }
+    .sp-card:hover .sp-arrow { color: var(--sp-green); transform: translateX(3px); }
+    .sp-badge { background: var(--sp-green); color: var(--sp-bg); font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 5px; letter-spacing: 0.04em; }
+    .sp-card--soon {
+      background: transparent; border-style: dashed; border-color: var(--sp-line-soft);
+      color: var(--sp-fg-deep); cursor: not-allowed;
+    }
+    .sp-card--soon:hover { border-color: var(--sp-line-soft); transform: none; }
+    .sp-card--soon .sp-tag { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .sp-footer {
+      max-width: 920px; margin: 2rem auto 0;
+      padding: 1.25rem 1.25rem 0;
+      border-top: 1px dashed var(--sp-line);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;
+      color: var(--sp-fg-deep); font-size: 0.72rem;
+    }
+    .sp-footer a { color: var(--sp-fg-dim); text-decoration: none; }
+    .sp-footer a:hover { color: var(--sp-green); }
 
     /* tame Material chrome on home only */
     .md-main { background: var(--sp-bg); }
@@ -693,35 +183,8 @@
     .md-content__inner::before { display: none; }
     .md-sidebar { display: none; }
 
-    /* keyframes */
-    @keyframes sp-rise {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes sp-fade {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes sp-line-in {
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes sp-blink {
-      0%, 49% { opacity: 1; }
-      50%, 100% { opacity: 0; }
-    }
-
     @media (prefers-reduced-motion: reduce) {
-      .sp-home *,
-      .sp-home *::before,
-      .sp-home *::after {
-        animation: none !important;
-        transition: none !important;
-      }
-      .sp-canvas { display: none !important; }
-      .sp-boot li, .sp-motd, .sp-tagline, .sp-stats, .sp-cmd-line, .sp-chapter, .sp-footer {
-        opacity: 1 !important;
-        transform: none !important;
-      }
+      .sp-acc-body, .sp-acc-chev, .sp-card { transition: none !important; }
     }
   </style>
 {% endblock %}
@@ -730,531 +193,152 @@
   {{ super() }}
 
   <section class="sp-home" data-home>
-    <canvas class="sp-canvas" aria-hidden="true"></canvas>
-    <div class="sp-vignette" aria-hidden="true"></div>
-    <div class="sp-scanlines" aria-hidden="true"></div>
 
-    <div class="sp-shell">
-
-      <div class="sp-window">
-        <div class="sp-titlebar">
-          <span class="sp-dots">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-          </span>
-          <span class="sp-titlebar-title">senior@stack ─ ~/senior-project</span>
-          <span class="sp-titlebar-meta">tmux 0:zsh*</span>
-        </div>
-        <div class="sp-window-pane">
-
-      <div class="sp-statusbar">
-        <span><span class="sp-led" aria-hidden="true"></span><span class="v">SENIOR-PROJECT</span> &nbsp;v01 &nbsp;|&nbsp; <span class="ok">CONNECTED</span></span>
-        <span>2,131 ENTRIES &nbsp;|&nbsp; UTF-8 &nbsp;|&nbsp; LINE 01:01</span>
-        <span>BUILD <span class="ok">OK</span> &nbsp;|&nbsp; <span class="v">senior-stack.uz</span></span>
+    <div class="sp-hero">
+      <span class="sp-pill">A field guide for senior engineers</span>
+      <h1>Senior Stack Roadmaps</h1>
+      <p>50+ learning paths, 100 annotated Leetcode solutions, and system-design patterns — all in one structured place. Junior &rarr; senior.</p>
+      <div class="sp-cta">
+        <a class="sp-btn-primary" href="roadmap/">Browse Roadmaps &rarr;</a>
+        <a class="sp-btn-ghost" href="Leetcode/">100 Leetcode &rarr;</a>
       </div>
-
-      <ul class="sp-boot">
-        <li><span class="arr">&gt;</span> mounting /knowledge_base ............ <span class="ok">[ OK ]</span></li>
-        <li><span class="arr">&gt;</span> indexing <span class="num">50</span> roadmaps ................ <span class="ok">[ OK ]</span></li>
-        <li><span class="arr">&gt;</span> indexing <span class="num">100</span> problems ............... <span class="ok">[ OK ]</span></li>
-        <li><span class="arr">&gt;</span> ready</li>
-      </ul>
-
-      <h1 class="sp-motd" aria-label="Login banner">
-        <span class="sp-motd-line"><span class="dim">Last login:</span> Wed May 06 2026 from <span class="green">senior-stack.uz</span></span>
-        <span class="sp-motd-line"><span class="dim">Welcome to</span> <span class="green">senior</span> <span class="dim">·</span> 50 roadmaps online <span class="dim">·</span> 2,131 entries indexed</span>
-      </h1>
-
-      <p class="sp-tagline">
-        // engineering knowledge base. <strong>2,131 entries.</strong> self-maintained.
-      </p>
-
       <div class="sp-stats" data-facts>
-        <div class="row">
-          <span><strong data-count="50">0</strong>+ ROADMAPS</span>
-          <span><strong data-count="100">0</strong> LEETCODE</span>
-          <span><strong data-count="10">0</strong> FILES&nbsp;/&nbsp;TOPIC</span>
-          <span><strong data-count="6">0</strong> LEVELS</span>
-          <span><strong data-count="2131">0</strong> ENTRIES</span>
-        </div>
+        <span><b data-count="50">0</b>+ roadmaps</span>
+        <span><b data-count="100">0</b> leetcode</span>
+        <span><b data-count="6">0</b> levels</span>
+        <span><b data-count="2131">0</b> entries</span>
+      </div>
+    </div>
+
+    <div class="sp-wrap">
+
+      <div class="sp-acc is-open">
+        <button class="sp-acc-head" type="button" aria-expanded="true"
+          onclick="this.parentElement.classList.toggle('is-open');this.setAttribute('aria-expanded',this.parentElement.classList.contains('is-open'))">
+          <span class="sp-acc-chev" aria-hidden="true">&#9654;</span>
+          <span class="sp-acc-title">Languages</span>
+          <span class="sp-acc-meta">4 live &middot; 3 soon</span>
+        </button>
+        <div class="sp-acc-body"><div class="sp-acc-inner"><div class="sp-grid">
+          <a class="sp-card" href="Roadmap/Programming-Languages/languages/golang/">Go <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/languages/python/">Python <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/languages/java/">Java <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/languages/typescript/">TypeScript <span class="sp-arrow">&rarr;</span></a>
+          <span class="sp-card sp-card--soon">Rust <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">SQL <span class="sp-tag">soon</span></span>
+        </div></div></div>
       </div>
 
-      <p class="sp-cmd-line sp-typer-line">
-        <span class="user">root</span><span class="dim">@</span><span class="host">senior</span><span class="dim">:</span><span class="path">~</span><span class="green">#</span>
-        <span class="cmd"><span data-typer></span><span class="sp-cursor sp-cursor-inline" aria-hidden="true"></span></span>
-      </p>
+      <div class="sp-acc is-open">
+        <button class="sp-acc-head" type="button" aria-expanded="true"
+          onclick="this.parentElement.classList.toggle('is-open');this.setAttribute('aria-expanded',this.parentElement.classList.contains('is-open'))">
+          <span class="sp-acc-chev" aria-hidden="true">&#9654;</span>
+          <span class="sp-acc-title">Code Craft</span>
+          <span class="sp-acc-meta">6 topics</span>
+        </button>
+        <div class="sp-acc-body"><div class="sp-acc-inner"><div class="sp-grid">
+          <a class="sp-card" href="Roadmap/Programming-Languages/code-craft/clean-code/">Clean Code <span class="sp-badge">NEW</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/code-craft/design-patterns/">Design Patterns <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/code-craft/refactoring/">Refactoring <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/code-craft/anti-patterns/">Anti-patterns <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/code-craft/functional-programming/">Functional Programming <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/object-oriented-programming/">OOP <span class="sp-arrow">&rarr;</span></a>
+        </div></div></div>
+      </div>
 
-      <nav class="sp-chapters" aria-label="Sections" data-chapters>
-        <a class="sp-chapter" href="roadmap/" data-chapter>
-          <div class="sp-window-title">
-            <span><span class="ord">[01]</span> &nbsp;curriculum/</span>
-            <span>50+ paths</span>
-          </div>
-          <div class="sp-window-body">
-            <h2 class="sp-chapter-title">roadmaps/</h2>
-            <p class="sp-chapter-lead">
-              50+ learning paths. junior &rarr; senior. interview drills, debug cases, optimization notes.
-            </p>
-            <span class="sp-chapter-foot">
-              <span class="arrow-prompt">&gt;</span> cd ./roadmaps
-              <span class="sp-chapter-arrow" aria-hidden="true">&rarr;</span>
-            </span>
-          </div>
-        </a>
+      <div class="sp-acc">
+        <button class="sp-acc-head" type="button" aria-expanded="false"
+          onclick="this.parentElement.classList.toggle('is-open');this.setAttribute('aria-expanded',this.parentElement.classList.contains('is-open'))">
+          <span class="sp-acc-chev" aria-hidden="true">&#9654;</span>
+          <span class="sp-acc-title">Engineering Depth</span>
+          <span class="sp-acc-meta">4 topics</span>
+        </button>
+        <div class="sp-acc-body"><div class="sp-acc-inner"><div class="sp-grid">
+          <a class="sp-card" href="Roadmap/Programming-Languages/language-internals/">Language Internals <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/diagnostics/">Diagnostics <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/quality-engineering/">Quality Engineering <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="Roadmap/Programming-Languages/engineering-thinking/">Engineering Thinking <span class="sp-arrow">&rarr;</span></a>
+        </div></div></div>
+      </div>
 
-        <a class="sp-chapter" href="Leetcode/" data-chapter>
-          <div class="sp-window-title">
-            <span><span class="ord">[02]</span> &nbsp;algorithms/</span>
-            <span>100 problems</span>
-          </div>
-          <div class="sp-window-body">
-            <h2 class="sp-chapter-title">leetcode/</h2>
-            <p class="sp-chapter-lead">
-              100 annotated solutions. intuition + complexity + visual walkthroughs. indexed.
-            </p>
-            <span class="sp-chapter-foot">
-              <span class="arrow-prompt">&gt;</span> cd ./leetcode
-              <span class="sp-chapter-arrow" aria-hidden="true">&rarr;</span>
-            </span>
-          </div>
-        </a>
+      <div class="sp-acc">
+        <button class="sp-acc-head" type="button" aria-expanded="false"
+          onclick="this.parentElement.classList.toggle('is-open');this.setAttribute('aria-expanded',this.parentElement.classList.contains('is-open'))">
+          <span class="sp-acc-chev" aria-hidden="true">&#9654;</span>
+          <span class="sp-acc-title">Data &amp; Algorithms</span>
+          <span class="sp-acc-meta">1 topic</span>
+        </button>
+        <div class="sp-acc-body"><div class="sp-acc-inner"><div class="sp-grid">
+          <a class="sp-card" href="Roadmap/Data/datastructures-and-algorithms/">Data Structures &amp; Algorithms <span class="sp-arrow">&rarr;</span></a>
+        </div></div></div>
+      </div>
 
-        <a class="sp-chapter" href="system-design/" data-chapter>
-          <div class="sp-window-title">
-            <span><span class="ord">[03]</span> &nbsp;architecture/</span>
-            <span>4 levels</span>
-          </div>
-          <div class="sp-window-body">
-            <h2 class="sp-chapter-title">system_design/</h2>
-            <p class="sp-chapter-lead">
-              production patterns. sharding, replication, queues, caches. 4 levels.
-            </p>
-            <span class="sp-chapter-foot">
-              <span class="arrow-prompt">&gt;</span> cd ./system-design
-              <span class="sp-chapter-arrow" aria-hidden="true">&rarr;</span>
-            </span>
-          </div>
-        </a>
-      </nav>
+      <div class="sp-acc">
+        <button class="sp-acc-head" type="button" aria-expanded="false"
+          onclick="this.parentElement.classList.toggle('is-open');this.setAttribute('aria-expanded',this.parentElement.classList.contains('is-open'))">
+          <span class="sp-acc-chev" aria-hidden="true">&#9654;</span>
+          <span class="sp-acc-title">Practice</span>
+          <span class="sp-acc-meta">leetcode &middot; system design</span>
+        </button>
+        <div class="sp-acc-body"><div class="sp-acc-inner"><div class="sp-grid">
+          <a class="sp-card" href="Leetcode/">Leetcode (100) <span class="sp-arrow">&rarr;</span></a>
+          <a class="sp-card" href="system-design/">System Design <span class="sp-arrow">&rarr;</span></a>
+        </div></div></div>
+      </div>
 
-      {# F10 — Per-section read stats card, populated by reading.js #}
+      <div class="sp-acc">
+        <button class="sp-acc-head" type="button" aria-expanded="false"
+          onclick="this.parentElement.classList.toggle('is-open');this.setAttribute('aria-expanded',this.parentElement.classList.contains('is-open'))">
+          <span class="sp-acc-chev" aria-hidden="true">&#9654;</span>
+          <span class="sp-acc-title">Coming soon</span>
+          <span class="sp-acc-meta">9 domains</span>
+        </button>
+        <div class="sp-acc-body"><div class="sp-acc-inner"><div class="sp-grid">
+          <span class="sp-card sp-card--soon">AI <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Backend <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">DevOps <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Frontend <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Mobile <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Security <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Soft Skills <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Architecture <span class="sp-tag">soon</span></span>
+          <span class="sp-card sp-card--soon">Tools &amp; Platforms <span class="sp-tag">soon</span></span>
+        </div></div></div>
+      </div>
+
+      {# Per-section read stats card, populated by reading.js #}
       <aside class="sp-home-stats" data-sp-home-stats hidden></aside>
 
-      <section class="sp-section" aria-labelledby="sec-roadmaps">
-        <p class="sp-section-prompt">
-          <span class="user">root</span><span class="dim">@</span><span class="host">senior</span><span class="dim">:</span><span class="path">~</span>
-          <span class="green">#</span> <span class="cmd">tree</span> <span class="arg">./roadmaps</span>
-        </p>
-        <div class="sp-window" id="sec-roadmaps">
-          <div class="sp-window-title">
-            <span><span class="ord">[01]</span> &nbsp;curriculum/</span>
-            <span>11 domains &nbsp;·&nbsp; 50+ paths</span>
-          </div>
-          <div class="sp-listing-grid">
-
-            <div class="sp-listing-cell">
-              <span class="head">ai/</span>
-              <ul>
-                <li><span>ai-engineer</span><span class="tag">soon</span></li>
-                <li><span>machine-learning</span><span class="tag">soon</span></li>
-                <li><span>ai-agents</span><span class="tag">soon</span></li>
-                <li><span>prompt-engineering</span><span class="tag">soon</span></li>
-                <li><span>claude-code</span><span class="tag">soon</span></li>
-                <li><span>vibe-coding</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">architecture/</span>
-              <ul>
-                <li><span>software-architect</span><span class="tag">soon</span></li>
-                <li><span>software-design</span><span class="tag">soon</span></li>
-                <li><span>system-design</span><span class="tag">soon</span></li>
-                <li><span>computer-science</span><span class="tag">soon</span></li>
-                <li><span>blockchain</span><span class="tag">soon</span></li>
-                <li><span>refactoring</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">backend/</span>
-              <ul>
-                <li><span>backend</span><span class="tag">soon</span></li>
-                <li><span>api-design</span><span class="tag">soon</span></li>
-                <li><span>full-stack</span><span class="tag">soon</span></li>
-                <li><span>postgresql</span><span class="tag">soon</span></li>
-                <li><span>mongodb</span><span class="tag">soon</span></li>
-                <li><span>redis</span><span class="tag">soon</span></li>
-                <li><span>elasticsearch</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">data/</span>
-              <ul>
-                <li><a href="Roadmap/Data/datastructures-and-algorithms/">data-structures-algorithms</a><span class="tag live">live</span></li>
-                <li><span>ai-data-scientist</span><span class="tag">soon</span></li>
-                <li><span>data-analyst</span><span class="tag">soon</span></li>
-                <li><span>bi-analyst</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">devops/</span>
-              <ul>
-                <li><span>devops</span><span class="tag">soon</span></li>
-                <li><span>docker</span><span class="tag">soon</span></li>
-                <li><span>kubernetes</span><span class="tag">soon</span></li>
-                <li><span>terraform</span><span class="tag">soon</span></li>
-                <li><span>aws</span><span class="tag">soon</span></li>
-                <li><span>cloudflare</span><span class="tag">soon</span></li>
-                <li><span>linux</span><span class="tag">soon</span></li>
-                <li><span>mlops</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">frontend/</span>
-              <ul>
-                <li><span>frontend</span><span class="tag">soon</span></li>
-                <li><span>react</span><span class="tag">soon</span></li>
-                <li><span>typescript</span><span class="tag">soon</span></li>
-                <li><span>graphql</span><span class="tag">soon</span></li>
-                <li><span>design-system</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">mobile/</span>
-              <ul>
-                <li><span>android</span><span class="tag">soon</span></li>
-                <li><span>ios</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">programming-languages/</span>
-              <ul>
-                <li><span>code-craft</span><span class="tag">soon</span></li>
-                <li><span>diagnostics</span><span class="tag">soon</span></li>
-                <li><span>language-internals</span><span class="tag">soon</span></li>
-                <li><a href="Roadmap/Programming-Languages/languages/">languages</a><span class="tag live">live</span></li>
-                <li><span>quality-engineering</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">security/</span>
-              <ul>
-                <li><span>cyber-security</span><span class="tag">soon</span></li>
-                <li><span>ai-red-teaming</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">soft-skills/</span>
-              <ul>
-                <li><span>code-review</span><span class="tag">soon</span></li>
-                <li><span>devrel</span><span class="tag">soon</span></li>
-                <li><span>engineering-manager</span><span class="tag">soon</span></li>
-                <li><span>product-manager</span><span class="tag">soon</span></li>
-                <li><span>qa</span><span class="tag">soon</span></li>
-                <li><span>technical-writer</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-            <div class="sp-listing-cell">
-              <span class="head">tools-platforms/</span>
-              <ul>
-                <li><span>aws</span><span class="tag">soon</span></li>
-                <li><span>git-github</span><span class="tag">soon</span></li>
-              </ul>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      <section class="sp-section" aria-labelledby="sec-systemdesign">
-        <p class="sp-section-prompt">
-          <span class="user">root</span><span class="dim">@</span><span class="host">senior</span><span class="dim">:</span><span class="path">~</span>
-          <span class="green">#</span> <span class="cmd">ls</span> <span class="arg">./system-design</span>
-        </p>
-        <div class="sp-window" id="sec-systemdesign">
-          <div class="sp-window-title">
-            <span><span class="ord">[03]</span> &nbsp;architecture/</span>
-            <span>4 levels &nbsp;·&nbsp; design problems &nbsp;·&nbsp; sources</span>
-          </div>
-          <div class="sp-levels">
-            <a class="sp-level" href="System%20Design/01-junior-level/">
-              <span class="ord">[01]</span>
-              <span class="name">junior/</span>
-              <span class="lead">building blocks of distributed systems, scalability basics, common architectural patterns.</span>
-            </a>
-            <a class="sp-level" href="System%20Design/02-middle-level/">
-              <span class="ord">[02]</span>
-              <span class="name">middle/</span>
-              <span class="lead">production patterns: caching, message queues, db scaling, observability fundamentals.</span>
-            </a>
-            <a class="sp-level" href="System%20Design/03-senior-level/">
-              <span class="ord">[03]</span>
-              <span class="name">senior/</span>
-              <span class="lead">high-availability, consistency tradeoffs, distributed transactions, tradeoff analysis.</span>
-            </a>
-            <a class="sp-level" href="System%20Design/04-professional-level/">
-              <span class="ord">[04]</span>
-              <span class="name">professional/</span>
-              <span class="lead">multi-region, capacity planning, disaster recovery, operating at scale.</span>
-            </a>
-            <a class="sp-level" href="System%20Design/06-design-problems/">
-              <span class="ord">[06]</span>
-              <span class="name">design-problems/</span>
-              <span class="lead">worked-through interview-style design problems with explicit tradeoff analysis.</span>
-            </a>
-            <a class="sp-level" href="System%20Design/05-sources/">
-              <span class="ord">[05]</span>
-              <span class="name">sources/</span>
-              <span class="lead">curated reading list — books, papers, engineering blogs worth re-reading.</span>
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <section class="sp-section" aria-labelledby="sec-leetcode">
-        <p class="sp-section-prompt">
-          <span class="user">root</span><span class="dim">@</span><span class="host">senior</span><span class="dim">:</span><span class="path">~</span>
-          <span class="green">#</span> <span class="cmd">ls -lt</span> <span class="arg">./leetcode</span> | <span class="cmd">head</span>
-        </p>
-        <div class="sp-window" id="sec-leetcode">
-          <div class="sp-window-title">
-            <span><span class="ord">[02]</span> &nbsp;algorithms/</span>
-            <span>100 problems &nbsp;·&nbsp; latest 10</span>
-          </div>
-          <div class="sp-leet">
-            <table>
-              <thead>
-                <tr><th class="num">#</th><th>problem</th><th class="diff">level</th></tr>
-              </thead>
-              <tbody>
-                <tr><td class="num">100</td><td><a href="Leetcode/0100-same-tree/solution/">same-tree</a></td><td class="diff easy">easy</td></tr>
-                <tr><td class="num">099</td><td><a href="Leetcode/0099-recover-binary-search-tree/solution/">recover-binary-search-tree</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">098</td><td><a href="Leetcode/0098-validate-binary-search-tree/solution/">validate-binary-search-tree</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">097</td><td><a href="Leetcode/0097-interleaving-string/solution/">interleaving-string</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">096</td><td><a href="Leetcode/0096-unique-binary-search-trees/solution/">unique-binary-search-trees</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">095</td><td><a href="Leetcode/0095-unique-binary-search-trees-ii/solution/">unique-binary-search-trees-ii</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">094</td><td><a href="Leetcode/0094-binary-tree-inorder-traversal/solution/">binary-tree-inorder-traversal</a></td><td class="diff easy">easy</td></tr>
-                <tr><td class="num">093</td><td><a href="Leetcode/0093-restore-ip-addresses/solution/">restore-ip-addresses</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">092</td><td><a href="Leetcode/0092-reverse-linked-list-ii/solution/">reverse-linked-list-ii</a></td><td class="diff medium">medium</td></tr>
-                <tr><td class="num">091</td><td><a href="Leetcode/0091-decode-ways/solution/">decode-ways</a></td><td class="diff medium">medium</td></tr>
-              </tbody>
-            </table>
-            <div class="sp-leet-foot">
-              <span>// 100 total &nbsp;·&nbsp; go &nbsp;·&nbsp; java &nbsp;·&nbsp; python</span>
-              <a href="Leetcode/">view all 100 &rarr;</a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <footer class="sp-footer">
-        <span>// docs generated with <a href="https://claude.com/claude-code" target="_blank" rel="noopener">claude</a></span>
-        <span>// curated by <a href="https://github.com/bakhod1r" target="_blank" rel="noopener">Bakhodir Yashin Mansur</a></span>
-      </footer>
-
-        </div><!-- /.sp-window-pane -->
-      </div><!-- /.sp-window -->
-
     </div>
+
+    <footer class="sp-footer">
+      <span>// docs generated with <a href="https://claude.com/claude-code" target="_blank" rel="noopener">claude</a></span>
+      <span>// curated by <a href="https://github.com/bakhod1r" target="_blank" rel="noopener">Bakhodir Yashin Mansur</a></span>
+    </footer>
+
   </section>
 
   <script>
-    /* ============================================================
-       Matrix rain — vanilla 2D canvas, ~zero deps
-       ============================================================ */
+    /* stat counter — count up when scrolled into view */
     (() => {
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const homeEl  = document.querySelector('[data-home]');
-      const canvas  = document.querySelector('.sp-canvas');
-      if (!canvas || !homeEl || reduced) return;
-
-      /* dark scheme only — light/sepia are paper, not CRT */
-      const scheme = document.body.getAttribute('data-md-color-scheme');
-      if (scheme && scheme !== 'slate') return;
-
-      const initMatrixRain = () => {
-        const ctx = canvas.getContext('2d');
-
-        // char pool — katakana subset + ascii symbols + digits
-        const KATA = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝ';
-        const ASCII = '01<>{}[]()=*/\\$&|;#@?!';
-        const POOL = (KATA + ASCII).split('');
-
-        const FONT_SIZE = 14;
-        let cols = 0;
-        let drops = [];
-        let speeds = [];
-        let cw = 0, ch = 0;
-
-        const setup = () => {
-          const dpr = Math.min(devicePixelRatio || 1, 2);
-          cw = homeEl.clientWidth;
-          ch = homeEl.clientHeight;
-          canvas.width  = cw * dpr;
-          canvas.height = ch * dpr;
-          canvas.style.width  = cw + 'px';
-          canvas.style.height = ch + 'px';
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-          cols = Math.ceil(cw / FONT_SIZE);
-          drops  = new Array(cols).fill(0).map(() => Math.random() * -ch);
-          speeds = new Array(cols).fill(0).map(() => 0.4 + Math.random() * 1.2);
-          ctx.font = `${FONT_SIZE}px "Intel One Mono", monospace`;
-          ctx.textBaseline = 'top';
-        };
-
-        setup();
-        addEventListener('resize', setup);
-        new ResizeObserver(setup).observe(homeEl);
-
-        let visible = true;
-        const io = new IntersectionObserver(([entry]) => {
-          visible = entry.isIntersecting;
-        }, { threshold: 0 });
-        io.observe(homeEl);
-        document.addEventListener('visibilitychange', () => {
-          visible = !document.hidden && visible;
-        });
-
-        const draw = () => {
-          requestAnimationFrame(draw);
-          if (!visible) return;
-
-          // trail-fade overlay
-          ctx.fillStyle = 'rgba(5, 5, 5, 0.08)';
-          ctx.fillRect(0, 0, cw, ch);
-
-          for (let i = 0; i < cols; i++) {
-            const x = i * FONT_SIZE;
-            const y = drops[i];
-            const ch2 = POOL[(Math.random() * POOL.length) | 0];
-
-            // bright leading head
-            ctx.fillStyle = '#b9ffcd';
-            ctx.fillText(ch2, x, y);
-
-            // dim trail above
-            ctx.fillStyle = '#1f8a3e';
-            ctx.fillText(ch2, x, y - FONT_SIZE * 1.5);
-
-            drops[i] += FONT_SIZE * speeds[i] * 0.45;
-            if (drops[i] > ch && Math.random() > 0.965) {
-              drops[i] = -FONT_SIZE * (5 + Math.random() * 30);
-              speeds[i] = 0.4 + Math.random() * 1.2;
-            }
-          }
-        };
-        requestAnimationFrame(draw);
-        requestAnimationFrame(() => canvas.classList.add('is-ready'));
-      };
-
-      // Defer matrix rain init until browser is idle — keeps it off the
-      // critical path so LCP lands first.
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(initMatrixRain, { timeout: 1500 });
-      } else {
-        setTimeout(initMatrixRain, 800);
-      }
-    })();
-
-    /* ============================================================
-       Typewriter — cycle through `cd ./<section>` commands
-       and glow the corresponding chapter card while typing.
-       ============================================================ */
-    (() => {
-      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const target = document.querySelector('[data-typer]');
-      const cards  = Array.from(document.querySelectorAll('[data-chapter]'));
-      if (!target || !cards.length) return;
-
-      const COMMANDS = [
-        { cmd: 'cd ./roadmaps',      cardIndex: 0 },
-        { cmd: 'cd ./leetcode',      cardIndex: 1 },
-        { cmd: 'cd ./system-design', cardIndex: 2 },
-      ];
-
-      if (reduced) {
-        target.textContent = COMMANDS[0].cmd;
-        return;
-      }
-
-      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-      const TYPE_SPEED   = 65;   // ms per char (with jitter)
-      const DELETE_SPEED = 28;
-      const HOLD_AFTER_TYPE = 1400;
-      const HOLD_AFTER_DELETE = 250;
-
-      let i = 0;
-
-      const setActive = (idx) => {
-        cards.forEach((c, n) => c.classList.toggle('is-active', n === idx));
-      };
-      const clearActive = () => cards.forEach(c => c.classList.remove('is-active'));
-
-      async function loop() {
-        while (true) {
-          const { cmd, cardIndex } = COMMANDS[i];
-          // type
-          for (let n = 1; n <= cmd.length; n++) {
-            target.textContent = cmd.slice(0, n);
-            // mid-typing, light up the card once we passed `cd ./`
-            if (n === Math.min(cmd.length, 5)) setActive(cardIndex);
-            await sleep(TYPE_SPEED + (Math.random() * 30 - 15));
-          }
-          await sleep(HOLD_AFTER_TYPE);
-          // delete
-          for (let n = cmd.length; n >= 0; n--) {
-            target.textContent = cmd.slice(0, n);
-            await sleep(DELETE_SPEED);
-          }
-          clearActive();
-          await sleep(HOLD_AFTER_DELETE);
-          i = (i + 1) % COMMANDS.length;
-        }
-      }
-      loop();
-    })();
-
-    /* ============================================================
-       Counter animation
-       ============================================================ */
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const facts = document.querySelectorAll('[data-count]');
-    if (facts.length && !reduced) {
-      const animateCount = (el) => {
-        const target = +el.dataset.count;
-        const dur = 1100;
-        const start = performance.now();
+      const facts = document.querySelectorAll('[data-count]');
+      if (!facts.length) return;
+      if (reduced) { facts.forEach((el) => { el.textContent = el.dataset.count; }); return; }
+      const animate = (el) => {
+        const target = +el.dataset.count, dur = 1100, start = performance.now();
         const tick = (now) => {
           const p = Math.min(1, (now - start) / dur);
-          const e = 1 - Math.pow(1 - p, 3);
-          el.textContent = Math.round(target * e);
+          el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
           if (p < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       };
       const obs = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            animateCount(entry.target);
-            obs.unobserve(entry.target);
-          }
-        });
+        entries.forEach((e) => { if (e.isIntersecting) { animate(e.target); obs.unobserve(e.target); } });
       }, { threshold: 0.5 });
       facts.forEach((el) => obs.observe(el));
-    } else {
-      facts.forEach((el) => { el.textContent = el.dataset.count; });
-    }
+    })();
   </script>
 {% endblock %}
 
