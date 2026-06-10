@@ -118,17 +118,17 @@ Comparing the same principle across all three shows what is *universal* in clean
 
 ## Status
 
-### ⏳ Core Chapters — PENDING (0/11)
-- ⬜ Meaningful Names
-- ⬜ Functions
-- ⬜ Comments
-- ⬜ Formatting
-- ⬜ Objects & Data Structures
-- ⬜ Error Handling
-- ⬜ Boundaries
-- ⬜ Unit Tests
-- ⬜ Classes
-- ⬜ Emergent Design
+### 🚧 Core Chapters — 10/11 (8-file suites)
+- ✅ Meaningful Names
+- ✅ Functions
+- ✅ Comments
+- ✅ Formatting
+- ✅ Objects & Data Structures
+- ✅ Error Handling
+- ✅ Boundaries
+- ✅ Unit Tests
+- ✅ Classes
+- ✅ Emergent Design
 - ⬜ Concurrency
 
 ### ⏳ Modern Extension Chapters — PENDING (0/7)
