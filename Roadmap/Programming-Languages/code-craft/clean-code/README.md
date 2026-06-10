@@ -51,6 +51,8 @@
 | [14](14-immutability/README.md) | Immutability | Value objects, persistent data structures, mutability as the new goto |
 | [15](15-pure-functions/README.md) | Pure Functions | Referential transparency, side-effect quarantine |
 | [16](16-defensive-vs-offensive/README.md) | Defensive vs Offensive | Assertions, contracts, fail-fast vs fail-safe |
+| [22](22-abstraction-and-information-hiding/README.md) | Abstraction & Information Hiding | Deep vs shallow modules, information leakage, "complexity = dependencies + obscurity" |
+| [23](23-configuration-and-feature-flags/README.md) | Configuration, Constants & Feature Flags | Named constants, single source of truth, fail-fast config, retiring flags |
 
 ---
 
@@ -65,6 +67,8 @@
 | [19](19-modules-and-packages/README.md) | Modules & Packages | Public/private boundary, circular deps, layering, package-by-feature |
 | [20](20-cognitive-load/README.md) | Cognitive Load | Cyclomatic/cognitive complexity metrics, rule of 7±2, measuring "clean" |
 | [21](21-boy-scout-rule/README.md) | Boy Scout Rule | "Leave it cleaner than you found it" — incremental, continuous cleanup as habit |
+| [24](24-documentation-and-adrs/README.md) | Documentation & ADRs | READMEs, runbooks, decision records — the *why* outside the code |
+| [25](25-clean-commits-and-version-control/README.md) | Clean Commits & VCS Hygiene | Atomic commits, intent-revealing messages, bisectable history |
 
 ---
 
@@ -127,24 +131,28 @@ Comparing the same principle across all three shows what is *universal* in clean
 - ⬜ Emergent Design
 - ⬜ Concurrency
 
-### ⏳ Modern Extension Chapters — PENDING (0/5)
+### ⏳ Modern Extension Chapters — PENDING (0/7)
 - ⬜ Async & Functional
 - ⬜ Generics & Types
 - ⬜ Immutability
 - ⬜ Pure Functions
 - ⬜ Defensive vs Offensive
+- ⬜ Abstraction & Information Hiding
+- ⬜ Configuration, Constants & Feature Flags
 
-### ⏳ Practice & Meta Chapters — PENDING (0/5)
+### ⏳ Practice & Meta Chapters — PENDING (0/7)
 - ⬜ Code Reviews
 - ⬜ Logging & Diagnostics
 - ⬜ Modules & Packages
 - ⬜ Cognitive Load
 - ⬜ Boy Scout Rule
+- ⬜ Documentation & ADRs
+- ⬜ Clean Commits & Version-Control Hygiene
 
 ### ⏳ Supplementary — PENDING
 - ⬜ Criticisms of Clean Code
 - ⬜ Naming Recipes
-- ⬜ Per-chapter README + anti-patterns (21)
+- ⬜ Per-chapter README + anti-patterns (25)
 - ⬜ Pre-Commit Checklist
 - ⬜ PR Review Checklist
 
