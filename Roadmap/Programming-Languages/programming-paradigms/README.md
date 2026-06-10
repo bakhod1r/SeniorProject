@@ -39,7 +39,12 @@ Most engineers learn one paradigm (usually OOP) by osmosis and never see the oth
 | [09](09-aspect-oriented-programming/) | Aspect-Oriented Programming | Cross-cutting concerns (logging, security) woven separately from core logic |
 | [10](10-data-oriented-programming/) | Data-Oriented Programming | Design around data layout and transformation — ECS, cache-friendly, DOP |
 | [11](11-event-driven-programming/) | Event-Driven Programming | Control flow driven by events and handlers; callbacks, the event loop |
-| [12](12-multiparadigm-in-practice/) | Multiparadigm in Practice | How real languages (Rust, Scala, Kotlin, Python, C++) blend paradigms |
+| [12](12-array-oriented-programming/) | Array-Oriented Programming | Whole-array/vectorized operations — APL, J, NumPy, dataframes |
+| [13](13-constraint-programming/) | Constraint Programming | Declare constraints, let a solver find solutions — CLP, SAT/SMT, schedulers |
+| [14](14-probabilistic-programming/) | Probabilistic Programming | Programs as probability distributions — Bayesian inference, PPLs (Stan, Pyro) |
+| [15](15-symbolic-programming/) | Symbolic Programming | Code as data, homoiconicity, term rewriting — Lisp tradition, CAS |
+| [16](16-concatenative-and-stack-based/) | Concatenative & Stack-Based | Composition by juxtaposition over an implicit stack — Forth, Factor, PostScript |
+| [17](17-multiparadigm-in-practice/) | Multiparadigm in Practice | How real languages (Rust, Scala, Kotlin, Python, C++) blend paradigms |
 
 ---
 
