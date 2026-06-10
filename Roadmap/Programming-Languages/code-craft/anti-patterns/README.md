@@ -52,9 +52,11 @@ Rules of thumb:
 
 ---
 
-## Four Categories
+## Seven Chapters
 
 This roadmap is scoped to anti-patterns that live **inside the code**. System-level architectural anti-patterns and process / project anti-patterns are handled by their own roadmaps (linked above).
+
+The first four chapters are the **shapes** themselves — wrong code, by layer. The last three are about **living with them**: the anti-patterns that hide in your *tests* and *performance*, and the staff-level work of managing all of these across a whole codebase over time.
 
 ```mermaid
 graph TD
@@ -63,6 +65,9 @@ graph TD
     AP --> DS[Design<br/>class / module level<br/>Anemic Model, Golden Hammer...]
     AP --> CC[Concurrency<br/>multi-thread<br/>Deadlock, Race conditions...]
     AP --> AS[Async<br/>event-loop / Promise<br/>Floating Promise, await in Loop...]
+    AP --> TE[Testing<br/>the tests lie<br/>Flaky, Fragile, Over-Mocking...]
+    AP --> PE[Performance<br/>code-level waste<br/>N+1, Wrong Structure...]
+    AP --> SC[At-Scale<br/>staff level<br/>Fitness Functions, Hotspots...]
 ```
 
 | Category | Layer | Examples |
@@ -71,8 +76,11 @@ graph TD
 | **[Design](02-design/README.md)** | Class / module structure | Anemic Domain Model, Singletonitis, Flag Arguments, Telescoping Constructor, Fragile Base Class, Golden Hammer |
 | **[Concurrency](03-concurrency/README.md)** | Multi-thread coordination | Double-Checked Locking, Deadlock, Shared Mutable State, Busy Waiting, Thread-Per-Request Unbounded |
 | **[Async](04-async/README.md)** | Event-loop / Promise / await | Floating Promise, Forgotten await, await in Loop, Swallowed Rejection, Promise Chain Hell |
+| **[Testing](05-testing/README.md)** | Anti-patterns in the tests | Fragile Tests, Flaky Tests, Mystery Guest, Assertion Roulette, Slow Tests, Over-Mocking |
+| **[Performance](06-performance/README.md)** | Code-level efficiency | Premature Optimization, N+1 in Code, Unnecessary Allocation, Wrong Data Structure |
+| **[At-Scale](07-at-scale/README.md)** | Managing anti-patterns across a codebase (staff) | Fitness Functions, Budgets & Ratcheting, Hotspot Analysis, Automated Refactoring, Strangler Fig, Expand-Contract, Premature Abstraction |
 
-Total: **57 coding anti-patterns** across the four chapters.
+The four code-shape chapters catalog **57 coding anti-patterns**; the Testing and Performance chapters add 10 more, and the At-Scale chapter covers the 7 disciplines for managing them.
 
 ---
 
@@ -118,6 +126,9 @@ Code examples are written in **Go**, **Java**, and **Python** — same conventio
 - [Design Anti-Patterns](02-design/README.md) — 20 anti-patterns: OO misuse, coupling & state, abstraction failures.
 - [Concurrency Anti-Patterns](03-concurrency/README.md) — 9 anti-patterns: synchronization misuse, coordination, shared state.
 - [Async Anti-Patterns](04-async/README.md) — 9 anti-patterns: error handling, execution shape, misuse.
+- [Testing Anti-Patterns](05-testing/README.md) — 6 anti-patterns: fragile, flaky, mystery guest, assertion roulette, slow tests, over-mocking.
+- [Performance Anti-Patterns](06-performance/README.md) — 4 anti-patterns: premature optimization, N+1 in code, unnecessary allocation, wrong data structure.
+- [Anti-Patterns at Scale](07-at-scale/README.md) — 7 staff-level disciplines: fitness functions, budgets & ratcheting, hotspot analysis, automated refactoring, strangler fig, expand-contract, premature abstraction.
 
 ---
 
