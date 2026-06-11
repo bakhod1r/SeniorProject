@@ -55,7 +55,7 @@ Examples in **Go** (`go.opentelemetry.io/otel`), **Java** (OpenTelemetry SDK, Ja
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete** — `junior` · `middle` · `senior` · `professional` · `interview` · `tasks`.
 
 ---
 
