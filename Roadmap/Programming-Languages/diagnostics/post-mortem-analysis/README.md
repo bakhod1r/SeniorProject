@@ -58,7 +58,7 @@ Examples in **Java** (heap dumps, `jcmd`, JFR, MAT), **Go** (`runtime.WriteHeapD
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete** — `junior` · `middle` · `senior` · `professional` · `interview` · `tasks`.
 
 ---
 
