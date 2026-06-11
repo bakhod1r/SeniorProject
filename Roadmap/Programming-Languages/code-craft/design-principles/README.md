@@ -89,4 +89,4 @@ The five object-oriented design principles that travel together.
 
 ## Status
 
-Skeleton — topic folders are scaffolded; content is written per topic following the Code Craft file convention. All content in **English**.
+**Content-complete.** All 23 topics across the four sections are written following the Code Craft file convention — five levels each (`junior` · `middle` · `senior` · `professional` · `interview`). All content in **English**.
