@@ -55,7 +55,7 @@ Examples in **JavaScript** (Sentry browser + Node SDK, source maps), **Java/Kotl
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete** — `junior` · `middle` · `senior` · `professional` · `interview` · `tasks`.
 
 ---
 
