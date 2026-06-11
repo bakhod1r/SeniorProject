@@ -1,6 +1,6 @@
 # Single Responsibility Principle (SRP) — Middle Level
 
-> **Category:** [Design Principles → SOLID](../README.md) — a class should have one, and only one, reason to change.
+> **Category:** [Design Principles → SOLID](../../README.md) — a class should have one, and only one, reason to change.
 
 > **Prerequisite:** [Junior](junior.md)
 > **Focus:** **Why** and **When**
@@ -320,4 +320,4 @@ flowchart LR
     DUST["CLASS EXPLOSION<br/>one class per OPERATION<br/>(shotgun surgery)"] --> SRP
 ```
 
-[← Junior](junior.md) · [SOLID](../README.md) · [Roadmap](../../../../README.md) · **Next:** [Senior](senior.md)
+[← Junior](junior.md) · [SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [Senior](senior.md)

@@ -1,6 +1,6 @@
 # Liskov Substitution Principle (LSP) — Professional Level
 
-> **Category:** [Design Principles → SOLID](../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
+> **Category:** [Design Principles → SOLID](../../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
 
 > **Prerequisites:** [Junior](junior.md) · [Middle](middle.md) · [Senior](senior.md)
 > **Focus:** **Production** — reviews, real incidents, team conventions, legacy refactoring
@@ -262,4 +262,4 @@ flowchart TD
 
 ---
 
-[← Senior](senior.md) · [Design Principles → SOLID](../README.md) · [Roadmap](../../../README.md) · **Next:** [Interview](interview.md)
+[← Senior](senior.md) · [Design Principles → SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [Interview](interview.md)

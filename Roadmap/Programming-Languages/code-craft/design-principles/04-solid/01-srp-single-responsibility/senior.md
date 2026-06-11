@@ -1,6 +1,6 @@
 # Single Responsibility Principle (SRP) — Senior Level
 
-> **Category:** [Design Principles → SOLID](../README.md) — a class should have one, and only one, reason to change.
+> **Category:** [Design Principles → SOLID](../../README.md) — a class should have one, and only one, reason to change.
 
 > **Prerequisites:** [Junior](junior.md) · [Middle](middle.md)
 > **Focus:** **Theory** and **system-level trade-offs**
@@ -283,4 +283,4 @@ flowchart LR
 
 ---
 
-[← Middle](middle.md) · [SOLID](../README.md) · [Roadmap](../../../../README.md) · **Next:** [Professional](professional.md)
+[← Middle](middle.md) · [SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [Professional](professional.md)

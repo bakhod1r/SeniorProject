@@ -1,6 +1,6 @@
 # Single Responsibility Principle (SRP) — Interview Questions
 
-> **Category:** [Design Principles → SOLID](../README.md) — a class should have one, and only one, reason to change.
+> **Category:** [Design Principles → SOLID](../../README.md) — a class should have one, and only one, reason to change.
 
 Conceptual and coding questions, graded junior → professional, plus trick and behavioral questions.
 
@@ -322,4 +322,4 @@ class Stack<T> {
 
 ---
 
-[← Professional](professional.md) · [SOLID](../README.md) · [Roadmap](../../../../README.md) · **Next:** [Open/Closed Principle](../02-ocp-open-closed/)
+[← Professional](professional.md) · [SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [Open/Closed Principle](../02-ocp-open-closed/)

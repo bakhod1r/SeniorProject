@@ -1,6 +1,6 @@
 # Liskov Substitution Principle (LSP) — Interview Questions
 
-> **Category:** [Design Principles → SOLID](../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
+> **Category:** [Design Principles → SOLID](../../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
 
 Conceptual and coding questions, graded junior → professional, plus trick and behavioral questions.
 
@@ -360,4 +360,4 @@ class Point:
 
 ---
 
-[← Professional](professional.md) · [Design Principles → SOLID](../README.md) · [Roadmap](../../../README.md)
+[← Professional](professional.md) · [Design Principles → SOLID](../../README.md) · [Roadmap](../../../README.md)

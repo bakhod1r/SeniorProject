@@ -1,6 +1,6 @@
 # Single Responsibility Principle (SRP) — Junior Level
 
-> **Category:** [Design Principles → SOLID](../README.md) — the first of the five SOLID principles: a class should have one, and only one, reason to change.
+> **Category:** [Design Principles → SOLID](../../README.md) — the first of the five SOLID principles: a class should have one, and only one, reason to change.
 
 ---
 
@@ -450,4 +450,4 @@ flowchart TD
     R --> D
 ```
 
-[Design Principles](../../README.md) · [SOLID](../README.md) · [Roadmap](../../../../README.md) · **Next:** [SRP — Middle](middle.md)
+[Design Principles](../../README.md) · [SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [SRP — Middle](middle.md)

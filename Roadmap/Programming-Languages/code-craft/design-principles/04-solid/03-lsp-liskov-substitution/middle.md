@@ -1,6 +1,6 @@
 # Liskov Substitution Principle (LSP) — Middle Level
 
-> **Category:** [Design Principles → SOLID](../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
+> **Category:** [Design Principles → SOLID](../../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
 
 > **Prerequisite:** [Junior](junior.md)
 > **Focus:** **Why** and **When** — the contract rules, applied to real code
@@ -392,4 +392,4 @@ flowchart LR
     F -.->|"cure"| ISP["Split via ISP:<br/>ReadOnlyList + MutableList<br/>→ every impl is a real subtype"]
 ```
 
-[← Junior](junior.md) · [Design Principles → SOLID](../README.md) · [Roadmap](../../../README.md) · **Next:** [Senior](senior.md)
+[← Junior](junior.md) · [Design Principles → SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [Senior](senior.md)

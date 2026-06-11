@@ -1,6 +1,6 @@
 # Liskov Substitution Principle (LSP) — Junior Level
 
-> **Category:** [Design Principles → SOLID](../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
+> **Category:** [Design Principles → SOLID](../../README.md) — the **L** in SOLID: subtypes must be usable anywhere their base type is expected, without breaking the program.
 
 ---
 
@@ -488,4 +488,4 @@ flowchart LR
     T -->|"Square → 16 ❌"| BAD["LSP violated:<br/>Square weakens setHeight's postcondition"]
 ```
 
-[Design Principles → SOLID](../README.md) · [Roadmap](../../../README.md) · **Next:** [Middle](middle.md)
+[Design Principles → SOLID](../../README.md) · [Roadmap](../../../README.md) · **Next:** [Middle](middle.md)
