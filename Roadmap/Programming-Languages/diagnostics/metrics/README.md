@@ -56,7 +56,7 @@ Examples in **Go** (`prometheus/client_golang`, `expvar`), **Java** (Micrometer,
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete** — `junior` · `middle` · `senior` · `professional` · `interview` · `tasks`.
 
 ---
 
