@@ -176,8 +176,8 @@ Flattening a hierarchy for **comprehension** is always justified. Flattening for
 
 | Topic | Why |
 |---|---|
-| [Fragile Base Class Problem](../06-fragile-base-class-problem/) | Performance optimizations in base classes break subclasses |
-| [Composition Over Inheritance](../../../03-design-principles/02-composition-over-inheritance/) | Composition typically inlines better than deep inheritance |
-| [Refused Bequest](../05-refused-bequest/) | Refused overrides leave dead vtable slots |
+| [Fragile Base Class Problem](../../03-design-principles/06-fragile-base-class-problem/) | Performance optimizations in base classes break subclasses |
+| [Composition Over Inheritance](../../03-design-principles/02-composition-over-inheritance/) | Composition typically inlines better than deep inheritance |
+| [Refused Bequest](../04-refused-bequest/) | Refused overrides leave dead vtable slots |
 
 The performance argument against the yo-yo is real but secondary. The cognitive argument is primary. Both point to the same fix.

@@ -143,6 +143,6 @@ VOs interact with the ORM allocation path. Two issues to know:
 
 ## 9. What's next
 
-- `../07-primitive-obsession/optimize.md` — performance discussion of tiny types specifically.
-- `../../06-anemic-domain-model/optimize.md` — how rich VOs affect domain-service call shapes.
+- `../09-primitive-obsession/optimize.md` — performance discussion of tiny types specifically.
+- `../02-anemic-domain-model/optimize.md` — how rich VOs affect domain-service call shapes.
 - `./tasks.md` — hands-on exercises that exercise the patterns described here.

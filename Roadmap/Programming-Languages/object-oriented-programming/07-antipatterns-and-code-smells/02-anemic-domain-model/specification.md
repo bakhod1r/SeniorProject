@@ -226,6 +226,34 @@ When reviewing a class, walk this in order:
 
 Outside these contexts, anemia in the domain layer is a defect.
 
+## 7. Mapping the claims to canonical sources
+
+Every assertion in this topic traces back to named literature. Use these when defending a design in review — citing the source ends the argument faster than re-deriving it.
+
+| Claim in this topic | Canonical source |
+| --- | --- |
+| "Anemic Domain Model is an anti-pattern; OO means combining data and process" | **Fowler, *AnemicDomainModel*** (martinfowler.com/bliki, 2003) |
+| "The Service layer that holds the logic is just procedural" | **Fowler, *Patterns of Enterprise Application Architecture* (PoEAA, 2002)** — *Domain Model* pattern (pp. 116–124) vs. *Transaction Script* (pp. 110–115); anemic = Transaction Script wearing a Domain Model's class names |
+| "Entities own identity + behaviour; value objects own validity + immutability" | **Evans, *Domain-Driven Design* (2003)** — ch. 5, *Entities* and *Value Objects*; ch. 6, *Aggregates* (invariant boundaries), *Factories*, *Repositories* |
+| "Domain Services hold only logic belonging to no single entity" | **Evans, *DDD* (2003)** — ch. 5, *Services*; **Vernon, *Implementing DDD* (2013)** — ch. 7 |
+| "Tell, Don't Ask: don't pull state out to decide externally" | **Hunt & Thomas, *The Pragmatic Programmer* (1999)** — *Tell, Don't Ask*; phrasing originates with **Sharp, *Smalltalk by Example* (1997)** |
+| "Bundle data with the behaviour that uses it; minimise mutability" | **Bloch, *Effective Java* 3e** — Item 15 (minimise accessibility), Item 17 (minimise mutability); **Meyer, *Object-Oriented Software Construction* 2e** — information hiding, design by contract |
+| "Anemia is the absence of cohesion between fields and methods" | **Chidamber & Kemerer (1994)** — LCOM metric; **Fowler, *Refactoring* 2e** — *Move Method*, *Replace Data Value with Object*, *Encapsulate Field* |
+
+The crisp historical framing: Fowler's *PoEAA* names two ways to organise domain logic — **Transaction Script** (procedure per use case, operating on dumb data) and **Domain Model** (behaviour on the objects). Both are *legitimate*; the *Transaction Script* is honest for simple CRUD. The **Anemic Domain Model is the failure to choose**: it pays the Domain Model's modelling cost (an object graph, ORM mapping) while keeping the Transaction Script's procedural structure — the worst of both.
+
+## 8. Reading list
+
+1. **Martin Fowler — *AnemicDomainModel*** (martinfowler.com/bliki/AnemicDomainModel.html, 2003). The naming essay. Short; read it whole.
+2. **Martin Fowler — *Patterns of Enterprise Application Architecture* (2002).** *Domain Model* (pp. 116–124) and *Transaction Script* (pp. 110–115) — the two honest alternatives the anemic model fails to pick between. Also *Service Layer* (pp. 133–141).
+3. **Eric Evans — *Domain-Driven Design* (2003).** Ch. 5 (Entities, Value Objects, Services), Ch. 6 (Aggregates, Factories, Repositories). The canonical treatment of where behaviour and invariants belong.
+4. **Vaughn Vernon — *Implementing Domain-Driven Design* (2013).** Ch. 5–10. The practical "how", with the anti-corruption between anemic boundary shapes and rich aggregates spelled out.
+5. **Andrew Hunt & David Thomas — *The Pragmatic Programmer* (1999).** *Tell, Don't Ask* — the lens that turns "this is anemic" into a concrete refactoring.
+6. **Martin Fowler — *Refactoring* (2nd ed., 2018).** *Move Function (Move Method)*, *Encapsulate Field*, *Replace Primitive with Object*, *Combine Functions into Class* — the mechanical moves that enrich an anemic model.
+7. **Joshua Bloch — *Effective Java* (3rd ed.).** Item 15 (minimise accessibility), Item 16 (accessor methods over public fields), Item 17 (minimise mutability).
+8. **Bertrand Meyer — *Object-Oriented Software Construction* (2nd ed.).** Information hiding and Design by Contract — the theory under "the object owns its invariants".
+9. **Chidamber & Kemerer (1994), *A Metrics Suite for Object-Oriented Design*.** The LCOM metric used in §2 to quantify anemia.
+
 ## Memorize this
 
 - **Anemic = data + no invariants + behavior elsewhere.** All three conditions must hold.

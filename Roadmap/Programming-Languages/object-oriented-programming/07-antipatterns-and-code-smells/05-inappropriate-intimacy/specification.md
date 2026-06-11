@@ -156,6 +156,20 @@ Suppose `OrderService` reports:
 
 Diagnosis: CBO is acceptable, but average MPC per method (17.7) is in the refactor band; one of the nine partners is being hit constantly. The bidirectional edge with `Order` confirms it: `OrderService` reaches into `Order`, and `Order` calls back into `OrderService`. Refactor — push the intimate behaviour onto `Order` (or extract a new collaborator) and the MPC will halve and the bidirectional edge will disappear.
 
+## 10. Reading list
+
+The smell is named and the cures are catalogued in Fowler; the *why* (knowledge leaking across a boundary) is connascence; the *how much* is the CK suite.
+
+1. **Martin Fowler** — *Refactoring: Improving the Design of Existing Code*, 2nd ed., Addison-Wesley, 2018. The **Inappropriate Intimacy** smell entry, and the four canonical cures it names: **Move Function** (Move Method), **Move Field**, **Extract Class** / **Inline Class**, **Hide Delegate** / **Remove Middle Man**, and **Change Bidirectional Association to Unidirectional**. This is the authoritative source for both the name and the refactoring catalogue.
+2. **Martin Fowler** — *Refactoring* 2e, ch. 3 "Bad Smells in Code" (with Kent Beck). Places Inappropriate Intimacy next to its relatives **Feature Envy**, **Shotgun Surgery**, and **Message Chains**, and explains how the same two classes can exhibit several smells at once.
+3. **Meilir Page-Jones** — *What Every Programmer Should Know About Object-Oriented Design*, Dorset House, 1995 (and *Fundamentals of Object-Oriented Design in UML*, 2000). The **connascence** taxonomy: Inappropriate Intimacy is high-strength, *dynamic*, *non-local* connascence — exactly the combination you most want to eliminate. Use connascence to argue *which* intimacy is worst.
+4. **Shyam R. Chidamber & Chris F. Kemerer** — "A Metrics Suite for Object-Oriented Design", *IEEE TSE* 20(6), 1994. The original definition of **CBO** (Coupling Between Objects) and **RFC** used throughout this chapter. The empirical paper that made coupling measurable.
+5. **David L. Parnas** — "On the Criteria To Be Used in Decomposing Systems into Modules", *CACM* 15(12), 1972. Information hiding: intimacy is the *violation* of the criterion this paper sets out. The senior file builds on it directly.
+6. **Karl Lieberherr & Ian Holland** — "Assuring Good Style for Object-Oriented Programs" (Law of Demeter), *IEEE Software*, 1989. Getter-chain intimacy (`b.x.y.z`) is a Demeter violation; the law is the local rule, intimacy is the structural consequence.
+7. **Joshua Bloch** — *Effective Java*, 3rd ed., Addison-Wesley, 2018. Items 15 (minimize accessibility), 16 (use accessors not public fields), 64 (refer to objects by interfaces). The Java-specific levers that keep CBO down.
+
+See also the in-repo treatments: [`../../03-design-principles/04-cohesion-and-coupling/`](../../03-design-principles/04-cohesion-and-coupling/) for the coupling forces, and [`../../09-oo-design-and-modeling/02-oo-metrics-ck-suite/`](../../09-oo-design-and-modeling/02-oo-metrics-ck-suite/) for the full CK metric suite.
+
 ## Memorize this
 
 - CBO counts partners; MPC counts messages; both matter.

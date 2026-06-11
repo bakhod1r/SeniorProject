@@ -123,7 +123,7 @@ Be precise about the boundary. The following are **not** refused bequests:
 3. **Strengthening preconditions in a way that's documented as a subtype contract** — though this is an LSP violation by another name.
 4. **Optional operations explicitly documented in the supertype** — `Collection.add` is documented to optionally throw `UnsupportedOperationException`. Subclasses doing so are honoring, not refusing, the bequest.
 
-The distinction in case 4 is subtle but important: the JDK Collections framework chose to make mutation methods optional, which **builds refused bequest into the supertype's contract**. This is widely considered a design mistake (Bloch, *Effective Java*, Item 19) but it is technically not refusal — the supertype gave the subtype permission.
+The distinction in case 4 is subtle but important: the JDK Collections framework chose to make mutation methods optional, which **builds refused bequest into the supertype's contract**. This is widely considered a design mistake (Bloch, *Effective Java* 3e, Item 18, "Favor composition over inheritance") but it is technically not refusal — the supertype gave the subtype permission.
 
 ## 6. Detection rules in static analyzers
 
@@ -229,6 +229,40 @@ class Fish extends Animal {
 - `U(Fish)` includes the inherited `breathe`, `eat`, `sleep`, `reproduce` — `|U| = 4`, so `inherited_usage = 4/6 ≈ 0.67`. Healthy.
 
 Verdict: Fish is **borderline**. The single refusal is real (LSP issue if any caller does `for (Animal a : zoo) a.makeSound();`), but the inheritance is otherwise pulling its weight. Fix: split `Vocalizing` into its own interface.
+
+## 10. Canonical sources
+
+The definitions above are operationalizations of claims made in the primary literature. Map each back to its source before citing it in a design review.
+
+### Where the smell is named and the fixes are specified
+
+- **Fowler, *Refactoring: Improving the Design of Existing Code*, 2nd ed. (2018)** is the authoritative catalog. *Refused Bequest* appears in the "Smells" chapter (Ch. 3): "Subclasses get to inherit the methods and data of their parents. But what if they don't want or need what they are given?" Fowler's prescribed refactorings, all defined with mechanics in the same book:
+  - **Replace Subclass with Delegate** — convert `extends P` into a field of type `P` (or an interface) and forward only the methods you want. This is the canonical "Replace Inheritance with Delegation" move.
+  - **Replace Superclass with Delegate** — the symmetric move when the parent, not the child, is the wrong abstraction (the `Stack extends Vector` case).
+  - **Push Down Method** / **Push Down Field** — when a member lives in the parent but only one subclass uses it, move it down so siblings stop inheriting (and refusing) it.
+  - **Extract Superclass** / **Extract Interface** — when refusal signals that two classes share *some* behavior, hoist only the shared, wanted part into a new common supertype or a narrower interface.
+  - Fowler explicitly notes that a *small* refused bequest (a subclass that doesn't want a few inherited members) is often tolerable; the smell becomes actionable when the subclass refuses the *behavior and the interface*, i.e., it doesn't even want to be substitutable.
+
+### Why refusal of a documented method is an LSP break
+
+- **Liskov & Wing, "A Behavioral Notion of Subtyping," *ACM TOPLAS* 16(6), Nov. 1994** is the formal basis. The subtype requirement (the "subtype methods" rule plus history/invariant constraints) is: for subtype `S` of `T`, every property provable about objects of `T` must hold for objects of `S`. An override that throws `UnsupportedOperationException` where the supertype documents the method as usable *strengthens the precondition* (it now requires "don't call me"), violating the methods rule. This is the precise sense in which §2's "refused method in the documented contract" condition is an LSP violation, not just a stylistic complaint. (The 1994 TOPLAS paper supersedes Liskov's earlier 1988 OOPSLA keynote where the "substitution property" was first stated informally.)
+
+### Why the fix is composition, not a deeper hierarchy
+
+- **Bloch, *Effective Java*, 3rd ed. (2018):**
+  - **Item 18 — "Favor composition over inheritance."** Bloch's argument is exactly the refused-bequest cure: inheritance violates encapsulation because the subclass depends on implementation details of the superclass; wrapping (a forwarding class plus a reusable forwarding interface — the *decorator*-style "InstrumentedSet" example) lets you expose only the operations you want. This is the standard Java idiom for Replace Subclass with Delegate.
+  - **Item 19 — "Design and document for inheritance or else prohibit it."** The complement: if a class is not designed and documented as a base class, it should be `final` (or have package-private constructors) so no one can refuse its bequest in the first place.
+- **Meyer, *Object-Oriented Software Construction*, 2nd ed. (1997)** frames the same constraint through Design by Contract: a redefinition may weaken a precondition and strengthen a postcondition, never the reverse. Throwing on an inherited operation strengthens the precondition and is therefore an illegal redefinition under DbC — the contract-level statement of refused bequest.
+- **Gamma, Helm, Johnson, Vlissides (GoF), *Design Patterns* (1994)** — the chapter-one maxim "Favor object composition over class inheritance" and the **Decorator** and **Adapter** patterns are the structural realizations of the delegation fix.
+
+### Numbered reading list
+
+1. Martin Fowler, *Refactoring*, 2nd ed. (2018) — Ch. 3 "Refused Bequest"; refactorings "Replace Subclass with Delegate," "Replace Superclass with Delegate," "Push Down Method/Field," "Extract Superclass," "Extract Interface."
+2. Barbara Liskov & Jeannette Wing, "A Behavioral Notion of Subtyping," *ACM TOPLAS* 16(6), 1994 — the subtype methods/invariant/history rules.
+3. Joshua Bloch, *Effective Java*, 3rd ed. (2018) — Item 18 (favor composition over inheritance), Item 19 (design for inheritance or prohibit it), Item 20 (prefer interfaces to abstract classes).
+4. Bertrand Meyer, *Object-Oriented Software Construction*, 2nd ed. (1997) — Design by Contract and the rules for valid redefinition.
+5. Gamma et al., *Design Patterns* (1994) — Decorator, Adapter, and "favor composition over inheritance."
+6. Lanza & Marinescu, *Object-Oriented Metrics in Practice* (2006) — the NOM/DIT/WMC metric thresholds referenced in §3.
 
 ## Memorize this
 

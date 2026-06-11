@@ -210,9 +210,10 @@ Records as `@Embeddable` work in Hibernate 6.2+ with the right `@Embeddable` ann
 
 ## 5. What's next
 
-- `../07-primitive-obsession/` — primitive obsession is the sibling smell; a clump is "obsession with shape", obsession is "obsession with type".
-- `../../06-anemic-domain-model/` — VOs are the bricks; anemic-domain-model is the wall they belong in.
-- `../../08-immutability/` (when written) — VOs are the canonical immutable type; share patterns.
+- `../09-primitive-obsession/` — primitive obsession is the sibling smell; a clump is "obsession with shape", obsession is "obsession with type".
+- `../02-anemic-domain-model/` — VOs are the bricks; anemic-domain-model is the wall they belong in.
+- `../../08-tactical-ddd/01-value-objects/` — VOs are the canonical destination for an extracted clump.
+- `../../04-object-contracts-and-semantics/05-immutability-and-defensive-copying/` — VOs are the canonical immutable type; share patterns.
 
 ---
 

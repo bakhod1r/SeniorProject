@@ -222,6 +222,6 @@ False positives (e.g., a `Range(double, double)` for non-geographic values) are 
 
 ## What's next
 
-- `../07-primitive-obsession/tasks.md` — overlapping exercises focused on type-level errors.
-- `../../06-anemic-domain-model/tasks.md` — exercises pushing behavior onto extracted VOs.
+- `../09-primitive-obsession/tasks.md` — overlapping exercises focused on type-level errors.
+- `../02-anemic-domain-model/tasks.md` — exercises pushing behavior onto extracted VOs.
 - `./interview.md` — twenty interview-style questions to consolidate the topic.

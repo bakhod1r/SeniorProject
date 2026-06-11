@@ -321,7 +321,7 @@ You can swing too far. Symptoms of over-rich domain:
 
 - **Domain methods that call out to infrastructure.** `account.sendStatementEmail()` puts SMTP knowledge on the entity. Wrong — that belongs in an application service.
 - **Repositories injected into entities.** `order.persist()` makes the entity know about its storage. Wrong — the repository is infrastructure.
-- **Methods that orchestrate multiple aggregates.** `account.transferTo(other, amount)` blurs the consistency boundary. Better: a domain service `Transfer.execute(from, to, amount)`.
+- **Methods that orchestrate multiple aggregates.** `account.transferTo(other, amount)` blurs the consistency boundary. Better: a [domain service](../../08-tactical-ddd/05-domain-services/) `Transfer.execute(from, to, amount)` — the one legitimate home for logic that belongs to no single [entity](../../08-tactical-ddd/02-entities/) or [aggregate](../../08-tactical-ddd/03-aggregates/).
 - **Behaviour that *can* be on the entity but only one caller ever needs it.** YAGNI applies — if the only place that ever computes "loyalty bonus" is one report, that calculation lives in the report, not on `Customer`.
 
 The senior calibration: **invariants on the entity, lifecycle transitions on the entity, derived values on the entity. Infrastructure off the entity. Cross-aggregate coordination off the entity. One-off calculations off the entity.**

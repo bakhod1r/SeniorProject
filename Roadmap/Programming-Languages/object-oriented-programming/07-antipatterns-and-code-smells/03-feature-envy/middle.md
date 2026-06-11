@@ -9,7 +9,7 @@
 
 Open the method. Ask, in order:
 
-1. **What does it touch?** Count the *distinct objects* the method reads from. If exactly one foreign object dominates, you're in classic Feature Envy territory. If two or three foreign objects share the load, you may have *Inappropriate Intimacy* across multiple classes instead.
+1. **What does it touch?** Count the *distinct objects* the method reads from. If exactly one foreign object dominates, you're in classic Feature Envy territory. If two or three foreign objects share the load, you may have *Inappropriate Intimacy* across multiple classes instead (see the sibling topic [`../05-inappropriate-intimacy/`](../05-inappropriate-intimacy/)).
 2. **What is its locality?** Compute roughly: `local_accesses / (local_accesses + foreign_accesses)`. Below 1/3 is the formal threshold Lanza and Marinescu use for LAA (Locality of Attribute Accesses) — see `specification.md`. Below 1/2 is a gut-feel smell.
 3. **What is its name?** Methods named `xFor(B)`, `xOf(B)`, `summariseB`, `processB`, `validateB` are advertising envy in their names.
 4. **What is its return type?** A method on `A` that returns *something computed from `B`'s state* — a discount on `Customer`, a label from `Address`, a tax from `Region` — almost always belongs on `B`.
@@ -173,7 +173,7 @@ Tell Don't Ask also helps thread-safety: `account.canDebit(amount)` can be synch
 
 ## 5. The Law of Demeter connection
 
-Demeter's Law (Ian Holland, Karl Lieberherr, 1987): a method on `A` should only talk to (a) itself, (b) its parameters, (c) objects it creates, and (d) its own fields. *Not* to objects reached through chains.
+Demeter's Law (Ian Holland, Karl Lieberherr, 1987 — see [`../../03-design-principles/03-law-of-demeter/`](../../03-design-principles/03-law-of-demeter/)): a method on `A` should only talk to (a) itself, (b) its parameters, (c) objects it creates, and (d) its own fields. *Not* to objects reached through chains.
 
 ```java
 // Demeter violation — chain through three classes

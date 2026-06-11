@@ -244,4 +244,15 @@ Two methods on the *same* class that share state are *cohesive*, which is good. 
 
 ---
 
+## 9. Related topics
+
+| Topic                                                       | Where                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------ |
+| The forces behind the smell: cohesion vs coupling, CBO      | [`../../03-design-principles/04-cohesion-and-coupling/`](../../03-design-principles/04-cohesion-and-coupling/) |
+| The metric that quantifies intimacy (CBO and the CK suite)  | [`../../09-oo-design-and-modeling/02-oo-metrics-ck-suite/`](../../09-oo-design-and-modeling/02-oo-metrics-ck-suite/) |
+| Sibling smell — one method that envies another class's data | [`../03-feature-envy/`](../03-feature-envy/)           |
+| Sibling smell — one change rippling across many classes     | [`../06-shotgun-surgery/`](../06-shotgun-surgery/)     |
+
+---
+
 **Memorize this:** Inappropriate Intimacy is two classes sharing a private life — package-private fields, bidirectional references, getter chains, mutual setters. The smell is *coupling that survives only because both sides cooperate*. The cure is to pick an owner, push behaviour into the class that owns the data, and let the other side ask through a narrow public method.

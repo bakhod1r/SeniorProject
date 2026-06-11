@@ -96,6 +96,6 @@ A record with `BigDecimal amount` and `Currency currency`, a compact constructor
 
 ## What's next
 
-- `../07-primitive-obsession/interview.md` — companion question set on tiny types.
-- `../../06-anemic-domain-model/interview.md` — questions on behavior placement once VOs exist.
+- `../09-primitive-obsession/interview.md` — companion question set on tiny types.
+- `../02-anemic-domain-model/interview.md` — questions on behavior placement once VOs exist.
 - `./tasks.md` — practice the patterns these answers describe.

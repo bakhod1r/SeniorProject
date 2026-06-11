@@ -338,7 +338,21 @@ public final class Customer {
 
 ---
 
-## 13. What's next
+## 13. Related topics
+
+Feature Envy sits at the centre of a cluster of OO principles and sibling smells. The positive principle that *answers* "where should this method live" is GRASP **Information Expert** — assign a responsibility to the class that holds the information needed to fulfil it. Reading that principle alongside this smell is the fastest way to internalise the fix.
+
+| Where to go                                            | Path                                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Information Expert — the positive rule behind the fix  | [`../../09-oo-design-and-modeling/01-grasp-responsibility-assignment/`](../../09-oo-design-and-modeling/01-grasp-responsibility-assignment/) |
+| Law of Demeter — the chains that co-occur with envy    | [`../../03-design-principles/03-law-of-demeter/`](../../03-design-principles/03-law-of-demeter/)                  |
+| Cohesion & coupling — what Move Method actually buys   | [`../../03-design-principles/04-cohesion-and-coupling/`](../../03-design-principles/04-cohesion-and-coupling/)    |
+| Refused Bequest — sibling smell (unwanted inheritance) | [`../04-refused-bequest/`](../04-refused-bequest/)                                          |
+| Inappropriate Intimacy — sibling smell (bilateral envy)| [`../05-inappropriate-intimacy/`](../05-inappropriate-intimacy/)                            |
+
+---
+
+## 14. What's next
 
 | Topic                                                              | File              |
 | ------------------------------------------------------------------ | ----------------- |

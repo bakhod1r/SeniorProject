@@ -215,6 +215,6 @@ The bug is not just in code — it is in the database. A VO without a matching D
 
 ## What's next
 
-- `../07-primitive-obsession/find-bug.md` — overlapping bug catalogue from the primitive-type angle.
-- `../../06-anemic-domain-model/find-bug.md` — what happens when the VOs are extracted but stay behaviorless.
+- `../09-primitive-obsession/find-bug.md` — overlapping bug catalogue from the primitive-type angle.
+- `../02-anemic-domain-model/find-bug.md` — what happens when the VOs are extracted but stay behaviorless.
 - `./optimize.md` — performance properties of the records you just extracted.

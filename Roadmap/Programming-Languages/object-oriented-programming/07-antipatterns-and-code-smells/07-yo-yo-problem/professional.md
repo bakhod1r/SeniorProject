@@ -201,9 +201,9 @@ Guidance:
 
 | Topic | Why |
 |---|---|
-| [Fragile Base Class Problem](../06-fragile-base-class-problem/) | Deep framework hierarchies amplify fragility |
-| [Composition Over Inheritance](../../../03-design-principles/02-composition-over-inheritance/) | The structural answer for framework-induced depth |
-| [Refused Bequest](../05-refused-bequest/) | Common in framework subclasses that ignore inherited capability |
+| [Fragile Base Class Problem](../../03-design-principles/06-fragile-base-class-problem/) | Deep framework hierarchies amplify fragility |
+| [Composition Over Inheritance](../../03-design-principles/02-composition-over-inheritance/) | The structural answer for framework-induced depth |
+| [Refused Bequest](../04-refused-bequest/) | Common in framework subclasses that ignore inherited capability |
 
 ---
 

@@ -160,8 +160,9 @@ A VO defined as a record with a compact constructor that throws on invalid input
 
 ## 7. What's next
 
-- `../07-primitive-obsession/specification.md` — defines the "tiny type" boundary case in detail.
-- `../../06-anemic-domain-model/specification.md` — explains why VOs must carry behavior to count as domain-rich.
+- `../09-primitive-obsession/specification.md` — defines the "tiny type" boundary case in detail.
+- `../02-anemic-domain-model/specification.md` — explains why VOs must carry behavior to count as domain-rich.
+- `../../08-tactical-ddd/01-value-objects/specification.md` — the DDD canon for the type the clump becomes.
 - `./find-bug.md` — applies this specification to ten real scenarios.
 
 ---

@@ -183,11 +183,11 @@ The yo-yo problem only emerges when inheritance is used to *share code* rather t
 
 | Topic | Why |
 |---|---|
-| [Fragile Base Class Problem](../06-fragile-base-class-problem/) | The change-time twin of the yo-yo |
-| [Refused Bequest](../05-refused-bequest/) | Subclasses ignoring inherited behavior often hide inside yo-yo chains |
-| [Composition Over Inheritance](../../../03-design-principles/02-composition-over-inheritance/) | The structural fix for yo-yo and fragile base together |
-| [Template Method (design patterns)](../../../15-design-patterns-in-go/) | The pattern most commonly misused into a yo-yo |
-| [SOLID — LSP](../../../03-design-principles/01-solid-principles/) | Yo-yo chains routinely violate Liskov substitution |
+| [Fragile Base Class Problem](../../03-design-principles/06-fragile-base-class-problem/) | The change-time twin of the yo-yo |
+| [Refused Bequest](../04-refused-bequest/) | Subclasses ignoring inherited behavior often hide inside yo-yo chains |
+| [Composition Over Inheritance](../../03-design-principles/02-composition-over-inheritance/) | The structural fix for yo-yo and fragile base together |
+| [CK Metrics — DIT / NOC](../../09-oo-design-and-modeling/02-oo-metrics-ck-suite/) | The depth metric that quantifies how yo-yo-prone a hierarchy is |
+| [SOLID — LSP](../../03-design-principles/01-solid-principles/) | Yo-yo chains routinely violate Liskov substitution |
 
 ---
 

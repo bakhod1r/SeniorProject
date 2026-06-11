@@ -90,7 +90,7 @@ Object-oriented design has one defining promise: **encapsulation**. An object hi
 - **It is procedural code wearing OO clothes.** `UserService.register(...)` reads exactly like a function in a C program that takes a `User` struct, manipulates its fields, and returns it. The `class` keyword on `User` adds nothing — `User` is a struct.
 - **Invariants are unenforceable.** Any caller that holds a `User` reference can call `setActive(true)` on a user who was just deleted, or set `email` to `null`, or push `lastLoginAt` into the future. The class has no opinion about its own state.
 - **Behaviour scatters.** `User`-related rules end up in `UserService`, `UserValidator`, `UserMapper`, `UserActivator`, `UserAuditor`. To understand what a user *is*, you read six files. To add a rule (say, "a user can't log in within 5 seconds of registration"), you have to find every place that touches login.
-- **Tell, don't ask, is reversed.** Code constantly *asks* a `User` for its fields and then makes decisions outside. The OO style is to *tell* the `User` to do something and let it decide.
+- **Tell, don't ask, is reversed.** Code constantly *asks* a `User` for its fields and then makes decisions outside. The OO style is to *tell* the `User` to do something and let it decide. (The structural mirror of this is the [Law of Demeter](../../03-design-principles/03-law-of-demeter/): anemic code chains `a.getX().getY()` to reach data it then decides on.)
 
 Fowler's original wording (bliki: *AnemicDomainModel*, 2003) is blunt:
 
@@ -152,7 +152,7 @@ Notice the differences:
 - The constructor is `private`. A `User` only enters the world via `register(...)`, which guarantees a valid initial state.
 - There are no setters. State transitions happen through `recordLogin`, `deactivate`, `changeEmail` — methods whose names say *what they do in the domain*.
 - The invariant "disabled users cannot change email" lives on the class. Any caller that holds a `User` cannot bypass it.
-- `Email` and `PasswordHash` are *value objects* — small immutable types that own their own validity (we'll meet them in `middle.md`).
+- `Email` and `PasswordHash` are *value objects* — small immutable types that own their own validity (we'll meet them in `middle.md`; see also [../../08-tactical-ddd/01-value-objects/](../../08-tactical-ddd/01-value-objects/)).
 
 The `UserService` shrinks dramatically — it becomes a thin coordinator between the repository and the rich `User`, not the place where user logic lives.
 
@@ -218,7 +218,19 @@ The `setBalance` exposes the same hole the anemic version had — any caller can
 
 ---
 
-## 8. What's next
+## 8. Related smells
+
+Anemia rarely travels alone — it pulls a cluster of sibling smells with it:
+
+- **[God Class](../01-god-class/)** — when behaviour is exiled from entities it collects in a few bloated `…Service`/`…Manager` classes. The anemic model *causes* the god service.
+- **[Primitive Obsession](../09-primitive-obsession/)** — anemic entities expose raw `String`/`BigDecimal` fields instead of [value objects](../../08-tactical-ddd/01-value-objects/), so validation has nowhere to live but a service.
+- **[Law of Demeter](../../03-design-principles/03-law-of-demeter/)** violations — `ask` code reaches through anemic objects (`order.getCustomer().getAddress().getZip()`) to fetch data it decides on externally.
+
+The constructive opposite is *tactical DDD*: [entities](../../08-tactical-ddd/02-entities/) and [value objects](../../08-tactical-ddd/01-value-objects/) that own behaviour, [aggregates](../../08-tactical-ddd/03-aggregates/) that own invariants, and [domain services](../../08-tactical-ddd/05-domain-services/) reserved for logic that genuinely belongs to *no single* entity.
+
+---
+
+## 9. What's next
 
 | Topic                                                              | File              |
 | ------------------------------------------------------------------ | ----------------- |

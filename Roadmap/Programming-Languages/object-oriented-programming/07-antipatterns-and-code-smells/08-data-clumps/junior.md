@@ -237,7 +237,7 @@ Pick one representation. Synchronising two is worse than either alone.
 | Hands-on extraction exercises                               | `tasks.md`         |
 | Interview Q&A                                               | `interview.md`     |
 
-Related smells: [primitive-obsession](../09-primitive-obsession/), [anemic-domain-model](../02-anemic-domain-model/), and the value-side of [immutability](../../05-immutability/) (when added) all sit next to this one.
+Related: [primitive-obsession](../09-primitive-obsession/) (sibling smell), [anemic-domain-model](../02-anemic-domain-model/), [DDD value-objects](../../08-tactical-ddd/01-value-objects/) (the extracted clump's destination), [records](../../02-more-about-oop/08-record/) (the carrier), and [immutability and defensive copying](../../04-object-contracts-and-semantics/05-immutability-and-defensive-copying/) all sit next to this one.
 
 ---
 

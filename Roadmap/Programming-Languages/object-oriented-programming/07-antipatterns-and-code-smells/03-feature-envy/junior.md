@@ -216,7 +216,7 @@ The two-step *Extract + Move* is what you reach for when a 30-line method has a 
 - [ ] More foreign `getX()` calls than local `this.` accesses → move the method.
 - [ ] Method name contains `For`, `Of`, or another class's name → suspect.
 - [ ] Method takes one object parameter and reads it heavily → candidate for `Move Method`.
-- [ ] Long chain of `customer.getAddress().getCity().getRegion()...` → Law of Demeter violation, often co-occurs.
+- [ ] Long chain of `customer.getAddress().getCity().getRegion()...` → [Law of Demeter](../../03-design-principles/03-law-of-demeter/) violation, often co-occurs.
 - [ ] Caller has to know about an internal enum or tier to do anything → telling, not asking.
 
 ---

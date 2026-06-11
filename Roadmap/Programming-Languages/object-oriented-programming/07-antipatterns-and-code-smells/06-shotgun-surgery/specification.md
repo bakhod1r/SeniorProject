@@ -142,4 +142,46 @@ Estimated ROI: 60% reduction in files-per-commit for order changes
 
 This template, repeated for every cluster, turns the abstract smell into a tracked refactoring stream.
 
+## 9. Canonical literature — where the smell and its cures are defined
+
+The metrics above quantify the smell; the canonical text *names* it and prescribes the refactorings. Map every claim back to these sources.
+
+| Claim                                                              | Authoritative source                                                      |
+|-------------------------------------------------------------------|---------------------------------------------------------------------------|
+| The smell itself: "one change → many little edits in many classes" | **Fowler, *Refactoring*, 2nd ed. (2018), ch. 3, "Shotgun Surgery"**       |
+| Its mirror image: "one class → many reasons to change"            | **Fowler, *Refactoring*, 2nd ed., ch. 3, "Divergent Change"**             |
+| Cure — gather scattered behaviour onto its data                   | Fowler, ch. 8, **Move Function** (was *Move Method*) and **Move Field**   |
+| Cure — fold a thin helper back into its owner                     | Fowler, ch. 7, **Inline Class**                                           |
+| Cure — give a smeared free-function family a class home           | Fowler, ch. 6, **Combine Functions into Class**                          |
+| Cure — replace scattered `switch`/type-code with dispatch         | Fowler, ch. 10, **Replace Conditional with Polymorphism**; ch. 12, **Replace Type Code with Subclasses** |
+| The underlying principle both smells violate                      | **Martin, *Clean Code* (2008), ch. 10, and *Agile Software Development* (2002), ch. 8 — Single Responsibility Principle** |
+| "Reason to change" = a single actor/stakeholder                   | Martin, *Clean Architecture* (2017), ch. 7 — SRP restated as "one actor" |
+
+The two-sentence diagnosis Fowler gives is exact and worth memorising verbatim: *Divergent Change* occurs "when one class is commonly changed in different ways for different reasons"; *Shotgun Surgery* is "the opposite … when every time you make a kind of change, you have to make a lot of little changes to a lot of different classes." Both are SRP failures — Divergent Change crams many responsibilities into one class; Shotgun Surgery smears one responsibility across many. See [`../../03-design-principles/01-solid-principles/`](../../03-design-principles/01-solid-principles/).
+
+## 10. Connascence — the precise coupling vocabulary
+
+Meilir Page-Jones's *connascence* gives the smell a sharper name than "coupling". Two elements are connascent if a change to one requires a matching change to the other to preserve correctness. Shotgun Surgery is **high *degree*** connascence (many elements connascent on one fact) combined with **low *locality*** (those elements live far apart). The specific forms that produce scattered edits:
+
+| Connascence form           | How it causes Shotgun Surgery                                             | Fix direction                          |
+|----------------------------|--------------------------------------------------------------------------|----------------------------------------|
+| **Connascence of Name**    | A field/enum-constant name (`Currency.EUR`, `status == "SHIPPED"`) is repeated across N call sites; renaming forces N edits | Encapsulate; let one type own the name |
+| **Connascence of Position** | The same positional argument order or tuple layout `(street, city, zip)` recurs in many signatures; adding a field reorders all of them | Introduce a value object / record (see [`../08-data-clumps/`](../08-data-clumps/)) |
+| **Connascence of Algorithm** | The same rule (a regex, a tax formula) is copy-pasted; changing it requires a treasure hunt | Extract to one place; **Combine Functions into Class** |
+| **Connascence of Type / Meaning** | A magic value's interpretation is duplicated across modules | Replace with a named type / sealed hierarchy |
+
+Page-Jones's two operative laws apply directly: **minimise overall connascence by encapsulation**, and **where connascence remains, maximise its locality** — keep connascent elements in the same class/module so a change stays in one file. Shotgun Surgery is exactly the violation of the *locality* law. The remedy is always to raise locality: move the connascent elements into one home (Move Function/Move Field/Combine Functions into Class), then dissolve the empty helpers (Inline Class).
+
+## 11. Reading list
+
+1. **Martin Fowler — *Refactoring: Improving the Design of Existing Code*, 2nd ed., Addison-Wesley, 2018.** Ch. 3 names *Shotgun Surgery* and *Divergent Change* as a paired diagnosis; chs. 6–8 and 10–12 give the cures (Combine Functions into Class, Inline Class, Move Function, Move Field, Replace Conditional with Polymorphism, Replace Type Code with Subclasses).
+2. **Robert C. Martin — *Clean Code*, Prentice Hall, 2008, ch. 10**, and ***Agile Software Development*, 2002, ch. 8.** The Single Responsibility Principle — the principle both smells violate.
+3. **Robert C. Martin — *Clean Architecture*, Prentice Hall, 2017, ch. 7.** SRP recast as "a module should have one, and only one, reason to change — one *actor*." The cleanest lens for locating the misplaced responsibility.
+4. **Meilir Page-Jones — *What Every Programmer Should Know About Object-Oriented Design*, Dorset House, 1995.** The connascence taxonomy; degree and locality; the two laws this file leans on.
+5. **Adam Tornhill — *Your Code as a Crime Scene*, Pragmatic Bookshelf, 2015** (2nd ed. 2024), and ***Software Design X-Rays*, 2018.** Temporal coupling, change coupling, and the hotspot metrics in §§1–3 above.
+6. **Michael Feathers — *Working Effectively with Legacy Code*, Prentice Hall, 2004.** Seams and characterization tests — the safety net for gathering scattered behaviour without behaviour change.
+7. **Kent Beck — *Tidy First?*, O'Reilly, 2023.** Small, safe, reversible structural moves — the discipline for executing a gather refactor incrementally.
+
+The spec sections in this file *measure* the smell; the literature above *defines* it and *prescribes the fix*. Reach for the metrics to decide which cluster to attack; reach for Fowler's catalogue to decide which move dissolves it.
+
 **Memorize this:** Change coupling above 40% over a 30-commit window is the operational definition of shotgun surgery. CodeMaat or Codescene computes it; a 30-line shell script approximates it. Track p95 files-per-commit as the leading indicator, refactor the top cluster monthly, gate PR size as a guardrail.

@@ -299,7 +299,9 @@ Related:
 | ------------------------------ | ------------------------------------------------------------- |
 | Composition over Inheritance   | `../../03-design-principles/02-composition-over-inheritance/`  |
 | Liskov Substitution Principle  | `../../03-design-principles/01-solid-principles/`              |
-| Fragile Base Class             | `../../03-design-principles/05-fragile-base-class/`            |
+| Fragile Base Class             | `../../03-design-principles/06-fragile-base-class-problem/`            |
+| Feature Envy (sibling smell)   | `../03-feature-envy/`                                         |
+| Inappropriate Intimacy         | `../05-inappropriate-intimacy/`                              |
 
 ---
 
