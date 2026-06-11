@@ -57,7 +57,7 @@ Examples in **Go** (`net/http/pprof`, `expvar`), **Java** (JMX, JFR, Spring Actu
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete** — `junior` · `middle` · `senior` · `professional` · `interview` · `tasks`.
 
 ---
 
