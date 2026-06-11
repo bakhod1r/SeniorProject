@@ -53,7 +53,7 @@ Coupling is not "bad" the way a bug is bad — modules *must* talk to each other
 
 - **Required:** You can write functions/methods and classes, and you understand what it means for one to *call* or *import* another.
 - **Required:** Basic familiarity with interfaces / abstract types in at least one language.
-- **Helpful:** A feel for **[automated testing](../../../craftsmanship-disciplines/README.md)** — coupling shows up most painfully as "I can't test this in isolation."
+- **Helpful:** A feel for **[automated testing](../../../craftsmanship-disciplines/02-test-design-and-fixtures/junior.md)** — coupling shows up most painfully as "I can't test this in isolation."
 - **Helpful:** Exposure to **[cohesion](../02-maximise-cohesion/junior.md)**, coupling's sibling concept (covered fully in its own topic).
 
 ---

@@ -115,7 +115,7 @@ SRP says: align each module with **one actor** — i.e., **one team / one stakeh
 
 > SRP is Conway's Law applied at the class level: **make code boundaries match team (actor) boundaries**, so the cost of change stays inside one team.
 
-This is why senior SRP decisions are inseparable from org design. When you split `Employee` by CFO/COO/CTO actors, you are pre-aligning the code with the three departments that will request the changes — so future changes stay single-team. The "[inverse Conway maneuver](../../../../Architecture/clean-architecture/)" (shaping teams to get the architecture you want) is the same insight run in reverse.
+This is why senior SRP decisions are inseparable from org design. When you split `Employee` by CFO/COO/CTO actors, you are pre-aligning the code with the three departments that will request the changes — so future changes stay single-team. The "[inverse Conway maneuver](../../../../../Architecture/clean-architecture/)" (shaping teams to get the architecture you want) is the same insight run in reverse.
 
 ---
 
@@ -129,7 +129,7 @@ SRP scales from classes to components to microservices, and the actor framing sc
 | Component / package | One reason-to-change family (CCP) | A change rebuilds half the system |
 | Microservice | One bounded context / business capability | The "distributed monolith" — one change redeploys many services |
 
-The **distributed monolith** is SRP failure at the service tier: services split by *technical layer* (a "validation service," a "formatting service") rather than by *business capability* (actor), so a single feature change ripples across every service — shotgun surgery over the network, the most expensive form. Conversely, a service that owns *several* business capabilities is a god-service. The same actor test applies: **split services where different stakeholders drive change, keep together what changes for one reason.** (See [Event-Driven Architecture](../../../../system-design/) for how bounded contexts realise this.)
+The **distributed monolith** is SRP failure at the service tier: services split by *technical layer* (a "validation service," a "formatting service") rather than by *business capability* (actor), so a single feature change ripples across every service — shotgun surgery over the network, the most expensive form. Conversely, a service that owns *several* business capabilities is a god-service. The same actor test applies: **split services where different stakeholders drive change, keep together what changes for one reason.** (See [Event-Driven Architecture](../../../../../Architecture/system-design/) for how bounded contexts realise this.)
 
 > The most expensive SRP violations are not in classes — they are in service boundaries, because there the "shotgun surgery" of a misaligned change becomes a multi-team, multi-deploy, distributed-transaction problem.
 
