@@ -60,7 +60,7 @@ Most audit logging is structurally cross-language (the *event* matters, not the 
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete** — `junior` · `middle` · `senior` · `professional` · `interview` · `tasks`.
 
 ---
 
