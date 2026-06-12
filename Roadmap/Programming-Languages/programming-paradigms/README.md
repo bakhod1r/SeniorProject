@@ -64,4 +64,4 @@ This roadmap stays at the **paradigm / way-of-thinking** level and cross-links t
 
 ## Status
 
-Skeleton — topic folders are scaffolded; content is written per topic following the Code Craft file convention. All content in **English**.
+**Content-complete** — all 17 topics are fully written, each with the 5-tier theory set (`junior` · `middle` · `senior` · `professional` · `interview`), following the Code Craft file convention. All content in **English**.
