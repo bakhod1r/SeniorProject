@@ -1,0 +1,17 @@
+{
+  "name": "go-roadmap-books",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build print-quality PDF books from the Go roadmap markdown content",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "highlight.js": "^11.9.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.0.1",
+    "mermaid": "^11.4.0",
+    "puppeteer": "^23.0.0"
+  }
+}
