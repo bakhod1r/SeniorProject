@@ -47,7 +47,7 @@ The roadmap is tool-centric, but examples cover the build tools for **Go**, **Ja
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content complete.** All 10 topics written across five tiers each — `junior` / `middle` / `senior` / `professional` / `interview`.
 
 ---
 
