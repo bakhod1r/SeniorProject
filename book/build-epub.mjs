@@ -49,6 +49,16 @@ const VOLUMES = [
   { no: 4, title: "Patterns, Internals & Modern Go", sections: ["13-design-patterns-in-go", "14-runtime-and-internals", "15-go-source-reading", "16-webassembly-and-alternative-targets", "17-observability-and-runtime-introspection", "18-modern-language-features"] },
 ];
 
+// Volume 2 (07-concurrency, ~half the corpus) is too large for Send-to-Kindle's
+// KFX conversion as a single 341-spine / 16 MB EPUB ("Failed. Please retry").
+// Split it at the topic-16 boundary into two balanced parts (~170 spine / ~8 MB
+// each — matching Volume 1's known-good profile). Built via --split-vol2.
+const topicNum = (dir) => parseInt(dir.match(/^(\d+)/)?.[1] ?? "999", 10);
+const VOLUMES_SPLIT2 = [
+  { no: "2A", title: "Concurrency in Go, Part 1 — Foundations", sections: ["07-concurrency"], topicFilter: (d) => topicNum(d) <= 16 },
+  { no: "2B", title: "Concurrency in Go, Part 2 — Advanced & Production", sections: ["07-concurrency"], topicFilter: (d) => topicNum(d) >= 17 },
+];
+
 const unescapeHtml = (s) =>
   s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 
@@ -277,17 +287,22 @@ async function newMermaidPage(browser) {
 //   docs        — every tier xhtml, in reading/spine order
 //   navChapters — one entry per leaf topic (-> its first tier file); tiers within
 //                 a leaf flow by swiping, keeping the TOC at topic granularity.
-async function renderSectionChapters(section, md, page, oebps, imgDir, imgManifest) {
+async function renderSectionChapters(section, md, page, oebps, imgDir, imgManifest, topicFilter) {
   const sectionDir = path.join(ROADMAP_ROOT, section);
   const bookNo = section.match(/^(\d+)/)[1];
   const prefix = `s${bookNo}`;
   const tree = buildTree(sectionDir, prefix, 0, sectionDir);
 
-  const leaves = [];
+  let leaves = [];
   (function walk(n) {
     if (n.files && n.files.length) leaves.push(n);
     for (const c of n.children) walk(c);
   })(tree);
+
+  // Optional split: keep only leaves whose top-level topic dir passes the filter.
+  // Used to halve an oversized section (e.g. 07-concurrency) into two EPUBs that
+  // stay within Send-to-Kindle's KFX conversion limits.
+  if (topicFilter) leaves = leaves.filter((n) => topicFilter(n.rel.split("/")[0]));
 
   const docs = [];
   const navChapters = [];
@@ -432,7 +447,7 @@ async function buildVolume(vol, browser, hljsCss, force) {
   const groups = [];
   const allDocs = [];
   for (const section of vol.sections) {
-    const { title: secTitle, navChapters, docs } = await renderSectionChapters(section, md, page, oebps, imgDir, svgManifest);
+    const { title: secTitle, navChapters, docs } = await renderSectionChapters(section, md, page, oebps, imgDir, svgManifest, vol.topicFilter);
     groups.push({ title: secTitle, chapters: navChapters });
     allDocs.push(...docs);
   }
@@ -482,13 +497,15 @@ async function main() {
   const only = argv.includes("--only") ? argv[argv.indexOf("--only") + 1] : null;
   const force = argv.includes("--force");
   const volumes = argv.includes("--volumes");
+  const splitVol2 = argv.includes("--split-vol2");
   fs.mkdirSync(EPUB_DIR, { recursive: true });
 
   const hljsCss = fs.readFileSync(path.join(__dirname, "node_modules/highlight.js/styles/github.css"), "utf8");
   const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
 
-  if (volumes) {
-    for (const vol of VOLUMES) {
+  if (volumes || splitVol2) {
+    const list = splitVol2 ? VOLUMES_SPLIT2 : VOLUMES;
+    for (const vol of list) {
       console.log(`\nVolume ${vol.no}: ${vol.title}`);
       try { await buildVolume(vol, browser, hljsCss, force); }
       catch (e) { console.error(`  FAILED: Volume ${vol.no} — ${e.message}`); }
