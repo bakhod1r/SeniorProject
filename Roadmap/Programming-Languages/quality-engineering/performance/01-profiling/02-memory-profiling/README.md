@@ -18,7 +18,7 @@ Memory profiling answers *what is alive in the heap right now, and what keeps it
 ## Related
 
 - **[Allocation Profiling](../03-allocation-profiling/)** — the *rate* side; usually the easier optimisation target.
-- **[Memory Optimization](../../05-memory-optimization/)** — what to do once you know what's retained.
+- **[Memory Optimization](../../05-memory-and-allocation-profiling/)** — what to do once you know what's retained.
 - **[Diagnostics → Post-Mortem Analysis](../../../../diagnostics/post-mortem-analysis/)** — heap dumps captured at crash time.
 - **[Language Internals → Memory Management](../../../../language-internals/memory-management/)** — GC strategies and their effect on what "memory profile" even means.
 
@@ -26,4 +26,4 @@ Memory profiling answers *what is alive in the heap right now, and what keeps it
 
 ## Status
 
-⏳ Per-tier files (junior / middle / senior / professional / interview) pending.
+✅ Content-complete — all five tiers written ([junior](junior.md) / [middle](middle.md) / [senior](senior.md) / [professional](professional.md) / [interview](interview.md)).

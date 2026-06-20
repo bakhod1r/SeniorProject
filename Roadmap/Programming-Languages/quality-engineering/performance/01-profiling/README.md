@@ -23,7 +23,7 @@ A common mistake: "profile memory" and look at heap usage. But high *allocation 
 
 ## Related
 
-- **[Benchmarking](../02-benchmarking/)** — controlled comparison; profiling is exploration.
-- **[Memory Optimization](../05-memory-optimization/)** — once allocation profile points the finger, this is where you act on it.
+- **[Benchmarking](../02-benchmarking-and-microbenchmarks/)** — controlled comparison; profiling is exploration.
+- **[Memory Optimization](../05-memory-and-allocation-profiling/)** — once allocation profile points the finger, this is where you act on it.
 - **[Diagnostics → Diagnostic Endpoints](../../../diagnostics/diagnostic-endpoints/)** — `/debug/pprof` and JFR-style live profile capture.
 - **[Language Internals → Memory Management](../../../language-internals/memory-management/)** — *why* allocations are expensive, not just where.

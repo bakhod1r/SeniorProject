@@ -19,7 +19,7 @@ Allocation profiling attributes *where allocations happen*, not what stays alive
 ## Related
 
 - **[Memory Profiling](../02-memory-profiling/)** — what's *retained* (different question, same tool sometimes).
-- **[Memory Optimization](../../05-memory-optimization/)** — reducing rate at the source.
+- **[Memory Optimization](../../05-memory-and-allocation-profiling/)** — reducing rate at the source.
 - **[Language Internals → Escape Analysis](../../../../language-internals/memory-management/08-escape-analysis/)** — why some allocations could have stayed on the stack.
 - **[Language Internals → Tracing GC](../../../../language-internals/memory-management/05-tracing-garbage-collection/)** — why allocation rate matters for pause times.
 
@@ -27,4 +27,4 @@ Allocation profiling attributes *where allocations happen*, not what stays alive
 
 ## Status
 
-⏳ Per-tier files (junior / middle / senior / professional / interview) pending.
+✅ Content-complete — all five tiers written ([junior](junior.md) / [middle](middle.md) / [senior](senior.md) / [professional](professional.md) / [interview](interview.md)).

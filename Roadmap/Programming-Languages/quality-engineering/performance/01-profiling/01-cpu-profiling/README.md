@@ -17,11 +17,11 @@ CPU profiles attribute *where the CPU spent its cycles* — wall-clock vs on-CPU
 ## Related
 
 - **[Flame Graphs](../04-flame-graphs/)** — the dominant visualisation for CPU profiles.
-- **[Benchmarking](../../02-benchmarking/)** — comparison after profile-guided change.
+- **[Benchmarking](../../02-benchmarking-and-microbenchmarks/)** — comparison after profile-guided change.
 - **[Diagnostics → Diagnostic Endpoints](../../../../diagnostics/diagnostic-endpoints/)** — `/debug/pprof` for live capture.
 
 ---
 
 ## Status
 
-⏳ Per-tier files (junior / middle / senior / professional / interview) pending.
+✅ Content-complete — all five tiers written ([junior](junior.md) / [middle](middle.md) / [senior](senior.md) / [professional](professional.md) / [interview](interview.md)).

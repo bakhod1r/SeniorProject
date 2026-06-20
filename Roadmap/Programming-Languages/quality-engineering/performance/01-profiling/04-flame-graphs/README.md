@@ -25,4 +25,4 @@ Flame graphs are the visualisation Brendan Gregg invented to make sampled stack 
 
 ## Status
 
-⏳ Per-tier files (junior / middle / senior / professional / interview) pending.
+✅ Content-complete — all five tiers written ([junior](junior.md) / [middle](middle.md) / [senior](senior.md) / [professional](professional.md) / [interview](interview.md)).

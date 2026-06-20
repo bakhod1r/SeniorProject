@@ -26,19 +26,19 @@ Most performance content is either *intro-level* ("use a hash map for lookup") o
 
 ## Sections
 
-| # | Topic | Focus |
-|---|---|---|
-| [01](01-profiling/) | Profiling | CPU / memory / allocation profiles, flame graphs, pprof / perf / Instruments / async-profiler |
-| [02](02-benchmarking/) | Benchmarking | Micro-benchmarks done right (avoiding DCE, JIT warm-up, branch prediction noise); macro-benchmarks; stability |
-| [03](03-latency-budgets/) | Latency Budgets | Tail-latency thinking, the p99 trap, per-component budgets, error budgets |
-| [04](04-throughput-vs-latency/) | Throughput vs Latency | The Little's-Law triangle (throughput · latency = concurrency), when each matters |
-| [05](05-memory-optimization/) | Memory Optimization | Allocation rate, escape analysis, GC pressure, fragmentation, working set, allocators |
-| [06](06-cache-friendly-code/) | Cache-Friendly Code | Cache lines, false sharing, SoA vs AoS, prefetching, NUMA |
-| [07](07-concurrency-overhead/) | Concurrency Overhead | Amdahl, contention, lock convoying, scheduler effects, scaling curves |
-| 08 | Regression Detection | CI benchmarks, statistical thresholds (Mann-Whitney U), trend dashboards, alerts |
-| 09 | Performance Anti-patterns | "Optimise without measuring," premature optimisation, micro-benchmark theatre, "it's fine on my Mac" |
+Each topic ships the full five-tier set — **junior / middle / senior / professional / interview**.
 
-> Sections 08–09 are planned but not yet scaffolded as sub-folders — they'll be added as content is filled in.
+| # | Topic | Focus | Status |
+|---|---|---|---|
+| [01](01-profiling/) | Profiling | CPU / memory / allocation profiles, flame graphs, pprof / perf / Instruments / async-profiler | ✅ |
+| [02](02-benchmarking-and-microbenchmarks/) | Benchmarking & Microbenchmarks | Micro-benchmarks done right (avoiding DCE, JIT warm-up, branch-prediction noise); macro-benchmarks; statistical stability | ✅ |
+| [03](03-latency-and-throughput/) | Latency & Throughput | Little's Law, the p99 trap, tail-at-scale, coordinated omission, queueing, budgets | ✅ |
+| [04](04-cpu-bound-optimization/) | CPU-Bound Optimization | Profile-first, the memory hierarchy, branch prediction, SIMD, data layout, PGO | ✅ |
+| [05](05-memory-and-allocation-profiling/) | Memory & Allocation Optimization | Allocation rate vs residency, escape analysis, GC pressure, allocators, GOMEMLIMIT/OOMKills | ✅ |
+| [06](06-concurrency-and-contention/) | Concurrency & Contention | Amdahl & USL, lock contention, false sharing, cache coherence, scheduler effects, scaling curves | ✅ |
+| [07](07-performance-budgets-and-regression-testing/) | Performance Budgets & Regression Testing | Budgets as SLOs, benchstat/Mann-Whitney, change-point detection, CI gates, trend dashboards | ✅ |
+
+> The 01-profiling section is further split into four sub-topics — [CPU](01-profiling/01-cpu-profiling/), [Memory](01-profiling/02-memory-profiling/), [Allocation](01-profiling/03-allocation-profiling/), and [Flame Graphs](01-profiling/04-flame-graphs/) — each with the full five-tier set.
 
 ---
 
@@ -50,7 +50,7 @@ Examples in **Go** (`pprof`, `benchstat`, `runtime/trace`), **Java** (JFR, async
 
 ## Status
 
-⏳ **Structure defined; 7 sub-folders scaffolded. Sections 08–09 planned. Per-topic files (junior / middle / senior / professional / interview) pending.**
+✅ **Content-complete.** All 7 sections — including the 4 profiling sub-topics — are written across the full five-tier set (junior / middle / senior / professional / interview): 50 topic files in total.
 
 ---
 
