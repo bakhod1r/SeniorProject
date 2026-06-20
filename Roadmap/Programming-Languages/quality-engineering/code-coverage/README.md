@@ -24,22 +24,16 @@ Every team eventually wires a coverage tool into CI, picks a threshold ("80%? 90
 
 ---
 
-## Sections
+Each topic ships the full five-tier set — **junior / middle / senior / professional / interview**.
 
 | # | Topic | Focus |
 |---|---|---|
-| [01](01-what-coverage-measures/) | What Coverage Measures | Line, statement, branch, path, function coverage — what each one counts and what each one ignores |
-| [02](02-mutation-coverage/) | Mutation Coverage | The only honest signal of test *quality*; `pitest` (Java), Stryker (JS/C#/Scala), `mutmut` / `cosmic-ray` (Python) |
-| [03](03-coverage-as-target-antipattern/) | The Coverage-as-Target Anti-pattern | Goodhart's law applied to tests; gaming the number with assertion-free tests and `# pragma: no cover` |
-| [04](04-diff-coverage/) | Diff Coverage | Coverage of changed lines only — what most modern CIs actually enforce, and why it's saner than a global threshold |
-| [05](05-branch-coverage-in-depth/) | Branch Coverage in Depth | Short-circuit evaluation, exception paths, default branches, the cases line coverage silently hides |
-| [06](06-coverage-tools/) | Coverage Tools | JaCoCo (Java), Coverage.py (Python), Go's built-in `-cover`, `llvm-cov` / `grcov` / `tarpaulin` (Rust), `c8` / `nyc` / Istanbul (JS) |
-| [07](07-ci-integration/) | CI Integration | Codecov, Coveralls, SonarCloud — PR comments, status checks, merge blockers, and the politics of coverage gates |
-| [08](08-what-not-to-cover/) | What NOT to Cover | Generated code, vendored third-party, trivial accessors, `main` glue; intentional exclusion vs sloppy ignoring |
-| [09](09-coverage-reports/) | Coverage Reports | HTML drill-down reports, IDE gutter highlights, finding the *one* untested branch in a 50k-line module |
-| [10](10-path-coverage-explosion/) | Path Coverage & Combinatorial Explosion | Why true 100% path coverage is mathematically impossible for non-trivial code, and what people mean when they claim it |
-| [11](11-async-and-concurrent-coverage/) | Coverage of Async / Concurrent Code | Goroutines, async/await, threads — what coverage tools record, what they miss (race conditions, interleavings, dropped futures) |
-| [12](12-antipatterns/) | Anti-patterns | "100% required to merge" gates, coverage-driven test design, `assertTrue(true)`, deleting hard-to-cover branches, hiding behind exclusion lists |
+| [01](01-line-branch-path-coverage/) | Line, Branch & Path Coverage | What each metric counts and ignores — statement/line, branch/decision, condition, MC/DC, path; the subsumption hierarchy; why 100% line ≠ 100% branch; path explosion; how instrumentation works |
+| [02](02-mutation-coverage/) | Mutation Coverage | The only honest signal of test *quality* — mutants, operators, mutation score, killed vs survived, equivalent mutants; `pitest` (Java), Stryker (JS/C#/Scala), `mutmut`/`cosmic-ray` (Python), `go-mutesting`; making it practical on diffs |
+| [03](03-coverage-tooling-per-language/) | Coverage Tooling per Language | Go `-cover`/`-covermode`, JaCoCo, Coverage.py, `c8`/`nyc`/Istanbul/V8, gcov/lcov/llvm-cov, tarpaulin/grcov; report formats (lcov, cobertura, clover); HTML drill-down, IDE gutters, merging reports |
+| [04](04-coverage-in-ci-and-diffs/) | Coverage in CI & Diffs | Diff/patch coverage (Codecov, Coveralls, SonarCloud), project vs patch coverage, the ratchet, PR status checks & merge blockers, combining parallel shards, flaky coverage, the politics of gates |
+| [05](05-what-coverage-does-not-tell-you/) | What Coverage Does *Not* Tell You | Covered ≠ tested (no assertions/oracle), missed requirements & edge cases, async/concurrent blind spots (races, interleavings), what *not* to cover (generated/vendored/trivial), false confidence |
+| [06](06-coverage-as-signal-not-target/) | Coverage as Signal, Not Target | Goodhart's law in practice, gaming the number (assertion-free tests, `pragma: no cover`, deleting hard branches), the 80%/100% debate, Google's no-global-threshold stance, coverage as diagnostic not KPI |
 
 ---
 
@@ -51,7 +45,7 @@ The roadmap is tool-centric, but examples cover **Go** (`go test -cover`, `-cove
 
 ## Status
 
-⏳ **Structure defined; content pending.**
+✅ **Content-complete.** All 6 topics are written across the full five-tier set (junior / middle / senior / professional / interview): 30 topic files in total.
 
 ---
 
