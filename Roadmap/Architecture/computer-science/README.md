@@ -2,269 +2,59 @@
 
 - Roadmap: https://roadmap.sh/computer-science
 
-## Deep-Dive Sections
+This roadmap is the **senior / staff deep-dive layer** of computer science: how each
+layer works **internally and why** — the bar that separates senior/staff engineers
+from "knows how to use it." The roadmap.sh intro topics that overlap with other
+roadmaps in this repo are **not re-authored here** (see *Foundations* below); they
+live at their authoritative home. Each subtopic here is a skeleton folder, content TBD.
 
-- [01. Operating Systems](01-operating-systems/) — processes/threads, memory management, scheduling, file systems, virtual memory, system calls
-- [02. Networking](02-networking/) — TCP/IP, HTTP, DNS, TLS/SSL, OSI model
-- [03. Database Internals](03-database-internals/) — B-tree storage, LSM trees, MVCC, WAL, query planning
-- [04. Compilers](04-compilers/) — lexer, parser, semantic analysis, optimizer, code generation
-- [05. Computer Architecture](05-computer-architecture/) — CPU, cache hierarchy, pipeline, NUMA, vectorization
+## Deep-Dive Sections (bottom-up)
+
+Ordered foundations → applied, each layer building on the one before it.
+
+1. [Discrete Mathematics](01-discrete-mathematics/) — logic & proofs, set theory, combinatorics, probability, graph theory, number theory, recurrences, boolean algebra (the math under algorithm analysis & complexity)
+2. [Theory of Computation](02-theory-of-computation/) — automata, context-free grammars, Turing machines/computability, halting problem, P vs NP/NP-completeness, reductions
+3. [Information Theory](03-information-theory/) — entropy/Shannon, compression (Huffman/LZ77), error-correcting codes
+4. [Computer Architecture](04-computer-architecture/) — pipelining/OOO, branch prediction, cache coherence (MESI), TLB, NUMA, memory ordering, SIMD, mechanical sympathy
+5. [Operating Systems](05-operating-systems/) — scheduler internals, virtual memory, page replacement, IPC, I/O models (epoll/io_uring), context switching, interrupts, real-time
+6. [Concurrency & Parallelism](06-concurrency-and-parallelism/) — memory models, happens-before, atomics/CAS, lock-free/wait-free, Amdahl/USL, race conditions/ABA, actor/CSP
+7. [Networking Internals](07-networking-internals/) — TCP congestion/flow control, HOL blocking, TLS 1.3 handshake, QUIC/HTTP3, L4 vs L7 LB, latency numbers, DNS/anycast, network namespaces
+8. [Compilers & Language Theory](08-compilers-and-language-theory/) — lexing/parsing, AST/semantic analysis, IR/SSA, optimization passes, codegen, JIT vs AOT, garbage collection
+9. [Database Internals](09-database-internals/) — LSM vs B-tree storage, MVCC, WAL/recovery, query planner, consensus (Raft/Paxos), CRDTs/vector clocks, distributed transactions
+10. [Distributed Systems Theory](10-distributed-systems-theory/) — CAP/PACELC, FLP impossibility, consistency models, logical/vector clocks, quorums/gossip, consensus foundations
+11. [Cryptography & Security](11-cryptography-and-security/) — symmetric (AES), asymmetric (RSA/ECC), hash/KDFs, TLS/PKI internals, zero-knowledge proofs, side-channel attacks
+12. [Programming Language Theory](12-programming-language-theory/) — lambda calculus, operational/denotational semantics, type systems & inference (Hindley-Milner), polymorphism/subtyping, effects/monads, dependent & refinement types
+13. [GPU & Parallel Computing](13-gpu-and-parallel-computing/) — GPU architecture & execution model, CUDA/GPGPU, memory coalescing, parallel primitives (scan/reduce), parallel algorithm design, graphics rendering pipeline
+14. [Numerical Methods & Scientific Computing](14-numerical-methods-and-scientific-computing/) — floating-point error analysis, numerical stability/conditioning, linear solvers & decompositions, iterative methods, FFT/spectral methods, numerical integration & ODEs
 
 **Companion roadmaps:**
 - [Data Structures & Algorithms](../../Data/datastructures-and-algorithms/) — algorithmic foundations
 - [System Design](../system-design/) — applying CS at the architecture level
+- [Databases](../../Backend/databases/) — vendor-agnostic database concepts
 
 ---
 
-## 1. Pick a Language
-- 1.1 Python
-- 1.2 Go
-- 1.3 C#
-- 1.4 C++
-- 1.5 C
-- 1.6 Java
-- 1.7 Rust
+## Foundations — covered in their canonical roadmaps
 
-## 2. Data Structures
-- 2.1 Array
-- 2.2 Linked List
-- 2.3 Stack
-- 2.4 Queue
-- 2.5 Hash Table
-- 2.6 Heap
+The roadmap.sh "computer science" intro repeats material that already lives —
+more thoroughly — in other roadmaps in this repo. To avoid duplication, those
+topics are **not** re-authored here; learn them at their authoritative home:
 
-### 2.7 Tree
-- 2.7.1 Binary Tree
-- 2.7.2 Binary Search Tree
-- 2.7.3 Full Binary Tree
-- 2.7.4 Complete Binary Tree
-- 2.7.5 Balanced Tree
-- 2.7.6 Unbalanced Tree
-
-### 2.8 Graph
-- 2.8.1 Directed Graph
-- 2.8.2 Undirected Graph
-- 2.8.3 Spanning Tree
-
-### 2.9 Representation
-- 2.9.1 Adjacency List
-- 2.9.2 Adjacency Matrix
-
-## 3. Asymptotic Notation
-
-### 3.1 Big O
-- 3.1.1 Constant
-- 3.1.2 Logarithmic
-- 3.1.3 Linear
-- 3.1.4 Polynomial
-- 3.1.5 Exponential
-- 3.1.6 Factorial
-
-### 3.2 Big-Theta
-
-### 3.3 Big Omega
-
-### 3.4 Common Runtimes
-
-## 4. Common Algorithms
-
-### 4.1 Sorting
-- 4.1.1 Bubble Sort
-- 4.1.2 Selection Sort
-- 4.1.3 Insertion Sort
-- 4.1.4 Heap Sort
-- 4.1.5 Quick Sort
-- 4.1.6 Merge Sort
-
-### 4.2 Tree
-- 4.2.1 Pre-Order Traversal
-- 4.2.2 In-Order Traversal
-- 4.2.3 Post Order Traversal
-- 4.2.4 Breadth First Search
-- 4.2.5 Depth First Search
-
-### 4.3 Graphs
-- 4.3.1 Breadth First Search
-- 4.3.2 Depth First Search
-- 4.3.3 Bellman Ford's Algorithm
-- 4.3.4 Dijkstra's Algorithm
-- 4.3.5 A* Algorithm
-
-### 4.4 Recursion
-- 4.4.1 Tail Recursion
-- 4.4.2 Non-Tail Recursion
-
-### 4.5 Searching
-- 4.5.1 Binary Search
-- 4.5.2 Linear Search
-
-### 4.6 Caches
-- 4.6.1 MFU Cache
-- 4.6.2 LRU Cache
-- 4.6.3 LFU Cache
-
-### 4.7 Greedy Algorithms
-- 4.7.1 Dijkstra's Algorithm
-- 4.7.2 Huffman Coding
-- 4.7.3 Kruskal's Algorithm
-- 4.7.4 Ford-Fulkerson Algorithm
-- 4.7.5 Prim's Algorithm
-
-### 4.8 Back Tracking
-- 4.8.1 Finding Hamiltonian Paths
-- 4.8.2 Solving N Queen Problem
-- 4.8.3 Maze Solving Problem
-- 4.8.4 The Knight's Tour Problem
-- 4.8.5 Rabin-Karp Algorithm
-
-### 4.9 String Search & Manipulations
-- 4.9.1 Search Pattern in Text
-- 4.9.2 Suffix Arrays
-- 4.9.3 Substring Search
-- 4.9.4 Brute Force Search
-- 4.9.5 Robin-Karp
-- 4.9.6 Knuth-Morris Pratt
-- 4.9.7 Boyer-Moore
-
-### 4.10 Endianness
-- 4.10.1 Big Endian
-- 4.10.2 Little Endian
-
-### 4.11 Floating Point Math
-
-### 4.12 Unicode
-
-### 4.13 ASCII
-
-### 4.14 Character Encodings
-
-### 4.15 Bitwise Operators
-
-## 5. Common UML Diagrams
-- 5.1 Class Diagrams
-- 5.2 Usecase Diagrams
-- 5.3 Activity Diagrams
-- 5.4 Statemachine Diagrams
-- 5.5 Sequence Diagrams
-
-## 6. Design Patterns
-- 6.1 GoF Design Patterns
-- 6.2 Architectural Patterns
-- 6.3 Dependency Injection
-- 6.4 Null Object Pattern
-- 6.5 Type Object Pattern
-
-## 7. Complexity Classes
-- 7.1 P
-- 7.2 NP
-- 7.3 P = NP
-- 7.4 Co-NP
-- 7.5 NP Hard
-- 7.6 NP Complete
-
-### 7.7 Travelling Salesman Problem
-
-### 7.8 Knapsack Problem
-
-### 7.9 Longest Path Problem
-
-## 8. Tries
-
-## 9. Balanced Search Trees
-- 9.1 AVL Trees
-- 9.2 Red / Black Trees
-- 9.3 2-3 Search Trees
-- 9.4 2-3-4 Trees
-- 9.5 K-ary / M-ary Tree
-- 9.6 B-Tree
-
-### 9.7 K-D Trees
-
-### 9.8 Skip Lists
-
-## 10. Databases
-
-### 10.1 SQL vs NoSQL Databases
-
-### 10.2 Normalization / Denormalization
-
-### 10.3 Entity-Relationship Model
-
-### 10.4 DDL, DML, DQL, DCL
-
-### 10.5 Locking
-
-### 10.6 ACID Model
-
-### 10.7 BASE
-
-### 10.8 CAP Theorem
-
-### 10.9 PACELC
-
-### 10.10 Indexes
-
-### 10.11 Views
-
-### 10.12 Transactions
-
-### 10.13 Stored Procedures
-
-### 10.14 Database Federation
-
-### 10.15 Replication
-
-### 10.16 Sharding
-
-## 11. Networking
-- 11.1 OSI Model
-- 11.2 TCP/IP Model
-- 11.3 DNS
-- 11.4 HTTP
-- 11.5 TLS & HTTPS
-- 11.6 Sockets
-
-## 12. Security
-- 12.1 Hashing / Encryption / Encoding
-- 12.2 Public Key Cryptography
-- 12.3 Hashing Algorithms
-- 12.4 OWASP Top 10
-
-## 13. How Computers Work
-- 13.1 How CPU Executes Programs
-- 13.2 Registers and RAM
-- 13.3 Instructions and Programs
-- 13.4 CPU Cache
-- 13.5 How Computers Calculate
-
-## 14. Processes and Threads
-- 14.1 Process Forking
-- 14.2 Memory Management
-- 14.3 Lock / Mutex / Semaphore
-- 14.4 Concurrency in Multiple Cores
-- 14.5 Scheduling Algorithms
-- 14.6 CPU Interrupts
-- 14.7 Processes vs Threads
-
-## 15. System Design
-- 15.1 Horizontal vs Vertical Scaling
-- 15.2 Load Balancing
-- 15.3 Clustering
-- 15.4 Caching
-- 15.5 CDN
-- 15.6 Proxy
-- 15.7 CAP Theorem
-- 15.8 Queues
-- 15.9 Architectural Styles
-  - 15.9.1 REST
-  - 15.9.2 GraphQL
-  - 15.9.3 gRPC
-- 15.10 Cloud Design Patterns
-  - 15.10.1 Long Polling
-  - 15.10.2 Short Polling
-  - 15.10.3 Web Sockets
-  - 15.10.4 SSE
-
-### 15.11 Basic Math Skills
-- 15.11.1 Probability
-- 15.11.2 Combinatorics
+| roadmap.sh topic | Learn it here |
+|-------|---------------|
+| Pick a Language | [choosing-a-language-and-polyglot](../../Programming-Languages/choosing-a-language-and-polyglot/) · [languages/](../../Programming-Languages/languages/) |
+| Data Structures | [DSA · basic-data-structures](../../Data/datastructures-and-algorithms/05-basic-data-structures/) · [trees](../../Data/datastructures-and-algorithms/09-trees/) · [graphs](../../Data/datastructures-and-algorithms/11-graphs/) |
+| Asymptotic Notation | [DSA · asymptotic-notation](../../Data/datastructures-and-algorithms/06-algorithmic-complexity/04-asymptotic-notation/) |
+| Common Algorithms | [DSA · sorting](../../Data/datastructures-and-algorithms/07-sorting-algorithms/) · [search](../../Data/datastructures-and-algorithms/08-search-algorithms/) · [greedy](../../Data/datastructures-and-algorithms/14-greedy-algorithms/) · [strings](../../Data/datastructures-and-algorithms/17-string-algorithms/) |
+| Data Representation | [language-internals/data-representation-and-numerics](../../Programming-Languages/language-internals/data-representation-and-numerics/) (endianness, IEEE-754, Unicode) |
+| Common UML Diagrams | [documentation/12-uml-diagrams](../../Programming-Languages/code-craft/documentation/12-uml-diagrams/) · [diagrams-as-code](../../Programming-Languages/code-craft/documentation/08-diagrams-as-code/) |
+| Design Patterns | [code-craft/design-patterns](../../Programming-Languages/code-craft/design-patterns/) *(authoritative catalog)* |
+| Complexity Classes (P/NP) | [DSA · complexity-classes-p-np](../../Data/datastructures-and-algorithms/06-algorithmic-complexity/06-complexity-classes-p-np/) — deeper in [02. Theory of Computation](02-theory-of-computation/) |
+| Tries | [DSA · trie](../../Data/datastructures-and-algorithms/09-trees/05-trie/) · [advanced-structures](../../Data/datastructures-and-algorithms/21-advanced-structures/) |
+| Balanced Search Trees | [DSA · trees](../../Data/datastructures-and-algorithms/09-trees/) (BST · AVL · Red-Black · 2-3 · 2-3-4 · B-Tree) |
+| Databases | [Backend/databases](../../Backend/databases/) *(concepts)* · engine internals in [09. Database Internals](09-database-internals/) |
+| Networking | [07. Networking Internals](07-networking-internals/) |
+| Security | [11. Cryptography & Security](11-cryptography-and-security/) · [Security roadmap](../../Security/) |
+| How Computers Work | [04. Computer Architecture](04-computer-architecture/) |
+| Processes & Threads | [05. Operating Systems](05-operating-systems/) · [06. Concurrency & Parallelism](06-concurrency-and-parallelism/) |
+| System Design | [Architecture/system-design](../system-design/) (34-section roadmap) |
