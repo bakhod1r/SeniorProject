@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lower Bounds &amp; Adversary Arguments — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .grid2 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; }
+  @media (max-width: 900px){ .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .prob-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .prob-btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.82em; transition: all 0.2s; text-align: left; flex: 1;
+  }
+  .prob-btn:hover { border-color: var(--blue); }
+  .prob-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.12); color: var(--blue); }
+  .prob-btn .tag { display: block; font-size: 0.72em; color: var(--text2); margin-top: 2px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .graph-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+  svg { width: 100%; height: auto; display: block; }
+  /* tree elements */
+  .tedge { stroke: var(--border); stroke-width: 1.8; transition: all .3s; }
+  .tedge.on { stroke: var(--orange); stroke-width: 3.2; }
+  .elabel { fill: var(--text2); font: 600 9px 'Fira Code', monospace; pointer-events: none; }
+  .elabel.on { fill: var(--orange); }
+  .tnode { transition: all .25s; }
+  .tnode rect, .tnode circle, .tnode ellipse { transition: all .25s; }
+  /* internal comparison node */
+  .cmp rect { fill: var(--bg3); stroke: var(--border); stroke-width: 1.6; }
+  .cmp.on rect { fill: rgba(210,153,34,0.18); stroke: var(--orange); stroke-width: 2.4; }
+  .cmp text { fill: var(--text); font: 600 10px 'Fira Code', monospace; pointer-events: none; }
+  .cmp.on text { fill: var(--orange); }
+  /* leaf permutation node */
+  .leaf ellipse { fill: var(--bg3); stroke: var(--border); stroke-width: 1.6; }
+  .leaf.on ellipse { fill: rgba(63,185,80,0.25); stroke: var(--green); stroke-width: 3; }
+  .leaf text { fill: var(--text2); font: 600 9px 'Fira Code', monospace; pointer-events: none; }
+  .leaf.on text { fill: var(--green); }
+  /* adversary view */
+  .anode circle { fill: var(--bg3); stroke: var(--border); stroke-width: 2; }
+  .anode.live circle { fill: rgba(88,166,255,0.18); stroke: var(--blue); stroke-width: 2.6; }
+  .anode.dead circle { fill: rgba(248,81,73,0.12); stroke: var(--red); stroke-width: 2; }
+  .anode.king circle { fill: rgba(63,185,80,0.28); stroke: var(--green); stroke-width: 3.4; }
+  .anode text { fill: var(--text); font: 600 12px 'Fira Code', monospace; pointer-events: none; }
+  .anode.dead text { fill: var(--red); }
+  .anode.king text { fill: var(--green); }
+  .aedge { stroke: var(--orange); stroke-width: 2.6; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .stat-box .value { font-size: 1.3em; font-weight: bold; color: var(--blue); font-family: 'Fira Code', monospace; }
+  .stat-box.leaves .value { color: var(--green); }
+  .stat-box.height .value { color: var(--orange); }
+  .stat-box.bound .value { color: var(--purple); }
+  .stat-box .label { font-size: 0.68em; color: var(--text2); margin-top: 2px; }
+  .guarantee {
+    background: rgba(188,140,255,0.07); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin: 0 0 12px; text-align: center; font-family: 'Fira Code', monospace;
+    font-size: 0.9em; line-height: 1.7;
+  }
+  .guarantee .bnd { color: var(--green); font-weight: bold; }
+  .guarantee .ach { color: var(--orange); font-weight: bold; }
+  .guarantee .res { color: var(--purple); font-weight: bold; }
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+  table.ntab { width: 100%; border-collapse: collapse; font-family: 'Fira Code', monospace; font-size: 0.78em; margin-bottom: 12px; }
+  table.ntab th, table.ntab td { border: 1px solid var(--border); padding: 5px 6px; text-align: center; }
+  table.ntab th { color: var(--text2); font-weight: 600; background: var(--bg); }
+  table.ntab td { color: var(--text); }
+  table.ntab tr.cur td { background: rgba(88,166,255,0.1); color: var(--blue); }
+  table.ntab td.fac { color: var(--green); }
+  table.ntab td.lg { color: var(--orange); }
+  .verdict { text-align: center; font-size: 0.96em; font-weight: bold; margin: 6px 0; min-height: 1.4em; }
+  .verdict.ok { color: var(--green); }
+  .verdict.tight { color: var(--orange); }
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.85em; line-height: 1.55; margin-top: 8px; min-height: 110px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .res { color: var(--purple); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--purple); font-size: 0.92em; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.74em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .line { width: 16px; height: 0; border-top: 3px solid; display: inline-block; }
+  .note {
+    background: rgba(210,153,34,0.07); border: 1px solid var(--orange); border-radius: 6px;
+    padding: 8px 10px; font-size: 0.78em; line-height: 1.45; margin-top: 12px; color: var(--text2);
+  }
+  .note b { color: var(--orange); }
+  .perm-pick { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .perm-pick button {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 8px; border-radius: 5px; cursor: pointer; font-size: 0.74em; font-family: 'Fira Code', monospace; transition: all .2s;
+  }
+  .perm-pick button:hover { border-color: var(--green); }
+  .perm-pick button.active { border-color: var(--green); background: rgba(63,185,80,0.14); color: var(--green); }
+  .view-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+  .view-toggle button {
+    flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+    padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em; transition: all .2s;
+  }
+  .view-toggle button.active { border-color: var(--blue); background: rgba(88,166,255,0.12); color: var(--blue); font-weight: bold; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>Lower Bounds &amp; Adversary Arguments</h1>
+<p class="subtitle">Why no comparison sort beats Θ(n log n): the n! outputs force a tall decision tree</p>
+
+<div class="container">
+  <div class="view-toggle">
+    <button id="vtTree" class="active" onclick="setView('tree')">Decision Tree — the sorting lower bound</button>
+    <button id="vtAdv" onclick="setView('adv')">Adversary — finding the max needs n−1</button>
+  </div>
+
+  <!-- ============== VIEW A: DECISION TREE ============== -->
+  <div id="viewTree" class="grid2">
+    <!-- LEFT: the tree -->
+    <div class="panel">
+      <h2>Comparison Decision Tree</h2>
+      <div class="prob-btns" id="probBtns"></div>
+
+      <div class="perm-pick" id="permPick"></div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnStep" onclick="step()">Step</button>
+        <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+        <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+        <div class="speed-control">
+          <label>Speed</label>
+          <input type="range" id="speedSlider" min="1" max="10" value="6">
+        </div>
+      </div>
+
+      <div class="graph-box">
+        <svg id="treeSvg" viewBox="0 0 700 380" role="img" aria-label="Comparison decision tree">
+          <g id="gEdges"></g>
+          <g id="gElabels"></g>
+          <g id="gNodes"></g>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <span><span class="sq" style="background:var(--bg3);border:1px solid var(--orange)"></span>comparison (internal node)</span>
+        <span><span class="dot" style="background:var(--green)"></span>leaf = sorted permutation</span>
+        <span><span class="line" style="border-color:var(--orange)"></span>traced root→leaf path</span>
+      </div>
+
+      <div class="note">
+        <b>Comparison model only.</b> This bound counts <i>comparisons between elements</i>.
+        Sorts that read the keys' digits or bits instead — counting sort, radix sort, bucket sort —
+        are <i>not</i> comparison sorts, so they sidestep this tree and can run in O(n) on suitable keys.
+      </div>
+    </div>
+
+    <!-- RIGHT: the math -->
+    <div class="panel">
+      <h2>The Lower Bound, Computed</h2>
+
+      <div class="claim">
+        <b>Information-theoretic argument.</b> A comparison sort of <code>n</code> items must
+        distinguish all <code>n!</code> possible orderings, so its decision tree needs
+        <b>≥ n! leaves</b>. A binary tree with <code>L</code> leaves has height
+        <b>≥ ⌈log₂ L⌉</b>, and height = worst-case comparisons. Therefore every comparison sort
+        makes <code>≥ ⌈log₂(n!)⌉ = Θ(n log n)</code> comparisons in the worst case. No cleverness escapes it.
+      </div>
+
+      <div class="guarantee">
+        outputs to tell apart:&nbsp; <span id="gFac">n! = —</span> leaves<br>
+        tree height ≥&nbsp; <span class="ach" id="gLog">⌈log₂ n!⌉ = —</span><br>
+        lower bound:&nbsp; any comparison sort ≥ <span class="res" id="gBound">—</span> comparisons
+      </div>
+
+      <div class="stats">
+        <div class="stat-box leaves">
+          <div class="value" id="statLeaves">—</div>
+          <div class="label">leaves drawn (= n!)</div>
+        </div>
+        <div class="stat-box height">
+          <div class="value" id="statHeight">—</div>
+          <div class="label">tree height = ⌈log₂ n!⌉</div>
+        </div>
+        <div class="stat-box bound">
+          <div class="value" id="statPath">—</div>
+          <div class="label">comparisons on traced path</div>
+        </div>
+      </div>
+
+      <table class="ntab" id="nTable">
+        <thead><tr><th>n</th><th>n!</th><th>⌈log₂ n!⌉</th><th>n·log₂n</th></tr></thead>
+        <tbody id="nTableBody"></tbody>
+      </table>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="narration" id="narration"></div>
+    </div>
+  </div>
+
+  <!-- ============== VIEW B: ADVERSARY ============== -->
+  <div id="viewAdv" class="grid2 hidden">
+    <div class="panel">
+      <h2>Adversary for Finding the Maximum</h2>
+      <div class="controls">
+        <button class="btn primary" id="btnAStep" onclick="advStep()">Ask comparison</button>
+        <button class="btn primary" id="btnAPlay" onclick="advTogglePlay()">Auto</button>
+        <button class="btn" id="btnAReset" onclick="advReset()">Reset</button>
+        <div class="speed-control">
+          <label>Speed</label>
+          <input type="range" id="advSpeed" min="1" max="10" value="6">
+        </div>
+      </div>
+
+      <div class="graph-box">
+        <svg id="advSvg" viewBox="0 0 480 320" role="img" aria-label="Adversary tournament">
+          <g id="aEdges"></g>
+          <g id="aNodes"></g>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <span><span class="dot" style="background:var(--blue)"></span>still could be the max</span>
+        <span><span class="dot" style="background:var(--red)"></span>has lost — eliminated</span>
+        <span><span class="dot" style="background:var(--green)"></span>the unique maximum</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Why n−1 Comparisons Are Forced</h2>
+      <div class="claim">
+        <b>Adversary argument.</b> An element can be the maximum only if it has <i>never lost</i> a
+        comparison. To name the max with certainty, the algorithm must reduce the set of
+        "could-still-be-max" candidates from <code>n</code> down to <code>1</code>. Each comparison
+        produces <b>at most one new loser</b>, so the adversary — answering consistently to keep
+        candidates alive — forces <b>≥ n−1</b> comparisons. Tournament-style algorithms match it exactly.
+      </div>
+
+      <div class="stats">
+        <div class="stat-box leaves">
+          <div class="value" id="aLive">—</div>
+          <div class="label">candidates still alive</div>
+        </div>
+        <div class="stat-box height">
+          <div class="value" id="aComps">0</div>
+          <div class="label">comparisons asked</div>
+        </div>
+        <div class="stat-box bound">
+          <div class="value" id="aBound">—</div>
+          <div class="label">lower bound (n−1)</div>
+        </div>
+      </div>
+
+      <div class="verdict" id="aVerdict"></div>
+      <div class="narration" id="aNarration"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Exact integer factorial / log helpers (correct counts)
+// ============================================================
+function factorial(n){ let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
+function ceilLog2(x){
+  // ceil(log2(x)) for integer x >= 1, computed exactly via integer powers of two
+  let k = 0, p = 1;
+  while (p < x) { p *= 2; k++; }
+  return k;
+}
+
+// Build a CORRECT comparison decision tree for sorting n items.
+// Elements a1..an; we sort by asking "ai < aj?". Each leaf = one
+// permutation. At each node we pick the pair whose comparison best
+// splits the still-possible permutations, then recurse on YES / NO.
+function permutations(n){
+  const base = []; for (let i = 1; i <= n; i++) base.push(i);
+  const out = [];
+  const rec = (arr, rest) => {
+    if (!rest.length){ out.push(arr.slice()); return; }
+    for (let i = 0; i < rest.length; i++){
+      const r2 = rest.slice(); const x = r2.splice(i,1)[0];
+      rec(arr.concat(x), r2);
+    }
+  };
+  rec([], base);
+  return out;
+}
+
+// A "world" is a permutation telling us the true rank of each element:
+// world[i] = rank of element a(i+1).  "ai < aj?" is YES iff world[i] < world[j].
+function buildTree(n){
+  const worlds = permutations(n);           // n! possible orderings
+  let nodeId = 0;
+  // choose the comparison (i,j) that splits `set` most evenly
+  function chooseComparison(set){
+    let bestPair = null, bestScore = Infinity;
+    for (let i = 0; i < n; i++){
+      for (let j = i+1; j < n; j++){
+        let yes = 0, no = 0;
+        for (const w of set){ if (w[i] < w[j]) yes++; else no++; }
+        if (yes === 0 || no === 0) continue;     // useless: doesn't split
+        const score = Math.abs(yes - no);
+        if (score < bestScore){ bestScore = score; bestPair = [i,j]; }
+      }
+    }
+    return bestPair;
+  }
+  function rec(set){
+    if (set.length === 1){
+      // a leaf: the unique sorted order. Render as the permutation of element labels
+      // ordered from smallest to largest.
+      const w = set[0];
+      const order = []; // element indices sorted by their rank
+      for (let r = 1; r <= n; r++){
+        for (let i = 0; i < n; i++) if (w[i] === r) order.push(i+1);
+      }
+      return { id: nodeId++, leaf: true, order, world: w };
+    }
+    const pair = chooseComparison(set);
+    const [i,j] = pair;
+    const yesSet = [], noSet = [];
+    for (const w of set){ (w[i] < w[j] ? yesSet : noSet).push(w); }
+    const node = { id: nodeId++, leaf: false, i, j };
+    node.yes = rec(yesSet);   // "ai < aj" is true
+    node.no  = rec(noSet);    // "ai < aj" is false (ai > aj)
+    return node;
+  }
+  const root = rec(worlds);
+  return root;
+}
+
+// count leaves and height of the built tree (to verify correctness live)
+function treeStats(root){
+  let leaves = 0, height = 0;
+  function rec(node, depth){
+    if (node.leaf){ leaves++; height = Math.max(height, depth); return; }
+    rec(node.yes, depth+1); rec(node.no, depth+1);
+  }
+  rec(root, 0);
+  return { leaves, height };
+}
+
+// ============================================================
+//  Layout: assign x by in-order leaf position, y by depth.
+// ============================================================
+function layoutTree(root, W, H, n){
+  // gather leaves in order to spread horizontally
+  const leaves = [];
+  (function collect(nd){ if (nd.leaf) leaves.push(nd); else { collect(nd.yes); collect(nd.no); } })(root);
+  const stats = treeStats(root);
+  const topPad = 30, botPad = 38;
+  const levelH = (H - topPad - botPad) / Math.max(1, stats.height);
+  const slot = W / (leaves.length + 1);
+  leaves.forEach((lf, k) => { lf._lx = (k+1) * slot; });
+  function place(nd, depth){
+    nd.y = topPad + depth * levelH;
+    if (nd.leaf){ nd.x = nd._lx; return; }
+    place(nd.yes, depth+1); place(nd.no, depth+1);
+    nd.x = (nd.yes.x + nd.no.x) / 2;
+  }
+  place(root, 0);
+  return { leaves, stats };
+}
+
+// ============================================================
+//  STATE (tree view)
+// ============================================================
+const N_OPTIONS = [
+  { n: 3, name: 'n = 3', tag: '3! = 6 leaves, height 3' },
+  { n: 4, name: 'n = 4', tag: '4! = 24 leaves, height 5' },
+];
+let nIdx = 0;
+let N = 3;
+let tree = null;
+let allNodes = [];        // flat list with refs
+let edgeRecs = [];        // {parent, child, ans:'Y'/'N'}
+let chosenPerm = null;    // array like [a2,a1,a3] meaning the true sorted order
+let pathSteps = [];       // sequence of {node, ans, child} from root to leaf
+let stepPtr = 0;
+let playing = false, timer = null;
+
+function elN(id){ return document.getElementById(id); }
+function narrate(html){ elN('narration').innerHTML = html; }
+
+// flatten the tree into node + edge records, attach DOM ids
+function flatten(){
+  allNodes = []; edgeRecs = [];
+  (function rec(nd){
+    allNodes.push(nd);
+    if (!nd.leaf){
+      edgeRecs.push({ from: nd, to: nd.yes, ans: 'Y' });
+      edgeRecs.push({ from: nd, to: nd.no,  ans: 'N' });
+      rec(nd.yes); rec(nd.no);
+    }
+  })(tree);
+}
+
+// ============================================================
+//  RENDER tree
+// ============================================================
+function renderTree(){
+  const gE = elN('gEdges'), gL = elN('gElabels'), gN = elN('gNodes');
+  gE.innerHTML = ''; gL.innerHTML = ''; gN.innerHTML = '';
+
+  edgeRecs.forEach((e, ei) => {
+    const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1', e.from.x); ln.setAttribute('y1', e.from.y);
+    ln.setAttribute('x2', e.to.x);   ln.setAttribute('y2', e.to.y);
+    ln.setAttribute('class','tedge'); ln.id = 'te-' + ei;
+    gE.appendChild(ln);
+    // edge label Y/N near the parent
+    const mx = e.from.x + (e.to.x - e.from.x) * 0.32;
+    const my = e.from.y + (e.to.y - e.from.y) * 0.32;
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', mx); t.setAttribute('y', my);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('class','elabel'); t.id = 'tel-' + ei;
+    t.textContent = e.ans === 'Y' ? 'yes' : 'no';
+    gL.appendChild(t);
+  });
+
+  allNodes.forEach(nd => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.id = 'tn-' + nd.id;
+    if (nd.leaf){
+      g.setAttribute('class','tnode leaf');
+      const w = Math.max(26, nd.order.length * 11 + 8);
+      const ell = document.createElementNS('http://www.w3.org/2000/svg','ellipse');
+      ell.setAttribute('cx', nd.x); ell.setAttribute('cy', nd.y);
+      ell.setAttribute('rx', w/2); ell.setAttribute('ry', 12);
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', nd.x); t.setAttribute('y', nd.y + 3);
+      t.setAttribute('text-anchor','middle');
+      // label like "a2<a1<a3" (smallest first)
+      t.textContent = nd.order.map(k => 'a'+k).join('<');
+      g.appendChild(ell); g.appendChild(t);
+    } else {
+      g.setAttribute('class','tnode cmp');
+      const label = 'a'+(nd.i+1)+'<a'+(nd.j+1)+'?';
+      const w = label.length * 6.4 + 10;
+      const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      r.setAttribute('x', nd.x - w/2); r.setAttribute('y', nd.y - 11);
+      r.setAttribute('width', w); r.setAttribute('height', 22);
+      r.setAttribute('rx', 5);
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', nd.x); t.setAttribute('y', nd.y + 3.5);
+      t.setAttribute('text-anchor','middle');
+      t.textContent = label;
+      g.appendChild(r); g.appendChild(t);
+    }
+    gN.appendChild(g);
+  });
+}
+
+function edgeIndex(parent, child){
+  return edgeRecs.findIndex(e => e.from === parent && e.to === child);
+}
+
+function clearTreeHighlights(){
+  allNodes.forEach(nd => elN('tn-'+nd.id).classList.remove('on'));
+  edgeRecs.forEach((_, ei) => { elN('te-'+ei).classList.remove('on'); elN('tel-'+ei).classList.remove('on'); });
+}
+
+// ============================================================
+//  Build the path for the chosen permutation, by SIMULATING
+//  the sort: the chosen permutation defines the true order, and
+//  we walk the decision tree answering each comparison truthfully.
+// ============================================================
+function rankOf(permLabels){
+  // permLabels: array of element indices (1-based) smallest..largest
+  // returns world[]: world[i] = rank of element a(i+1)
+  const world = new Array(N);
+  permLabels.forEach((elemLabel, rankMinus1) => { world[elemLabel-1] = rankMinus1 + 1; });
+  return world;
+}
+
+function buildPath(){
+  pathSteps = [];
+  const world = rankOf(chosenPerm);
+  let node = tree;
+  while (!node.leaf){
+    const ans = world[node.i] < world[node.j] ? 'Y' : 'N';
+    const child = ans === 'Y' ? node.yes : node.no;
+    pathSteps.push({ node, ans, child });
+    node = child;
+  }
+  pathSteps.push({ node, ans: null, child: null, leafReached: true });
+}
+
+// ============================================================
+//  STATS panel
+// ============================================================
+function updateMath(){
+  const fac = factorial(N);
+  const lg = ceilLog2(fac);
+  const st = treeStats(tree);
+  elN('gFac').textContent = 'n! = ' + fac;
+  elN('gLog').textContent = '⌈log₂ ' + fac + '⌉ = ' + lg;
+  elN('gBound').textContent = lg;
+  elN('statLeaves').textContent = st.leaves;     // must equal fac
+  elN('statHeight').textContent = st.height;      // must be >= lg (and equals optimal)
+  elN('statPath').textContent = '—';
+}
+
+function buildNTable(){
+  const body = elN('nTableBody');
+  body.innerHTML = '';
+  for (let n = 1; n <= 8; n++){
+    const fac = factorial(n);
+    const lg = ceilLog2(fac);
+    const nlog = n <= 1 ? 0 : (n * Math.log2(n));
+    const tr = document.createElement('tr');
+    if (n === N) tr.className = 'cur';
+    tr.innerHTML = '<td>'+n+'</td><td class="fac">'+fac+'</td><td class="lg">'+lg+'</td><td>'+nlog.toFixed(1)+'</td>';
+    body.appendChild(tr);
+  }
+}
+
+// ============================================================
+//  PERMUTATION PICKER
+// ============================================================
+function buildPermPick(){
+  const box = elN('permPick');
+  box.innerHTML = '';
+  const perms = permutations(N).map(w => {
+    // convert a world to "labels smallest..largest"
+    const order = [];
+    for (let r = 1; r <= N; r++) for (let i = 0; i < N; i++) if (w[i] === r) order.push(i+1);
+    return order;
+  });
+  // limit picker count for n=4 to keep it tidy: show first 12
+  const show = perms.slice(0, N === 3 ? perms.length : 12);
+  const lbl = document.createElement('span');
+  lbl.style.cssText = 'color:var(--text2);font-size:0.74em;align-self:center;margin-right:4px;';
+  lbl.textContent = 'Run input → true order:';
+  box.appendChild(lbl);
+  show.forEach((order, k) => {
+    const b = document.createElement('button');
+    b.textContent = order.map(x => 'a'+x).join('<');
+    b.onclick = () => pickPerm(order, b);
+    b.dataset.idx = k;
+    box.appendChild(b);
+  });
+  // auto-pick the first
+  pickPerm(show[0], box.querySelectorAll('button')[0]);
+}
+
+function pickPerm(order, btn){
+  chosenPerm = order;
+  document.querySelectorAll('#permPick button').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  stopPlay();
+  stepPtr = 0;
+  buildPath();
+  clearTreeHighlights();
+  // always show root highlighted as the start
+  elN('tn-'+tree.id).classList.add('on');
+  elN('statPath').textContent = '0';
+  const v = elN('verdict'); v.className = 'verdict'; v.textContent = '';
+  narrate('<b>Input chosen.</b> The true sorted order is <code>' + order.map(x=>'a'+x).join(' < ')
+    + '</code>. Press <b>Step</b> to walk the tree: at each <span class="hl">comparison node</span> we answer '
+    + 'truthfully and follow the <i>yes</i> or <i>no</i> edge, counting one comparison each time, until we land '
+    + 'on the matching <span class="ok">leaf</span>.');
+}
+
+// ============================================================
+//  STEP through the traced path
+// ============================================================
+function step(){
+  if (stepPtr >= pathSteps.length) return;
+  const s = pathSteps[stepPtr]; stepPtr++;
+
+  if (s.leafReached){
+    elN('tn-'+s.node.id).classList.add('on');
+    const order = s.node.order.map(k => 'a'+k).join(' < ');
+    const comps = stepPtr - 1; // number of comparison steps taken before the leaf
+    const v = elN('verdict');
+    const lg = ceilLog2(factorial(N));
+    const st = treeStats(tree);
+    const tight = comps === st.height;
+    v.className = 'verdict ' + (tight ? 'tight' : 'ok');
+    v.textContent = tight
+      ? '✓ Reached a deepest leaf in ' + comps + ' comparisons = worst case ⌈log₂ ' + factorial(N) + '⌉ = ' + lg
+      : '✓ Reached the leaf in ' + comps + ' comparisons (≤ height ' + st.height + ')';
+    narrate('<b>Leaf reached.</b> The path ended at <span class="ok">' + order + '</span> — the one permutation '
+      + 'consistent with every answer we gave. It took <span class="res">' + comps + ' comparisons</span>. '
+      + 'There are <span class="ok">' + factorial(N) + ' = ' + N + '!</span> leaves, one per possible output, and '
+      + 'the tree’s height is <span class="hl">' + st.height + ' = ⌈log₂ ' + factorial(N) + '⌉</span>. '
+      + 'Some input forces that many comparisons — <span class="exp">no comparison sort can promise fewer</span>.');
+    return;
+  }
+
+  // highlight the comparison node and the edge taken
+  elN('tn-'+s.node.id).classList.add('on');
+  const ei = edgeIndex(s.node, s.child);
+  elN('te-'+ei).classList.add('on');
+  elN('tel-'+ei).classList.add('on');
+  const compsSoFar = stepPtr;
+  elN('statPath').textContent = compsSoFar;
+
+  const world = rankOf(chosenPerm);
+  const ai = 'a'+(s.node.i+1), aj = 'a'+(s.node.j+1);
+  const valI = world[s.node.i], valJ = world[s.node.j];
+  const ansTxt = s.ans === 'Y' ? '<b>yes</b>' : '<b>no</b>';
+  narrate('<b>Comparison #' + compsSoFar + ': ' + ai + ' &lt; ' + aj + ' ?</b> '
+    + 'In our input the rank of ' + ai + ' is ' + valI + ' and of ' + aj + ' is ' + valJ + ', so the answer is '
+    + '<span class="hl">' + ansTxt + '</span>. We follow that edge. Each answer <span class="ok">halves (at best) '
+    + 'the surviving permutations</span> — which is why ⌈log₂ n!⌉ comparisons are needed to pin down a single one.');
+}
+
+function pathDone(){ return stepPtr >= pathSteps.length; }
+
+function togglePlay(){
+  if (playing){ stopPlay(); return; }
+  if (pathDone()) return;
+  playing = true;
+  elN('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    step();
+    if (pathDone()){ stopPlay(); return; }
+    const speed = parseInt(elN('speedSlider').value);
+    timer = setTimeout(tick, Math.max(250, 1400 - speed*120));
+  };
+  tick();
+}
+function stopPlay(){
+  playing = false;
+  if (timer){ clearTimeout(timer); timer = null; }
+  elN('btnPlay').textContent = 'Auto';
+}
+
+// ============================================================
+//  RESET / SELECT n
+// ============================================================
+function resetSim(){
+  stopPlay();
+  N = N_OPTIONS[nIdx].n;
+  tree = buildTree(N);
+  layoutTree(tree, 700, 380, N);
+  flatten();
+  renderTree();
+  updateMath();
+  buildNTable();
+  buildPermPick();    // this also picks the first permutation + sets narration
+}
+
+function buildProbBtns(){
+  const box = elN('probBtns');
+  box.innerHTML = '';
+  N_OPTIONS.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.className = 'prob-btn' + (i === nIdx ? ' active' : '');
+    b.id = 'nb-' + i;
+    b.innerHTML = o.name + '<span class="tag">' + o.tag + '</span>';
+    b.onclick = () => selectN(i);
+    box.appendChild(b);
+  });
+}
+function selectN(i){
+  nIdx = i;
+  document.querySelectorAll('#probBtns .prob-btn').forEach((b,j)=>b.classList.toggle('active', j===i));
+  resetSim();
+}
+
+// ============================================================
+//  VIEW B: ADVERSARY (finding the max needs n-1)
+// ============================================================
+const ADV_N = 6;
+let advNodes = [];   // {id, x, y, lost}
+let advComps = 0;
+let advSteps = [];   // precomputed pairings producing exactly n-1 comparisons (tournament)
+let advPtr = 0;
+let advPlaying = false, advTimer = null;
+let advKing = null;
+
+function advBuild(){
+  advNodes = [];
+  const cx = 240, cy = 165, R = 120;
+  for (let i = 0; i < ADV_N; i++){
+    const ang = -Math.PI/2 + i * (2*Math.PI/ADV_N);
+    advNodes.push({ id: i, x: cx + R*Math.cos(ang), y: cy + R*Math.sin(ang), lost: false });
+  }
+  // tournament schedule: repeatedly pair up live elements; loser is eliminated.
+  // The adversary's rule: whoever is already known smaller / arbitrary loser dies,
+  // but we just need the COUNT (n-1) and a valid bracket. We keep a "winner" list.
+  advSteps = [];
+  let live = advNodes.map(n => n.id);
+  // deterministic bracket: winner is always the lower index (acts as adversary's consistent answer)
+  while (live.length > 1){
+    const next = [];
+    for (let i = 0; i < live.length; i += 2){
+      if (i+1 < live.length){
+        const a = live[i], b = live[i+1];
+        const winner = a, loser = b;     // adversary keeps `a` alive
+        advSteps.push({ a, b, winner, loser });
+        next.push(winner);
+      } else {
+        next.push(live[i]);  // bye
+      }
+    }
+    live = next;
+  }
+  advKing = live[0];
+}
+
+function advRender(){
+  const gE = elN('aEdges'), gN = elN('aNodes');
+  gE.innerHTML = ''; gN.innerHTML = '';
+  advNodes.forEach(nd => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','anode' + (nd.lost ? ' dead' : ' live'));
+    g.id = 'an-' + nd.id;
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', nd.x); c.setAttribute('cy', nd.y); c.setAttribute('r', 20);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', nd.x); t.setAttribute('y', nd.y + 4);
+    t.setAttribute('text-anchor','middle');
+    t.textContent = 'e'+(nd.id+1);
+    g.appendChild(c); g.appendChild(t);
+    gN.appendChild(g);
+  });
+}
+
+function advRepaint(){
+  advNodes.forEach(nd => {
+    const el = elN('an-'+nd.id);
+    el.setAttribute('class', 'anode' + (nd.lost ? ' dead' : ' live'));
+  });
+  const live = advNodes.filter(n => !n.lost).length;
+  elN('aLive').textContent = live;
+  elN('aComps').textContent = advComps;
+  elN('aBound').textContent = (ADV_N - 1);
+}
+
+function advStep(){
+  if (advPtr >= advSteps.length){
+    // finished — crown the king
+    advNodes.forEach(nd => { const el = elN('an-'+nd.id); el.classList.remove('live'); });
+    elN('an-'+advKing).setAttribute('class','anode king');
+    const v = elN('aVerdict'); v.className = 'verdict tight';
+    v.textContent = '✓ Exactly n−1 = ' + (ADV_N-1) + ' comparisons to find the max';
+    advNarrate('<b>Done.</b> One candidate remains: <span class="ok">e' + (advKing+1) + '</span>, the maximum. '
+      + 'We asked <span class="res">' + advComps + ' = n−1</span> comparisons. Each non-max element had to '
+      + '<span class="exp">lose at least once</span>, and one comparison creates at most one new loser — so '
+      + '<span class="ok">n−1</span> comparisons are unavoidable. The adversary can always answer to force this, '
+      + 'and a tournament achieves it: the bound is <span class="hl">tight</span>.');
+    advStopPlay();
+    return;
+  }
+  const s = advSteps[advPtr]; advPtr++;
+  advNodes[s.loser].lost = true;
+  advComps++;
+  advRepaint();
+  // draw the comparison edge briefly
+  const gE = elN('aEdges');
+  gE.innerHTML = '';
+  const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+  const a = advNodes[s.a], b = advNodes[s.b];
+  ln.setAttribute('x1', a.x); ln.setAttribute('y1', a.y);
+  ln.setAttribute('x2', b.x); ln.setAttribute('y2', b.y);
+  ln.setAttribute('class','aedge');
+  gE.appendChild(ln);
+  const live = advNodes.filter(n => !n.lost).length;
+  advNarrate('<b>Compare e' + (s.a+1) + ' vs e' + (s.b+1) + '.</b> The adversary answers so that '
+    + '<span class="ok">e' + (s.winner+1) + '</span> wins and <span class="exp">e' + (s.loser+1) + '</span> loses — '
+    + 'now eliminated (red). Comparisons so far: <span class="res">' + advComps + '</span>; candidates still '
+    + 'alive: <span class="hl">' + live + '</span>. We must drive "alive" down to 1, and each comparison removes '
+    + 'at most one — so we are spending one comparison per elimination.');
+}
+
+function advDone(){ return advPtr >= advSteps.length; }
+
+function advTogglePlay(){
+  if (advPlaying){ advStopPlay(); return; }
+  advPlaying = true;
+  elN('btnAPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!advPlaying) return;
+    advStep();
+    if (advDone() && advPtr > advSteps.length){ advStopPlay(); return; }
+    const speed = parseInt(elN('advSpeed').value);
+    advTimer = setTimeout(tick, Math.max(300, 1400 - speed*120));
+  };
+  tick();
+}
+function advStopPlay(){
+  advPlaying = false;
+  if (advTimer){ clearTimeout(advTimer); advTimer = null; }
+  elN('btnAPlay').textContent = 'Auto';
+}
+
+function advReset(){
+  advStopPlay();
+  advPtr = 0; advComps = 0;
+  advBuild();
+  advRender();
+  advRepaint();
+  const v = elN('aVerdict'); v.className = 'verdict'; v.textContent = '';
+  advNarrate('<b>Goal.</b> Find the maximum of <span class="hl">' + ADV_N + ' elements</span> using only '
+    + '"is x &gt; y?" comparisons. An <span class="ok">adversary</span> answers each question to keep as many '
+    + 'elements as possible still able to be the max. An element survives only while it has never lost. '
+    + 'Press <b>Ask comparison</b> — watch each one eliminate at most one candidate, forcing <span class="res">'
+    + (ADV_N-1) + ' = n−1</span> comparisons.');
+}
+function advNarrate(html){ elN('aNarration').innerHTML = html; }
+
+// ============================================================
+//  VIEW SWITCH
+// ============================================================
+function setView(which){
+  if (which === 'tree'){
+    elN('viewTree').classList.remove('hidden');
+    elN('viewAdv').classList.add('hidden');
+    elN('vtTree').classList.add('active'); elN('vtAdv').classList.remove('active');
+  } else {
+    elN('viewAdv').classList.remove('hidden');
+    elN('viewTree').classList.add('hidden');
+    elN('vtAdv').classList.add('active'); elN('vtTree').classList.remove('active');
+    advReset();
+  }
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+buildProbBtns();
+resetSim();
+advBuild();
+</script>
+</body>
+</html>
