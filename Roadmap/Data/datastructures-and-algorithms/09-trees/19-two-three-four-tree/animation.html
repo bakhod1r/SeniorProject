@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>2-3-4 Tree — Interactive Visualization</title>
+<style>
+:root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--purple:#bc8cff;--orange:#ffa657;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:18px}
+h1{font-size:1.9rem;color:var(--blue);margin-bottom:4px;text-align:center}
+.subtitle{color:var(--muted);margin-bottom:16px;text-align:center;font-size:.9rem;max-width:860px}
+.badges{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.badge{padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;
+       border:1px solid var(--border);background:var(--surface)}
+.badge.best{color:var(--green);border-color:var(--green)}
+.badge.worst{color:var(--red);border-color:var(--red)}
+.badge.space{color:var(--blue);border-color:var(--blue)}
+.controls{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;justify-content:center;align-items:center}
+button{padding:6px 14px;border:2px solid var(--blue);background:transparent;
+       color:var(--blue);border-radius:6px;cursor:pointer;font-size:.88rem;font-family:inherit}
+button:hover:not(:disabled){background:var(--blue);color:var(--bg)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.secondary{border-color:var(--border);color:var(--muted)}
+button.secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+button.danger{border-color:var(--red);color:var(--red)}
+button.danger:hover:not(:disabled){background:var(--red);color:var(--bg)}
+input[type=number]{padding:6px 10px;border:2px solid var(--border);background:var(--surface);
+       color:var(--text);border-radius:6px;font-size:.88rem;width:90px;font-family:inherit}
+input[type=range]{width:140px;accent-color:var(--blue)}
+label{color:var(--muted);font-size:.82rem}
+.toggle{display:flex;align-items:center;gap:6px}
+.toggle input{accent-color:var(--red)}
+.canvas-container{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:24px 16px;margin-bottom:14px;width:100%;max-width:1200px;
+       min-height:260px;overflow:auto;position:relative}
+#svgCanvas{display:block;margin:0 auto}
+.legend{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.legend-color{width:13px;height:13px;border-radius:3px;border:1px solid var(--border)}
+.info-panel{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:12px 18px;width:100%;max-width:1200px;margin-bottom:12px;
+       font-family:monospace;font-size:.86rem;min-height:60px;line-height:1.55}
+.info-panel .highlight{color:var(--yellow);font-weight:600}
+.info-panel .ok{color:var(--green);font-weight:600}
+.info-panel .bad{color:var(--red);font-weight:600}
+.info-panel .blue{color:var(--blue);font-weight:600}
+.info-panel .purple{color:var(--purple);font-weight:600}
+.stats{background:var(--surface);border:2px solid var(--border);border-radius:12px;
+       padding:10px 18px;display:flex;gap:22px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase}
+.stat-value{color:var(--blue);font-size:1.1rem;font-weight:700;font-family:monospace}
+.footer-note{color:var(--muted);font-size:.76rem;margin-top:6px;text-align:center;max-width:860px}
+g.node rect{transition:fill .3s,stroke .3s}
+g.node.path rect{stroke:var(--blue);stroke-width:2.5}
+g.node.full rect{fill:rgba(255,166,87,.18);stroke:var(--orange)}
+g.node.splitting rect{fill:rgba(210,153,34,.32);stroke:var(--yellow);stroke-width:3}
+g.node.found rect{fill:rgba(63,185,80,.28);stroke:var(--green);stroke-width:3}
+g.node.notfound rect{stroke:var(--red);stroke-width:2}
+g.node.underflow rect{fill:rgba(248,81,73,.22);stroke:var(--red);stroke-width:2.5}
+g.node.borrow rect{fill:rgba(88,166,255,.20);stroke:var(--blue);stroke-width:3}
+g.node.merging rect{fill:rgba(188,140,255,.25);stroke:var(--purple);stroke-width:3}
+g.node text.key{fill:var(--text);font-family:monospace;font-size:15px;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+g.node.found text.fk{fill:var(--green);font-weight:700}
+g.node.splitting text.mk{fill:var(--yellow);font-weight:700}
+g.node text.red{fill:var(--red);font-weight:700}
+g.edge path{stroke:var(--border);stroke-width:1.5;fill:none}
+g.edge.active path{stroke:var(--blue);stroke-width:2.4}
+g.edge.redlink path{stroke:var(--red);stroke-width:2.6}
+.rising{fill:var(--yellow);font-weight:700;font-size:16px;font-family:monospace;text-anchor:middle;dominant-baseline:middle}
+</style>
+</head>
+<body>
+<h1>2-3-4 Tree</h1>
+<p class="subtitle">A perfectly height-balanced search tree whose nodes are 2-nodes (1 key, 2 children), 3-nodes (2 keys, 3 children), or 4-nodes (3 keys, 4 children), with every leaf at the same depth. It is exactly a B-tree of order 4 (minimum degree t = 2) and is the structural twin of a red-black tree.</p>
+
+<div class="badges">
+<span class="badge best">Search: O(log n)</span>
+<span class="badge best">Insert: O(log n)</span>
+<span class="badge worst">Delete: O(log n)</span>
+<span class="badge space">All leaves at equal depth</span>
+</div>
+
+<div class="controls">
+<label>key <input type="number" id="keyInput" value="13"></label>
+<button onclick="doInsert()">Insert</button>
+<button onclick="doSearch()">Search</button>
+<button onclick="doDelete()">Delete</button>
+<label style="margin-left:14px">speed</label>
+<input type="range" id="speedSlider" min="1" max="10" value="6">
+<label class="toggle" style="margin-left:14px"><input type="checkbox" id="rbToggle" onchange="render()">red-black view</label>
+</div>
+
+<div class="controls">
+<button class="secondary" onclick="demoInsert()">Demo: insert 1..10 (top-down splits)</button>
+<button class="secondary" onclick="demoDelete()">Demo: delete (fuse + root collapse)</button>
+<button class="secondary" onclick="randomFill()">+10 random</button>
+<button class="danger" onclick="resetTree()">Reset</button>
+</div>
+
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:var(--bg);border-color:var(--border)"></div>Idle</div>
+<div class="legend-item"><div class="legend-color" style="background:transparent;border-color:var(--blue)"></div>Descent path</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(255,166,87,.18);border-color:var(--orange)"></div>Full 4-node</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(210,153,34,.32);border-color:var(--yellow)"></div>Splitting / pushing up</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(248,81,73,.22);border-color:var(--red)"></div>Underflow (1 key)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(88,166,255,.20);border-color:var(--blue)"></div>Borrow (rotate)</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(188,140,255,.25);border-color:var(--purple)"></div>Fuse (pull down)</div>
+</div>
+
+<div class="stats">
+<div><div class="stat-label">Total keys</div><div class="stat-value" id="statN">0</div></div>
+<div><div class="stat-label">Total nodes</div><div class="stat-value" id="statNodes">1</div></div>
+<div><div class="stat-label">2-nodes</div><div class="stat-value" id="stat2">0</div></div>
+<div><div class="stat-label">3-nodes</div><div class="stat-value" id="stat3">0</div></div>
+<div><div class="stat-label">4-nodes</div><div class="stat-value" id="stat4">0</div></div>
+<div><div class="stat-label">Height</div><div class="stat-value" id="statH">0</div></div>
+<div><div class="stat-label">Leaf depth</div><div class="stat-value" id="statLeaf">-</div></div>
+</div>
+
+<div class="canvas-container">
+<svg id="svgCanvas" width="1100" height="320"></svg>
+</div>
+
+<div class="info-panel" id="trace">
+Ready. A 2-3-4 tree never lets a node hold more than three keys. Insertion descends <span class="highlight">top-down</span>, pre-emptively splitting every full 4-node on the way down, so a key dropped into a leaf never has to cascade back up.
+</div>
+
+<p class="footer-note">Insert splits any 4-node it meets while descending (its middle key rises into the guaranteed non-full parent), so the leaf insert is always safe — a root split grows the height. Delete also works top-down: before stepping into a 1-key child it tops the child up to ≥ 2 keys by borrowing from a 2+/3-node sibling (rotation through the parent) or fusing it with a sibling plus a parent key into a 4-node; an internal key is swapped with a leaf predecessor, and draining the root collapses one level. Toggle the red-black view to see the equivalent encoding: 2-node = black, 3-node = black + 1 red child, 4-node = black + 2 red children.</p>
+
+<script>
+"use strict";
+
+// =================== 2-3-4 Tree core ===================
+// A node holds 1 key (2-node), 2 keys (3-node), or 3 keys (4-node). Children
+// count is always keys.length + 1 for internal nodes. Top-down insertion keeps
+// every node at <= 3 keys at all times: a 4-node is split BEFORE we descend.
+let nextNodeId = 1;
+
+class Node {
+    constructor(leaf) {
+        this.id = nextNodeId++;
+        this.keys = [];        // sorted, length 1..3
+        this.children = [];     // length keys.length+1, empty for leaves
+        this.leaf = leaf;
+    }
+    isFull() { return this.keys.length === 3; }   // a 4-node
+    isMinimal() { return this.keys.length === 1; } // a 2-node (cannot lose a key safely)
+}
+
+let root = new Node(true);
+
+// =================== Animation helpers ===================
+const svg = document.getElementById("svgCanvas");
+const speed = () => 1200 / parseInt(document.getElementById("speedSlider").value);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setTrace = html => { document.getElementById("trace").innerHTML = html; };
+const fmt = node => "[" + node.keys.join(", ") + "]";
+const fmtKeys = ks => "[" + ks.join(", ") + "]";
+
+// =================== Layout & render ===================
+const KEY_W = 30, NODE_H = 38, V_GAP = 66, H_GAP = 18;
+
+function measureWidth(node) {
+    return Math.max(46, node.keys.length * KEY_W + 16);
+}
+
+function layout(node, depth, xOffset) {
+    node._w = measureWidth(node);
+    node._y = 30 + depth * (NODE_H + V_GAP);
+    if (node.leaf || node.children.length === 0) {
+        node._x = xOffset + node._w / 2;
+        return { width: node._w, cx: node._x };
+    }
+    let totalW = 0;
+    const centers = [];
+    for (const c of node.children) {
+        const sub = layout(c, depth + 1, xOffset + totalW);
+        centers.push(sub.cx);
+        totalW += sub.width + H_GAP;
+    }
+    totalW -= H_GAP;
+    node._x = (centers[0] + centers[centers.length - 1]) / 2;
+    return { width: Math.max(totalW, node._w), cx: node._x };
+}
+
+// In the red-black encoding, each 2-3-4 node maps to one black node plus 0/1/2
+// red children. We render the keys of a 3-/4-node in red to signal those red
+// links, and color the inter-key separators red as well.
+function render(hl = {}) {
+    layout(root, 0, 20);
+    let maxX = 0, maxY = 0;
+    (function bound(n) {
+        maxX = Math.max(maxX, n._x + n._w / 2 + 20);
+        maxY = Math.max(maxY, n._y + 60);
+        if (!n.leaf) n.children.forEach(bound);
+    })(root);
+    svg.setAttribute("width", Math.max(820, maxX));
+    svg.setAttribute("height", Math.max(220, maxY));
+    const rb = document.getElementById("rbToggle").checked;
+    let out = "";
+
+    // edges
+    (function edges(node) {
+        if (node.leaf) return;
+        node.children.forEach((c, i) => {
+            const ex = node._x, ey = node._y + NODE_H / 2;
+            const cx = c._x, cy = c._y - NODE_H / 2;
+            const active = hl.activeEdge && hl.activeEdge[0] === node.id && hl.activeEdge[1] === i;
+            out += `<g class="edge${active ? " active" : ""}"><path d="M${ex} ${ey} C ${ex} ${(ey + cy) / 2}, ${cx} ${(ey + cy) / 2}, ${cx} ${cy}"/></g>`;
+            edges(c);
+        });
+    })(root);
+
+    // nodes
+    const has = (set, id) => hl[set] && hl[set].has(id);
+    (function nodes(node) {
+        let cls = "node";
+        ["path", "full", "splitting", "found", "notfound", "underflow", "borrow", "merging"]
+            .forEach(s => { if (has(s, node.id)) cls += " " + s; });
+        const w = node._w, x = node._x - w / 2, y = node._y - NODE_H / 2;
+        out += `<g class="${cls}">`;
+        out += `<rect x="${x}" y="${y}" width="${w}" height="${NODE_H}" rx="7" fill="var(--bg)" stroke="var(--border)" stroke-width="1.6"/>`;
+        const left = node._x - (node.keys.length * KEY_W) / 2;
+        node.keys.forEach((k, i) => {
+            let tc = "key";
+            // In red-black view, the 2nd and 3rd keys of a node are the "red" keys.
+            if (rb && i >= 1) tc += " red";
+            if (hl.foundKey !== undefined && k === hl.foundKey && has("found", node.id)) tc += " fk";
+            if (hl.midKey !== undefined && k === hl.midKey && has("splitting", node.id)) tc += " mk";
+            out += `<text class="${tc}" x="${left + i * KEY_W + KEY_W / 2}" y="${node._y + 1}">${k}</text>`;
+        });
+        for (let i = 1; i < node.keys.length; i++) {
+            const sx = left + i * KEY_W;
+            const sc = rb ? "var(--red)" : "var(--border)";
+            const sw = rb ? "1.4" : "0.8";
+            out += `<line x1="${sx}" x2="${sx}" y1="${node._y - 13}" y2="${node._y + 13}" stroke="${sc}" stroke-width="${sw}"/>`;
+        }
+        out += `</g>`;
+        if (!node.leaf) node.children.forEach(nodes);
+    })(root);
+
+    // rising-median annotation
+    if (hl.rising) {
+        out += `<text class="rising" x="${hl.rising.x}" y="${hl.rising.y}">▲ ${hl.rising.key}</text>`;
+    }
+
+    svg.innerHTML = out;
+    updateStats();
+}
+
+function updateStats() {
+    let nodes = 0, keys = 0, twos = 0, threes = 0, fours = 0, minLeaf = Infinity, maxLeaf = 0;
+    (function walk(n, d) {
+        nodes++; keys += n.keys.length;
+        if (n.keys.length === 1) twos++;
+        else if (n.keys.length === 2) threes++;
+        else if (n.keys.length === 3) fours++;
+        if (n.leaf) { minLeaf = Math.min(minLeaf, d); maxLeaf = Math.max(maxLeaf, d); }
+        else n.children.forEach(c => walk(c, d + 1));
+    })(root, 0);
+    document.getElementById("statN").textContent = keys;
+    document.getElementById("statNodes").textContent = nodes;
+    document.getElementById("stat2").textContent = twos;
+    document.getElementById("stat3").textContent = threes;
+    document.getElementById("stat4").textContent = fours;
+    document.getElementById("statH").textContent = maxLeaf;
+    document.getElementById("statLeaf").textContent =
+        keys === 0 ? "-" : (minLeaf === maxLeaf ? "all = " + maxLeaf : minLeaf + ".." + maxLeaf + " (!)");
+}
+
+// =================== Search ===================
+async function searchKey(key) {
+    setTrace(`<span class="blue">Search ${key}</span>: descend from the root, choosing the child interval that contains ${key}.`);
+    const path = new Set();
+    let node = root;
+    while (true) {
+        path.add(node.id);
+        render({ path });
+        await sleep(speed());
+        let i = 0;
+        while (i < node.keys.length && key > node.keys[i]) i++;
+        if (i < node.keys.length && key === node.keys[i]) {
+            render({ found: new Set([node.id]), foundKey: key });
+            setTrace(`Found <span class="ok">${key}</span> in node ${fmt(node)}.`);
+            return;
+        }
+        if (node.leaf) {
+            render({ notfound: new Set([node.id]) });
+            setTrace(`<span class="bad">${key}</span> not found — it belongs in leaf ${fmt(node)} but is absent.`);
+            return;
+        }
+        render({ path, activeEdge: [node.id, i] });
+        await sleep(speed() * 0.6);
+        node = node.children[i];
+    }
+}
+
+// =================== Insert (canonical top-down, pre-emptive split) ===================
+async function insertKey(key) {
+    if (find(root, key)) {
+        setTrace(`<span class="highlight">${key}</span> already present — 2-3-4 trees hold distinct keys, nothing to do.`);
+        render({ found: new Set([locate(root, key).id]), foundKey: key });
+        return;
+    }
+    setTrace(`<span class="blue">Insert ${key}</span>: descend top-down, splitting every full 4-node on the way so the leaf insert never cascades back up.`);
+
+    // Step 1: if the root is a full 4-node, split it first (this is the only
+    // place the tree grows taller). After this the new root is a 2-node.
+    if (root.isFull()) {
+        render({ full: new Set([root.id]) });
+        setTrace(`The root is a full 4-node ${fmt(root)} — split it first. Its middle key rises into a brand-new root, so the <span class="purple">tree grows one level taller.</span>`);
+        await sleep(speed());
+        const mid = root.keys[1];
+        const newRoot = new Node(false);
+        newRoot.children = [root];
+        render({ splitting: new Set([root.id]), midKey: mid,
+                 rising: { x: root._x, y: root._y - NODE_H / 2 - 14, key: mid } });
+        await sleep(speed() * 1.1);
+        splitChild(newRoot, 0);
+        root = newRoot;
+        render({ splitting: new Set([newRoot.id]), midKey: mid });
+        await sleep(speed());
+    }
+
+    await insertNonFull(root, key, new Set());
+    render();
+    setTrace(`Inserted <span class="ok">${key}</span>. Height ${heightOf()}, every leaf at the same depth.`);
+}
+
+// Precondition (invariant of the top-down method): `node` is guaranteed NOT to
+// be a full 4-node when we enter it.
+async function insertNonFull(node, key, pathSet) {
+    pathSet.add(node.id);
+    render({ path: new Set(pathSet) });
+    await sleep(speed() * 0.6);
+
+    if (node.leaf) {
+        insertSorted(node.keys, key);   // node had <= 2 keys, so now <= 3: still valid
+        render({ path: new Set(pathSet) });
+        await sleep(speed() * 0.6);
+        return;
+    }
+
+    // pick the child interval
+    let i = 0;
+    while (i < node.keys.length && key > node.keys[i]) i++;
+    render({ path: new Set(pathSet), activeEdge: [node.id, i] });
+    await sleep(speed() * 0.5);
+
+    // pre-emptive split: if the child we are about to enter is a full 4-node,
+    // split it now. The parent is non-full (invariant), so it can absorb the
+    // rising middle key without itself overflowing.
+    if (node.children[i].isFull()) {
+        const full = node.children[i];
+        const mid = full.keys[1];
+        render({ path: new Set(pathSet), full: new Set([full.id]) });
+        setTrace(`Child ${fmt(full)} on the path is a full 4-node — <span class="highlight">split it pre-emptively</span> before descending. Middle key ${mid} rises into the parent.`);
+        await sleep(speed());
+        render({ path: new Set(pathSet), splitting: new Set([full.id]), midKey: mid,
+                 rising: { x: full._x, y: full._y - NODE_H / 2 - 14, key: mid } });
+        await sleep(speed() * 1.1);
+        splitChild(node, i);
+        render({ path: new Set(pathSet) });
+        await sleep(speed() * 0.6);
+        // decide which of the two halves to descend into
+        if (key > node.keys[i]) i++;
+    }
+
+    await insertNonFull(node.children[i], key, pathSet);
+}
+
+// Split children[idx] (a full 4-node) into two 2-nodes around its middle key,
+// which is inserted into the (non-full) parent.
+function splitChild(parent, idx) {
+    const full = parent.children[idx];
+    const mid = full.keys[1];
+    const right = new Node(full.leaf);
+    right.keys = full.keys.slice(2);     // [3rd key]
+    full.keys = full.keys.slice(0, 1);   // [1st key]
+    if (!full.leaf) {
+        right.children = full.children.slice(2, 4);
+        full.children = full.children.slice(0, 2);
+    }
+    parent.children.splice(idx + 1, 0, right);
+    parent.keys.splice(idx, 0, mid);
+}
+
+function insertSorted(arr, k) {
+    let i = arr.length - 1;
+    arr.push(k);
+    while (i >= 0 && arr[i] > k) { arr[i + 1] = arr[i]; i--; }
+    arr[i + 1] = k;
+}
+
+// =================== Delete (top-down: ensure >= 2 keys before descent) ===================
+async function deleteKey(key) {
+    if (!find(root, key)) {
+        setTrace(`<span class="bad">${key}</span> is not in the tree — nothing to delete.`);
+        render({ notfound: new Set([locate(root, key).id]) });
+        return;
+    }
+    setTrace(`<span class="blue">Delete ${key}</span>: descend top-down, making sure each child we enter has at least 2 keys (borrow or fuse first); an internal key is swapped down to a leaf.`);
+    await deleteRec(root, key, new Set());
+    if (!root.leaf && root.keys.length === 0) {
+        setTrace(`The root lost its only key — its single child becomes the new root. <span class="purple">Tree height shrinks by 1.</span>`);
+        render({ underflow: new Set([root.id]) });
+        await sleep(speed());
+        root = root.children[0];
+        render();
+    }
+    setTrace(`Deleted <span class="ok">${key}</span>. Height ${heightOf()}, all leaves still at the same depth.`);
+}
+
+// Precondition: `node` is the root, OR it has been topped up to >= 2 keys
+// before we descended into it. So `node` can always afford to lose a key.
+async function deleteRec(node, key, pathSet) {
+    pathSet.add(node.id);
+    render({ path: new Set(pathSet) });
+    await sleep(speed() * 0.55);
+
+    let idx = 0;
+    while (idx < node.keys.length && key > node.keys[idx]) idx++;
+    const here = idx < node.keys.length && node.keys[idx] === key;
+
+    if (node.leaf) {
+        // Found in a leaf — just remove it (the leaf has >= 2 keys by invariant,
+        // unless it is the root, which may shrink to 0).
+        node.keys.splice(node.keys.indexOf(key), 1);
+        render({ path: new Set(pathSet) });
+        await sleep(speed() * 0.6);
+        return;
+    }
+
+    if (here) {
+        // Internal key: swap with in-order predecessor (rightmost leaf key of
+        // the left subtree) so the real removal happens at a leaf.
+        const predLeaf = rightmostLeaf(node.children[idx]);
+        const pred = predLeaf.keys[predLeaf.keys.length - 1];
+        setTrace(`<span class="highlight">${key}</span> sits in internal node ${fmt(node)}. Swap it with its in-order predecessor <span class="highlight">${pred}</span> so deletion moves to a leaf.`);
+        render({ path: new Set(pathSet), borrow: new Set([node.id, predLeaf.id]), activeEdge: [node.id, idx] });
+        await sleep(speed());
+        node.keys[idx] = pred;
+        // Now delete `pred` from the left child subtree.
+        const ci = await ensureChildHasTwo(node, idx, pathSet);
+        await deleteRec(node.children[ci], pred, pathSet);
+    } else {
+        // Descend into children[idx], topping it up first if it is a 2-node.
+        const ci = await ensureChildHasTwo(node, idx, pathSet);
+        render({ path: new Set(pathSet), activeEdge: [node.id, ci] });
+        await sleep(speed() * 0.5);
+        await deleteRec(node.children[ci], key, pathSet);
+    }
+}
+
+// Before descending into children[ci], guarantee it has >= 2 keys. If it is a
+// 2-node, borrow from a 2+/3-node sibling, else fuse with a sibling. Returns
+// the (possibly shifted) index of the child that now holds the target range.
+async function ensureChildHasTwo(node, ci, pathSet) {
+    const child = node.children[ci];
+    if (child.keys.length >= 2) return ci;
+
+    render({ path: new Set(pathSet), underflow: new Set([child.id]) });
+    setTrace(`Child ${fmt(child)} is a 2-node — top it up to ≥ 2 keys before descending. Try borrowing from a sibling, otherwise fuse.`);
+    await sleep(speed());
+
+    const leftIdx = ci - 1, rightIdx = ci + 1;
+    if (leftIdx >= 0 && node.children[leftIdx].keys.length >= 2) {
+        await borrowFromLeft(node, ci, pathSet);
+        return ci;
+    } else if (rightIdx < node.children.length && node.children[rightIdx].keys.length >= 2) {
+        await borrowFromRight(node, ci, pathSet);
+        return ci;
+    } else if (leftIdx >= 0) {
+        await fuse(node, leftIdx, pathSet);   // fuse child into its left sibling
+        return ci - 1;                         // target now lives in the merged left node
+    } else {
+        await fuse(node, ci, pathSet);         // fuse right sibling into child
+        return ci;
+    }
+}
+
+// Borrow = rotation through the parent: parent's separator drops into the child,
+// and the rich sibling's adjacent key rises to take the parent's place.
+async function borrowFromLeft(node, ci, pathSet) {
+    const child = node.children[ci];
+    const sib = node.children[ci - 1];
+    setTrace(`Left sibling ${fmt(sib)} has a spare key — <span class="blue">borrow</span> (rotate): parent key ${node.keys[ci - 1]} drops into the child, sibling's largest key ${sib.keys[sib.keys.length - 1]} rises to the parent.`);
+    render({ path: new Set(pathSet), borrow: new Set([child.id, sib.id]) });
+    await sleep(speed());
+    child.keys.unshift(node.keys[ci - 1]);
+    node.keys[ci - 1] = sib.keys.pop();
+    if (!sib.leaf) child.children.unshift(sib.children.pop());
+    render({ path: new Set(pathSet) });
+    await sleep(speed() * 0.6);
+}
+
+async function borrowFromRight(node, ci, pathSet) {
+    const child = node.children[ci];
+    const sib = node.children[ci + 1];
+    setTrace(`Right sibling ${fmt(sib)} has a spare key — <span class="blue">borrow</span> (rotate): parent key ${node.keys[ci]} drops into the child, sibling's smallest key ${sib.keys[0]} rises to the parent.`);
+    render({ path: new Set(pathSet), borrow: new Set([child.id, sib.id]) });
+    await sleep(speed());
+    child.keys.push(node.keys[ci]);
+    node.keys[ci] = sib.keys.shift();
+    if (!sib.leaf) child.children.push(sib.children.shift());
+    render({ path: new Set(pathSet) });
+    await sleep(speed() * 0.6);
+}
+
+// Fuse children[idx] and children[idx+1] with the separator key pulled down,
+// producing one 4-node (two 1-key nodes + 1 separator key).
+async function fuse(node, idx, pathSet) {
+    const left = node.children[idx];
+    const right = node.children[idx + 1];
+    setTrace(`No sibling has a spare key — <span class="purple">fuse</span>: pull parent separator ${node.keys[idx]} down between ${fmt(left)} and ${fmt(right)} to form one 4-node.`);
+    render({ path: new Set(pathSet), merging: new Set([left.id, right.id]) });
+    await sleep(speed());
+    left.keys.push(node.keys[idx], ...right.keys);
+    if (!left.leaf) left.children.push(...right.children);
+    node.keys.splice(idx, 1);
+    node.children.splice(idx + 1, 1);
+    render({ path: new Set(pathSet), merging: new Set([left.id]) });
+    await sleep(speed() * 0.7);
+}
+
+function rightmostLeaf(node) {
+    while (!node.leaf) node = node.children[node.children.length - 1];
+    return node;
+}
+
+// =================== Utilities ===================
+function find(node, key) {
+    let i = 0;
+    while (i < node.keys.length && key > node.keys[i]) i++;
+    if (i < node.keys.length && node.keys[i] === key) return true;
+    return node.leaf ? false : find(node.children[i], key);
+}
+function locate(node, key) {
+    let i = 0;
+    while (i < node.keys.length && key > node.keys[i]) i++;
+    if (i < node.keys.length && node.keys[i] === key) return node;
+    return node.leaf ? node : locate(node.children[i], key);
+}
+function heightOf() {
+    let h = 0, n = root;
+    while (!n.leaf) { h++; n = n.children[0]; }
+    return h;
+}
+
+// =================== Silent (non-animated) core for setup ===================
+function insertSilently(key) {
+    if (find(root, key)) return;
+    if (root.isFull()) {
+        const nr = new Node(false);
+        nr.children = [root];
+        splitChild(nr, 0);
+        root = nr;
+    }
+    insertNonFullSilent(root, key);
+}
+function insertNonFullSilent(node, key) {
+    if (node.leaf) { insertSorted(node.keys, key); return; }
+    let i = 0;
+    while (i < node.keys.length && key > node.keys[i]) i++;
+    if (node.children[i].isFull()) {
+        splitChild(node, i);
+        if (key > node.keys[i]) i++;
+    }
+    insertNonFullSilent(node.children[i], key);
+}
+
+// =================== UI handlers ===================
+let busy = false;
+async function withBusy(fn) {
+    if (busy) return;
+    busy = true;
+    setButtons(true);
+    try { await fn(); } finally { busy = false; setButtons(false); }
+}
+function setButtons(dis) {
+    document.querySelectorAll("button").forEach(b => b.disabled = dis);
+}
+
+async function doInsert() {
+    const v = parseInt(document.getElementById("keyInput").value);
+    if (Number.isNaN(v)) return;
+    await withBusy(() => insertKey(v));
+}
+async function doSearch() {
+    const v = parseInt(document.getElementById("keyInput").value);
+    if (Number.isNaN(v)) return;
+    await withBusy(() => searchKey(v));
+}
+async function doDelete() {
+    const v = parseInt(document.getElementById("keyInput").value);
+    if (Number.isNaN(v)) return;
+    await withBusy(() => deleteKey(v));
+}
+
+function resetTree() {
+    if (busy) return;
+    nextNodeId = 1;
+    root = new Node(true);
+    render();
+    setTrace("Tree cleared.");
+}
+
+async function demoInsert() {
+    await withBusy(async () => {
+        nextNodeId = 1;
+        root = new Node(true);
+        render();
+        const seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        setTrace(`<span class="blue">Demo:</span> inserting 1..10 in order. Watch full 4-nodes split <span class="highlight">pre-emptively on the way down</span>, and the root split that grows the tree taller.`);
+        await sleep(speed());
+        for (const k of seq) {
+            document.getElementById("keyInput").value = k;
+            await insertKey(k);
+            await sleep(speed() * 0.45);
+        }
+        setTrace(`Built from 1..10: height ${heightOf()}, every leaf at the same depth. Every split happened top-down — no key ever cascaded upward.`);
+    });
+}
+
+async function demoDelete() {
+    await withBusy(async () => {
+        nextNodeId = 1;
+        root = new Node(true);
+        // Build a 2-level tree: root [20], leaves [10] and [30,40].
+        // Deleting 10 borrows from the rich sibling; deleting 20 then fuses
+        // with no rich sibling, draining the root and collapsing one level.
+        for (const k of [10, 20, 30, 40]) insertSilently(k);
+        render();
+        setTrace(`<span class="blue">Demo:</span> a tree built from 10, 20, 30, 40 (root [20] over leaves [10] and [30,40]). Deleting 10 forces a <span class="blue">borrow</span>; deleting 20 then forces a <span class="purple">fuse</span> that pulls the root separator down and <span class="purple">collapses the root</span>.`);
+        await sleep(speed() * 1.2);
+        for (const k of [10, 20]) {
+            document.getElementById("keyInput").value = k;
+            await deleteKey(k);
+            await sleep(speed() * 0.8);
+        }
+        setTrace(`A fuse pulled the root's separator down, collapsing one level — the tree is now a single node. Height is ${heightOf()}.`);
+    });
+}
+
+async function randomFill() {
+    await withBusy(async () => {
+        const seen = new Set();
+        (function collect(n) { n.keys.forEach(k => seen.add(k)); if (!n.leaf) n.children.forEach(collect); })(root);
+        let added = 0;
+        while (added < 10) {
+            const v = Math.floor(Math.random() * 99) + 1;
+            if (seen.has(v)) continue;
+            seen.add(v); added++;
+            document.getElementById("keyInput").value = v;
+            await insertKey(v);
+            await sleep(speed() * 0.3);
+        }
+    });
+}
+
+// initial demo
+(function init() {
+    for (const k of [10, 20, 5, 15, 25, 30, 8, 13]) insertSilently(k);
+    render();
+    setTrace(`Demo tree built from 10, 20, 5, 15, 25, 30, 8, 13. Try inserting <span class="highlight">13</span> again (already present), delete <span class="highlight">20</span> to watch an internal-key swap, or toggle the <span class="bad">red-black view</span>.`);
+})();
+</script>
+</body>
+</html>
