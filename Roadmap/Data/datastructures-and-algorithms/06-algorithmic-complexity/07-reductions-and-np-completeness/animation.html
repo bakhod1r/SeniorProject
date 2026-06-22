@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reductions &amp; NP-Completeness — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1040px; margin: 0 auto; }
+  .grid2 { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+  @media (max-width: 860px){ .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .prob-btns { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 12px; }
+  .prob-btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 0.82em; transition: all 0.2s; text-align: left;
+  }
+  .prob-btn:hover { border-color: var(--blue); }
+  .prob-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.12); color: var(--blue); }
+  .prob-btn .tag { display: block; font-size: 0.74em; color: var(--text2); margin-top: 2px; }
+  .prob-btn .tag.sat { color: var(--green); }
+  .prob-btn .tag.unsat { color: var(--red); }
+  .formula {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; margin-bottom: 12px; font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.95em; text-align: center; line-height: 1.7;
+  }
+  .formula .cl { color: var(--orange); white-space: nowrap; }
+  .formula .conj { color: var(--text2); padding: 0 4px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .graph-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+  svg { width: 100%; height: auto; display: block; }
+  /* graph elements */
+  .tri-edge { stroke: var(--blue); stroke-width: 1.6; opacity: 0.55; }
+  .conf-edge { stroke: var(--red); stroke-width: 1.4; stroke-dasharray: 4 3; opacity: 0; transition: opacity .3s; }
+  .conf-edge.shown { opacity: 0.7; }
+  .vnode { transition: all .25s; }
+  .vnode circle { fill: var(--bg3); stroke: var(--border); stroke-width: 2; transition: all .25s; }
+  .vnode.appear circle { fill: rgba(88,166,255,0.18); stroke: var(--blue); }
+  .vnode.pick circle { fill: rgba(63,185,80,0.22); stroke: var(--green); stroke-width: 3; }
+  .vnode.bad circle { fill: rgba(248,81,73,0.22); stroke: var(--red); stroke-width: 3; }
+  .vnode text { fill: var(--text); font: 600 11px 'Fira Code', monospace; pointer-events: none; }
+  .vnode.pick text { fill: var(--green); }
+  .vnode.bad text { fill: var(--red); }
+  .clabel { fill: var(--text2); font: 600 11px 'Segoe UI', sans-serif; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .stat-box .value { font-size: 1.3em; font-weight: bold; color: var(--blue); font-family: 'Fira Code', monospace; }
+  .stat-box.k .value { color: var(--orange); }
+  .stat-box.ok .value { color: var(--green); }
+  .stat-box.no .value { color: var(--red); }
+  .stat-box .label { font-size: 0.72em; color: var(--text2); margin-top: 2px; }
+  .verdict { text-align: center; font-size: 1.0em; font-weight: bold; margin: 6px 0; min-height: 1.4em; }
+  .verdict.ok { color: var(--green); }
+  .verdict.no { color: var(--red); }
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.85em; line-height: 1.55; margin-top: 8px; min-height: 92px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--purple); font-size: 0.92em; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.75em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .line { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+  /* reduction chain */
+  .chain { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+  .chain .node {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+    padding: 5px 9px; border-radius: 5px; font-size: 0.72em; font-family: 'Fira Code', monospace;
+  }
+  .chain .node.cur { border-color: var(--green); background: rgba(63,185,80,0.12); color: var(--green); font-weight: bold; }
+  .chain .arrow { color: var(--text2); font-size: 0.8em; }
+</style>
+</head>
+<body>
+<h1>Reductions &amp; NP-Completeness</h1>
+<p class="subtitle">The 3-SAT → Independent-Set gadget reduction, built and checked step by step</p>
+
+<div class="container">
+  <div class="grid2">
+    <!-- LEFT: formula + graph -->
+    <div class="panel">
+      <h2>Construction: 3-CNF → Graph</h2>
+      <div class="prob-btns" id="probBtns"></div>
+
+      <div class="formula" id="formulaView"></div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnStep" onclick="step()">Step</button>
+        <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+        <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+        <div class="speed-control">
+          <label>Speed</label>
+          <input type="range" id="speedSlider" min="1" max="10" value="6">
+        </div>
+      </div>
+
+      <div class="graph-box">
+        <svg id="graphSvg" viewBox="0 0 480 360" role="img" aria-label="Independent Set instance">
+          <g id="gEdges"></g>
+          <g id="gNodes"></g>
+          <g id="gLabels"></g>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <span><span class="line" style="border-color:var(--blue)"></span>triangle edge (one literal / clause)</span>
+        <span><span class="line" style="border-color:var(--red);border-top-style:dashed"></span>conflict edge (x ↔ ¬x)</span>
+        <span><span class="dot" style="background:var(--green)"></span>in independent set</span>
+        <span><span class="dot" style="background:var(--red)"></span>conflict</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: claim + demo + accounting -->
+    <div class="panel">
+      <h2>The Claim &amp; the Proof</h2>
+
+      <div class="claim">
+        <b>Karp reduction.</b> A 3-CNF formula with <code>m</code> clauses is satisfiable
+        <b>if and only if</b> its constructed graph has an independent set of size
+        <code>k = m</code>. Each clause becomes a triangle (so at most one of its 3 literals
+        can be picked); conflict edges <code>xᵢ — ¬xᵢ</code> forbid picking a literal and its
+        negation together. A size-<code>m</code> independent set = one true literal per clause
+        with no contradictions = a satisfying assignment.
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnDemo" onclick="runDemo()">Demonstrate IFF</button>
+        <button class="btn" id="btnSearch" onclick="searchIS()">Search all subsets</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat-box k">
+          <div class="value" id="statK">—</div>
+          <div class="label">target k = clauses (m)</div>
+        </div>
+        <div class="stat-box">
+          <div class="value" id="statV">0</div>
+          <div class="label">vertices in graph (3m)</div>
+        </div>
+        <div class="stat-box">
+          <div class="value" id="statSubsets">0</div>
+          <div class="label">subsets tested (search)</div>
+        </div>
+        <div class="stat-box" id="statBestBox">
+          <div class="value" id="statBest">0</div>
+          <div class="label">largest IS found</div>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="narration" id="narration"></div>
+
+      <div class="chain" id="chain">
+        <span class="node">SAT</span><span class="arrow">→</span>
+        <span class="node">3-SAT</span><span class="arrow">→</span>
+        <span class="node cur">Independent Set</span><span class="arrow">→</span>
+        <span class="node">Vertex Cover</span><span class="arrow">→</span>
+        <span class="node">Clique</span><span class="arrow">→</span>
+        <span class="node">…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== FORMULAS =====================
+// A literal is {v: variable index (1-based), neg: bool}.
+// A clause is an array of exactly 3 literals.
+const FORMULAS = [
+  {
+    name: '(x1 ∨ ¬x2 ∨ x3) ∧ (¬x1 ∨ x2 ∨ x3)',
+    tag: 'satisfiable — has a size-2 independent set',
+    sat: true,
+    vars: 3,
+    clauses: [
+      [{v:1,neg:false},{v:2,neg:true},{v:3,neg:false}],
+      [{v:1,neg:true},{v:2,neg:false},{v:3,neg:false}],
+    ],
+  },
+  {
+    name: '(x1 ∨ x2 ∨ x3) ∧ (¬x1 ∨ ¬x2 ∨ x3) ∧ (x1 ∨ ¬x2 ∨ ¬x3)',
+    tag: 'satisfiable — has a size-3 independent set',
+    sat: true,
+    vars: 3,
+    clauses: [
+      [{v:1,neg:false},{v:2,neg:false},{v:3,neg:false}],
+      [{v:1,neg:true},{v:2,neg:true},{v:3,neg:false}],
+      [{v:1,neg:false},{v:2,neg:true},{v:3,neg:true}],
+    ],
+  },
+  {
+    // All 8 clauses over x1,x2,x3 => no assignment satisfies all => UNSAT.
+    name: 'all 8 clauses over x1,x2,x3  (unsatisfiable)',
+    tag: 'unsatisfiable — no size-8 independent set exists',
+    sat: false,
+    vars: 3,
+    clauses: (function(){
+      const cs = [];
+      for (let a=0;a<2;a++) for (let b=0;b<2;b++) for (let c=0;c<2;c++) {
+        cs.push([{v:1,neg:!!a},{v:2,neg:!!b},{v:3,neg:!!c}]);
+      }
+      return cs;
+    })(),
+  },
+];
+
+// ===================== STATE =====================
+let fIdx = 0;
+let formula = FORMULAS[0];
+let nodes = [];   // {id, clause, slot, v, neg, label, x, y}
+let edges = [];   // {a, b, kind: 'tri'|'conf'}
+let buildSteps = [];  // ordered list of build actions
+let stepPtr = 0;
+let playing = false, timer = null;
+
+// ===================== GRAPH CONSTRUCTION (CORRECT) =====================
+function literalLabel(lit){ return (lit.neg ? '¬x' : 'x') + lit.v; }
+
+function buildGraph() {
+  nodes = []; edges = [];
+  const m = formula.clauses.length;
+  // layout: clauses arranged in a row (wrap if many); each clause = small triangle.
+  const cols = m <= 4 ? m : Math.ceil(m / 2);
+  const rows = Math.ceil(m / cols);
+  const cellW = 480 / cols;
+  const cellH = 320 / rows;
+  const R = Math.min(cellW, cellH) * 0.27;
+
+  formula.clauses.forEach((clause, ci) => {
+    const col = ci % cols, row = Math.floor(ci / cols);
+    const cx = col * cellW + cellW / 2;
+    const cy = row * cellH + cellH / 2 + 20;
+    clause.forEach((lit, si) => {
+      // triangle: top, bottom-left, bottom-right
+      const ang = -Math.PI/2 + si * (2*Math.PI/3);
+      nodes.push({
+        id: nodes.length,
+        clause: ci, slot: si,
+        v: lit.v, neg: lit.neg,
+        label: literalLabel(lit),
+        x: cx + R * Math.cos(ang),
+        y: cy + R * Math.sin(ang),
+        cx, cy,
+      });
+    });
+  });
+
+  // triangle edges: connect the 3 nodes of each clause
+  for (let ci = 0; ci < m; ci++) {
+    const base = ci * 3;
+    edges.push({a: base,   b: base+1, kind:'tri'});
+    edges.push({a: base+1, b: base+2, kind:'tri'});
+    edges.push({a: base+2, b: base,   kind:'tri'});
+  }
+  // conflict edges: every literal vs its negation across clauses
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i+1; j < nodes.length; j++) {
+      if (nodes[i].v === nodes[j].v && nodes[i].neg !== nodes[j].neg) {
+        edges.push({a: i, b: j, kind:'conf'});
+      }
+    }
+  }
+}
+
+// adjacency for IS checking
+function adjacency() {
+  const adj = nodes.map(() => new Set());
+  edges.forEach(e => { adj[e.a].add(e.b); adj[e.b].add(e.a); });
+  return adj;
+}
+
+// Is `subset` (array of node ids) an independent set? (no edge between any two)
+function isIndependent(subset, adj) {
+  for (let i = 0; i < subset.length; i++)
+    for (let j = i+1; j < subset.length; j++)
+      if (adj[subset[i]].has(subset[j])) return false;
+  return true;
+}
+
+// Find a maximum independent set by exhaustive search (n small here).
+// Returns {best: array, foundK: bool, tested: count}. Stops early if it finds size>=k.
+function findMaxIS(k) {
+  const adj = adjacency();
+  const n = nodes.length;
+  let best = [];
+  let tested = 0;
+  let foundK = false;
+  const total = 1 << n;
+  for (let mask = 0; mask < total; mask++) {
+    tested++;
+    const subset = [];
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) subset.push(i);
+    if (subset.length <= best.length && !(subset.length === k && !foundK)) {
+      // can't improve best and not a fresh k-hit; skip the independence test for speed
+      if (subset.length < best.length) continue;
+    }
+    if (isIndependent(subset, adj)) {
+      if (subset.length > best.length) best = subset;
+      if (subset.length >= k) { foundK = true; }
+    }
+  }
+  return { best, foundK, tested };
+}
+
+// Build a size-k independent set DIRECTLY from a satisfying assignment, for the demo.
+// Returns array of node ids (one true literal per clause) or null.
+function satToIndependentSet() {
+  // brute-force find a satisfying assignment
+  const n = formula.vars;
+  for (let mask = 0; mask < (1 << n); mask++) {
+    const assign = {};
+    for (let i = 0; i < n; i++) assign[i+1] = !!(mask & (1 << i));
+    // does it satisfy all clauses?
+    const ok = formula.clauses.every(cl =>
+      cl.some(lit => assign[lit.v] !== lit.neg)  // literal true: var==true & !neg, or var==false & neg
+    );
+    if (!ok) continue;
+    // for each clause pick one true literal -> its node
+    const pick = [];
+    formula.clauses.forEach((cl, ci) => {
+      for (let si = 0; si < cl.length; si++) {
+        const lit = cl[si];
+        if (assign[lit.v] !== lit.neg) { pick.push(ci*3 + si); break; }
+      }
+    });
+    return { set: pick, assign };
+  }
+  return null;
+}
+
+// ===================== BUILD STEP SEQUENCE =====================
+function makeBuildSteps() {
+  buildSteps = [];
+  const m = formula.clauses.length;
+  // step: reveal each clause's triangle, one clause at a time
+  for (let ci = 0; ci < m; ci++) {
+    buildSteps.push({type:'clause', clause: ci});
+  }
+  // step: reveal conflict edges grouped by variable
+  const confByVar = {};
+  edges.forEach((e, ei) => {
+    if (e.kind === 'conf') {
+      const v = nodes[e.a].v;
+      (confByVar[v] = confByVar[v] || []).push(ei);
+    }
+  });
+  Object.keys(confByVar).sort().forEach(v => {
+    buildSteps.push({type:'conflict', variable:+v, edgeIdx: confByVar[v]});
+  });
+  buildSteps.push({type:'done'});
+}
+
+// ===================== RENDERING =====================
+function nodeEl(nd){ return document.getElementById('vn-' + nd.id); }
+
+function renderGraphSkeleton() {
+  const gE = document.getElementById('gEdges');
+  const gN = document.getElementById('gNodes');
+  const gL = document.getElementById('gLabels');
+  gE.innerHTML = ''; gN.innerHTML = ''; gL.innerHTML = '';
+
+  // clause labels
+  const seen = {};
+  nodes.forEach(nd => {
+    if (!seen[nd.clause]) {
+      seen[nd.clause] = true;
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', nd.cx);
+      t.setAttribute('y', nd.cy - 1);
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('class','clabel');
+      t.setAttribute('opacity','0');
+      t.id = 'cl-' + nd.clause;
+      t.textContent = 'C' + (nd.clause+1);
+      gL.appendChild(t);
+    }
+  });
+
+  // edges
+  edges.forEach((e, ei) => {
+    const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1', nodes[e.a].x); ln.setAttribute('y1', nodes[e.a].y);
+    ln.setAttribute('x2', nodes[e.b].x); ln.setAttribute('y2', nodes[e.b].y);
+    ln.setAttribute('class', e.kind === 'tri' ? 'tri-edge' : 'conf-edge');
+    ln.id = 'ed-' + ei;
+    if (e.kind === 'tri') ln.style.opacity = '0';
+    gE.appendChild(ln);
+  });
+
+  // nodes
+  nodes.forEach(nd => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','vnode');
+    g.id = 'vn-' + nd.id;
+    g.setAttribute('opacity','0');
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', nd.x); c.setAttribute('cy', nd.y); c.setAttribute('r', 15);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', nd.x); t.setAttribute('y', nd.y + 4);
+    t.setAttribute('text-anchor','middle');
+    t.textContent = nd.label;
+    g.appendChild(c); g.appendChild(t);
+    gN.appendChild(g);
+  });
+
+  document.getElementById('statV').textContent = nodes.length;
+  document.getElementById('statK').textContent = formula.clauses.length;
+}
+
+function clearHighlights() {
+  nodes.forEach(nd => {
+    const el = nodeEl(nd);
+    el.classList.remove('pick','bad');
+  });
+}
+
+function renderFormula(activeClause) {
+  const fv = document.getElementById('formulaView');
+  fv.innerHTML = formula.clauses.map((cl, ci) => {
+    const inner = cl.map(literalLabel).join(' ∨ ');
+    const cls = (activeClause != null && ci <= activeClause) || activeClause == null
+      ? 'cl' : 'cl';
+    const style = (activeClause != null && ci === activeClause)
+      ? ' style="color:var(--green)"' : '';
+    return '<span class="cl"'+style+'>(' + inner + ')</span>';
+  }).join('<span class="conj">∧</span>');
+}
+
+function narrate(html){ document.getElementById('narration').innerHTML = html; }
+
+// ===================== STEP-BY-STEP CONSTRUCTION =====================
+function step() {
+  if (stepPtr >= buildSteps.length) return;
+  const s = buildSteps[stepPtr];
+  stepPtr++;
+
+  if (s.type === 'clause') {
+    // reveal clause label, its 3 nodes, its 3 triangle edges
+    document.getElementById('cl-' + s.clause).setAttribute('opacity','1');
+    for (let si = 0; si < 3; si++) {
+      const el = nodeEl(nodes[s.clause*3 + si]);
+      el.setAttribute('opacity','1');
+      el.classList.add('appear');
+    }
+    edges.forEach((e, ei) => {
+      if (e.kind === 'tri' && nodes[e.a].clause === s.clause)
+        document.getElementById('ed-'+ei).style.opacity = '0.55';
+    });
+    renderFormula(s.clause);
+    const lits = formula.clauses[s.clause].map(literalLabel).join(', ');
+    narrate('<b>Clause C' + (s.clause+1) + '</b> = (' + lits + ') becomes a <span class="hl">triangle</span> '
+      + 'of its three literal-vertices. The three edges make them mutually adjacent, so an independent set '
+      + 'can contain <span class="ok">at most one</span> of them — exactly "pick at most one true literal per clause".');
+  } else if (s.type === 'conflict') {
+    s.edgeIdx.forEach(ei => document.getElementById('ed-'+ei).classList.add('shown'));
+    narrate('<b>Conflict edges for x' + s.variable + '.</b> We connect every <code>x' + s.variable
+      + '</code> vertex to every <code>¬x' + s.variable + '</code> vertex (the red dashed edges). '
+      + 'These forbid picking a literal and its negation together — the independent set must be a '
+      + '<span class="ok">consistent</span> assignment.');
+  } else if (s.type === 'done') {
+    narrate('<b>Construction complete.</b> Graph has <span class="hl">' + nodes.length + ' vertices</span> and '
+      + edges.length + ' edges, built in time polynomial in the formula size. Target independent-set size is '
+      + '<span class="hl">k = m = ' + formula.clauses.length + '</span> (one literal per clause). '
+      + 'Now press <b>Demonstrate IFF</b> or <b>Search all subsets</b> to test the claim.');
+    stopPlay();
+  }
+}
+
+function buildComplete() { return stepPtr >= buildSteps.length; }
+
+// ===================== DEMO: prove the IFF on this instance =====================
+function runDemo() {
+  // make sure construction is fully shown
+  while (!buildComplete()) {
+    const s = buildSteps[stepPtr]; stepPtr++;
+    if (s.type === 'clause') {
+      document.getElementById('cl-' + s.clause).setAttribute('opacity','1');
+      for (let si=0; si<3; si++){ const el=nodeEl(nodes[s.clause*3+si]); el.setAttribute('opacity','1'); el.classList.add('appear'); }
+      edges.forEach((e,ei)=>{ if(e.kind==='tri'&&nodes[e.a].clause===s.clause) document.getElementById('ed-'+ei).style.opacity='0.55'; });
+    } else if (s.type === 'conflict') {
+      s.edgeIdx.forEach(ei => document.getElementById('ed-'+ei).classList.add('shown'));
+    }
+  }
+  renderFormula(null);
+  clearHighlights();
+  const k = formula.clauses.length;
+
+  if (formula.sat) {
+    const res = satToIndependentSet();
+    const pick = res.set;
+    pick.forEach(id => nodeEl(nodes[id]).classList.add('pick'));
+    document.getElementById('statBest').textContent = pick.length;
+    document.getElementById('statBestBox').className = 'stat-box ok';
+    const v = document.getElementById('verdict');
+    v.className = 'verdict ok';
+    v.textContent = '✓ Satisfiable  ⟷  independent set of size k = ' + k + ' exists';
+    const asg = Object.keys(res.assign).map(vv => 'x'+vv+'='+(res.assign[vv]?'T':'F')).join(', ');
+    narrate('This formula <span class="ok">is satisfiable</span> under <code>' + asg + '</code>. '
+      + 'From each clause we take one literal that this assignment makes <b>true</b>, lighting up the '
+      + '<span class="ok">green</span> vertices: { ' + pick.map(id=>nodes[id].label).join(', ') + ' }. '
+      + 'No two are joined — never two from one triangle (one per clause) and never a literal with its '
+      + 'negation (consistent assignment). That is exactly a <span class="ok">size-' + k + ' independent set</span>. '
+      + 'The "satisfiable ⇒ IS of size k" direction, made concrete.');
+  } else {
+    // unsatisfiable: prove no size-k IS via exhaustive search, then show a forced conflict
+    const res = findMaxIS(k);
+    document.getElementById('statBest').textContent = res.best.length;
+    document.getElementById('statSubsets').textContent = res.tested.toLocaleString();
+    document.getElementById('statBestBox').className = 'stat-box no';
+    // highlight the best (too-small) independent set, then show a blocking pair
+    res.best.forEach(id => nodeEl(nodes[id]).classList.add('pick'));
+    const v = document.getElementById('verdict');
+    v.className = 'verdict no';
+    v.textContent = '✗ Unsatisfiable  ⟷  no independent set of size k = ' + k;
+    narrate('This formula is <span class="exp">unsatisfiable</span>. We searched the graph: the '
+      + '<span class="ok">largest</span> independent set has size <span class="hl">' + res.best.length
+      + '</span> &lt; k = ' + k + ' (green). Any attempt to take one literal from all ' + k + ' clauses is '
+      + '<span class="exp">forced into a conflict</span> — some clause can only offer a literal whose negation '
+      + 'is already chosen, and the red edge between them breaks independence. No satisfying assignment exists, '
+      + 'so no size-k independent set exists. The IFF holds in the negative direction too.');
+  }
+}
+
+// ===================== SEARCH: brute-force IS of size k =====================
+function searchIS() {
+  while (!buildComplete()) { step(); }
+  clearHighlights();
+  const k = formula.clauses.length;
+  const res = findMaxIS(k);
+  document.getElementById('statSubsets').textContent = res.tested.toLocaleString();
+  document.getElementById('statBest').textContent = res.best.length;
+  res.best.forEach(id => nodeEl(nodes[id]).classList.add('pick'));
+  const v = document.getElementById('verdict');
+  if (res.foundK) {
+    document.getElementById('statBestBox').className = 'stat-box ok';
+    v.className = 'verdict ok';
+    v.textContent = '✓ Found an independent set of size ' + k + ' (tested 2^' + nodes.length + ' subsets)';
+    narrate('Exhaustive check over all <span class="exp">2^' + nodes.length + ' = ' + res.tested.toLocaleString()
+      + '</span> subsets: a <span class="ok">size-' + k + ' independent set exists</span> → the formula '
+      + '<span class="ok">is satisfiable</span>. The IFF is <b>computed</b>, not asserted. Note the cost: '
+      + 'checking one subset is fast (polynomial), but searching all of them is <span class="exp">exponential</span> '
+      + '— the hardness that the reduction transfers from 3-SAT.');
+  } else {
+    document.getElementById('statBestBox').className = 'stat-box no';
+    v.className = 'verdict no';
+    v.textContent = '✗ No independent set of size ' + k + ' (max found = ' + res.best.length + ')';
+    narrate('Exhaustive check over all <span class="exp">2^' + nodes.length + ' = ' + res.tested.toLocaleString()
+      + '</span> subsets: the largest independent set has size <span class="hl">' + res.best.length
+      + '</span> &lt; k = ' + k + '. No size-k independent set → the formula <span class="exp">is unsatisfiable</span>. '
+      + 'Because the construction is faithful, solving Independent Set would solve 3-SAT — so Independent Set '
+      + 'is <b>NP-hard</b> too.');
+  }
+}
+
+// ===================== PLAY / RESET / SELECT =====================
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  if (buildComplete()) return;
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    step();
+    if (buildComplete()) { stopPlay(); return; }
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(120, 1100 - speed * 95));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto';
+}
+
+function resetSim() {
+  stopPlay();
+  stepPtr = 0;
+  buildGraph();
+  makeBuildSteps();
+  renderGraphSkeleton();
+  renderFormula(null);
+  document.getElementById('statSubsets').textContent = '0';
+  document.getElementById('statBest').textContent = '0';
+  document.getElementById('statBestBox').className = 'stat-box';
+  const v = document.getElementById('verdict'); v.className='verdict'; v.textContent='';
+  narrate('<b>Goal.</b> Reduce <span class="hl">3-SAT</span> to <span class="hl">Independent Set</span> — turn '
+    + 'a yes/no question about a boolean formula into a yes/no question about a graph, so that a solver for one '
+    + 'solves the other. Press <b>Step</b> to draw each clause as a triangle, then the conflict edges. '
+    + 'The formula has <span class="hl">m = ' + formula.clauses.length + '</span> clauses, so we will look for an '
+    + 'independent set of size <span class="hl">k = ' + formula.clauses.length + '</span>.');
+}
+
+function buildProbBtns() {
+  const box = document.getElementById('probBtns');
+  box.innerHTML = '';
+  FORMULAS.forEach((f, i) => {
+    const b = document.createElement('button');
+    b.className = 'prob-btn' + (i === fIdx ? ' active' : '');
+    b.id = 'fb-' + i;
+    b.innerHTML = f.name + '<span class="tag ' + (f.sat?'sat':'unsat') + '">' + f.tag + '</span>';
+    b.onclick = () => selectFormula(i);
+    box.appendChild(b);
+  });
+}
+
+function selectFormula(i) {
+  fIdx = i;
+  formula = FORMULAS[i];
+  FORMULAS.forEach((_, j) => document.getElementById('fb-'+j).classList.toggle('active', j === i));
+  resetSim();
+}
+
+// ===================== INIT =====================
+buildProbBtns();
+resetSim();
+</script>
+</body>
+</html>
