@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MFU Cache Visualization</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); margin-bottom: 6px; font-size: 1.5rem; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 12px; font-size: 0.85rem; }
+
+  .vs-note {
+    max-width: 1180px; margin: 0 auto 18px; text-align: center; font-size: 0.8rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; line-height: 1.5;
+  }
+  .vs-note b.lfu { color: var(--blue); }
+  .vs-note b.mfu { color: var(--red); }
+
+  .container { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 18px; }
+  .main-area { display: flex; flex-direction: column; gap: 16px; }
+  .side-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h3 { color: var(--blue); margin-bottom: 10px; font-size: 0.95rem; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls input[type="number"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; width: 64px; font-family: inherit; }
+  .controls label { color: var(--muted); font-size: 0.85rem; }
+  button { background: var(--green); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: background 0.2s; }
+  button:hover { filter: brightness(1.12); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.search { background: var(--blue); }
+  button.danger { background: var(--red); }
+  button.secondary { background: var(--border); color: var(--text); }
+
+  /* layout: key map column + freq buckets */
+  .layout { display: grid; grid-template-columns: 160px 1fr; gap: 18px; align-items: start; }
+  .map-col { display: flex; flex-direction: column; gap: 4px; }
+  .map-title { color: var(--muted); font-size: 0.78rem; margin-bottom: 4px; }
+  .map-row { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; font-size: 0.76rem; }
+  .map-row .mkey { color: var(--purple); font-weight: bold; min-width: 26px; }
+  .map-row .marrow { color: var(--orange); }
+  .map-row .mptr { color: var(--green); }
+  .map-row.highlight { border-color: var(--blue); background: #11203a; }
+
+  .freq-title { color: var(--muted); font-size: 0.78rem; margin-bottom: 8px; }
+  .buckets { display: flex; flex-direction: column; gap: 10px; }
+  .bucket-row { display: flex; align-items: center; gap: 10px; }
+  .bucket-label {
+    min-width: 96px; display: flex; flex-direction: column; align-items: flex-start;
+    font-size: 0.74rem; color: var(--muted);
+  }
+  .bucket-label .fnum { color: var(--yellow); font-weight: bold; font-size: 0.9rem; }
+  .bucket-label.is-max .fnum { color: var(--red); }
+  .maxptr { color: var(--red); font-size: 0.66rem; }
+
+  .bucket-list { display: flex; align-items: center; gap: 4px; overflow-x: auto; padding: 4px 0; min-height: 60px; }
+  .bnewest, .boldest { font-size: 0.6rem; color: var(--muted); align-self: center; padding: 0 2px; }
+  .mfu-node {
+    position: relative; min-width: 58px; height: 50px; border-radius: 8px;
+    border: 2px solid var(--border); background: #21262d;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 0.78rem; transition: all 0.45s ease; flex-shrink: 0;
+  }
+  .mfu-node .nk { color: var(--purple); font-weight: bold; }
+  .mfu-node .nv { color: var(--text); font-size: 0.66rem; }
+  .mfu-node.moving   { border-color: var(--blue);   background: #11203a; transform: translateY(-10px) scale(1.08); box-shadow: 0 0 14px rgba(88,166,255,0.5); }
+  .mfu-node.inserting{ border-color: var(--green);  background: #112b18; box-shadow: 0 0 14px rgba(63,185,80,0.5); }
+  .mfu-node.found    { border-color: var(--green);  background: #112b18; }
+  .mfu-node.evicting { border-color: var(--red);    background: #2b1416; opacity: 0; transform: scale(0.6); }
+  .mfu-node.scanning { border-color: var(--yellow); background: #2b2410; }
+  .empty-bucket { color: var(--muted); font-size: 0.72rem; padding: 4px 0; }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.72rem; color: var(--muted); margin-top: 12px; }
+  .legend span::before { content: '\25CF'; margin-right: 4px; }
+  .legend .l-move::before { color: var(--blue); }
+  .legend .l-new::before { color: var(--green); }
+  .legend .l-evict::before { color: var(--red); }
+  .legend .l-max::before { color: var(--red); }
+  .legend .l-scan::before { color: var(--yellow); }
+
+  .info-panel { min-height: 64px; }
+  .info-op { font-weight: bold; color: var(--blue); font-size: 0.9rem; }
+  .info-msg { color: var(--text); font-size: 0.82rem; margin: 6px 0; line-height: 1.4; }
+  .info-cplx { color: var(--green); font-size: 0.78rem; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; text-align: center; }
+  .stat .val { font-size: 1.2rem; color: var(--blue); font-weight: bold; }
+  .stat .lbl { font-size: 0.66rem; color: var(--muted); margin-top: 2px; }
+
+  .bigo-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+  .bigo-table th, .bigo-table td { padding: 5px 8px; border: 1px solid var(--border); text-align: center; }
+  .bigo-table th { background: #21262d; color: var(--blue); }
+  .bigo-table .best { color: var(--green); }
+  .bigo-table .worst { color: var(--yellow); }
+
+  .log-area { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; max-height: 170px; overflow-y: auto; font-size: 0.74rem; line-height: 1.5; }
+  .log-entry { border-bottom: 1px solid #21262d; padding: 2px 0; }
+  .op-get { color: var(--blue); }
+  .op-put { color: var(--green); }
+  .op-evict { color: var(--red); }
+  .op-info { color: var(--orange); }
+  .op-miss { color: var(--yellow); }
+</style>
+</head>
+<body>
+
+<h1>MFU Cache Visualization</h1>
+<p class="subtitle">Key Map + Frequency Buckets (DLLs) + maxFreq | a use promotes a node to the next bucket; eviction removes the oldest node in the maxFreq bucket</p>
+
+<div class="vs-note">
+  <b class="lfu">LFU evicts the coldest</b> (the least-frequently-used key) &mdash; <b class="mfu">MFU evicts the hottest</b> (the most-frequently-used key).
+  MFU bets that once a key is heavily used it is "done", so the highest-frequency bucket is the eviction target. Ties in that bucket are broken by <b>LRU</b> (the oldest node goes first).
+</div>
+
+<div class="container">
+  <div class="main-area">
+    <div class="panel">
+      <h3>Controls</h3>
+      <div class="controls">
+        <label>Key:</label>
+        <input type="number" id="keyInput" placeholder="1" value="1">
+        <label>Val:</label>
+        <input type="number" id="valInput" placeholder="10" value="10">
+        <button class="search" id="btnGet" onclick="doGet()">get(key)</button>
+        <button id="btnPut" onclick="doPut()">put(key, val)</button>
+        <button class="secondary" id="btnSample" onclick="loadSample()">Load Demo</button>
+        <button class="secondary" id="btnLoop" onclick="runLooping()">Looping Demo</button>
+        <button class="danger" id="btnReset" onclick="doReset()">Reset</button>
+      </div>
+      <div class="controls" style="margin-top:10px">
+        <label>Capacity:</label>
+        <input type="number" id="capInput" value="4" min="1" max="8">
+        <button class="secondary" onclick="applyCapacity()">Set Capacity</button>
+        <label style="margin-left:10px">Speed:</label>
+        <input type="number" id="speedInput" value="650" min="120" max="1600" step="100" style="width:74px">
+        <label>ms</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Cache State</h3>
+      <div class="layout">
+        <div class="map-col">
+          <div class="map-title">Key Map (key &rarr; node)</div>
+          <div id="mapContainer"></div>
+        </div>
+        <div>
+          <div class="freq-title">Frequency Buckets &mdash; <span style="color:var(--yellow)">freq</span> &rarr; DLL (<span style="color:var(--blue)">newest</span> &hellip; <span style="color:var(--orange)">oldest</span>); <span style="color:var(--red)">maxFreq</span> = eviction target</div>
+          <div class="buckets" id="bucketsContainer"></div>
+          <div class="legend">
+            <span class="l-move">promoting (freq++)</span>
+            <span class="l-new">newly inserted (freq 1)</span>
+            <span class="l-evict">evicting (MFU victim)</span>
+            <span class="l-max">maxFreq bucket</span>
+            <span class="l-scan">scanning</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel info-panel">
+      <h3>Last Operation</h3>
+      <div class="info-op" id="infoOp">Ready.</div>
+      <div class="info-msg" id="infoMsg">Load the demo, or enter a key and value, then press get/put.</div>
+      <div class="info-cplx" id="infoCplx"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Operation Log</h3>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel">
+      <h3>Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statSize">0</div><div class="lbl">Size</div></div>
+        <div class="stat"><div class="val" id="statCap">4</div><div class="lbl">Capacity</div></div>
+        <div class="stat"><div class="val" id="statMax">-</div><div class="lbl">maxFreq</div></div>
+        <div class="stat"><div class="val" id="statEvict">0</div><div class="lbl">Evictions</div></div>
+        <div class="stat"><div class="val" id="statHits">0</div><div class="lbl">Hits</div></div>
+        <div class="stat"><div class="val" id="statRatio">0%</div><div class="lbl">Hit Ratio</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Big-O Complexity</h3>
+      <table class="bigo-table">
+        <tr><th>Operation</th><th>Avg</th><th>Worst</th></tr>
+        <tr><td>get(key)</td><td class="best">O(1)</td><td class="worst">O(n)*</td></tr>
+        <tr><td>put(key,v)</td><td class="best">O(1)</td><td class="worst">O(n)*</td></tr>
+        <tr><td>promote</td><td class="best">O(1)</td><td class="best">O(1)</td></tr>
+        <tr><td>evict MFU</td><td class="best">O(1)</td><td class="best">O(1)</td></tr>
+        <tr><td>space</td><td colspan="2" class="best">O(capacity)</td></tr>
+      </table>
+      <div style="font-size:0.66rem;color:var(--muted);margin-top:6px">* worst case only from hash-map collisions; bucket/maxFreq work is always O(1).</div>
+    </div>
+
+    <div class="panel">
+      <h3>How It Works</h3>
+      <div style="font-size:0.74rem;color:var(--muted);line-height:1.5">
+        The <b style="color:var(--purple)">key map</b> points at <b>nodes</b>. Nodes are grouped into
+        <b style="color:var(--yellow)">frequency buckets</b>: bucket <i>f</i> holds every key used <i>f</i> times,
+        ordered <b style="color:var(--blue)">newest</b>&rarr;<b style="color:var(--orange)">oldest</b>.
+        A <b style="color:var(--blue)">use</b> (get/put) promotes a node to bucket <i>f+1</i>.
+        Eviction removes the <b style="color:var(--orange)">oldest</b> node in the
+        <b style="color:var(--red)">maxFreq</b> bucket &mdash; most frequent, oldest on a tie.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- model ----------
+let capacity = 4;
+let keyMap = new Map();      // key -> node {key, value, freq}
+let buckets = new Map();     // freq -> array of nodes, index 0 = newest ... last = oldest
+let maxFreq = 0;
+let hits = 0, misses = 0, evictions = 0;
+let busy = false;
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function speed(){ return parseInt(document.getElementById('speedInput').value) || 650; }
+
+function bucketOf(f){
+  if (!buckets.has(f)) buckets.set(f, []);
+  return buckets.get(f);
+}
+function recomputeMax(){
+  const fs = [...buckets.keys()].filter(f => buckets.get(f).length > 0);
+  maxFreq = fs.length ? Math.max(...fs) : 0;
+}
+
+// ---------- rendering ----------
+function render(opts){
+  opts = opts || {};
+  renderBuckets(opts);
+  renderMap(opts);
+  renderStats();
+}
+
+function renderBuckets(opts){
+  const c = document.getElementById('bucketsContainer');
+  c.innerHTML = '';
+  // highest frequency first so the eviction target (maxFreq) sits at the TOP
+  const freqs = [...buckets.keys()].filter(f => buckets.get(f).length > 0).sort((a,b)=>b-a);
+  if (freqs.length === 0){
+    const e = document.createElement('div');
+    e.className = 'empty-bucket';
+    e.textContent = '(cache empty — no frequency buckets yet)';
+    c.appendChild(e);
+    return;
+  }
+  freqs.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'bucket-row';
+
+    const label = document.createElement('div');
+    label.className = 'bucket-label' + (f === maxFreq ? ' is-max' : '');
+    label.innerHTML = '<span class="fnum">freq ' + f + '</span>' +
+      (f === maxFreq ? '<span class="maxptr">&#9664; maxFreq</span>' : '');
+    row.appendChild(label);
+
+    const list = document.createElement('div');
+    list.className = 'bucket-list';
+    const newestTag = document.createElement('span');
+    newestTag.className = 'bnewest'; newestTag.textContent = 'new';
+    list.appendChild(newestTag);
+
+    buckets.get(f).forEach(node => {
+      const el = document.createElement('div');
+      let cls = 'mfu-node';
+      if (opts.movingKey === node.key) cls += ' moving';
+      if (opts.insertKey === node.key) cls += ' inserting';
+      if (opts.foundKey === node.key) cls += ' found';
+      if (opts.evictKey === node.key) cls += ' evicting';
+      if (opts.scanKey === node.key) cls += ' scanning';
+      el.className = cls;
+      el.innerHTML = '<div class="nk">' + node.key + '</div><div class="nv">v' + node.value + '</div>';
+      list.appendChild(el);
+    });
+
+    const oldTag = document.createElement('span');
+    oldTag.className = 'boldest'; oldTag.textContent = 'old';
+    list.appendChild(oldTag);
+    row.appendChild(list);
+    c.appendChild(row);
+  });
+}
+
+function renderMap(opts){
+  opts = opts || {};
+  const c = document.getElementById('mapContainer');
+  c.innerHTML = '';
+  const keys = [...keyMap.keys()].sort((a,b)=>a-b);
+  if (keys.length === 0){
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--muted);font-size:0.74rem;padding:4px';
+    empty.textContent = '(empty)';
+    c.appendChild(empty);
+    return;
+  }
+  keys.forEach(k => {
+    const node = keyMap.get(k);
+    const row = document.createElement('div');
+    row.className = 'map-row' + (opts.highlightKey === k ? ' highlight' : '');
+    row.innerHTML = '<span class="mkey">' + k + '</span>' +
+                    '<span class="marrow">&rarr;</span>' +
+                    '<span class="mptr">f' + node.freq + ' v' + node.value + '</span>';
+    c.appendChild(row);
+  });
+}
+
+function renderStats(){
+  document.getElementById('statSize').textContent = keyMap.size;
+  document.getElementById('statCap').textContent = capacity;
+  document.getElementById('statMax').textContent = (keyMap.size ? maxFreq : '-');
+  document.getElementById('statEvict').textContent = evictions;
+  document.getElementById('statHits').textContent = hits;
+  const total = hits + misses;
+  document.getElementById('statRatio').textContent = total ? Math.round(100*hits/total) + '%' : '0%';
+}
+
+function setInfo(op, msg, cplx){
+  document.getElementById('infoOp').textContent = op;
+  document.getElementById('infoMsg').innerHTML = msg;
+  document.getElementById('infoCplx').textContent = cplx || '';
+}
+
+function addLog(msg, cls){
+  const area = document.getElementById('logArea');
+  const e = document.createElement('div');
+  e.className = 'log-entry';
+  e.innerHTML = '<span class="' + cls + '">' + msg + '</span>';
+  area.prepend(e);
+  if (area.children.length > 60) area.removeChild(area.lastChild);
+}
+
+function setButtons(disabled){
+  ['btnGet','btnPut','btnSample','btnLoop','btnReset'].forEach(id => {
+    document.getElementById(id).disabled = disabled;
+  });
+}
+
+// ---------- operations ----------
+async function doGet(){
+  if (busy) return;
+  const key = parseInt(document.getElementById('keyInput').value);
+  if (isNaN(key)) return;
+  busy = true; setButtons(true);
+  await getOp(key);
+  busy = false; setButtons(false);
+}
+
+async function getOp(key){
+  setInfo('get(' + key + ')', 'Looking up key <b>' + key + '</b> in the key map…', 'O(1) hash lookup');
+  render({ highlightKey: key });
+  await sleep(speed());
+
+  if (!keyMap.has(key)){
+    misses++;
+    setInfo('get(' + key + ') → MISS', 'Key <b>' + key + '</b> is not cached. Returns -1.', 'O(1)');
+    addLog('get(' + key + ') → MISS (returns -1)', 'op-miss');
+    render();
+    return -1;
+  }
+
+  hits++;
+  const node = keyMap.get(key);
+  setInfo('get(' + key + ') → HIT', 'Found key <b>' + key + '</b> (value ' + node.value + ', freq ' + node.freq + '). A read is a use → promote it to freq ' + (node.freq+1) + '.', 'O(1)');
+  render({ highlightKey: key, foundKey: key });
+  await sleep(speed());
+
+  await promote(node, 'get');
+  addLog('get(' + key + ') → ' + node.value + ' (freq → ' + node.freq + ')', 'op-get');
+  return node.value;
+}
+
+async function promote(node, source){
+  const f = node.freq;
+  // remove from old bucket
+  const oldBucket = bucketOf(f);
+  const idx = oldBucket.indexOf(node);
+  setInfo(source + ': promote', 'Unlink key <b>' + node.key + '</b> from the freq ' + f + ' bucket…', 'O(1) DLL unlink');
+  render({ movingKey: node.key });
+  await sleep(speed());
+  oldBucket.splice(idx, 1);
+  if (oldBucket.length === 0) buckets.delete(f);
+  // add to new bucket at front (newest)
+  node.freq = f + 1;
+  bucketOf(node.freq).unshift(node);
+  if (node.freq > maxFreq){
+    maxFreq = node.freq;
+    addLog('freq ' + node.freq + ' is the new maxFreq (eviction target)', 'op-info');
+  } else {
+    recomputeMax();   // old bucket may have emptied below the previous max
+  }
+  setInfo(source + ': promote', 'Key <b>' + node.key + '</b> now has freq <b>' + node.freq + '</b>; placed at the front (newest) of the freq ' + node.freq + ' bucket.', 'O(1) push-front');
+  render({ movingKey: node.key });
+  await sleep(speed());
+  render();
+}
+
+async function doPut(){
+  if (busy) return;
+  const key = parseInt(document.getElementById('keyInput').value);
+  const val = parseInt(document.getElementById('valInput').value);
+  if (isNaN(key) || isNaN(val)) return;
+  busy = true; setButtons(true);
+  await putOp(key, val);
+  busy = false; setButtons(false);
+}
+
+async function putOp(key, val){
+  if (capacity === 0){ setInfo('put','Capacity is 0 — nothing stored.',''); return; }
+  setInfo('put(' + key + ', ' + val + ')', 'Checking whether key <b>' + key + '</b> already exists…', 'O(1) hash lookup');
+  render({ highlightKey: key });
+  await sleep(speed());
+
+  if (keyMap.has(key)){
+    const node = keyMap.get(key);
+    node.value = val;
+    setInfo('put(' + key + ', ' + val + ') → update', 'Key exists. Updated value to <b>' + val + '</b>; an update is a use → promote (freq ' + node.freq + ' → ' + (node.freq+1) + ').', 'O(1)');
+    render({ highlightKey: key, foundKey: key });
+    await sleep(speed());
+    await promote(node, 'put');
+    addLog('put(' + key + ', ' + val + ') → updated, freq → ' + node.freq, 'op-put');
+    return;
+  }
+
+  // new key: evict first if full
+  if (keyMap.size >= capacity){
+    await evictMFU();
+  }
+
+  const node = { key, value: val, freq: 1 };
+  keyMap.set(key, node);
+  bucketOf(1).unshift(node);
+  recomputeMax();
+  setInfo('put(' + key + ', ' + val + ') → insert', 'New key starts at freq <b>1</b>, placed at the front of the freq 1 bucket. maxFreq is now ' + maxFreq + '.', 'O(1) insert');
+  render({ insertKey: key, highlightKey: key });
+  addLog('put(' + key + ', ' + val + ') → inserted at freq 1', 'op-put');
+  await sleep(speed());
+  render();
+}
+
+async function evictMFU(){
+  recomputeMax();
+  const maxBucket = bucketOf(maxFreq);
+  const victim = maxBucket[maxBucket.length - 1]; // oldest (LRU) in the max bucket
+  setInfo('evict MFU', 'Size (' + keyMap.size + ') = capacity (' + capacity + '). The HOTTEST bucket is freq <b>' + maxFreq + '</b>; its oldest node — key <b>' + victim.key + '</b> — is the most frequent and, on a tie, least recently used. Evict it.', 'O(1) eviction');
+  render({ evictKey: victim.key, scanKey: undefined });
+  await sleep(speed() + 200);
+  maxBucket.pop();
+  if (maxBucket.length === 0) buckets.delete(maxFreq);
+  keyMap.delete(victim.key);
+  evictions++;
+  recomputeMax();
+  addLog('evicted key ' + victim.key + ' (freq ' + victim.freq + ', MFU + LRU tie-break)', 'op-evict');
+  setInfo('evicted ' + victim.key, 'Removed the oldest node of the maxFreq bucket and deleted its key from the map. maxFreq is now ' + (keyMap.size ? maxFreq : '-') + '.', 'O(1)');
+  render();
+  await sleep(speed());
+}
+
+// ---------- demos ----------
+async function loadSample(){
+  if (busy) return;
+  busy = true; setButtons(true);
+  doResetState();
+  render();
+  addLog('--- demo: fill, heat up, evict the hottest ---', 'op-info');
+  // capacity 4 walkthrough:
+  //   put 1,2,3,4   -> all freq 1
+  //   get 1, get 1  -> key 1 climbs to freq 3 (hottest)
+  //   get 2         -> key 2 climbs to freq 2
+  //   put 5         -> FULL: maxFreq bucket = freq 3 = {1}, evict key 1 (the hottest)
+  //   get 3, get 4  -> keys 3 and 4 reach freq 2; bucket order newest->oldest = [4, 3, 2]
+  //   put 6         -> FULL: maxFreq = freq 2 = [4, 3, 2]; tie broken by LRU => evict key 2 (oldest)
+  const steps = [
+    ['put', 1, 10], ['put', 2, 20], ['put', 3, 30], ['put', 4, 40],
+    ['get', 1, null], ['get', 1, null],   // key 1 -> freq 3
+    ['get', 2, null],                     // key 2 -> freq 2 (first into the freq-2 bucket => oldest)
+    ['put', 5, 50],                       // evicts key 1 (hottest, freq 3)
+    ['get', 3, null], ['get', 4, null],   // keys 3,4 -> freq 2 (newer than key 2)
+    ['put', 6, 60]                        // freq-2 tie [4,3,2]: oldest is key 2 -> evict 2
+  ];
+  for (const [op, k, v] of steps){
+    document.getElementById('keyInput').value = k;
+    if (v !== null) document.getElementById('valInput').value = v;
+    if (op === 'put') await putOp(k, v); else await getOp(k);
+    await sleep(200);
+  }
+  setInfo('demo complete', 'put(5) evicted the single hottest key (1, freq 3). Later, with keys 2, 3, 4 all at freq 2, put(6) hit a tie in the maxFreq bucket and evicted key <b>2</b> — the least-recently-used among them (key 2 reached freq 2 first). That is MFU: the hottest goes first, LRU breaks ties.', '');
+  busy = false; setButtons(false);
+}
+
+async function runLooping(){
+  if (busy) return;
+  busy = true; setButtons(true);
+  doResetState();
+  render();
+  addLog('--- demo: where MFU shines (looping scan) ---', 'op-info');
+  setInfo('the looping-access pattern', 'Imagine repeatedly scanning a working set larger than the cache: 1,2,3,4,5,1,2,3,4,5,… Under LRU every access misses (the block you need was the one just evicted). MFU instead keeps re-evicting the block it just touched, protecting the older blocks the loop is about to revisit.', '');
+  await sleep(900);
+  // capacity is whatever the user set; clamp the working set to capacity+1 to force the classic loop thrash
+  const cap = capacity;
+  const setSize = Math.min(cap + 1, 6);
+  // first fill so every key has been seen once (freq 1)
+  for (let k = 1; k <= setSize; k++){
+    document.getElementById('keyInput').value = k; document.getElementById('valInput').value = k*10;
+    await putOp(k, k*10); await sleep(140);
+  }
+  setInfo('working set seeded', 'All ' + setSize + ' keys want to live in a cache of size ' + cap + '. Now we loop over them. Each access bumps a key into the hottest bucket, making IT the next victim — so the rest survive to be reused.', '');
+  await sleep(900);
+  // now loop over the set a couple of times; MFU keeps protecting the not-yet-revisited keys
+  const loop = [];
+  for (let pass = 0; pass < 2; pass++) for (let k = 1; k <= setSize; k++) loop.push(k);
+  for (const k of loop){
+    document.getElementById('keyInput').value = k; document.getElementById('valInput').value = k*10;
+    if (keyMap.has(k)) await getOp(k); else await putOp(k, k*10);
+    await sleep(120);
+  }
+  setInfo('why MFU wins here', 'Each revisited key is promoted to maxFreq and becomes the eviction target, so it yields its slot to a cooler key the loop has not reached yet. For cyclic / sequential-scan workloads MFU avoids the all-miss thrash that sinks LRU and LFU.', '');
+  addLog('looping scan complete — MFU protected the cold-but-soon-needed keys', 'op-info');
+  busy = false; setButtons(false);
+}
+
+// ---------- controls ----------
+function applyCapacity(){
+  if (busy) return;
+  const c = parseInt(document.getElementById('capInput').value);
+  if (isNaN(c) || c < 1) return;
+  capacity = Math.min(c, 8);
+  document.getElementById('capInput').value = capacity;
+  // trim if needed: evict from maxFreq buckets downward
+  while (keyMap.size > capacity){
+    recomputeMax();
+    const mb = bucketOf(maxFreq);
+    const victim = mb[mb.length - 1];
+    mb.pop();
+    if (mb.length === 0) buckets.delete(maxFreq);
+    keyMap.delete(victim.key);
+    evictions++;
+  }
+  recomputeMax();
+  addLog('capacity set to ' + capacity, 'op-info');
+  render();
+}
+
+function doResetState(){
+  keyMap = new Map();
+  buckets = new Map();
+  maxFreq = 0;
+  hits = 0; misses = 0; evictions = 0;
+}
+
+function doReset(){
+  if (busy) return;
+  doResetState();
+  document.getElementById('logArea').innerHTML = '';
+  setInfo('Reset.', 'Cache cleared. Capacity = ' + capacity + '.', '');
+  addLog('cache reset (capacity ' + capacity + ')', 'op-info');
+  render();
+}
+
+// ---------- init ----------
+render();
+setInfo('Ready.', 'Press <b>Load Demo</b> to watch fill / heat-up / evict-the-hottest, or <b>Looping Demo</b> to see the scan pattern where MFU beats LRU.', '');
+</script>
+</body>
+</html>
