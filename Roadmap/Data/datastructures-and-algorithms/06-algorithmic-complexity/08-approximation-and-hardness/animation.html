@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Approximation Algorithms &amp; Hardness — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1040px; margin: 0 auto; }
+  .grid2 { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+  @media (max-width: 860px){ .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .prob-btns { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 12px; }
+  .prob-btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 0.82em; transition: all 0.2s; text-align: left;
+  }
+  .prob-btn:hover { border-color: var(--blue); }
+  .prob-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.12); color: var(--blue); }
+  .prob-btn .tag { display: block; font-size: 0.74em; color: var(--text2); margin-top: 2px; }
+  .prob-btn .tag.tight { color: var(--red); }
+  .prob-btn .tag.easy { color: var(--green); }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .graph-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+  svg { width: 100%; height: auto; display: block; }
+  /* graph elements */
+  .edge { stroke: var(--border); stroke-width: 2; transition: all .3s; }
+  .edge.matched { stroke: var(--orange); stroke-width: 4; }
+  .edge.covered { stroke: var(--green); stroke-width: 2.4; opacity: 0.7; }
+  .edge.uncovered { stroke: var(--red); stroke-width: 2.4; }
+  .vnode { transition: all .25s; }
+  .vnode circle { fill: var(--bg3); stroke: var(--border); stroke-width: 2; transition: all .25s; }
+  .vnode.endpoint circle { fill: rgba(210,153,34,0.18); stroke: var(--orange); }
+  .vnode.cover circle { fill: rgba(63,185,80,0.25); stroke: var(--green); stroke-width: 3.5; }
+  .vnode.opt circle { fill: rgba(188,140,255,0.22); stroke: var(--purple); stroke-width: 3.5; }
+  .vnode text { fill: var(--text); font: 600 12px 'Fira Code', monospace; pointer-events: none; }
+  .vnode.cover text { fill: var(--green); }
+  .vnode.opt text { fill: var(--purple); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .stat-box .value { font-size: 1.3em; font-weight: bold; color: var(--blue); font-family: 'Fira Code', monospace; }
+  .stat-box.alg .value { color: var(--green); }
+  .stat-box.opt .value { color: var(--purple); }
+  .stat-box.ratio .value { color: var(--orange); }
+  .stat-box .label { font-size: 0.7em; color: var(--text2); margin-top: 2px; }
+  .guarantee {
+    background: rgba(88,166,255,0.07); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin: 0 0 12px; text-align: center; font-family: 'Fira Code', monospace;
+    font-size: 0.92em; line-height: 1.6;
+  }
+  .guarantee .bnd { color: var(--blue); font-weight: bold; }
+  .guarantee .ach { color: var(--orange); font-weight: bold; }
+  .bar-wrap { margin: 4px 0 12px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 0.78em; }
+  .bar-row .name { width: 52px; color: var(--text2); text-align: right; font-family: 'Fira Code', monospace; }
+  .bar-track { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; height: 18px; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; transition: width .4s; }
+  .bar-fill.alg { background: linear-gradient(90deg, var(--green), #58d977); }
+  .bar-fill.opt { background: linear-gradient(90deg, var(--purple), #d0b0ff); }
+  .bar-row .num { width: 24px; font-family: 'Fira Code', monospace; font-weight: bold; }
+  .verdict { text-align: center; font-size: 0.96em; font-weight: bold; margin: 6px 0; min-height: 1.4em; }
+  .verdict.ok { color: var(--green); }
+  .verdict.tight { color: var(--orange); }
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.85em; line-height: 1.55; margin-top: 8px; min-height: 96px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .opt { color: var(--purple); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--purple); font-size: 0.92em; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.74em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .line { width: 16px; height: 0; border-top: 3px solid; display: inline-block; }
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+</style>
+</head>
+<body>
+<h1>Approximation Algorithms &amp; Hardness</h1>
+<p class="subtitle">Vertex Cover: a fast greedy that is provably within 2× of optimal — solution and guarantee, side by side</p>
+
+<div class="container">
+  <div class="grid2">
+    <!-- LEFT: graph + controls -->
+    <div class="panel">
+      <h2>2-Approximation via Maximal Matching</h2>
+      <div class="prob-btns" id="probBtns"></div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnStep" onclick="step()">Step</button>
+        <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+        <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+        <div class="speed-control">
+          <label>Speed</label>
+          <input type="range" id="speedSlider" min="1" max="10" value="6">
+        </div>
+      </div>
+
+      <div class="graph-box">
+        <svg id="graphSvg" viewBox="0 0 480 360" role="img" aria-label="Vertex cover instance">
+          <g id="gEdges"></g>
+          <g id="gNodes"></g>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <span><span class="line" style="border-color:var(--orange)"></span>matched edge (greedy pick)</span>
+        <span><span class="dot" style="background:var(--green)"></span>ALG cover vertex</span>
+        <span><span class="dot" style="background:var(--purple)"></span>OPT cover vertex</span>
+        <span><span class="line" style="border-color:var(--green)"></span>covered edge</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: guarantee + numbers -->
+    <div class="panel">
+      <h2>The Guarantee, Measured</h2>
+
+      <div class="claim">
+        <b>Algorithm.</b> Greedily build a <b>maximal matching</b> M (edges sharing no vertex).
+        Put <b>both endpoints</b> of every matched edge into the cover C, so <code>|C| = 2|M|</code>.
+        <b>Why it covers:</b> M is maximal, so every edge touches a matched vertex.
+        <b>Why it's good:</b> any cover must use ≥1 endpoint of each matched edge, and those edges are
+        disjoint, so <code>OPT ≥ |M|</code>. Hence <code>|C| = 2|M| ≤ 2·OPT</code>.
+      </div>
+
+      <div class="guarantee">
+        guarantee:&nbsp; |ALG| <span class="bnd">≤ 2 · OPT</span><br>
+        achieved:&nbsp;&nbsp; ratio = |ALG| / OPT = <span class="ach" id="ratioBig">—</span>
+      </div>
+
+      <div class="stats">
+        <div class="stat-box alg">
+          <div class="value" id="statAlg">—</div>
+          <div class="label">|ALG| cover (= 2·|M|)</div>
+        </div>
+        <div class="stat-box opt">
+          <div class="value" id="statOpt">—</div>
+          <div class="label">OPT (brute force)</div>
+        </div>
+        <div class="stat-box ratio">
+          <div class="value" id="statRatio">—</div>
+          <div class="label">ratio ALG/OPT</div>
+        </div>
+      </div>
+
+      <div class="bar-wrap">
+        <div class="bar-row">
+          <span class="name">ALG</span>
+          <span class="bar-track"><span class="bar-fill alg" id="barAlg"></span></span>
+          <span class="num" id="numAlg" style="color:var(--green)">0</span>
+        </div>
+        <div class="bar-row">
+          <span class="name">OPT</span>
+          <span class="bar-track"><span class="bar-fill opt" id="barOpt"></span></span>
+          <span class="num" id="numOpt" style="color:var(--purple)">0</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnOpt" onclick="revealOpt()">Brute-force OPT</button>
+        <button class="btn" id="btnShowAlg" onclick="showAlg()">Show ALG cover</button>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="narration" id="narration"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== INSTANCES =====================
+// Each instance: nodes with coordinates + edge list (undirected, by node index).
+// `matchOrder` fixes the greedy edge-scan order so the demo is deterministic and traceable.
+const INSTANCES = [
+  {
+    name: 'Path of 3 edges  (P4)',
+    tag: 'easy — greedy can hit OPT exactly (ratio 1.0)',
+    kind: 'easy',
+    nodes: [
+      {x:90,  y:180, label:'a'},
+      {x:210, y:180, label:'b'},
+      {x:330, y:180, label:'c'},
+      {x:450-30, y:180, label:'d'},
+    ],
+    edges: [[0,1],[1,2],[2,3]],
+    // Scanning edge (b,c) first matches the middle edge; its 2 endpoints {b,c} cover everything.
+    // OPT is also {b,c} = 2, so ratio = 1.0.
+    matchOrder: [1,0,2],
+  },
+  {
+    name: 'Triangle + tail',
+    tag: 'medium — ALG = 2, OPT = 2, ratio 1.0 (lucky scan)',
+    kind: 'easy',
+    nodes: [
+      {x:140, y:90,  label:'a'},
+      {x:240, y:230, label:'b'},
+      {x:60,  y:230, label:'c'},
+      {x:360, y:90,  label:'d'},
+    ],
+    edges: [[0,1],[1,2],[2,0],[0,3]],
+    // Greedy scans (a,b) first -> match it, cover {a,b}. Every other edge (b,c),(c,a),(a,d)
+    // shares a matched vertex, so all are skipped. |M|=1, ALG={a,b}=2. OPT is also {a,b}=2,
+    // so ratio = 1.0: a maximal matching that happens to land on optimal.
+    matchOrder: [0,1,2,3],
+  },
+  {
+    name: 'Perfect matching  (3 disjoint edges)',
+    tag: 'tight — every edge must be matched, ratio → 2.0',
+    kind: 'tight',
+    nodes: [
+      {x:110, y:110, label:'a'},
+      {x:230, y:110, label:'b'},
+      {x:110, y:250, label:'c'},
+      {x:230, y:250, label:'d'},
+      {x:370, y:180, label:'e'},
+      {x:430, y:180, label:'f'},
+    ],
+    edges: [[0,1],[2,3],[4,5]],
+    // 3 disjoint edges: maximal matching = all 3, cover = all 6 vertices. OPT = one endpoint each = 3.
+    matchOrder: [0,1,2],
+  },
+  {
+    name: 'Star  (one hub, 4 leaves)',
+    tag: 'easy — greedy ALG = 2, OPT = 1, ratio 2.0',
+    kind: 'tight',
+    nodes: [
+      {x:240, y:180, label:'h'},
+      {x:240, y:60,  label:'p'},
+      {x:380, y:180, label:'q'},
+      {x:240, y:300, label:'r'},
+      {x:100, y:180, label:'s'},
+    ],
+    edges: [[0,1],[0,2],[0,3],[0,4]],
+    // Greedy matches one spoke (h,p) -> cover {h,p} size 2. OPT = {h} size 1. ratio 2.0.
+    matchOrder: [0,1,2,3],
+  },
+];
+
+// ===================== STATE =====================
+let iIdx = 0;
+let inst = INSTANCES[0];
+let nodes = [], edges = [];
+let adj = [];
+let steps = [];        // ordered greedy actions
+let stepPtr = 0;
+let matching = [];     // matched edge indices
+let coverSet = new Set();
+let matchedVertex = [];
+let optSet = null;     // brute-force minimum cover (set of node ids)
+let optShown = false;
+let playing = false, timer = null;
+
+// ===================== SETUP =====================
+function loadInstance() {
+  nodes = inst.nodes.map((n, i) => ({ ...n, id: i }));
+  edges = inst.edges.map((e, i) => ({ a: e[0], b: e[1], id: i }));
+  adj = nodes.map(() => []);
+  edges.forEach(e => { adj[e.a].push(e.id); adj[e.b].push(e.id); });
+  matching = [];
+  coverSet = new Set();
+  matchedVertex = nodes.map(() => false);
+  optSet = bruteForceMinCover();   // computed up front, correct OPT
+  optShown = false;
+}
+
+// ---- Maximal matching greedy + build the cover (CORRECT) ----
+// Returns step list; also leaves `matching`/`coverSet` consistent if fully run.
+function buildSteps() {
+  steps = [];
+  const used = nodes.map(() => false);
+  const localMatch = [];
+  // scan edges in the fixed order; take an edge if both endpoints are free
+  inst.matchOrder.forEach(eid => {
+    const e = edges[eid];
+    if (!used[e.a] && !used[e.b]) {
+      used[e.a] = true; used[e.b] = true;
+      localMatch.push(eid);
+      steps.push({ type: 'match', edge: eid });
+    } else {
+      steps.push({ type: 'skip', edge: eid });
+    }
+  });
+  // any edge not in matchOrder (safety) — append skips so render is consistent
+  edges.forEach(e => {
+    if (!inst.matchOrder.includes(e.id)) steps.push({ type: 'skip', edge: e.id });
+  });
+  steps.push({ type: 'done' });
+}
+
+// ---- Brute-force minimum vertex cover over all 2^n subsets (n small) ----
+function isCover(maskSet) {
+  for (const e of edges) if (!maskSet.has(e.a) && !maskSet.has(e.b)) return false;
+  return true;
+}
+function bruteForceMinCover() {
+  const n = nodes.length;
+  let best = null;
+  for (let mask = 0; mask < (1 << n); mask++) {
+    const s = new Set();
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) s.add(i);
+    if (best && s.size >= best.size) continue;   // prune: can't beat current best
+    if (isCover(s)) { if (!best || s.size < best.size) best = s; }
+  }
+  return best;
+}
+
+// ===================== RENDER =====================
+function nodeEl(id){ return document.getElementById('vn-' + id); }
+function edgeEl(id){ return document.getElementById('ed-' + id); }
+
+function renderSkeleton() {
+  const gE = document.getElementById('gEdges');
+  const gN = document.getElementById('gNodes');
+  gE.innerHTML = ''; gN.innerHTML = '';
+  edges.forEach(e => {
+    const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1', nodes[e.a].x); ln.setAttribute('y1', nodes[e.a].y);
+    ln.setAttribute('x2', nodes[e.b].x); ln.setAttribute('y2', nodes[e.b].y);
+    ln.setAttribute('class','edge'); ln.id = 'ed-' + e.id;
+    gE.appendChild(ln);
+  });
+  nodes.forEach(nd => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','vnode'); g.id = 'vn-' + nd.id;
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', nd.x); c.setAttribute('cy', nd.y); c.setAttribute('r', 16);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', nd.x); t.setAttribute('y', nd.y + 4); t.setAttribute('text-anchor','middle');
+    t.textContent = nd.label;
+    g.appendChild(c); g.appendChild(t);
+    gN.appendChild(g);
+  });
+}
+
+function repaintEdges() {
+  edges.forEach(e => {
+    const el = edgeEl(e.id);
+    el.className.baseVal = 'edge';
+    if (matching.includes(e.id)) { el.classList.add('matched'); return; }
+    // covered if either endpoint is in the cover; only meaningful once cover built
+    if (coverSet.size) {
+      el.classList.add(coverSet.has(e.a) || coverSet.has(e.b) ? 'covered' : 'uncovered');
+    }
+  });
+}
+
+function repaintNodes() {
+  nodes.forEach(nd => {
+    const el = nodeEl(nd.id);
+    el.className.baseVal = 'vnode';
+    if (optShown && optSet && optSet.has(nd.id)) { el.classList.add('opt'); return; }
+    if (coverSet.has(nd.id)) { el.classList.add('cover'); return; }
+    if (matchedVertex[nd.id]) el.classList.add('endpoint');
+  });
+}
+
+function updateStats() {
+  const alg = coverSet.size;
+  const opt = optSet ? optSet.size : 0;
+  document.getElementById('statAlg').textContent = alg || '—';
+  document.getElementById('numAlg').textContent = alg;
+  if (optShown) {
+    const ratio = (alg / opt);
+    document.getElementById('statOpt').textContent = opt;
+    document.getElementById('numOpt').textContent = opt;
+    document.getElementById('statRatio').textContent = ratio.toFixed(2);
+    document.getElementById('ratioBig').textContent = ratio.toFixed(2);
+  } else {
+    document.getElementById('statOpt').textContent = '?';
+    document.getElementById('numOpt').textContent = '?';
+    document.getElementById('statRatio').textContent = '?';
+    document.getElementById('ratioBig').textContent = '?';
+  }
+  // bars scaled to the larger of alg/opt
+  const scale = Math.max(alg, optShown ? opt : alg, 1);
+  document.getElementById('barAlg').style.width = (alg / scale * 100) + '%';
+  document.getElementById('barOpt').style.width = ((optShown ? opt : 0) / scale * 100) + '%';
+}
+
+function render() { repaintEdges(); repaintNodes(); updateStats(); }
+function narrate(html){ document.getElementById('narration').innerHTML = html; }
+
+// ===================== STEP THROUGH GREEDY =====================
+function step() {
+  if (stepPtr >= steps.length) return;
+  const s = steps[stepPtr]; stepPtr++;
+  if (s.type === 'match') {
+    const e = edges[s.edge];
+    matching.push(s.edge);
+    matchedVertex[e.a] = true; matchedVertex[e.b] = true;
+    coverSet.add(e.a); coverSet.add(e.b);
+    render();
+    narrate('<b>Match edge (' + nodes[e.a].label + ', ' + nodes[e.b].label + ').</b> '
+      + 'Both endpoints are free, so we add it to the matching (<span class="hl">orange</span>) and take '
+      + '<b>both</b> endpoints into the cover (<span class="ok">green</span>). '
+      + 'Matching size now |M| = <span class="hl">' + matching.length + '</span>, cover size '
+      + '|ALG| = 2|M| = <span class="ok">' + coverSet.size + '</span>.');
+  } else if (s.type === 'skip') {
+    const e = edges[s.edge];
+    render();
+    narrate('<b>Skip edge (' + nodes[e.a].label + ', ' + nodes[e.b].label + ').</b> '
+      + 'One of its endpoints is already matched, so adding it would break disjointness. '
+      + 'It is left out of M — but it is still <span class="ok">covered</span>, because that shared '
+      + 'endpoint is already in the cover. This is exactly why a <b>maximal</b> matching covers every edge.');
+  } else if (s.type === 'done') {
+    render();
+    const k = matching.length;
+    narrate('<b>Matching is maximal.</b> No remaining edge has two free endpoints. '
+      + 'We picked |M| = <span class="hl">' + k + '</span> disjoint edges and their '
+      + '<span class="ok">' + coverSet.size + '</span> endpoints form a valid cover — every edge touches one. '
+      + 'Now press <b>Brute-force OPT</b> to compute the true minimum and read off the ratio.');
+    stopPlay();
+  }
+}
+function greedyDone(){ return stepPtr >= steps.length; }
+
+function showAlg() {
+  while (!greedyDone()) {
+    const s = steps[stepPtr]; stepPtr++;
+    if (s.type === 'match') {
+      const e = edges[s.edge];
+      matching.push(s.edge); matchedVertex[e.a] = true; matchedVertex[e.b] = true;
+      coverSet.add(e.a); coverSet.add(e.b);
+    }
+  }
+  render();
+  narrate('<b>Full ALG cover shown.</b> Greedy maximal matching ran to completion: '
+    + '|M| = <span class="hl">' + matching.length + '</span> matched edges → '
+    + '|ALG| = <span class="ok">' + coverSet.size + '</span> cover vertices. '
+    + 'Linear time, no search. Press <b>Brute-force OPT</b> to see how close to optimal it landed.');
+}
+
+// ===================== REVEAL OPT + RATIO =====================
+function revealOpt() {
+  if (!greedyDone()) showAlg();        // make sure ALG is built first
+  optShown = true;
+  render();
+  const alg = coverSet.size, opt = optSet.size, ratio = alg / opt;
+  const v = document.getElementById('verdict');
+  const tight = Math.abs(ratio - 2) < 1e-9;
+  v.className = 'verdict ' + (tight ? 'tight' : 'ok');
+  v.textContent = tight
+    ? '⚠ Tight instance: ratio = 2.00, the worst the guarantee allows'
+    : '✓ ratio = ' + ratio.toFixed(2) + '  ≤  2  (guarantee holds)';
+
+  const optLabels = [...optSet].map(id => nodes[id].label).sort().join(', ');
+  let msg = '<b>OPT computed by brute force</b> over all 2<sup>' + nodes.length + '</sup> = '
+    + (1 << nodes.length) + ' vertex subsets: the smallest cover is { ' + optLabels + ' }, size '
+    + '<span class="opt">OPT = ' + opt + '</span> (purple). '
+    + 'The greedy cover is <span class="ok">|ALG| = ' + alg + '</span>, so the measured ratio is '
+    + '<span class="hl">' + alg + ' / ' + opt + ' = ' + ratio.toFixed(2) + '</span>. ';
+  if (tight) {
+    msg += 'This hits the <span class="exp">worst case</span>: ALG is exactly 2× OPT. '
+      + 'The bound <code>|ALG| ≤ 2·OPT</code> is <b>tight</b> — no analysis of this algorithm can promise better.';
+  } else {
+    msg += 'Here greedy did <span class="ok">better than the worst case</span> (ratio &lt; 2), '
+      + 'but the guarantee <code>≤ 2·OPT</code> holds on <i>every</i> graph regardless of luck.';
+  }
+  narrate(msg);
+  updateStats();
+}
+
+// ===================== PLAY / RESET / SELECT =====================
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  if (greedyDone()) return;
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    step();
+    if (greedyDone()) { stopPlay(); return; }
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(200, 1300 - speed * 110));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto';
+}
+
+function resetSim() {
+  stopPlay();
+  stepPtr = 0;
+  loadInstance();
+  buildSteps();
+  renderSkeleton();
+  render();
+  const v = document.getElementById('verdict'); v.className = 'verdict'; v.textContent = '';
+  narrate('<b>Goal.</b> Find a small <span class="ok">vertex cover</span> — a set of vertices touching '
+    + 'every edge. Minimum vertex cover is <span class="exp">NP-hard</span>, so we use a fast '
+    + '<span class="hl">2-approximation</span>: greedily build a maximal matching, then take both endpoints '
+    + 'of each matched edge. Press <b>Step</b> to scan edges one by one; matched edges turn orange and their '
+    + 'endpoints join the cover. This instance has <span class="hl">' + nodes.length + ' vertices</span> and '
+    + edges.length + ' edges.');
+}
+
+function buildProbBtns() {
+  const box = document.getElementById('probBtns');
+  box.innerHTML = '';
+  INSTANCES.forEach((f, i) => {
+    const b = document.createElement('button');
+    b.className = 'prob-btn' + (i === iIdx ? ' active' : '');
+    b.id = 'fb-' + i;
+    b.innerHTML = f.name + '<span class="tag ' + (f.kind === 'easy' ? 'easy' : 'tight') + '">' + f.tag + '</span>';
+    b.onclick = () => selectInstance(i);
+    box.appendChild(b);
+  });
+}
+
+function selectInstance(i) {
+  iIdx = i; inst = INSTANCES[i];
+  INSTANCES.forEach((_, j) => document.getElementById('fb-'+j).classList.toggle('active', j === i));
+  resetSim();
+}
+
+// ===================== INIT =====================
+buildProbBtns();
+resetSim();
+</script>
+</body>
+</html>
