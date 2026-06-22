@@ -139,6 +139,20 @@ Each question below gives **Q**, *what the interviewer is really testing*, and a
 
 **Q25.** *When do you delete a snapshot?* — When it's been blind-updated repeatedly without review (negative value) or once you understand the behavior well enough to assert it.
 
+**Q26.** *Snapshot test vs contract test for an API — same thing?* — No. A snapshot proves the body is byte-identical to last time; a contract/schema test proves it conforms to an agreed shape. Snapshots catch *any* drift (including intended); contracts catch *contract violations*. Use schema validation for the contract, a scrubbed snapshot as a change tripwire.
+
+**Q27.** *Why does ApprovalTests launch a diff tool on failure?* — To make acceptance a deliberate, in-your-face human act. The diff tool puts received vs approved side by side before you can save received → approved, which is exactly the review friction that `jest -u` lacks.
+
+**Q28.** *Is a passing snapshot suite "good test coverage"?* — Not necessarily. It can be high *line* coverage with near-zero *assertion strength* if the snapshots were never reviewed — every output is "approved" regardless of correctness. Coverage of execution, not of intent.
+
+**Q29.** *What's "blast radius" for snapshots?* — The number of snapshots that change for one logical edit. High blast radius (one component change lights up 200 snapshots) signals over-wide scoping and drives rubber-stamping; keep snapshots small and focused.
+
+**Q30.** *Scrub a value or delete the field — which, and why?* — Scrub the value (`"createdAt": "<TIMESTAMP>"`), never delete the field. Deleting it means a regression that drops the field entirely passes silently; you'd lose the structural signal you wanted to protect.
+
+**Q31.** *Can you over-normalize? Give an example.* — Yes. Replacing every number with `<NUM>` makes a genuinely wrong amount indistinguishable from a right one — the snapshot becomes a tautology. Normalization removes noise, never signal; scrub the smallest volatile span possible.
+
+**Q32.** *Where do snapshot/golden tests sit on the test pyramid?* — They're a *technique*, not a layer — usable at unit, integration, or end-to-end level. The pyramid concern is the same: keep the bulk fast and focused, and don't let wide, slow golden tests dominate.
+
 ---
 
 ## Red Flags / Green Flags
