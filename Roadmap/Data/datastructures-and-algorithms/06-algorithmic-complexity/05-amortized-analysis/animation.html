@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amortized Analysis — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    color: var(--blue);
+    font-size: 1.6em;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--text2);
+    font-size: 0.9em;
+    margin-bottom: 18px;
+  }
+  .container {
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .panel h2 {
+    color: var(--blue);
+    font-size: 1em;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .mode-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .mode-btn {
+    background: var(--bg3);
+    border: 2px solid var(--border);
+    color: var(--text);
+    padding: 10px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .mode-btn:hover { border-color: var(--blue); }
+  .mode-btn.active {
+    border-color: var(--blue);
+    background: rgba(88,166,255,0.1);
+    color: var(--blue);
+  }
+  .mode-btn .label { font-weight: bold; display: block; }
+  .mode-btn .sub { color: var(--green); font-size: 0.82em; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 0.82em;
+    color: var(--text2);
+  }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .array-view {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 70px;
+    align-content: flex-start;
+  }
+  .cell {
+    width: 34px;
+    height: 34px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.82em;
+    font-weight: bold;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text2);
+    transition: all 0.25s;
+  }
+  .cell.filled {
+    background: rgba(63,185,80,0.18);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .cell.new {
+    background: rgba(88,166,255,0.25);
+    border-color: var(--blue);
+    color: var(--blue);
+    transform: scale(1.12);
+  }
+  .cell.copying {
+    background: rgba(210,153,34,0.25);
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+  .cap-label {
+    font-size: 0.78em;
+    color: var(--text2);
+    margin: 10px 0 4px;
+    font-family: monospace;
+  }
+  .cap-bar {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    height: 18px;
+    overflow: hidden;
+    position: relative;
+  }
+  .cap-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    width: 0;
+    transition: width 0.3s;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .stat-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .stat-box .value {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: var(--blue);
+  }
+  .stat-box.amort .value { color: var(--green); }
+  .stat-box .label {
+    font-size: 0.72em;
+    color: var(--text2);
+    margin-top: 2px;
+  }
+  .chart-area {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 180px;
+    position: relative;
+  }
+  canvas { width: 100%; height: 170px; display: block; }
+  .narration {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--blue);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 0.86em;
+    line-height: 1.55;
+    margin-top: 8px;
+    min-height: 64px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.76em;
+    color: var(--text2);
+    margin-top: 8px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+<h1>Amortized Analysis</h1>
+<p class="subtitle">Why a single O(n) resize still leaves append at O(1) amortized</p>
+
+<div class="container">
+  <div class="panel">
+    <h2>Method</h2>
+    <div class="mode-btns">
+      <button class="mode-btn active" id="btn-array" onclick="selectMode('array')">
+        <span class="label">Dynamic Array Doubling</span>
+        <span class="sub">aggregate method</span>
+      </button>
+      <button class="mode-btn" id="btn-accounting" onclick="selectMode('accounting')">
+        <span class="label">Accounting Method</span>
+        <span class="sub">3 credits per append</span>
+      </button>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="btnAppend" onclick="manualAppend()">Append 1</button>
+      <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+    </div>
+
+    <div class="cap-label" id="capLabel">size 0 / capacity 1</div>
+    <div class="cap-bar"><div class="cap-fill" id="capFill"></div></div>
+    <div style="height:10px"></div>
+    <div class="array-view" id="arrayView"></div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:var(--green)"></span>stored</span>
+      <span><span class="dot" style="background:var(--blue)"></span>just inserted</span>
+      <span><span class="dot" style="background:var(--orange)"></span>copied on resize</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Cost Accounting</h2>
+    <div class="controls">
+      <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto-append</button>
+      <button class="btn" id="btnStep" onclick="manualAppend()">Step</button>
+      <div class="speed-control">
+        <label>Speed</label>
+        <input type="range" id="speedSlider" min="1" max="10" value="5">
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat-box">
+        <div class="value" id="statAppends">0</div>
+        <div class="label">Appends (n)</div>
+      </div>
+      <div class="stat-box">
+        <div class="value" id="statCost">0</div>
+        <div class="label" id="costLabel">Total element-copies + inserts</div>
+      </div>
+      <div class="stat-box">
+        <div class="value" id="statLast">0</div>
+        <div class="label">Cost of last append</div>
+      </div>
+      <div class="stat-box amort">
+        <div class="value" id="statAmort">0.00</div>
+        <div class="label" id="amortLabel">Amortized cost / append</div>
+      </div>
+    </div>
+
+    <div class="chart-area"><canvas id="chart"></canvas></div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--red)"></span>per-op cost (spikes on resize)</span>
+      <span><span class="dot" style="background:var(--green)"></span>amortized average</span>
+    </div>
+
+    <div class="narration" id="narration">
+      Press <b>Append 1</b> or <b>Auto-append</b>. Watch the per-op cost spike each time the array
+      doubles, while the green amortized average flattens out toward a small constant.
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- State ----
+let mode = 'array';
+let capacity = 1;
+let size = 0;
+let appends = 0;          // number of append calls (n)
+let totalCost = 1;        // running total work; starts so first append below sets correctly
+let lastCost = 0;
+let perOpHistory = [];    // cost of each append
+let amortHistory = [];    // amortized average after each append
+// Accounting method state
+let bank = 0;             // banked credits
+const COST_INSERT = 1;    // cost to write one element
+
+let playing = false;
+let timer = null;
+
+function resetSim() {
+  stopPlay();
+  capacity = 1;
+  size = 0;
+  appends = 0;
+  totalCost = 0;
+  lastCost = 0;
+  bank = 0;
+  perOpHistory = [];
+  amortHistory = [];
+  render();
+  narrate(mode === 'array'
+    ? 'Empty array, capacity 1. Each append costs 1 to write the new element; when full, we first pay an O(n) copy to a doubled buffer.'
+    : 'Accounting method: charge <span class="hl">3 credits</span> per append. 1 pays the insert, 2 are banked. A resize spends banked credits to move old elements — so it is always pre-paid.');
+}
+
+function selectMode(m) {
+  if (mode === m) return;
+  mode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + m).classList.add('active');
+  document.getElementById('costLabel').textContent =
+    m === 'array' ? 'Total element-copies + inserts' : 'Credits spent (= real work)';
+  document.getElementById('amortLabel').textContent =
+    m === 'array' ? 'Amortized cost / append' : 'Credits charged / append';
+  resetSim();
+}
+
+// One append. Returns details for narration.
+function doAppend() {
+  appends++;
+  let copies = 0;
+  let resized = false;
+  let oldCap = capacity;
+
+  if (size === capacity) {
+    // Resize: allocate double, copy all existing elements
+    resized = true;
+    copies = size;            // copy `size` elements
+    capacity = capacity * 2;
+  }
+  // Insert the new element
+  size++;
+  const insert = COST_INSERT;
+  lastCost = copies + insert;
+  totalCost += lastCost;
+
+  // Accounting bookkeeping (independent of real-cost total above)
+  if (mode === 'accounting') {
+    // charge 3 per append; spend `copies` on the move + 1 on insert
+    bank += 3;
+    bank -= (copies + insert);
+  }
+
+  perOpHistory.push(lastCost);
+  amortHistory.push(totalCost / appends);
+
+  return { copies, insert, resized, oldCap };
+}
+
+function manualAppend() {
+  const info = doAppend();
+  render();
+  narrateAppend(info);
+}
+
+function narrateAppend(info) {
+  const amort = (totalCost / appends);
+  if (mode === 'array') {
+    if (info.resized) {
+      narrate(
+        `Append #${appends}: array was full (<span class="hl">${info.copies}/${info.oldCap}</span>) → ` +
+        `<span class="exp">resize to capacity ${capacity}</span>, copy ${info.copies} element` +
+        `${info.copies === 1 ? '' : 's'} (expensive!) then insert. ` +
+        `Last op cost = <span class="hl">${info.copies}+1 = ${info.copies + 1}</span>. ` +
+        `Amortized so far = <span class="ok">${amort.toFixed(2)}</span> / append.`);
+    } else {
+      narrate(
+        `Append #${appends}: room available (${size}/${capacity}). Just insert — cost <span class="ok">1</span>. ` +
+        `Amortized so far = <span class="ok">${amort.toFixed(2)}</span> / append. ` +
+        `The average stays low even though resizes are O(n).`);
+    }
+  } else {
+    if (info.resized) {
+      narrate(
+        `Append #${appends}: charge <span class="hl">3 credits</span>. Array full → move ${info.copies} ` +
+        `old element${info.copies === 1 ? '' : 's'} using <span class="exp">banked credits</span>, ` +
+        `then pay 1 to insert. Bank now = <span class="ok">${bank}</span> credit${bank === 1 ? '' : 's'}. ` +
+        `Credits never go negative ⇒ 3 per append is a valid O(1) amortized bound.`);
+    } else {
+      narrate(
+        `Append #${appends}: charge <span class="hl">3 credits</span>. Spend 1 on the insert, ` +
+        `<span class="ok">bank 2</span>. Bank now = <span class="ok">${bank}</span> credits, ` +
+        `saved up to pay for the next resize.`);
+    }
+  }
+}
+
+function narrate(html) {
+  document.getElementById('narration').innerHTML = html;
+}
+
+function render() {
+  // counters
+  document.getElementById('statAppends').textContent = appends;
+  document.getElementById('statCost').textContent = totalCost;
+  document.getElementById('statLast').textContent = lastCost;
+  document.getElementById('statAmort').textContent = appends ? (totalCost / appends).toFixed(2) : '0.00';
+  document.getElementById('capLabel').textContent =
+    `size ${size} / capacity ${capacity}` + (mode === 'accounting' ? `   •   bank ${bank} credits` : '');
+  document.getElementById('capFill').style.width = (size / capacity * 100) + '%';
+
+  // array cells
+  const av = document.getElementById('arrayView');
+  av.innerHTML = '';
+  for (let i = 0; i < capacity; i++) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    if (i < size) {
+      c.classList.add(i === size - 1 ? 'new' : 'filled');
+      c.textContent = i;
+    } else {
+      c.textContent = '·';
+    }
+    av.appendChild(c);
+  }
+  drawChart();
+}
+
+function drawChart() {
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = 340;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth;
+  const h = 170;
+  ctx.clearRect(0, 0, w, h);
+
+  const padL = 30, padR = 10, padT = 12, padB = 20;
+  const cw = w - padL - padR;
+  const ch = h - padT - padB;
+
+  const maxOp = Math.max(4, ...perOpHistory);
+
+  // grid + y labels
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 0.5;
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (ch / 4) * i;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillText(Math.round(maxOp * (4 - i) / 4), padL - 4, y + 3);
+  }
+  ctx.textAlign = 'center';
+  ctx.fillText('append #', w / 2, h - 4);
+
+  if (perOpHistory.length === 0) return;
+  const n = perOpHistory.length;
+  const xAt = i => n === 1 ? padL + cw / 2 : padL + (i / (n - 1)) * cw;
+  const yAt = v => padT + ch - (v / maxOp) * ch;
+
+  // per-op cost bars
+  const barW = Math.max(2, Math.min(14, cw / n - 2));
+  for (let i = 0; i < n; i++) {
+    const x = xAt(i);
+    const y = yAt(perOpHistory[i]);
+    ctx.fillStyle = perOpHistory[i] > 1 ? 'rgba(248,81,73,0.7)' : 'rgba(248,81,73,0.3)';
+    ctx.fillRect(x - barW / 2, y, barW, padT + ch - y);
+  }
+
+  // amortized average line
+  ctx.beginPath();
+  ctx.strokeStyle = '#3fb950';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < n; i++) {
+    const x = xAt(i), y = yAt(amortHistory[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // last amortized dot + value
+  const lx = xAt(n - 1), ly = yAt(amortHistory[n - 1]);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#3fb950';
+  ctx.fill();
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#3fb950';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.fillText(amortHistory[n - 1].toFixed(2), Math.min(w - padR, lx - 6), Math.max(padT + 9, ly - 6));
+}
+
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    if (appends >= 64) { stopPlay(); return; }
+    manualAppend();
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(80, 800 - speed * 70));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto-append';
+}
+
+window.addEventListener('resize', drawChart);
+resetSim();
+</script>
+</body>
+</html>
