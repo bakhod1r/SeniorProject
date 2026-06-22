@@ -34,9 +34,12 @@ This roadmap covers all **23 patterns** from the GoF book. The *Interpreter* pat
 
 ---
 
-## Three Categories
+## The Categories
 
 The GoF book organizes patterns by **intent** — the kind of problem they solve.
+This roadmap keeps the three classic GoF categories and adds a fourth for
+**concurrency patterns** (POSA), which solve the same kind of object-level design
+problem in multithreaded code.
 
 ```mermaid
 graph TD
@@ -44,6 +47,7 @@ graph TD
     DP --> C[Creational<br/>5 patterns<br/>How objects are created]
     DP --> S[Structural<br/>7 patterns<br/>How objects are composed]
     DP --> B[Behavioral<br/>11 patterns<br/>How objects communicate]
+    DP --> X[Concurrency<br/>11 patterns<br/>How objects coordinate threads]
 ```
 
 | Category | Concern | Pattern Count | Examples |
@@ -51,6 +55,7 @@ graph TD
 | **[Creational](01-creational/README.md)** | Object creation mechanisms | 5 | Singleton, Factory Method, Builder |
 | **[Structural](02-structural/README.md)** | Object composition / structure | 7 | Adapter, Decorator, Proxy |
 | **[Behavioral](03-behavioral/README.md)** | Object communication / responsibilities | 11 | Strategy, Observer, Interpreter |
+| **[Concurrency](04-concurrency-patterns/README.md)** | Thread coordination / safe sharing | 11 | Thread Pool, Producer-Consumer, Future/Promise |
 
 ---
 
@@ -108,11 +113,41 @@ Many patterns are related, complementary, or contrasting. A few key contrasts to
 
 ---
 
-## Browse by Category
+## Patterns Catalog (master index)
 
-- [Creational Patterns](01-creational/README.md) — Factory Method, Abstract Factory, Builder, Prototype, Singleton
-- [Structural Patterns](02-structural/README.md) — Adapter, Bridge, Composite, Decorator, Facade, Flyweight, Proxy
-- [Behavioral Patterns](03-behavioral/README.md) — Chain of Responsibility, Command, Iterator, Mediator, Memento, Observer, State, Strategy, Template Method, Visitor, Interpreter
+This is the single entry point for **every** pattern in the repo, across all
+abstraction levels. Object-level patterns live here; architectural patterns and
+language-specific techniques live at their pedagogically correct home and are
+linked below — so you get one catalog without duplicating content or mixing
+altitudes.
+
+### Object-level patterns (here)
+
+- **[Creational](01-creational/README.md)** — Factory Method, Abstract Factory, Builder, Prototype, Singleton
+- **[Structural](02-structural/README.md)** — Adapter, Bridge, Composite, Decorator, Facade, Flyweight, Proxy
+- **[Behavioral](03-behavioral/README.md)** — Chain of Responsibility, Command, Iterator, Mediator, Memento, Observer, State, Strategy, Template Method, Visitor, Interpreter
+- **[Concurrency](04-concurrency-patterns/README.md)** — Active Object, Monitor Object, Reactor, Proactor, Thread Pool, Producer-Consumer, Future/Promise, Half-Sync/Half-Async, Leader-Followers, Double-Checked Locking, Balking
+- **[Other (GoF-adjacent)](05-other-patterns/)** — [Type Object](05-other-patterns/01-type-object/) · **Null Object** → kept with its sibling [Special Case](../coding-patterns/01-control-flow/03-null-object/junior.md) in control-flow patterns
+
+### Architectural patterns (system altitude → Architecture)
+
+Higher-altitude patterns that shape whole systems, not single objects. They live
+in the Architecture progression (architectural principles → styles → patterns →
+enterprise patterns), not here:
+
+- **[Architectural Patterns](../../../Architecture/software-design-architecture/08-architectural-patterns/)** — Layered, Hexagonal/Ports-and-Adapters, MVC/MVP/MVVM, Microkernel, Pipe-and-Filter, …
+- **[Architectural Styles](../../../Architecture/software-design-architecture/07-architectural-styles/)** — monolith, microservices, event-driven, serverless
+- **[Enterprise Patterns](../../../Architecture/software-design-architecture/09-enterprise-patterns/)** — Repository, Unit of Work, Service Layer, DTO
+- **[Clean Architecture](../../../Architecture/clean-architecture/)** · **[DDD](../../../Architecture/ddd/)**
+
+### Dependency Injection (principle + language idiom)
+
+DI is a *technique* for applying the Dependency Inversion Principle; its concrete
+form is language-specific, so it lives with the principle and the languages:
+
+- **Principle:** [SOLID · Dependency Inversion (DIP)](../design-principles/04-solid/05-dip-dependency-inversion/)
+- **Go idiom:** [Go · Dependency Injection](../../languages/golang/06-code-organization/06-dependency-injection/) *(full content)*
+- **Java idiom:** [Java · Dependency Injection](../../languages/java/10-dependency-injection/)
 
 ---
 

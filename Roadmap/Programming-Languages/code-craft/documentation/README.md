@@ -38,6 +38,7 @@ Code says *what* it does; documentation says *why it exists, how to use it, and 
 | [09](09-changelogs-and-release-notes/) | Changelogs & Release Notes | Keep a Changelog, semver, human vs machine notes, conventional commits |
 | [10](10-docs-as-code-and-tooling/) | Docs as Code & Tooling | Docs in the repo, linting, link-checking, versioned docs sites, CI for docs |
 | [11](11-keeping-docs-alive-and-doc-rot/) | Keeping Docs Alive | Fighting doc rot, single source of truth, docs that live next to the code they describe |
+| [12](12-uml-diagrams/) | UML Diagrams | The five common UML diagrams — class, use-case, activity, state-machine, sequence — when each one earns its keep |
 
 ---
 
