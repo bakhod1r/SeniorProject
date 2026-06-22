@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P vs NP — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .tabs {
+    max-width: 1000px;
+    margin: 0 auto 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .tab {
+    background: var(--bg3);
+    border: 2px solid var(--border);
+    color: var(--text);
+    padding: 11px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.88em;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .tab:hover { border-color: var(--blue); }
+  .tab.active { border-color: var(--blue); background: rgba(88,166,255,0.1); color: var(--blue); }
+  .tab .label { font-weight: bold; display: block; }
+  .tab .sub { color: var(--text2); font-size: 0.82em; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .mode-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .mode-btn {
+    background: var(--bg3); border: 2px solid var(--border); color: var(--text);
+    padding: 10px 8px; border-radius: 6px; cursor: pointer; font-size: 0.85em;
+    transition: all 0.2s; text-align: center;
+  }
+  .mode-btn:hover { border-color: var(--blue); }
+  .mode-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.1); color: var(--blue); }
+  .mode-btn .label { font-weight: bold; display: block; }
+  .mode-btn .sub { font-size: 0.8em; }
+  .mode-btn.verify .sub { color: var(--green); }
+  .mode-btn.solve .sub { color: var(--red); }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .problem-line {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; margin-bottom: 12px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85em;
+  }
+  .problem-line b { color: var(--orange); }
+  .set-view { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .chip {
+    min-width: 40px; height: 40px; padding: 0 8px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.95em; font-weight: bold;
+    border: 1px solid var(--border); background: var(--bg3); color: var(--text2); transition: all 0.2s;
+  }
+  .chip.in { background: rgba(88,166,255,0.18); border-color: var(--blue); color: var(--blue); }
+  .chip.summing { background: rgba(210,153,34,0.28); border-color: var(--orange); color: var(--orange); transform: scale(1.12); }
+  .chip.good { background: rgba(63,185,80,0.22); border-color: var(--green); color: var(--green); }
+  .chip.bad { background: rgba(248,81,73,0.18); border-color: var(--red); color: var(--red); }
+  .runtotal {
+    text-align: center; font-family: 'Fira Code', monospace; font-size: 1.1em;
+    margin: 14px 0; color: var(--text2);
+  }
+  .runtotal b { color: var(--orange); font-size: 1.2em; }
+  .verdict { text-align: center; font-size: 1.05em; font-weight: bold; margin: 8px 0; min-height: 1.4em; }
+  .verdict.ok { color: var(--green); }
+  .verdict.no { color: var(--red); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .stat-box .value { font-size: 1.3em; font-weight: bold; color: var(--blue); font-family: 'Fira Code', monospace; }
+  .stat-box.verify .value { color: var(--green); }
+  .stat-box.search .value { color: var(--red); }
+  .stat-box .label { font-size: 0.72em; color: var(--text2); margin-top: 2px; }
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.86em; line-height: 1.55; margin-top: 8px; min-height: 64px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--purple); font-size: 0.92em; }
+  /* Containment map */
+  .map-wrap { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+  @media (max-width: 820px){ .map-wrap, .grid2 { grid-template-columns: 1fr; } }
+  .map-svg-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  svg { width: 100%; height: auto; display: block; }
+  .prob-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .prob-btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 6px; border-radius: 5px; cursor: pointer; font-size: 0.78em; transition: all 0.2s; text-align: left;
+  }
+  .prob-btn:hover { border-color: var(--blue); }
+  .prob-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.12); color: var(--blue); }
+  .prob-btn .tag { display: block; font-size: 0.74em; color: var(--text2); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .region-label { font: 600 13px 'Segoe UI', sans-serif; }
+  .open-note {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-top: 12px; color: var(--text);
+  }
+  .open-note b { color: var(--purple); }
+</style>
+</head>
+<body>
+<h1>P vs NP</h1>
+<p class="subtitle">Finding a solution vs. checking one — and the map of complexity classes</p>
+
+<div class="tabs">
+  <button class="tab active" id="tab-gap" onclick="selectTab('gap')">
+    <span class="label">FIND vs VERIFY</span>
+    <span class="sub">Subset-Sum: O(n) to check, O(2ⁿ) to find</span>
+  </button>
+  <button class="tab" id="tab-map" onclick="selectTab('map')">
+    <span class="label">CLASS CONTAINMENT</span>
+    <span class="sub">P ⊆ NP ⊆ PSPACE ⊆ EXP</span>
+  </button>
+</div>
+
+<div class="container">
+
+<!-- =================== VIEW A: FIND vs VERIFY =================== -->
+<div class="view active" id="view-gap">
+  <div class="grid2">
+    <div class="panel">
+      <h2>Subset-Sum Instance</h2>
+      <div class="mode-btns">
+        <button class="mode-btn verify active" id="btn-verify" onclick="selectMode('verify')">
+          <span class="label">VERIFY mode</span>
+          <span class="sub">check a given subset — O(n)</span>
+        </button>
+        <button class="mode-btn solve" id="btn-solve" onclick="selectMode('solve')">
+          <span class="label">SOLVE mode</span>
+          <span class="sub">brute-force all subsets — O(2ⁿ)</span>
+        </button>
+      </div>
+
+      <div class="problem-line">
+        set = { <span id="setText"></span> }<br>
+        target = <b id="targetText"></b>
+      </div>
+
+      <div class="set-view" id="setView"></div>
+      <div class="runtotal">running sum: <b id="runSum">0</b> <span id="cmpTarget"></span></div>
+      <div class="verdict" id="verdict"></div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnStep" onclick="step()">Step</button>
+        <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+        <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+        <div class="speed-control">
+          <label>Speed</label>
+          <input type="range" id="speedSlider" min="1" max="10" value="6">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>The Cost Gap</h2>
+      <div class="stats">
+        <div class="stat-box verify">
+          <div class="value" id="statVerify">0</div>
+          <div class="label">VERIFY steps (= n, linear)</div>
+        </div>
+        <div class="stat-box search">
+          <div class="value" id="statSearch">0 / 0</div>
+          <div class="label">SOLVE: subsets tried of 2ⁿ</div>
+        </div>
+        <div class="stat-box">
+          <div class="value" id="statN">0</div>
+          <div class="label">n (size of set)</div>
+        </div>
+        <div class="stat-box">
+          <div class="value" id="statSpace">0</div>
+          <div class="label">2ⁿ (search space)</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label style="font-size:.82em;color:var(--text2)">Grow the set:</label>
+        <button class="btn" onclick="changeN(-1)">− remove</button>
+        <button class="btn" onclick="changeN(1)">+ add</button>
+      </div>
+
+      <div class="legend">
+        <span><span class="dot" style="background:var(--green)"></span>in the certificate / summed-ok</span>
+        <span><span class="dot" style="background:var(--orange)"></span>currently adding</span>
+        <span><span class="dot" style="background:var(--blue)"></span>chosen this subset</span>
+        <span><span class="dot" style="background:var(--red)"></span>rejected</span>
+      </div>
+
+      <div class="narration" id="narration"></div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== VIEW B: CLASS CONTAINMENT =================== -->
+<div class="view" id="view-map">
+  <div class="panel">
+    <h2>The Map of Complexity Classes</h2>
+    <div class="map-wrap">
+      <div class="map-svg-box">
+        <svg id="mapSvg" viewBox="0 0 460 380" role="img" aria-label="Nested complexity classes">
+          <!-- EXP -->
+          <rect x="10" y="10" width="440" height="360" rx="14" fill="rgba(248,81,73,0.06)" stroke="#f85149" stroke-width="1.5"/>
+          <text x="24" y="30" class="region-label" fill="#f85149">EXP</text>
+          <!-- PSPACE -->
+          <rect x="40" y="46" width="380" height="296" rx="14" fill="rgba(188,140,255,0.06)" stroke="#bc8cff" stroke-width="1.5"/>
+          <text x="54" y="66" class="region-label" fill="#bc8cff">PSPACE</text>
+          <!-- NP big region -->
+          <ellipse id="rgNP" cx="190" cy="210" rx="135" ry="118" fill="rgba(210,153,34,0.05)" stroke="#d29922" stroke-width="1.5"/>
+          <text x="78" y="118" class="region-label" fill="#d29922">NP</text>
+          <!-- co-NP beside NP -->
+          <ellipse id="rgCoNP" cx="338" cy="210" rx="78" ry="110" fill="rgba(88,166,255,0.05)" stroke="#58a6ff" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <text x="312" y="118" class="region-label" fill="#58a6ff" font-size="12">co-NP</text>
+          <!-- NP-complete rim (outer ring of NP) -->
+          <ellipse id="rgNPC" cx="190" cy="232" rx="120" ry="92" fill="rgba(248,81,73,0.04)" stroke="#f85149" stroke-width="1.2" stroke-dasharray="2 3"/>
+          <text x="118" y="312" class="region-label" fill="#f85149" font-size="11">NP-complete</text>
+          <!-- P core -->
+          <ellipse id="rgP" cx="180" cy="186" rx="78" ry="60" fill="rgba(63,185,80,0.10)" stroke="#3fb950" stroke-width="1.8"/>
+          <text x="155" y="160" class="region-label" fill="#3fb950">P</text>
+          <!-- dashed "is this boundary real?" line between P and NP-complete -->
+          <path id="openBoundary" d="M 100 230 Q 190 250 280 232" fill="none" stroke="#bc8cff" stroke-width="1.6" stroke-dasharray="6 5"/>
+          <text x="148" y="270" fill="#bc8cff" font-size="10" font-style="italic">P = NP ?  (open)</text>
+          <!-- problem marker -->
+          <circle id="marker" cx="180" cy="186" r="7" fill="#fff" stroke="#0d1117" stroke-width="2" opacity="0"/>
+        </svg>
+      </div>
+
+      <div>
+        <div class="prob-btns" id="probBtns"></div>
+        <div class="narration" id="mapNarration" style="margin-top:0"></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:var(--green)"></span>P — solvable in poly time</span>
+      <span><span class="dot" style="background:var(--orange)"></span>NP — verifiable in poly time</span>
+      <span><span class="dot" style="background:var(--red)"></span>NP-complete (NP's hard rim)</span>
+      <span><span class="dot" style="background:var(--blue)"></span>co-NP</span>
+      <span><span class="dot" style="background:var(--purple)"></span>PSPACE / EXP</span>
+    </div>
+
+    <div class="open-note">
+      <b>The open question.</b> Every problem in P is also in NP (if you can solve it fast, you can
+      certainly check it fast), so <code>P ⊆ NP</code>. Whether the reverse holds —
+      <b>P = NP?</b> — is unsolved. No one has found a polynomial-time algorithm for any NP-complete
+      problem, and no one has proven that none exists. The dashed line above marks exactly this unknown
+      boundary: if it collapses, <code>P = NP</code> and the FIND/VERIFY gap disappears.
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ===================== VIEW A: FIND vs VERIFY (Subset-Sum) =====================
+let mode = 'verify';
+let set = [3, 7, 1, 8, 4, 6];     // current instance
+let target = 18;
+let certificate = [];             // indices forming the planted "yes" certificate
+let verifySteps = 0;
+let searchTried = 0;              // subsets enumerated in SOLVE mode
+let solveDone = false;
+let solveFound = null;            // the winning subset (array of indices) once found
+
+let playing = false, timer = null;
+
+function chooseTargetAndCert() {
+  // Plant a real "yes" certificate: pick ~half the elements, sum them = target.
+  certificate = [];
+  for (let i = 0; i < set.length; i++) if (Math.random() < 0.5) certificate.push(i);
+  if (certificate.length === 0) certificate = [0];
+  target = certificate.reduce((s, i) => s + set[i], 0);
+}
+
+function regenInstance(n) {
+  set = [];
+  for (let i = 0; i < n; i++) set.push(1 + Math.floor(Math.random() * 9));
+  chooseTargetAndCert();
+}
+
+function resetSim() {
+  stopPlay();
+  verifySteps = 0;
+  searchTried = 0;
+  solveDone = false;
+  solveFound = null;
+  renderGap();
+  if (mode === 'verify') {
+    narrate('<b>VERIFY mode.</b> A friend hands us a candidate subset (the highlighted blue chips) — '
+      + 'this is the <span class="ok">certificate</span>. We just add those numbers and compare to the target. '
+      + 'Press <b>Step</b> to sum one element at a time. Total work is <span class="ok">O(n)</span> — linear, fast.');
+  } else {
+    narrate('<b>SOLVE mode.</b> Now nobody hands us the answer. We must brute-force <span class="exp">all 2ⁿ subsets</span> '
+      + 'and test each one. Press <b>Step</b> / <b>Auto</b> and watch the counter climb toward <span class="exp">'
+      + Math.pow(2, set.length) + '</span>. Best known time for this is <span class="exp">O(2ⁿ)</span> — it explodes as n grows.');
+  }
+}
+
+function selectMode(m) {
+  if (mode === m) return;
+  mode = m;
+  document.getElementById('btn-verify').classList.toggle('active', m === 'verify');
+  document.getElementById('btn-solve').classList.toggle('active', m === 'solve');
+  resetSim();
+}
+
+function changeN(delta) {
+  let n = set.length + delta;
+  n = Math.max(2, Math.min(16, n));
+  regenInstance(n);
+  resetSim();
+}
+
+// --- VERIFY: one step adds one certificate element to the running sum ---
+function verifyStep() {
+  if (verifySteps >= set.length) return; // we scan all n elements (skip non-members but still O(n))
+  verifySteps++;
+  renderGap();
+  if (verifySteps >= set.length) {
+    const sum = certificate.reduce((s, i) => s + set[i], 0);
+    const ok = sum === target;
+    const v = document.getElementById('verdict');
+    v.className = 'verdict ' + (ok ? 'ok' : 'no');
+    v.textContent = ok ? '✓ certificate VALID  (sum = target)' : '✗ certificate INVALID';
+    narrate('Scanned all <span class="ok">n = ' + set.length + '</span> elements: the certificate sums to '
+      + '<span class="ok">' + sum + '</span>' + (ok ? ' = target. ✓ <span class="ok">Accepted in O(n).</span> '
+        : ' ≠ target. ') + 'That is the whole point of <b>NP</b>: a yes-answer comes with a short '
+      + '<span class="ok">certificate</span> we can check in <span class="ok">polynomial time</span>.');
+  } else {
+    const partial = certificate.filter(i => i < verifySteps).reduce((s, i) => s + set[i], 0);
+    narrate('Step ' + verifySteps + '/' + set.length + ': scanning element <code>' + set[verifySteps - 1]
+      + '</code>. Running sum over certificate members so far = <span class="hl">' + partial + '</span>. '
+      + 'Checking is cheap — one pass, <span class="ok">O(n)</span>.');
+  }
+}
+
+// --- SOLVE: one step enumerates the next subset (as a bitmask) and tests it ---
+function solveStep() {
+  const total = Math.pow(2, set.length);
+  if (solveDone) return;
+  // test the subset whose bitmask == searchTried
+  const mask = searchTried;
+  const subset = [];
+  let sum = 0;
+  for (let i = 0; i < set.length; i++) {
+    if (mask & (1 << i)) { subset.push(i); sum += set[i]; }
+  }
+  searchTried++;
+  const hit = sum === target;
+  if (hit) { solveFound = subset; solveDone = true; }
+  if (searchTried >= total && !hit) solveDone = true;
+  renderGap(subset, hit, sum);
+
+  const v = document.getElementById('verdict');
+  if (hit) {
+    v.className = 'verdict ok';
+    v.textContent = '✓ FOUND a subset summing to ' + target;
+    narrate('Subset #<span class="hl">' + searchTried + '</span> of <span class="exp">' + total + '</span> '
+      + 'sums to <span class="ok">' + sum + '</span> = target. Found it! '
+      + 'But notice: we may have scanned up to <span class="exp">2ⁿ = ' + total + '</span> subsets to get here. '
+      + 'Finding is <span class="exp">exponential</span>; checking that same subset was <span class="ok">linear</span>.');
+  } else if (solveDone) {
+    v.className = 'verdict no';
+    v.textContent = '✗ No subset sums to ' + target + ' (searched all 2ⁿ)';
+    narrate('Exhausted all <span class="exp">' + total + '</span> subsets — none hit the target. '
+      + 'A definite "no" cost the <span class="exp">full O(2ⁿ)</span> search.');
+  } else {
+    v.className = 'verdict';
+    v.textContent = '';
+    narrate('Trying subset #<span class="hl">' + searchTried + '</span> of <span class="exp">' + total
+      + '</span> (bitmask ' + mask.toString(2).padStart(set.length, '0') + '): sum = <span class="hl">' + sum
+      + '</span>' + (sum === target ? '' : ' ≠ ' + target) + '. Keep searching… '
+      + 'the search space is <span class="exp">2ⁿ</span> and grows by ×2 each time you add an element.');
+  }
+}
+
+function step() {
+  if (mode === 'verify') verifyStep(); else solveStep();
+}
+
+function renderGap(activeSubset, hit, liveSum) {
+  document.getElementById('setText').textContent = set.join(', ');
+  document.getElementById('targetText').textContent = target;
+  document.getElementById('statN').textContent = set.length;
+  document.getElementById('statVerify').textContent = verifySteps;
+  document.getElementById('statSpace').textContent = Math.pow(2, set.length).toLocaleString();
+  document.getElementById('statSearch').textContent =
+    searchTried.toLocaleString() + ' / ' + Math.pow(2, set.length).toLocaleString();
+
+  // chips
+  const sv = document.getElementById('setView');
+  sv.innerHTML = '';
+  set.forEach((val, i) => {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.textContent = val;
+    if (mode === 'verify') {
+      const member = certificate.includes(i);
+      if (member) c.classList.add('in');
+      if (member && i < verifySteps) c.classList.remove('in'), c.classList.add(verifySteps >= set.length ? 'good' : 'summing');
+      if (member && verifySteps >= set.length) { c.classList.remove('summing'); c.classList.add('good'); }
+    } else {
+      if (activeSubset && activeSubset.includes(i)) c.classList.add(hit ? 'good' : 'in');
+      if (solveFound && solveFound.includes(i)) c.classList.add('good');
+    }
+    sv.appendChild(c);
+  });
+
+  // running sum line
+  let rs = 0, cmp = '';
+  if (mode === 'verify') {
+    rs = certificate.filter(i => i < verifySteps).reduce((s, i) => s + set[i], 0);
+  } else if (typeof liveSum === 'number') {
+    rs = liveSum;
+  }
+  document.getElementById('runSum').textContent = rs;
+  if (mode === 'verify' && verifySteps >= set.length) {
+    cmp = rs === target ? '= target ✓' : '≠ target ✗';
+  } else if (mode === 'solve' && typeof liveSum === 'number') {
+    cmp = liveSum === target ? '= target ✓' : 'vs target ' + target;
+  }
+  document.getElementById('cmpTarget').textContent = cmp;
+}
+
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    const before = mode === 'verify' ? verifySteps : searchTried;
+    step();
+    const done = mode === 'verify' ? (verifySteps >= set.length) : solveDone;
+    if (done) { stopPlay(); return; }
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(40, 700 - speed * 65));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto';
+}
+
+function narrate(html) { document.getElementById('narration').innerHTML = html; }
+
+// ===================== VIEW B: CLASS CONTAINMENT MAP =====================
+// region: where the problem's marker sits, and which class it belongs to.
+const PROBLEMS = [
+  { name: 'Sorting', cls: 'P', x: 165, y: 175,
+    note: '<b>Sorting</b> is in <span style="color:var(--green)">P</span> — mergesort runs in O(n log n), polynomial. Also trivially in NP.' },
+  { name: 'Shortest Path', cls: 'P', x: 195, y: 200,
+    note: '<b>Shortest Path</b> (Dijkstra / BFS) is in <span style="color:var(--green)">P</span>. Solvable in polynomial time, so it sits in the green core.' },
+  { name: '2-SAT', cls: 'P', x: 150, y: 205,
+    note: '<b>2-SAT</b> is in <span style="color:var(--green)">P</span> — solvable in linear time via implication graphs. Note its sibling 3-SAT is NP-complete: the jump from 2 to 3 literals crosses a hardness cliff.' },
+  { name: 'SAT (3-SAT)', cls: 'NPC', x: 95, y: 250,
+    note: '<b>SAT</b> is <span style="color:var(--red)">NP-complete</span> — the original (Cook–Levin) NP-complete problem. Easy to <i>verify</i> an assignment, no known poly-time way to <i>find</i> one.' },
+  { name: 'TSP (decision)', cls: 'NPC', x: 285, y: 252,
+    note: '<b>Traveling Salesman</b> (decision form) is <span style="color:var(--red)">NP-complete</span>. Given a tour you can check its length in O(n); finding an optimal tour is believed to need exponential time.' },
+  { name: '3-Coloring', cls: 'NPC', x: 190, y: 300,
+    note: '<b>Graph 3-Coloring</b> is <span style="color:var(--red)">NP-complete</span>. A proposed coloring is checked in poly time; searching for one is hard.' },
+  { name: 'Subset-Sum', cls: 'NPC', x: 110, y: 300,
+    note: '<b>Subset-Sum</b> (the problem in the other tab!) is <span style="color:var(--red)">NP-complete</span>. Verify a subset in O(n); best known search is O(2ⁿ).' },
+  { name: 'Factoring', cls: 'NP', x: 250, y: 165,
+    note: '<b>Integer Factoring</b> is in <span style="color:var(--orange)">NP</span> (and co-NP), but is <i>not known</i> to be NP-complete nor in P — it lives in the mysterious middle of NP.' },
+  { name: 'TQBF', cls: 'PSPACE', x: 70, y: 95,
+    note: '<b>TQBF</b> (true quantified boolean formulas) is <span style="color:var(--purple)">PSPACE-complete</span> — believed strictly harder than NP. It sits outside NP but inside PSPACE.' },
+  { name: 'Tautology', cls: 'coNP', x: 360, y: 200,
+    note: '<b>Tautology</b> (is a formula true for <i>all</i> assignments?) is <span style="color:var(--blue)">co-NP-complete</span>. A short certificate exists for "no" answers, not "yes" — the mirror image of SAT.' },
+];
+
+function buildProbBtns() {
+  const box = document.getElementById('probBtns');
+  box.innerHTML = '';
+  PROBLEMS.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'prob-btn';
+    b.id = 'pb-' + i;
+    const tagColor = { P:'var(--green)', NP:'var(--orange)', NPC:'var(--red)', coNP:'var(--blue)', PSPACE:'var(--purple)' }[p.cls];
+    const tagText = { P:'P', NP:'NP', NPC:'NP-complete', coNP:'co-NP', PSPACE:'PSPACE' }[p.cls];
+    b.innerHTML = p.name + '<span class="tag" style="color:' + tagColor + '">' + tagText + '</span>';
+    b.onclick = () => pickProblem(i);
+    box.appendChild(b);
+  });
+}
+
+function pickProblem(i) {
+  const p = PROBLEMS[i];
+  PROBLEMS.forEach((_, j) => document.getElementById('pb-' + j).classList.toggle('active', j === i));
+  const m = document.getElementById('marker');
+  m.setAttribute('cx', p.x);
+  m.setAttribute('cy', p.y);
+  m.setAttribute('opacity', '1');
+  document.getElementById('mapNarration').innerHTML = p.note;
+}
+
+function selectTab(t) {
+  document.getElementById('tab-gap').classList.toggle('active', t === 'gap');
+  document.getElementById('tab-map').classList.toggle('active', t === 'map');
+  document.getElementById('view-gap').classList.toggle('active', t === 'gap');
+  document.getElementById('view-map').classList.toggle('active', t === 'map');
+}
+
+// ===================== INIT =====================
+document.getElementById('speedSlider'); // (referenced lazily)
+buildProbBtns();
+document.getElementById('mapNarration').innerHTML =
+  'Click a problem to locate it on the map. The regions nest: '
+  + '<code>P ⊆ NP ⊆ PSPACE ⊆ EXP</code>. The purple dashed arc is the famous open boundary — '
+  + 'no one knows whether P-problems and NP-complete problems are truly separated.';
+resetSim();
+</script>
+</body>
+</html>
