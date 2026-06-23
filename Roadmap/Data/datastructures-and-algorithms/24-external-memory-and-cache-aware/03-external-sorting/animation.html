@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>External Sorting — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 120px; }
+  .field b { color: var(--text); }
+  .stage { font-size: 0.8em; color: var(--text2); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .runs { display: flex; gap: 10px; flex-wrap: wrap; }
+  .run { border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--bg); }
+  .run.active { border-color: var(--orange); box-shadow: 0 0 8px rgba(210,153,34,.4); }
+  .run.merged { border-color: var(--green); }
+  .run .rid { font-size: 0.66em; color: var(--text2); margin-bottom: 3px; text-align: center; }
+  .cells { display: flex; gap: 2px; }
+  .cell { width: 20px; height: 24px; border-radius: 3px; background: var(--bg3); color: var(--text);
+    font-size: 0.7em; display: flex; align-items: center; justify-content: center; font-family: 'Fira Code', monospace; }
+  .cell.head { background: var(--blue); color: #fff; box-shadow: 0 0 6px var(--blue); }
+  .cell.taken { background: rgba(63,185,80,0.25); color: var(--text2); }
+  .out { display: flex; gap: 2px; flex-wrap: wrap; border: 1px solid var(--green); border-radius: 6px; padding: 6px; background: rgba(63,185,80,0.06); min-height: 38px; }
+  .out .cell { background: rgba(63,185,80,0.18); }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 110px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.3em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+  table.math { width: 100%; border-collapse: collapse; font-size: 0.84em; margin-top: 8px; }
+  table.math td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+  table.math td:first-child { color: var(--text2); }
+  table.math td:last-child { font-family: 'Fira Code', monospace; text-align: right; }
+  table.math td.big { color: var(--green); font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>External Sorting — Interactive Visualization</h1>
+  <div class="subtitle">Sort data bigger than RAM with only a few sequential passes: form sorted runs, then repeatedly merge them <i>M/B</i>-ways.</div>
+
+  <div class="panel">
+    <h2>External merge sort, step by step</h2>
+    <div class="field">
+      <label>N (elements) <b id="nLbl">24</b></label>
+      <input type="range" id="nRange" min="12" max="40" step="4" value="24" oninput="rebuild()">
+      &nbsp; <label>M (fit in memory) <b id="mLbl">4</b></label>
+      <input type="range" id="mRange" min="2" max="6" step="1" value="4" oninput="rebuild()">
+      &nbsp; <label>merge fan-in k <b id="kLbl">3</b></label>
+      <input type="range" id="kRange" min="2" max="4" step="1" value="3" oninput="rebuild()">
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" id="runBtn" onclick="runToEnd()">Run to end ⏭</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="420" value="240"></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">phase</div><div class="val" id="phaseVal" style="font-size:1em">run formation</div></div>
+      <div class="stat"><div class="lbl">pass</div><div class="val" id="passVal">1</div></div>
+      <div class="stat"><div class="lbl">runs remaining</div><div class="val" id="runsVal" style="color:var(--orange)">—</div></div>
+      <div class="stat"><div class="lbl">I/Os (≈ elements moved)</div><div class="val" id="ioVal" style="color:var(--purple)">0</div></div>
+    </div>
+
+    <div class="stage">current runs on disk</div>
+    <div class="runs" id="runs"></div>
+
+    <div class="stage" id="outLabel" style="display:none">merging into new run</div>
+    <div class="out" id="out" style="display:none"></div>
+
+    <div class="narration" id="narration">Press <b>Step</b>. Phase 1 loads M elements at a time, sorts them in memory, and writes a sorted run. Phase 2 merges k runs at a time until one run remains.</div>
+  </div>
+
+  <div class="panel">
+    <h2>The pass count: why only a few passes</h2>
+    <table class="math" id="mathTable"></table>
+    <p class="note" id="mathNote"></p>
+  </div>
+</div>
+
+<script>
+let N, M, K;
+let runs = [];        // array of arrays (sorted runs on disk)
+let phase = 'form';   // 'form' | 'merge' | 'done'
+let formIdx = 0;      // next element index to load during run formation
+let data = [];        // the unsorted input
+let pass = 1;
+let ios = 0;
+// merge state
+let mergeGroup = null;   // {sources:[arr...], ptrs:[...], out:[], srcRunIdx:[...]}
+let pendingRuns = [];    // runs produced this merge pass
+let mergeQueue = [];     // groups of run-indices still to merge this pass
+let autoTimer = null;
+
+function $(id){ return document.getElementById(id); }
+
+function makeData(){
+  // deterministic pseudo-random distinct-ish values
+  let a=[], seed=N*7+M*3+K;
+  for(let i=0;i<N;i++){ seed=(seed*1103515245+12345)&0x7fffffff; a.push(seed%90+10); }
+  return a;
+}
+
+function rebuild(){
+  stopAuto();
+  N=+$('nRange').value; M=+$('mRange').value; K=+$('kRange').value;
+  $('nLbl').textContent=N; $('mLbl').textContent=M; $('kLbl').textContent=K;
+  data=makeData();
+  runs=[]; phase='form'; formIdx=0; pass=1; ios=0;
+  mergeGroup=null; pendingRuns=[]; mergeQueue=[];
+  $('phaseVal').textContent='run formation';
+  $('passVal').textContent=1;
+  $('outLabel').style.display='none'; $('out').style.display='none';
+  $('stepBtn').disabled=false; $('runBtn').disabled=false;
+  render();
+  $('narration').innerHTML='Input has '+N+' elements. Memory holds M='+M+'. We will form ⌈N/M⌉='+Math.ceil(N/M)+' sorted runs, then merge '+K+' at a time.';
+  computeMath();
+}
+
+function render(){
+  const rc=$('runs'); rc.innerHTML='';
+  runs.forEach((r,idx)=>{
+    const d=document.createElement('div'); d.className='run';
+    if(mergeGroup && mergeGroup.srcRunIdx.includes(idx)) d.classList.add('active');
+    const id=document.createElement('div'); id.className='rid'; id.textContent='run '+(idx+1)+' ('+r.length+')'; d.appendChild(id);
+    const cells=document.createElement('div'); cells.className='cells';
+    r.forEach((v,ci)=>{ const c=document.createElement('div'); c.className='cell';
+      if(mergeGroup){ const gi=mergeGroup.srcRunIdx.indexOf(idx);
+        if(gi>=0){ if(ci<mergeGroup.ptrs[gi]) c.classList.add('taken'); else if(ci===mergeGroup.ptrs[gi]) c.classList.add('head'); } }
+      c.textContent=v; cells.appendChild(c); });
+    d.appendChild(cells); rc.appendChild(d);
+  });
+  $('runsVal').textContent=runs.length;
+  $('ioVal').textContent=ios;
+  if(mergeGroup){
+    $('outLabel').style.display='block'; $('out').style.display='flex';
+    const o=$('out'); o.innerHTML='';
+    mergeGroup.out.forEach(v=>{ const c=document.createElement('div'); c.className='cell'; c.textContent=v; o.appendChild(c); });
+  } else { $('outLabel').style.display='none'; $('out').style.display='none'; }
+}
+
+function step(){
+  if(phase==='form'){
+    // load next M elements, sort, append as a run
+    const chunk=data.slice(formIdx, formIdx+M).sort((a,b)=>a-b);
+    runs.push(chunk);
+    ios += chunk.length;     // read M + write M ~ count elements moved (illustrative)
+    formIdx += M;
+    $('narration').innerHTML='Run formation: loaded '+chunk.length+' elements, sorted in memory → wrote <b>run '+runs.length+'</b> = ['+chunk.join(', ')+'].';
+    if(formIdx>=N){
+      phase='merge'; $('phaseVal').textContent='merge'; pass=2; $('passVal').textContent=pass;
+      startMergePass();
+    }
+    render(); return;
+  }
+  if(phase==='merge'){
+    if(!mergeGroup){
+      if(mergeQueue.length===0){ endMergePass(); return; }
+      const idxs=mergeQueue.shift();
+      mergeGroup={ srcRunIdx:idxs, sources:idxs.map(i=>runs[i]), ptrs:idxs.map(()=>0), out:[] };
+      $('narration').innerHTML='Merging runs '+idxs.map(i=>i+1).join(', ')+' ('+idxs.length+'-way merge): repeatedly take the smallest head element.';
+      render(); return;
+    }
+    // pick smallest head among sources
+    let best=-1, bestVal=Infinity;
+    mergeGroup.sources.forEach((s,gi)=>{ const p=mergeGroup.ptrs[gi]; if(p<s.length && s[p]<bestVal){ bestVal=s[p]; best=gi; } });
+    if(best===-1){
+      // group done: commit merged run
+      pendingRuns.push(mergeGroup.out.slice());
+      ios += mergeGroup.out.length;   // write the merged run
+      $('narration').innerHTML='Finished a '+mergeGroup.srcRunIdx.length+'-way merge → new run of '+mergeGroup.out.length+' elements.';
+      mergeGroup=null; render(); return;
+    }
+    mergeGroup.out.push(bestVal); mergeGroup.ptrs[best]++; ios++;  // one element read+placed
+    render(); return;
+  }
+}
+
+function startMergePass(){
+  // partition current runs into groups of K
+  mergeQueue=[]; pendingRuns=[];
+  for(let i=0;i<runs.length;i+=K){ mergeQueue.push([...Array(Math.min(K,runs.length-i)).keys()].map(x=>i+x)); }
+  $('narration').innerHTML='Merge pass '+(pass-1)+': '+runs.length+' runs → groups of up to '+K+'.';
+}
+function endMergePass(){
+  runs=pendingRuns; pendingRuns=[];
+  if(runs.length<=1){
+    phase='done'; $('phaseVal').textContent='done ✓';
+    $('stepBtn').disabled=true; $('runBtn').disabled=true;
+    const sorted=runs.length===1 && runs[0].every((v,i,a)=>i===0||a[i-1]<=v);
+    $('narration').innerHTML='Sorted! One run of '+(runs[0]?runs[0].length:0)+' elements'+(sorted?' (verified ascending)':'')+
+      '. Total ≈ <b style="color:var(--purple)">'+ios+'</b> element-moves over <b>'+pass+'</b> passes — external sort needs only ⌈log_k(N/M)⌉+1 passes.';
+    render(); return;
+  }
+  pass++; $('passVal').textContent=pass;
+  startMergePass();
+  render();
+}
+
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(phase==='done'){ stopAuto(); return; } step(); }, 460 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+function runToEnd(){ stopAuto(); let guard=0; while(phase!=='done' && guard++<100000) step(); }
+
+function computeMath(){
+  const runsCount=Math.ceil(N/M);
+  const mergePasses=Math.ceil(Math.log(runsCount)/Math.log(K));
+  const total=mergePasses+1;
+  $('mathTable').innerHTML=
+    '<tr><td>initial sorted runs ⌈N/M⌉</td><td>'+runsCount+'</td></tr>'+
+    '<tr><td>merge fan-in k</td><td>'+K+'</td></tr>'+
+    '<tr><td>merge passes ⌈log_k(N/M)⌉</td><td>'+mergePasses+'</td></tr>'+
+    '<tr><td class="big">total passes (+1 run formation)</td><td class="big">'+total+'</td></tr>';
+  $('mathNote').innerHTML='Each merge pass cuts the run count by a factor k='+K+', so it takes only <b>'+mergePasses+
+    '</b> merge pass'+(mergePasses===1?'':'es')+' to collapse '+runsCount+' runs into one. In the real I/O model the fan-in is k = M/B (often thousands), so even terabytes sort in <b>one or two</b> merge passes — total cost <code>Θ((N/B)·log_{M/B}(N/B))</code>.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
