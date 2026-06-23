@@ -41,7 +41,7 @@ This file builds that intuition from the ground up. We start with an analogy —
 ## Prerequisites
 
 - **Required:** [The I/O Model](../01-the-io-model/junior.md). This file assumes you know the model's three parameters (`N`, `M`, `B`), its cost measure (count block transfers; in-memory work is free), and the three fundamental bounds: `scan(N) = Θ(N/B)`, `search = Θ(log_B N)`, `sort(N) = Θ((N/B)·log_{M/B}(N/B))`. We *reuse* all of it; we don't re-derive it.
-- **Required:** Comfort with **divide-and-conquer recursion** — splitting a problem in half, solving the halves, combining. This is the engine of the whole topic. See [Divide and Conquer](../../15-divide-and-conquer/junior.md).
+- **Required:** Comfort with **divide-and-conquer recursion** — splitting a problem in half, solving the halves, combining. This is the engine of the whole topic. See [Divide and Conquer: Merge Sort](../../15-divide-and-conquer/01-merge-sort/junior.md).
 - **Required:** Arrays laid out contiguously in memory (element `i` sits right after `i−1`), and how a 2D array is stored row-major (all of row 0, then all of row 1).
 - **Required:** Binary search trees and a root-to-leaf search — we contrast tree *memory layouts*.
 - **Helpful:** Having seen a B-tree, the canonical *cache-aware* structure we keep contrasting against. See [B-Tree I/O Analysis](../04-b-tree-io-analysis/junior.md).

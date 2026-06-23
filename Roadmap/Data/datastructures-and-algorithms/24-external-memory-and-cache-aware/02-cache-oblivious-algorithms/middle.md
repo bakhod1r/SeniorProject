@@ -121,7 +121,7 @@ A cache-oblivious algorithm is divide-and-conquer. Its recursion keeps subdividi
 
 This is the cache-oblivious twist on the master theorem. In a *time* recurrence the base case is `T(1) = O(1)`; here the base case is "small enough to be cache-resident," which terminates the recursion **early** — at size `Θ(B)` or `Θ(√M)` rather than `1`. The work *below* the base case (the entire subtree of recursion once the data fits) is **free**, because it all happens in cache. The crossover where the recurrence bottoms out is precisely where `M` (or `B`) enters the bound — even though the *code* never mentioned it.
 
-The recurrences below all have the shape `Q(n) = a · Q(n/b) + (cost of dividing/combining)`, solved by the standard recursion-tree or master-theorem method, but with the recursion **stopping at the cache-resident level**. Master-theorem mechanics live in [recurrence relations and the master theorem](../../06-algorithmic-complexity/04-recurrence-relations-and-master-theorem/middle.md); we apply them here with the non-trivial base cases.
+The recurrences below all have the shape `Q(n) = a · Q(n/b) + (cost of dividing/combining)`, solved by the standard recursion-tree or master-theorem method, but with the recursion **stopping at the cache-resident level**. Master-theorem mechanics live in [the master theorem](../../15-divide-and-conquer/03-master-theorem/middle.md); we apply them here with the non-trivial base cases.
 
 ---
 
