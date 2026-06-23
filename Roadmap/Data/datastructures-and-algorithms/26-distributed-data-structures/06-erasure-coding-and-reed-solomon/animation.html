@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Erasure Coding & Reed–Solomon — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.4em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .field { display:flex; gap:18px; flex-wrap:wrap; margin-bottom:10px; font-size:.85em; color:var(--text2); align-items:center;}
+  .field label { display:flex; align-items:center; gap:6px;}
+  .field input[type=range]{ accent-color:var(--blue); }
+  .disks { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:14px 0; }
+  .disk { width:84px; border:1px solid var(--border); border-radius:8px; padding:8px 6px; text-align:center; cursor:pointer; transition:all .2s; background:var(--bg);}
+  .disk .tag { font-size:.66em; color:var(--text2); text-transform:uppercase; letter-spacing:.04em;}
+  .disk .val { font-family:'Fira Code',monospace; font-size:1.15em; margin-top:4px;}
+  .disk.data { border-color:var(--blue);} .disk.data .val{ color:var(--blue);}
+  .disk.parity { border-color:var(--purple);} .disk.parity .val{ color:var(--purple);}
+  .disk.lost { border-style:dashed; opacity:.55; }
+  .disk.lost .val{ color:var(--red); }
+  .disk.recovered { border-color:var(--green); box-shadow:0 0 10px rgba(63,185,80,.4);} .disk.recovered .val{ color:var(--green);}
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 120px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.15em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Erasure Coding &amp; Reed–Solomon — Any <span style="color:var(--green)">k</span> of <span style="color:var(--blue)">n</span> Survive</h1>
+  <div class="subtitle">A file is split into <b>k</b> data symbols; Reed–Solomon adds <b>m = n−k</b> parity symbols computed over a finite field. Lose <b>any</b> up to m of the n disks and the original is recovered <b>exactly</b> by solving a small linear system. Click disks to fail them.</div>
+
+  <div class="panel">
+    <h2>(n, k) Reed–Solomon over GF(257)</h2>
+    <div class="field">
+      <label>k (data) <input type="range" id="k" min="2" max="5" value="3" oninput="rebuild()"></label>
+      <span id="kLbl"></span>
+      <label>m (parity) <input type="range" id="m" min="1" max="4" value="2" oninput="rebuild()"></label>
+      <span id="mLbl"></span>
+      <span id="ratioLbl" style="margin-left:auto;color:var(--text2)"></span>
+    </div>
+    <div class="controls">
+      <button class="btn" onclick="randomizeData()">Randomize data ⟳</button>
+      <button class="btn primary" id="recBtn" onclick="recover()">Recover lost disks ▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+    </div>
+
+    <div class="disks" id="disks"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">disks lost</div><div class="val" id="lostVal" style="color:var(--red)">0</div></div>
+      <div class="stat"><div class="lbl">fault tolerance (m)</div><div class="val" id="tolVal" style="color:var(--green)">2</div></div>
+      <div class="stat"><div class="lbl">storage overhead</div><div class="val" id="ovVal" style="color:var(--orange)">—</div></div>
+      <div class="stat"><div class="lbl">status</div><div class="val" id="statVal" style="font-size:.95em">ok</div></div>
+    </div>
+
+    <div class="narration" id="narration">Click any disks to simulate failures, then press <b>Recover</b>. Up to m losses are recoverable; the (m+1)-th loss is unrecoverable — exactly the MDS guarantee.</div>
+  </div>
+
+  <div class="panel">
+    <h2>How &quot;any k of n&quot; works</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+// Reed-Solomon over prime field GF(p), p=257 (so each symbol is a byte 0..255; 256 also fits but keep <p).
+// Encoding (systematic via evaluation form): treat data d[0..k-1] as the values of a degree<k polynomial
+// at points x=0..k-1 (so data disks ARE the data). Parity disks are the polynomial evaluated at x=k..n-1,
+// where the polynomial is the Lagrange interpolation through (0,d0)...(k-1,d_{k-1}).
+// Recovery: from ANY k surviving (x,value) pairs, interpolate the polynomial, then evaluate anywhere.
+const P=257;
+let k, m, n, data, codeword, lost, recovered;
+
+function $(id){ return document.getElementById(id); }
+function mod(a){ a%=P; return a<0?a+P:a; }
+function inv(a){ // modular inverse via Fermat (P prime)
+  let r=1, b=mod(a), e=P-2;
+  while(e>0){ if(e&1) r=mod(r*b); b=mod(b*b); e>>=1; }
+  return r;
+}
+// Lagrange interpolation: given points [{x,y}], evaluate the interpolating polynomial at X.
+function interpAt(points, X){
+  let total=0;
+  for(let i=0;i<points.length;i++){
+    let num=1, den=1;
+    for(let j=0;j<points.length;j++){ if(j===i) continue;
+      num=mod(num*mod(X-points[j].x));
+      den=mod(den*mod(points[i].x-points[j].x));
+    }
+    total=mod(total + mod(points[i].y * mod(num*inv(den))));
+  }
+  return total;
+}
+
+function encode(){
+  // points (x=0..k-1, y=data) define the polynomial; data disks hold y=data directly (systematic in eval form)
+  const pts=data.map((y,x)=>({x,y}));
+  codeword=new Array(n);
+  for(let x=0;x<k;x++) codeword[x]=data[x];               // data symbols
+  for(let x=k;x<n;x++) codeword[x]=interpAt(pts, x);      // parity symbols
+}
+
+function rebuild(){
+  k=+$('k').value; m=+$('m').value; n=k+m;
+  $('kLbl').textContent='= '+k;
+  $('mLbl').textContent='= '+m;
+  $('ratioLbl').textContent='n = '+n+'  ·  overhead = n/k = '+(n/k).toFixed(2)+'×';
+  if(!data || data.length!==k) data=defaultData(k);
+  lost=new Set(); recovered=new Set();
+  encode();
+  $('lostVal').textContent='0';
+  $('tolVal').textContent=m;
+  $('ovVal').textContent=(n/k).toFixed(2)+'×';
+  $('statVal').innerHTML='<span style="color:var(--green)">ok</span>';
+  $('recBtn').disabled=true;
+  render();
+  $('narration').innerHTML='Encoded '+k+' data symbols into '+n+' total ('+m+' parity). Click disks to fail up to '+m+' of them, then Recover. (Overhead '+(n/k).toFixed(2)+'× vs 3.00× for triple replication at similar fault tolerance.)';
+  noteText();
+}
+function defaultData(kk){ const base=[83, 12, 200, 47, 159]; return base.slice(0,kk); }
+function randomizeData(){ // deterministic "random" so resume-safe; rotate values
+  data=data.map((v,i)=>mod(v*7 + 11 + i*29));
+  encode(); lost=new Set(); recovered=new Set();
+  render(); $('narration').innerHTML='New data symbols. Re-encoded. Fail some disks and recover.';
+  $('recBtn').disabled=true; $('lostVal').textContent='0'; $('statVal').innerHTML='<span style="color:var(--green)">ok</span>';
+}
+
+function toggle(i){
+  if(recovered.size) { recovered=new Set(); } // start a new scenario after a recovery
+  if(lost.has(i)) lost.delete(i); else lost.add(i);
+  $('lostVal').textContent=lost.size;
+  const survive=n-lost.size;
+  $('recBtn').disabled = lost.size===0;
+  if(lost.size>m){ $('statVal').innerHTML='<span style="color:var(--red)">UNRECOVERABLE ('+lost.size+'>'+m+')</span>';
+    $('narration').innerHTML='You have lost <b>'+lost.size+'</b> disks but only have '+m+' parity. Fewer than k='+k+' survive ⇒ the polynomial is under-determined ⇒ <b>data is gone</b>. This is the hard MDS limit: tolerate exactly m, no more.';
+  } else { $('statVal').innerHTML='<span style="color:var(--orange)">'+lost.size+' lost — recoverable</span>';
+    $('narration').innerHTML='Lost '+lost.size+' of '+n+'. Still '+survive+' ≥ k='+k+' survivors, so any k of them pin down the degree-'+(k-1)+' polynomial. Press <b>Recover</b>.';
+  }
+  render();
+}
+
+function recover(){
+  if(lost.size>m){ $('narration').innerHTML='Cannot recover: more than m='+m+' disks lost. Un-fail one and try again.'; return; }
+  // gather any k surviving (x, value) pairs
+  const survivors=[];
+  for(let x=0;x<n;x++) if(!lost.has(x)){ survivors.push({x, y:codeword[x]}); if(survivors.length===k) break; }
+  // reconstruct each lost symbol by interpolating at its x
+  recovered=new Set();
+  let ok=true;
+  for(const x of lost){
+    const val=interpAt(survivors, x);
+    if(val!==codeword[x]) ok=false;
+    recovered.add(x);
+  }
+  render();
+  $('statVal').innerHTML = ok ? '<span style="color:var(--green)">RECOVERED ✓</span>' : '<span style="color:var(--red)">error</span>';
+  $('narration').innerHTML = ok
+    ? 'Recovered <b>'+lost.size+'</b> lost symbol'+(lost.size>1?'s':'')+' byte-exactly. Took any <b>k='+k+'</b> survivors as (x, value) points, Lagrange-interpolated the unique degree-'+(k-1)+' polynomial, and evaluated it at the missing positions. The reconstructed bytes equal the originals — that is the Reed–Solomon guarantee.'
+    : 'Reconstruction mismatch (should not happen for ≤ m losses).';
+  lost=new Set(); $('lostVal').textContent='0'; $('recBtn').disabled=true;
+}
+
+function render(){
+  const root=$('disks'); let html='';
+  for(let x=0;x<n;x++){
+    const isData=x<k;
+    let cls='disk '+(isData?'data':'parity');
+    if(lost.has(x)) cls+=' lost';
+    if(recovered.has(x)) cls='disk '+(isData?'data':'parity')+' recovered';
+    const label=isData?('D'+x):('P'+(x-k));
+    const shown = lost.has(x) ? '✗' : codeword[x];
+    html+='<div class="'+cls+'" onclick="toggle('+x+')" title="x='+x+'">'+
+      '<div class="tag">'+label+' · x='+x+'</div><div class="val">'+shown+'</div></div>';
+  }
+  root.innerHTML=html;
+}
+
+function noteText(){
+  $('note').innerHTML =
+    'The k data symbols define a polynomial of degree at most k−1 (here by treating each data symbol as the polynomial\'s value at x = 0, 1, …, k−1). The n codeword symbols are that polynomial evaluated at n distinct points; the first k points <i>are</i> the data (a <b>systematic</b> code), the rest are parity.<br>'+
+    '<b>The magic:</b> a degree-(k−1) polynomial is uniquely fixed by <b>any k</b> of its (point, value) pairs. So as long as <b>k of the n</b> symbols survive, you interpolate the exact same polynomial and re-evaluate it to rebuild every lost symbol — tolerating any <b>m = n − k</b> failures. This is the optimal (MDS / Singleton-bound) trade-off.<br>'+
+    '<b>Why a finite field?</b> Real coders use GF(2⁸) (one byte per symbol, addition = XOR) so arithmetic is exact and overflow-free; this demo uses the prime field GF(257) for readable decimal numbers. The same algebra, smaller alphabet.<br>'+
+    'Storage cost is n/k (e.g. (10,4) → 1.4×) versus 3× for triple replication — roughly half the disks for comparable durability. The trade-off you pay back is <b>repair bandwidth</b>: rebuilding one symbol reads k others, which is why production systems add Local Reconstruction Codes (Azure LRC) on top.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
