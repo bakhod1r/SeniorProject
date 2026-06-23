@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>State-based vs Operation-based CRDTs — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.45em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display:flex; gap:18px; flex-wrap:wrap; margin-bottom: 10px; font-size:.85em; color: var(--text2);}
+  .field label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .seg button { background:var(--bg3); border:none; color:var(--text2); padding:6px 14px; cursor:pointer; font-size:.84em; }
+  .seg button.on { background:rgba(88,166,255,.18); color:var(--blue); }
+  .reps { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px){ .reps { grid-template-columns: 1fr; } }
+  .rep { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; transition: border-color .2s, box-shadow .2s;}
+  .rep h3 { font-size: 0.8em; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; text-align:center;}
+  .rep.flash { border-color: var(--blue); box-shadow: 0 0 12px rgba(88,166,255,.4); }
+  .bigval { font-family:'Fira Code',monospace; font-size:1.7em; text-align:center; color:var(--green); margin:4px 0;}
+  .bigval.bad { color: var(--red); }
+  .replog { font-size:.72em; color:var(--text2); font-family:'Fira Code',monospace; min-height:18px; text-align:center;}
+  .channel { margin-top:10px; min-height:60px; background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:8px; }
+  .msg { display:inline-block; font-family:'Fira Code',monospace; font-size:.74em; padding:3px 8px; margin:3px; border-radius:5px; border:1px solid var(--border); }
+  .msg.state { color:var(--purple); border-color:var(--purple);}
+  .msg.op { color:var(--orange); border-color:var(--orange);}
+  .msg.dup { border-style:dashed; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 120px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.15em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>State-based vs Operation-based CRDTs</h1>
+  <div class="subtitle">Both replicas run a counter and the channel is hostile: it <b>reorders</b> and <b>duplicates</b> messages. A <b>state-based</b> CRDT merges whole states by a join (idempotent) and shrugs it off. A naive <b>operation-based</b> counter applies each delivered op — so a <b>duplicate increment double-counts</b>.</div>
+
+  <div class="panel">
+    <h2>Same workload, two replication models, a flaky channel</h2>
+    <div class="field">
+      <span>model:</span>
+      <span class="seg">
+        <button id="segState" class="on" onclick="setModel('state')">state-based (merge=join)</button>
+        <button id="segOp" onclick="setModel('op')">operation-based (apply op)</button>
+      </span>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="dup" checked onchange="rebuild()"> channel <b>duplicates</b> messages</label>
+      <label><input type="checkbox" id="reorder" checked onchange="rebuild()"> channel <b>reorders</b> messages</label>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="450"></div>
+    </div>
+
+    <div class="reps" id="reps"></div>
+    <div class="channel" id="channel"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">messages delivered</div><div class="val" id="delVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">true total (R1+R2 increments)</div><div class="val" id="trueVal" style="color:var(--blue)">5</div></div>
+      <div class="stat"><div class="lbl">result</div><div class="val" id="resVal">—</div></div>
+    </div>
+
+    <div class="narration" id="narration">Each replica locally incremented its own counter. Now the channel delivers sync messages in a shuffled order, some twice. Step through and watch whether the model survives.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Why the join survives what the op cannot</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+// Two replicas each do some increments to their OWN G-Counter slot.
+// R1 increments 3 times, R2 increments 2 times. True total = 5.
+const INC = [3, 2];
+let model='state';
+let autoTimer=null;
+
+// state-based: each replica state = vector [r1,r2]; merge = elementwise max; value = sum.
+// op-based: each replica holds an integer; an op "inc r by 1" adds 1 on apply (naive: no dedup).
+let stateVec, opVal;        // per replica
+let queue, delivered, flashId, applied; // applied: track op ids applied per replica (for honest "what naive does")
+
+function $(id){ return document.getElementById(id); }
+
+function setModel(m){
+  model=m;
+  $('segState').classList.toggle('on', m==='state');
+  $('segOp').classList.toggle('on', m==='op');
+  rebuild();
+}
+
+function buildQueue(){
+  // Each replica announces its updates to the other.
+  // state-based: one message per replica carrying its FULL vector (re-read live at delivery).
+  // op-based: one message per increment carrying "inc replica r" (id = r:k).
+  const dup = $('dup').checked, reorder = $('reorder').checked;
+  let msgs=[];
+  if(model==='state'){
+    // R1->R2 and R2->R1 full-state syncs; do a couple rounds so it's interesting
+    for(let round=0; round<2; round++){
+      msgs.push({kind:'state', from:0, to:1});
+      msgs.push({kind:'state', from:1, to:0});
+    }
+  } else {
+    for(let r=0;r<2;r++) for(let k=0;k<INC[r];k++){
+      const to = 1-r;
+      msgs.push({kind:'op', from:r, to, id:r+':'+k});
+    }
+  }
+  if(dup){ // duplicate roughly half
+    const extra=[]; msgs.forEach((m,i)=>{ if(i%2===0) extra.push({...m, isDup:true}); });
+    msgs = msgs.concat(extra);
+  }
+  if(reorder){ for(let i=msgs.length-1;i>0;i--){ const j=(i*5+2)%(i+1); const t=msgs[i]; msgs[i]=msgs[j]; msgs[j]=t; } }
+  return msgs;
+}
+
+function rebuild(){
+  stopAuto();
+  stateVec = [[INC[0],0],[0,INC[1]]];   // R1 knows its 3; R2 knows its 2
+  opVal = [INC[0], INC[1]];             // op-based local integers (each has only its own so far)
+  applied = [new Set(), new Set()];     // ids each replica has already applied (we DON'T use this to dedup in naive mode; shown for honesty)
+  queue = buildQueue();
+  delivered=0; flashId=-1;
+  $('delVal').textContent='0';
+  $('trueVal').textContent = INC[0]+INC[1];
+  $('resVal').innerHTML='—';
+  $('stepBtn').disabled=false;
+  render();
+  $('narration').innerHTML = model==='state'
+    ? 'STATE-BASED: R1 = [3,0], R2 = [0,2]. Each sync ships the whole vector; the receiver takes the <b>elementwise max</b> (the lattice join). Re-applying a stale or duplicate vector changes nothing — the join is idempotent.'
+    : 'OPERATION-BASED (naive): each increment is broadcast as one "inc" message. The receiver simply adds 1 on delivery — with <b>no dedup</b>, a duplicated message will be counted twice.';
+  noteText();
+}
+
+function repValue(i){
+  if(model==='state') return stateVec[i][0]+stateVec[i][1];
+  return opVal[i];
+}
+
+function render(){
+  const reps=$('reps'); let html='';
+  for(let i=0;i<2;i++){
+    const cls = 'rep' + (i===flashId?' flash':'');
+    const detail = model==='state' ? '[ '+stateVec[i].join(', ')+' ]' : 'integer';
+    const v = repValue(i);
+    const bad = (delivered>0 && queue.length===0 && v!==INC[0]+INC[1]);
+    html += '<div class="'+cls+'"><h3>Replica '+(i+1)+'</h3>'+
+      '<div class="bigval'+(bad?' bad':'')+'">'+v+'</div>'+
+      '<div class="replog">'+detail+'</div></div>';
+  }
+  reps.innerHTML=html;
+  // channel
+  const ch=$('channel');
+  ch.innerHTML = queue.length
+    ? queue.map((m,i)=>{
+        const label = m.kind==='state' ? ('R'+(m.from+1)+'→R'+(m.to+1)+' state['+stateVec[m.from].join(',')+']')
+                                       : ('R'+(m.from+1)+'→R'+(m.to+1)+' inc('+m.id+')');
+        return '<span class="msg '+m.kind+(m.isDup?' dup':'')+'"'+(i===0?' style="outline:1px solid var(--blue)"':'')+'>'+label+(m.isDup?' ·dup':'')+'</span>';
+      }).join('')
+    : '<span style="color:var(--text2);font-size:.8em">channel empty — all messages delivered</span>';
+}
+
+function step(){
+  if(queue.length===0){ finish(); return; }
+  const m=queue.shift();
+  flashId=m.to;
+  delivered++;
+  $('delVal').textContent=delivered;
+  if(m.kind==='state'){
+    const before = stateVec[m.to].slice();
+    stateVec[m.to] = [Math.max(stateVec[m.to][0], stateVec[m.from][0]),
+                      Math.max(stateVec[m.to][1], stateVec[m.from][1])];
+    const changed = before[0]!==stateVec[m.to][0] || before[1]!==stateVec[m.to][1];
+    $('narration').innerHTML = 'R'+(m.from+1)+'→R'+(m.to+1)+': merge by elementwise max → ['+stateVec[m.to].join(', ')+']. '+
+      (changed ? 'Absorbed new information.' : '<b>No change</b> — R'+(m.to+1)+' already had ≥ these values. Duplicates/stale states are <b>idempotent</b>: harmless.');
+  } else {
+    // naive op-based: ALWAYS add 1 on delivery (no dedup) — this is the bug we are demonstrating
+    opVal[m.to] += 1;
+    const wasDup = m.isDup;
+    $('narration').innerHTML = 'R'+(m.from+1)+'→R'+(m.to+1)+': apply inc('+m.id+') → '+opVal[m.to]+'. '+
+      (wasDup ? '<b>This was a DUPLICATE</b> — but the naive effector added 1 again. The count is now inflated.' : 'Applied the increment.');
+  }
+  render();
+  if(queue.length===0) finish();
+}
+
+function finish(){
+  $('stepBtn').disabled=true; flashId=-1;
+  const truth = INC[0]+INC[1];
+  const v1=repValue(0), v2=repValue(1);
+  const converged = (v1===v2);
+  const correct = (v1===truth && v2===truth);
+  $('resVal').innerHTML = correct ? '<span style="color:var(--green)">'+truth+' ✓ correct</span>'
+                   : converged ? '<span style="color:var(--red)">'+v1+' ✗ inflated</span>'
+                               : '<span style="color:var(--red)">diverged</span>';
+  render();
+  if(model==='state'){
+    $('narration').innerHTML = 'Both replicas converged to <code>[3, 2]</code> → value <b>'+truth+'</b>, the correct total — despite reordering and duplication. The merge is a <b>join</b> (commutative, associative, <b>idempotent</b>), so a flaky at-least-once channel is enough.';
+  } else {
+    if(correct){
+      $('narration').innerHTML = 'With no duplication/reorder the naive op-based counter happened to land on '+truth+'. Turn on <b>duplicates</b> and reset: a redelivered increment will be counted twice. Op-based needs <b>exactly-once</b> (or idempotent ops) — a guarantee the channel must provide.';
+    } else {
+      $('narration').innerHTML = 'The naive op-based counter reads <b>'+Math.max(v1,v2)+'</b>, but the true total is <b>'+truth+'</b>. A <b>duplicated</b> "inc" was applied twice. Fix: dedup by op-id (exactly-once) or make the op idempotent. <i>This is the price op-based pays for tiny messages.</i>';
+    }
+  }
+}
+
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if($('stepBtn').disabled){ stopAuto(); return; } step(); }, 1000 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function noteText(){
+  $('note').innerHTML =
+    '<b>State-based (CvRDT).</b> A message carries the replica\'s whole state; the receiver merges with the <b>least upper bound</b> of the lattice. Because the join is idempotent, commutative and associative, the network may <b>lose, duplicate, or reorder</b> messages freely — any gossip schedule converges. Cost: messages are O(state).<br>'+
+    '<b>Operation-based (CmRDT).</b> A message carries just the operation; the receiver applies its effect. Messages are tiny, but convergence now depends on the <b>delivery layer</b>: every op must reach every replica <b>exactly once, in causal order</b> (or the op must itself be idempotent). A duplicated non-idempotent increment double-counts — exactly what you see above.<br>'+
+    'Same data type, two cost models: <i>fat messages + dumb network</i> vs <i>thin messages + smart network</i>. Delta-state CRDTs aim for the best of both — op-sized messages with state-based fault tolerance.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
