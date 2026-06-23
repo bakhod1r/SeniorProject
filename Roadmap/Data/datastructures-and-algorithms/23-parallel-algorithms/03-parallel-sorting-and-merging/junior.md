@@ -46,7 +46,7 @@ We'll build the whole picture from the ground up. We'll watch parallel merge sor
 
 - **Required:** The **work–span model** — work `T₁` (total operations = time on one processor), span `T∞` (longest dependency chain = time on infinitely many processors), and **parallelism `= T₁/T∞`**. It's all set up in [Models of Parallel Computation: PRAM and Work–Span](../01-models-pram-work-span/junior.md), and we use it on every algorithm here.
 - **Required:** **Serial merge sort** — split in half, sort each half, merge. And the **two-pointer merge** of two sorted arrays. We parallelize exactly this. See [Merge Sort](../../07-sorting-algorithms/02-merge-sort/junior.md).
-- **Required:** **Binary search** — finding where a value fits in a *sorted* array in `Θ(log n)` steps. The parallel merge is built entirely out of binary searches. See [Binary Search](../../05-searching-algorithms/01-binary-search/junior.md) if it's rusty.
+- **Required:** **Binary search** — finding where a value fits in a *sorted* array in `Θ(log n)` steps. The parallel merge is built entirely out of binary searches. See [Binary Search](../../08-search-algorithms/02-binary-search/junior.md) if it's rusty.
 - **Required:** That a comparison sort needs `Θ(n log n)` comparisons (the lower bound) — so when we talk about "extra work," you know what baseline we're measuring against.
 - **Helpful:** **Parallel scan** from [the previous topic](../02-parallel-prefix-sum-scan/junior.md) — sample sort uses a scan to compute bucket offsets, and the "looks sequential but isn't" mindset transfers directly.
 - **Helpful:** A vague picture of "running many threads/goroutines at once." We describe algorithms abstractly and analyze their DAGs, so no real threading is needed to follow along.
