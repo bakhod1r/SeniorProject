@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paging: Online Policies vs Belady's Optimum — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn.adv { background: rgba(248,81,73,0.13); border-color: var(--red); color: var(--red); }
+  .btn.adv:hover { background: rgba(248,81,73,0.22); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+
+  .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-btn {
+    background: var(--bg3); border: 2px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8em; transition: all 0.2s; text-align: left;
+  }
+  .preset-btn:hover { border-color: var(--blue); }
+  .preset-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.1); color: var(--blue); }
+  .preset-btn .label { font-weight: bold; display: block; }
+  .preset-btn .sub { color: var(--text2); font-size: 0.86em; }
+
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field label { font-family: 'Fira Code', monospace; }
+  .field input[type=range] { width: 160px; accent-color: var(--blue); }
+  .field .val { font-family: 'Fira Code', monospace; color: var(--blue); font-weight: bold; min-width: 24px; }
+
+  /* request stream */
+  .stream-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; }
+  .stream-label { font-size: 0.76em; color: var(--text2); margin-bottom: 8px; font-family: 'Fira Code', monospace; }
+  .stream { display: flex; gap: 4px; }
+  .req {
+    min-width: 30px; height: 36px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-family: 'Fira Code', monospace; font-size: 0.92em; font-weight: bold; color: var(--text2);
+    transition: all 0.2s; flex-shrink: 0; position: relative;
+  }
+  .req.done { color: var(--text); opacity: 0.6; }
+  .req.current { box-shadow: 0 0 0 2px var(--blue); background: rgba(88,166,255,0.18); color: var(--blue); opacity: 1; transform: scale(1.1); }
+
+  /* lanes */
+  .lanes { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .lane { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .lane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+  .lane-title { font-family: 'Fira Code', monospace; font-weight: bold; font-size: 0.94em; }
+  .lane-title .tag { font-size: 0.72em; color: var(--text2); font-weight: normal; margin-left: 6px; }
+  .lane.lru .lane-title { color: var(--blue); }
+  .lane.fifo .lane-title { color: var(--orange); }
+  .lane.opt .lane-title { color: var(--purple); }
+  .lane-stats { font-family: 'Fira Code', monospace; font-size: 0.8em; color: var(--text2); }
+  .lane-stats b { color: var(--text); }
+  .lane-stats .faults { color: var(--red); }
+  .lane-stats .hits { color: var(--green); }
+  .slots { display: flex; gap: 6px; align-items: center; }
+  .slot {
+    width: 46px; height: 46px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-family: 'Fira Code', monospace; font-size: 1em; font-weight: bold; color: var(--text2);
+    transition: all 0.25s; position: relative;
+  }
+  .slot.filled { color: var(--text); border-color: var(--border); background: var(--bg2); }
+  .slot.hit { background: rgba(63,185,80,0.2); border-color: var(--green); color: var(--green); transform: scale(1.08); }
+  .slot.inserted { background: rgba(88,166,255,0.22); border-color: var(--blue); color: var(--blue); transform: scale(1.08); }
+  .slot.evicting { background: rgba(248,81,73,0.22); border-color: var(--red); color: var(--red); }
+  .slot .meta { position: absolute; bottom: -15px; font-size: 0.6em; color: var(--text2); font-weight: normal; white-space: nowrap; }
+  .lane-result { font-family: 'Fira Code', monospace; font-size: 0.82em; margin-left: auto; min-width: 56px; text-align: right; }
+  .lane-result.hit { color: var(--green); }
+  .lane-result.fault { color: var(--red); }
+  .slots-row { display: flex; align-items: center; gap: 14px; margin-top: 4px; margin-bottom: 6px; }
+
+  /* ratio summary */
+  .ratios { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 4px 0 12px; }
+  .ratio-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .ratio-box .value { font-size: 1.3em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .ratio-box.lru .value { color: var(--blue); }
+  .ratio-box.fifo .value { color: var(--orange); }
+  .ratio-box.opt .value { color: var(--purple); }
+  .ratio-box .label { font-size: 0.68em; color: var(--text2); margin-top: 2px; }
+  .ratio-box .ksub { font-size: 0.66em; color: var(--text2); margin-top: 2px; font-family: 'Fira Code', monospace; }
+
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.86em; line-height: 1.55; margin-top: 8px; min-height: 84px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .lru { color: var(--blue); font-weight: bold; }
+  .narration .fifo { color: var(--orange); font-weight: bold; }
+  .narration .opt { color: var(--purple); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); font-size: 0.92em; }
+
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.74em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 820px){ .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Paging: Online Policies vs Belady's Optimum</h1>
+<p class="subtitle">LRU and FIFO decide blind; Belady's OPT sees the future and evicts the page used farthest ahead</p>
+
+<div class="container">
+
+  <div class="panel">
+    <h2>Setup</h2>
+    <div class="preset-btns" id="presets"></div>
+    <div class="field">
+      <label>cache size k =</label>
+      <input type="range" id="kSlider" min="2" max="5" value="3">
+      <span class="val" id="kVal">3</span>
+      <span style="font-size:0.92em">slots per policy</span>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btnStep" onclick="step()">Next Request &raquo;</button>
+      <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+      <button class="btn" id="btnRun" onclick="runAll()">Run to End</button>
+      <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+      <div class="speed-control">
+        <label>Speed</label>
+        <input type="range" id="speedSlider" min="1" max="10" value="6">
+      </div>
+    </div>
+    <div class="stream-box">
+      <div class="stream-label" id="streamLabel">request sequence</div>
+      <div class="stream" id="stream"></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--green)"></span>hit</span>
+      <span><span class="dot" style="background:var(--blue)"></span>inserted (fault)</span>
+      <span><span class="dot" style="background:var(--red)"></span>evicted</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Three Caches, One Stream</h2>
+    <div class="claim">
+      <b>LRU</b> evicts the <i>least recently used</i> page. <b>FIFO</b> evicts the <i>oldest inserted</i> page (insertion order, ignores reuse).
+      <b>OPT (Belady)</b> evicts the page whose <i>next use is farthest in the future</i> (or never used again) — provably optimal, but it must
+      <b>see the whole future</b>, so it is an offline-only baseline.
+    </div>
+    <div class="lanes" id="lanes"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Faults &amp; Competitive Ratio</h2>
+    <div class="ratios" id="ratios"></div>
+    <div class="narration" id="narration"></div>
+  </div>
+
+</div>
+
+<script>
+// ===================== PRESETS =====================
+// Each preset returns a sequence of page labels (strings).
+const PRESETS = [
+  {
+    id: 'locality',
+    label: 'Locality',
+    sub: 'reuses fit in cache → LRU ≈ OPT',
+    seq: ['A','B','C','A','B','C','A','D','A','D','B','C','B','C','A','B'],
+    k: 3
+  },
+  {
+    id: 'adversarial',
+    label: 'Adversarial (anti-LRU)',
+    sub: 'cycles k+1 pages → LRU faults every step',
+    // built dynamically from k: A B C D A B C D ...
+    dynamic: 'adversarial',
+    k: 3
+  },
+  {
+    id: 'belady',
+    label: "Belady's Anomaly (FIFO)",
+    sub: 'classic 1,2,3,4,1,2,5,1,2,3,4,5',
+    seq: ['1','2','3','4','1','2','5','1','2','3','4','5'],
+    k: 3
+  },
+  {
+    id: 'random',
+    label: 'Random',
+    sub: 'fresh random stream',
+    dynamic: 'random',
+    k: 3
+  }
+];
+
+// ===================== STATE =====================
+let k = 3;
+let seq = [];
+let pos = -1;             // index of current request (last processed)
+let activePreset = 'locality';
+let playing = false, timer = null;
+
+// Per-policy state. cache = array of page labels (length <= k). order info tracked separately.
+let policies = {};
+
+function newPolicyState() {
+  return { cache: [], faults: 0, hits: 0, lastResult: null, lastEvicted: null, lastInserted: null, lastHitPage: null,
+           lru: [], /* recency list: most-recent at end */ fifo: [] /* insertion order: oldest at front */ };
+}
+
+function resetPolicies() {
+  policies = { lru: newPolicyState(), fifo: newPolicyState(), opt: newPolicyState() };
+}
+
+// ===================== POLICY STEP FUNCTIONS =====================
+// Each returns { hit, evicted, inserted }.
+
+function stepLRU(p, page) {
+  const idx = p.cache.indexOf(page);
+  if (idx !== -1) {
+    // hit: refresh recency
+    p.lru = p.lru.filter(x => x !== page); p.lru.push(page);
+    p.hits++; p.lastResult = 'hit'; p.lastEvicted = null; p.lastInserted = null; p.lastHitPage = page;
+    return;
+  }
+  // fault
+  p.faults++; p.lastResult = 'fault'; p.lastHitPage = null;
+  let evicted = null;
+  if (p.cache.length >= k) {
+    // evict least-recently-used = front of lru list
+    evicted = p.lru.shift();
+    p.cache = p.cache.filter(x => x !== evicted);
+  }
+  p.cache.push(page); p.lru.push(page);
+  p.lastEvicted = evicted; p.lastInserted = page;
+}
+
+function stepFIFO(p, page) {
+  const idx = p.cache.indexOf(page);
+  if (idx !== -1) {
+    // hit: FIFO does NOT change order on reuse
+    p.hits++; p.lastResult = 'hit'; p.lastEvicted = null; p.lastInserted = null; p.lastHitPage = page;
+    return;
+  }
+  p.faults++; p.lastResult = 'fault'; p.lastHitPage = null;
+  let evicted = null;
+  if (p.cache.length >= k) {
+    evicted = p.fifo.shift();           // oldest inserted
+    p.cache = p.cache.filter(x => x !== evicted);
+  }
+  p.cache.push(page); p.fifo.push(page);
+  p.lastEvicted = evicted; p.lastInserted = page;
+}
+
+// Belady / Longest-Forward-Distance. Needs the future (seq + current index i).
+function stepOPT(p, page, i) {
+  const idx = p.cache.indexOf(page);
+  if (idx !== -1) {
+    p.hits++; p.lastResult = 'hit'; p.lastEvicted = null; p.lastInserted = null; p.lastHitPage = page;
+    return;
+  }
+  p.faults++; p.lastResult = 'fault'; p.lastHitPage = null;
+  let evicted = null, evictReason = '';
+  if (p.cache.length >= k) {
+    // For each cached page, find next-use distance after i. Evict farthest (or never-again).
+    let victim = null, victimDist = -1, victimNever = false;
+    for (const c of p.cache) {
+      let next = -1;
+      for (let j = i + 1; j < seq.length; j++) { if (seq[j] === c) { next = j; break; } }
+      if (next === -1) { victim = c; victimNever = true; break; } // never used again → evict immediately
+      if (next > victimDist) { victimDist = next; victim = c; }
+    }
+    evicted = victim;
+    evictReason = victimNever ? 'never used again' : 'used farthest ahead';
+    p.cache = p.cache.filter(x => x !== evicted);
+  }
+  p.cache.push(page);
+  p.lastEvicted = evicted; p.lastInserted = page; p.lastEvictReason = evictReason;
+}
+
+// ===================== DRIVER =====================
+function step() {
+  if (pos >= seq.length - 1) return;
+  pos++;
+  const page = seq[pos];
+  stepLRU(policies.lru, page);
+  stepFIFO(policies.fifo, page);
+  stepOPT(policies.opt, page, pos);
+  render();
+  narrateStep(page);
+  if (pos >= seq.length - 1) { stopPlay(); narrateFinal(); }
+}
+
+function runAll() {
+  stopPlay();
+  while (pos < seq.length - 1) {
+    pos++;
+    const page = seq[pos];
+    stepLRU(policies.lru, page);
+    stepFIFO(policies.fifo, page);
+    stepOPT(policies.opt, page, pos);
+  }
+  render();
+  narrateFinal();
+}
+
+// ===================== RENDER =====================
+function render() {
+  // stream
+  const s = document.getElementById('stream');
+  s.innerHTML = '';
+  seq.forEach((pg, i) => {
+    const d = document.createElement('div');
+    d.className = 'req' + (i < pos ? ' done' : '') + (i === pos ? ' current' : '');
+    d.textContent = pg;
+    s.appendChild(d);
+  });
+  // scroll current into view
+  const cur = s.querySelector('.current');
+  if (cur) cur.scrollIntoView({ inline: 'center', block: 'nearest' });
+
+  document.getElementById('streamLabel').textContent =
+    pos < 0 ? `request sequence (${seq.length} requests, k=${k}) — press Next Request`
+            : `request ${pos + 1} / ${seq.length}: page ${seq[pos]}`;
+
+  renderLanes();
+  renderRatios();
+}
+
+const LANE_DEFS = [
+  { id: 'lru',  cls: 'lru',  name: 'LRU',  tag: 'least recently used' },
+  { id: 'fifo', cls: 'fifo', name: 'FIFO', tag: 'oldest inserted' },
+  { id: 'opt',  cls: 'opt',  name: 'OPT',  tag: 'Belady — farthest future' }
+];
+
+function renderLanes() {
+  const wrap = document.getElementById('lanes');
+  wrap.innerHTML = '';
+  LANE_DEFS.forEach(def => {
+    const p = policies[def.id];
+    const lane = document.createElement('div');
+    lane.className = 'lane ' + def.cls;
+
+    const head = document.createElement('div');
+    head.className = 'lane-head';
+    head.innerHTML =
+      `<span class="lane-title">${def.name}<span class="tag">${def.tag}</span></span>` +
+      `<span class="lane-stats">faults <b class="faults">${p.faults}</b> &nbsp; hits <b class="hits">${p.hits}</b></span>`;
+    lane.appendChild(head);
+
+    const row = document.createElement('div');
+    row.className = 'slots-row';
+    const slots = document.createElement('div');
+    slots.className = 'slots';
+
+    // Build a stable slot view: show current cache contents padded to k.
+    // Order LRU by recency (oldest→newest), FIFO by insertion (oldest→newest), OPT by insertion order in cache array.
+    let view;
+    if (def.id === 'lru') view = p.lru.slice();
+    else if (def.id === 'fifo') view = p.fifo.slice();
+    else view = p.cache.slice();
+
+    for (let i = 0; i < k; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      const pg = view[i];
+      if (pg !== undefined) {
+        slot.classList.add('filled');
+        slot.textContent = pg;
+        if (pos >= 0) {
+          if (p.lastResult === 'hit' && pg === p.lastHitPage) slot.classList.add('hit');
+          else if (p.lastResult === 'fault' && pg === p.lastInserted) slot.classList.add('inserted');
+        }
+      } else {
+        slot.textContent = '·';
+      }
+      slots.appendChild(slot);
+    }
+    row.appendChild(slots);
+
+    // result + eviction note
+    const res = document.createElement('div');
+    res.className = 'lane-result ' + (p.lastResult || '');
+    if (pos < 0 || p.lastResult === null) res.textContent = '';
+    else if (p.lastResult === 'hit') res.textContent = 'HIT';
+    else res.textContent = 'FAULT';
+    row.appendChild(res);
+    lane.appendChild(row);
+
+    // eviction detail line
+    const note = document.createElement('div');
+    note.style = 'font-size:0.74em;color:var(--text2);font-family:Fira Code,monospace;min-height:1.1em;';
+    if (pos >= 0 && p.lastResult === 'fault' && p.lastEvicted) {
+      let reason = def.id === 'lru' ? 'least recently used'
+                 : def.id === 'fifo' ? 'oldest inserted'
+                 : (p.lastEvictReason || 'farthest future');
+      note.innerHTML = `evicted <b style="color:var(--red)">${p.lastEvicted}</b> (${reason}), inserted <b style="color:var(--blue)">${p.lastInserted}</b>`;
+    } else if (pos >= 0 && p.lastResult === 'fault') {
+      note.innerHTML = `inserted <b style="color:var(--blue)">${p.lastInserted}</b> (empty slot, no eviction)`;
+    } else {
+      note.innerHTML = '&nbsp;';
+    }
+    lane.appendChild(note);
+    wrap.appendChild(lane);
+  });
+}
+
+function renderRatios() {
+  const optF = policies.opt.faults;
+  const lruF = policies.lru.faults;
+  const fifoF = policies.fifo.faults;
+  const r = x => optF === 0 ? '—' : (x / optF).toFixed(2) + '×';
+  const wrap = document.getElementById('ratios');
+  wrap.innerHTML =
+    `<div class="ratio-box lru"><div class="value">${r(lruF)}</div><div class="label">LRU / OPT</div><div class="ksub">${lruF} / ${optF || 0} faults</div></div>` +
+    `<div class="ratio-box fifo"><div class="value">${r(fifoF)}</div><div class="label">FIFO / OPT</div><div class="ksub">${fifoF} / ${optF || 0} faults</div></div>` +
+    `<div class="ratio-box opt"><div class="value">${optF}</div><div class="label">OPT faults (optimal)</div><div class="ksub">k-competitive bound = ${k}×</div></div>`;
+}
+
+// ===================== NARRATION =====================
+function narrate(html) { document.getElementById('narration').innerHTML = html; }
+
+function resultWord(p) { return p.lastResult === 'hit' ? 'hit' : 'miss'; }
+
+function evictPhrase(p, kind) {
+  if (p.lastResult !== 'fault') return `${kind} hit`;
+  if (!p.lastEvicted) return `${kind} miss, inserted ${p.lastInserted} into a free slot`;
+  if (kind === 'LRU') return `LRU miss, evict ${p.lastEvicted} (least recently used)`;
+  if (kind === 'FIFO') return `FIFO miss, evict ${p.lastEvicted} (oldest inserted)`;
+  return `OPT miss, evict ${p.lastEvicted} (${p.lastEvictReason})`;
+}
+
+function narrateStep(page) {
+  const lru = policies.lru, fifo = policies.fifo, opt = policies.opt;
+  let msg = `<b>Request ${pos + 1}: page <code>${page}</code>.</b> `;
+  // LRU
+  if (lru.lastResult === 'hit') msg += `<span class="lru">LRU</span>: <span class="ok">hit</span>. `;
+  else if (lru.lastEvicted) msg += `<span class="lru">LRU</span>: <span class="exp">miss</span> — evict <span class="hl">${lru.lastEvicted}</span> (least recently used). `;
+  else msg += `<span class="lru">LRU</span>: <span class="exp">miss</span> — free slot, no eviction. `;
+  // FIFO
+  if (fifo.lastResult === 'hit') msg += `<span class="fifo">FIFO</span>: <span class="ok">hit</span>. `;
+  else if (fifo.lastEvicted) msg += `<span class="fifo">FIFO</span>: <span class="exp">miss</span> — evict <span class="hl">${fifo.lastEvicted}</span> (oldest inserted). `;
+  else msg += `<span class="fifo">FIFO</span>: <span class="exp">miss</span> — free slot. `;
+  // OPT
+  if (opt.lastResult === 'hit') msg += `<span class="opt">OPT</span>: <span class="ok">hit</span>. `;
+  else if (opt.lastEvicted) msg += `<span class="opt">OPT</span>: <span class="exp">miss</span> — evict <span class="hl">${opt.lastEvicted}</span> (${opt.lastEvictReason}). `;
+  else msg += `<span class="opt">OPT</span>: <span class="exp">miss</span> — free slot. `;
+
+  narrate(msg);
+}
+
+function narrateFinal() {
+  const lruF = policies.lru.faults, fifoF = policies.fifo.faults, optF = policies.opt.faults;
+  const lruR = optF ? (lruF / optF) : 0, fifoR = optF ? (fifoF / optF) : 0;
+  let msg = `<b>Stream complete (${seq.length} requests, k = ${k}).</b> `;
+  msg += `Faults: <span class="lru">LRU = ${lruF}</span>, <span class="fifo">FIFO = ${fifoF}</span>, <span class="opt">OPT = ${optF}</span> (optimal — unbeatable). `;
+  msg += `Competitive ratios: <span class="lru">LRU/OPT = ${lruR.toFixed(2)}×</span>, <span class="fifo">FIFO/OPT = ${fifoR.toFixed(2)}×</span>. `;
+
+  if (activePreset === 'adversarial') {
+    msg += `<br><span class="exp">Adversarial stream.</span> By cycling through <code>k+1 = ${k + 1}</code> distinct pages, every LRU and FIFO access after warm-up evicts exactly the page requested next — so they <span class="exp">fault on every step</span>. `;
+    msg += `OPT, seeing the future, keeps the soon-needed pages and evicts the one used farthest ahead, faulting far less. This is the worst case that proves LRU is <b>k-competitive</b>: an adversary can force up to <code>k×</code> the optimal faults.`;
+  } else if (activePreset === 'locality') {
+    msg += `<br><span class="ok">Locality stream.</span> The working set fits in the cache, so recently-used pages are exactly the soon-needed ones. <span class="lru">LRU</span> tracks reuse and lands <span class="ok">close to OPT</span> — this is why LRU dominates real caches: real reference streams have locality, not adversarial structure.`;
+  } else if (activePreset === 'belady') {
+    msg += `<br><span class="hl">Belady's anomaly.</span> On this classic stream, increasing FIFO's cache size from 3 to 4 actually <i>increases</i> faults — more memory, more misses. FIFO ignores reuse, so a bigger buffer can change eviction timing for the worse. LRU and OPT are <b>stack algorithms</b> and never suffer this anomaly.`;
+  } else {
+    msg += `<br>OPT is the offline optimum: it needs the entire future to pick the farthest-future victim. Online policies (LRU, FIFO) decide blind and pay the price of uncertainty — bounded by the k-competitive guarantee.`;
+  }
+  narrate(msg);
+}
+
+// ===================== SEQUENCE BUILDERS =====================
+function buildSeq(preset) {
+  if (preset.dynamic === 'adversarial') {
+    // cycle through k+1 distinct pages, ~4 full cycles
+    const pages = [];
+    for (let i = 0; i < k + 1; i++) pages.push(String.fromCharCode(65 + i)); // A,B,C,...
+    const out = [];
+    const total = (k + 1) * 4;
+    for (let i = 0; i < total; i++) out.push(pages[i % (k + 1)]);
+    return out;
+  }
+  if (preset.dynamic === 'random') {
+    const distinct = k + 2;
+    const pages = [];
+    for (let i = 0; i < distinct; i++) pages.push(String.fromCharCode(65 + i));
+    const out = [];
+    for (let i = 0; i < 18; i++) out.push(pages[Math.floor(Math.random() * distinct)]);
+    return out;
+  }
+  return preset.seq.slice();
+}
+
+// ===================== PRESET UI =====================
+function renderPresetButtons() {
+  const wrap = document.getElementById('presets');
+  wrap.innerHTML = '';
+  PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'preset-btn' + (p.id === activePreset ? ' active' : '');
+    b.innerHTML = `<span class="label">${p.label}</span><span class="sub">${p.sub}</span>`;
+    b.onclick = () => selectPreset(p.id);
+    wrap.appendChild(b);
+  });
+}
+
+function selectPreset(id) {
+  activePreset = id;
+  const p = PRESETS.find(x => x.id === id);
+  if (p.k && (id === 'locality' || id === 'belady')) {
+    k = p.k;
+    document.getElementById('kSlider').value = k;
+    document.getElementById('kVal').textContent = k;
+  }
+  renderPresetButtons();
+  resetSim();
+}
+
+// ===================== PLAY / RESET =====================
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  if (pos >= seq.length - 1) return;
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    step();
+    if (pos >= seq.length - 1) { stopPlay(); return; }
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(220, 1300 - speed * 110));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto';
+}
+
+function resetSim() {
+  stopPlay();
+  const preset = PRESETS.find(x => x.id === activePreset);
+  seq = buildSeq(preset);
+  pos = -1;
+  resetPolicies();
+  render();
+  const intro = {
+    locality: `<b>Setup — locality stream.</b> The working set (a few pages) is reused repeatedly and fits in <code>k = ${k}</code> slots. Press <b>Next Request »</b>. Watch <span class="lru">LRU</span> stay close to <span class="opt">OPT</span> because recently-used = soon-needed here.`,
+    adversarial: `<b>Setup — adversarial stream.</b> Pages cycle through <code>k+1 = ${k + 1}</code> distinct labels (A,B,C,…). This is engineered so that the page <span class="lru">LRU</span> evicts is always the very next one requested. Run it and watch LRU's ratio climb toward <code>k = ${k}×</code> while <span class="opt">OPT</span> stays low.`,
+    belady: `<b>Setup — Belady's anomaly.</b> The classic sequence <code>1 2 3 4 1 2 5 1 2 3 4 5</code>. With <span class="fifo">FIFO</span>, try k=3 vs k=4: a <i>larger</i> cache can yield <i>more</i> faults. <span class="opt">OPT</span> is the optimal baseline. Press <b>Next Request »</b>.`,
+    random: `<b>Setup — random stream.</b> A fresh random sequence over <code>${k + 2}</code> pages. No special structure — see how the three policies compare. Press <b>Reset</b> to draw a new stream.`
+  };
+  narrate(intro[activePreset] || intro.random);
+}
+
+// ===================== SLIDER =====================
+document.getElementById('kSlider').addEventListener('input', e => {
+  k = parseInt(e.target.value);
+  document.getElementById('kVal').textContent = k;
+  resetSim();
+});
+
+// ===================== INIT =====================
+renderPresetButtons();
+resetSim();
+</script>
+</body>
+</html>
