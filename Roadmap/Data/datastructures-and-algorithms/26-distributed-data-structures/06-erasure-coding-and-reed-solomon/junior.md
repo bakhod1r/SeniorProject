@@ -89,7 +89,7 @@ XOR (`⊕`, exclusive-or) compares bits: `0⊕0=0`, `0⊕1=1`, `1⊕0=1`, `1⊕1
 1. **Self-inverse:** `a ⊕ a = 0`. A value XORed with itself cancels out.
 2. **Identity:** `a ⊕ 0 = a`. XOR with zero changes nothing.
 
-From these, XOR is **associative** and **commutative**, so the order you combine values in doesn't matter. (If XOR feels rusty, see [Bit Manipulation / XOR](../../18-bit-manipulation/01-bitwise-operators-and-masks/junior.md).)
+From these, XOR is **associative** and **commutative**, so the order you combine values in doesn't matter. (If XOR feels rusty, see [Bit Manipulation / XOR](../../18-bit-manipulation/02-xor-pairing/junior.md).)
 
 ### The RAID-5 idea
 
@@ -532,7 +532,7 @@ REMEMBER
 ## 13. Further reading
 
 - **Within this roadmap:**
-  - [Bit Manipulation / XOR](../../18-bit-manipulation/01-bitwise-operators-and-masks/junior.md) — the XOR algebra (`a⊕a=0`, associativity) that makes parity work.
+  - [Bit Manipulation / XOR](../../18-bit-manipulation/02-xor-pairing/junior.md) — the XOR algebra (`a⊕a=0`, associativity) that makes parity work.
   - [Modular Arithmetic](../../19-number-theory/02-modular-arithmetic/junior.md) — the wrap-around arithmetic that finite-field (`GF(2^8)`) operations build on.
   - [middle](middle.md) and [senior](senior.md) — finite fields, polynomial encoding, and matrix-based Reed–Solomon decoding.
 - **External:**

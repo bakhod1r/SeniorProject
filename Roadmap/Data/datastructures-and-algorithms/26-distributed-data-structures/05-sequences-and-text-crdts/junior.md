@@ -330,7 +330,7 @@ In RGA, each character carries:
 - a **unique id**, typically `(timestamp, replica_id)` — a logical clock value plus who made it. This is unique and totally ordered (compare timestamps; break ties by replica id).
 - a reference to the id of the character it was inserted **immediately after** — call it the **origin** or **left parent**.
 
-Think of it as a **linked list of ids**: every character points back to the predecessor it was born after. (If you've studied [Linked Lists](../../05-basic-data-structures/02-linked-list/junior.md), the shape is familiar — RGA is essentially a linked list where the "links" are stable ids rather than memory pointers, which is exactly what makes it survive concurrent edits.) There's a virtual **head** sentinel that the first real character points after.
+Think of it as a **linked list of ids**: every character points back to the predecessor it was born after. (If you've studied [Linked Lists](../../05-basic-data-structures/02-linked-lists/junior.md), the shape is familiar — RGA is essentially a linked list where the "links" are stable ids rather than memory pointers, which is exactly what makes it survive concurrent edits.) There's a virtual **head** sentinel that the first real character points after.
 
 To build the visible string, you walk from the head, and at each step you go to the "next" character — but *which* next, when several characters were all inserted after the same origin? That's where concurrency lives.
 
@@ -958,7 +958,7 @@ That's the junior-level mental model. The [middle](middle.md) tier digs into the
 
 - [CRDT Fundamentals](../01-crdt-fundamentals/junior.md) — convergence, commutativity, the state-based vs op-based distinction this file assumes.
 - [Set CRDTs](../04-sets-or-set-lww/junior.md) — add-wins, LWW, and the merge intuition, applied to *unordered* collections.
-- [Linked Lists](../../05-basic-data-structures/02-linked-list/junior.md) — RGA is essentially a linked list whose links are stable ids; the shape carries over directly.
+- [Linked Lists](../../05-basic-data-structures/02-linked-lists/junior.md) — RGA is essentially a linked list whose links are stable ids; the shape carries over directly.
 - [middle](middle.md) — Logoot, LSEQ, RGA internals, and causal delivery in depth.
 - [senior](senior.md) — tombstone garbage collection, interleaving-resistant designs (YATA, Fugue), and real-world performance trade-offs.
 

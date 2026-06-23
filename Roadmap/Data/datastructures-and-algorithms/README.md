@@ -348,3 +348,38 @@ What DSA is, why it matters, how to study it, how problems map to data structure
 - [22.9 t-Digest Quantiles](22-randomized-algorithms/09-t-digest-quantiles/)
 - [22.10 Locality-Sensitive Hashing](22-randomized-algorithms/10-locality-sensitive-hashing/)
 - [22.11 Space-Saving Algorithm](22-randomized-algorithms/11-space-saving-algorithm/)
+
+## [23. Parallel Algorithms](23-parallel-algorithms/)
+
+- [23.1 Models: PRAM, Work & Span](23-parallel-algorithms/01-models-pram-work-span/)
+- [23.2 Parallel Prefix Sum (Scan)](23-parallel-algorithms/02-parallel-prefix-sum-scan/)
+- [23.3 Parallel Sorting & Merging](23-parallel-algorithms/03-parallel-sorting-and-merging/)
+- [23.4 Parallel Reduce & Map](23-parallel-algorithms/04-parallel-reduce-and-map/)
+- [23.5 Parallel Graph BFS](23-parallel-algorithms/05-parallel-graph-bfs/)
+- [23.6 MapReduce Patterns](23-parallel-algorithms/06-map-reduce-patterns/)
+- [23.7 Fork-Join & Work-Stealing](23-parallel-algorithms/07-fork-join-and-work-stealing/)
+
+## [24. External Memory & Cache-Aware](24-external-memory-and-cache-aware/)
+
+- [24.1 The I/O Model](24-external-memory-and-cache-aware/01-the-io-model/)
+- [24.2 Cache-Oblivious Algorithms](24-external-memory-and-cache-aware/02-cache-oblivious-algorithms/)
+- [24.3 External Sorting](24-external-memory-and-cache-aware/03-external-sorting/)
+- [24.4 B-Tree I/O Analysis](24-external-memory-and-cache-aware/04-b-tree-io-analysis/)
+- [24.5 Cache-Aware Data Layout](24-external-memory-and-cache-aware/05-cache-aware-data-layout/)
+
+## [25. Online Algorithms](25-online-algorithms/)
+
+- [25.1 Competitive Analysis](25-online-algorithms/01-competitive-analysis/)
+- [25.2 Ski Rental & Rent-or-Buy](25-online-algorithms/02-ski-rental-and-rent-or-buy/)
+- [25.3 Paging & Caching Theory](25-online-algorithms/03-paging-and-caching-theory/)
+- [25.4 The k-Server Problem](25-online-algorithms/04-k-server-problem/)
+- [25.5 Online Scheduling & Load Balancing](25-online-algorithms/05-online-scheduling-and-load-balancing/)
+
+## [26. Distributed Data Structures](26-distributed-data-structures/)
+
+- [26.1 CRDT Fundamentals](26-distributed-data-structures/01-crdt-fundamentals/)
+- [26.2 State-based vs Operation-based CRDTs](26-distributed-data-structures/02-state-vs-operation-based-crdts/)
+- [26.3 Counters (G-Counter, PN-Counter)](26-distributed-data-structures/03-counters-g-pn/)
+- [26.4 Sets (OR-Set, LWW-Element-Set)](26-distributed-data-structures/04-sets-or-set-lww/)
+- [26.5 Sequences & Text CRDTs](26-distributed-data-structures/05-sequences-and-text-crdts/)
+- [26.6 Erasure Coding & Reed-Solomon](26-distributed-data-structures/06-erasure-coding-and-reed-solomon/)

@@ -315,7 +315,7 @@ The discipline, stated as a checklist you can apply to any candidate type:
 2. Is **merge exactly the LUB**? (Test `m(s,s)=s`, `m(a,b)=m(b,a)`, `m(m(a,b),c)=m(a,m(b,c))`.)
 3. Does **every update inflate** (`s ⊑ u(s)`)?
 
-If all three hold, SEC follows from §3.1 *for free*. If any fails, no amount of testing will save you — divergence shows up only under the specific reorder/duplicate the test suite didn't hit. (This is exactly where [property-based testing](../../../README.md) earns its keep: generate random op interleavings and assert ICA + inflation.)
+If all three hold, SEC follows from §3.1 *for free*. If any fails, no amount of testing will save you — divergence shows up only under the specific reorder/duplicate the test suite didn't hit. (This is exactly where [property-based testing](../../README.md) earns its keep: generate random op interleavings and assert ICA + inflation.)
 
 ---
 
