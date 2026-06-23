@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallel Graph BFS — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.5em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field select { background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font-size: .9em; }
+  svg { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 8px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 110px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.25em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 10px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 8px; justify-content:center; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Parallel Graph BFS — Interactive Visualization</h1>
+  <div class="subtitle">Level-synchronous BFS expands a whole <b>frontier</b> at once. Each level is one parallel time-step; the number of levels = the graph's depth (≈ diameter) = the span.</div>
+
+  <div class="panel">
+    <h2>Frontier expansion: one level per parallel step</h2>
+    <div class="field">
+      <label>graph</label>
+      <select id="graphSel" onchange="rebuild()">
+        <option value="small">small-world (shallow, parallelizes well)</option>
+        <option value="chain">chain (deep, parallelizes poorly)</option>
+        <option value="grid">grid</option>
+      </select>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step (expand frontier) ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="450"></div>
+    </div>
+    <svg id="g" viewBox="0 0 720 380" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="stats">
+      <div class="stat"><div class="lbl">BFS level (parallel steps = span)</div><div class="val" id="lvlVal" style="color:var(--green)">0</div></div>
+      <div class="stat"><div class="lbl">current frontier size</div><div class="val" id="frontVal" style="color:var(--orange)">1</div></div>
+      <div class="stat"><div class="lbl">vertices visited (work)</div><div class="val" id="visVal" style="color:var(--purple)">0 / 0</div></div>
+    </div>
+    <div class="narration" id="narration">Press <b>Step</b>. The frontier (orange) is every vertex at the current distance. In one parallel step, all of them examine their neighbors and claim the unvisited ones as the next frontier.</div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>source</span>
+      <span><span class="sw" style="background:var(--orange)"></span>current frontier</span>
+      <span><span class="sw" style="background:var(--green)"></span>visited (settled)</span>
+      <span><span class="sw" style="background:var(--bg3)"></span>unvisited</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Why span ≈ diameter</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+let nodes=[], adj=[], dist=[], frontier=[], level, visited, autoTimer=null;
+function $(id){ return document.getElementById(id); }
+
+function makeGraph(kind){
+  // returns {pos:[[x,y]...], edges:[[u,v]...], src:0}
+  if(kind==='chain'){
+    const n=10, pos=[], edges=[];
+    for(let i=0;i<n;i++){ pos.push([60+i*64, 190 + (i%2? -40:40)]); if(i) edges.push([i-1,i]); }
+    return {pos, edges, src:0};
+  }
+  if(kind==='grid'){
+    const R=4,C=5, pos=[], edges=[]; const id=(r,c)=>r*C+c;
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++){ pos.push([90+c*135, 60+r*90]);
+      if(c) edges.push([id(r,c-1),id(r,c)]); if(r) edges.push([id(r-1,c),id(r,c)]); }
+    return {pos, edges, src:id(0,0)};
+  }
+  // small-world: central hub-ish, low diameter
+  const pos=[[360,190],[200,90],[520,90],[200,290],[520,290],[120,190],[600,190],[330,60],[400,320],[270,200],[450,200]];
+  const edges=[[0,1],[0,2],[0,3],[0,4],[0,9],[0,10],[1,5],[1,7],[2,6],[2,7],[3,5],[3,8],[4,6],[4,8],[9,3],[10,4],[1,2],[3,4]];
+  return {pos, edges, src:0};
+}
+
+function rebuild(){
+  stopAuto();
+  const G=makeGraph($('graphSel').value);
+  nodes=G.pos; const n=nodes.length;
+  adj=Array.from({length:n},()=>[]);
+  G.edges.forEach(([u,v])=>{ adj[u].push(v); adj[v].push(u); });
+  dist=new Array(n).fill(-1); visited=new Array(n).fill(false);
+  level=0; dist[G.src]=0; visited[G.src]=true; frontier=[G.src];
+  $('lvlVal').textContent=0; $('frontVal').textContent=1; $('visVal').textContent='1 / '+n;
+  $('stepBtn').disabled=false;
+  draw([], G.src);
+  $('narration').innerHTML='Source = vertex '+G.src+' (distance 0). Frontier = {source}. Press Step to expand.';
+  noteText();
+}
+
+function draw(activeNeighbors, src){
+  const svg=$('g'); let html='';
+  // edges
+  for(let u=0;u<adj.length;u++) for(const v of adj[u]) if(u<v){
+    const a=nodes[u],b=nodes[v];
+    let col='#30363d', w=1.4;
+    html+='<line x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'" stroke="'+col+'" stroke-width="'+w+'"/>';
+  }
+  // nodes
+  for(let i=0;i<nodes.length;i++){
+    const [x,y]=nodes[i];
+    let fill='#21262d', stroke='#30363d', tcol='#8b949e';
+    if(visited[i] && !frontier.includes(i)){ fill='rgba(63,185,80,.2)'; stroke='#3fb950'; tcol='#3fb950'; }
+    if(frontier.includes(i)){ fill='#d29922'; stroke='#d29922'; tcol='#0d1117'; }
+    if(i===src){ stroke='#58a6ff'; }
+    html+='<circle cx="'+x+'" cy="'+y+'" r="16" fill="'+fill+'" stroke="'+stroke+'" stroke-width="2.5"/>';
+    const lbl = dist[i]>=0 ? dist[i] : '';
+    html+='<text x="'+x+'" y="'+(y+4)+'" font-size="12" text-anchor="middle" fill="'+tcol+'" font-family="Fira Code">'+lbl+'</text>';
+  }
+  svg.innerHTML=html;
+}
+
+function step(){
+  if(frontier.length===0){ return; }
+  // expand: all frontier vertices in parallel claim unvisited neighbors
+  const next=[]; let claims=0;
+  for(const u of frontier) for(const v of adj[u]){ if(!visited[v]){ visited[v]=true; dist[v]=level+1; next.push(v); claims++; } }
+  level++;
+  frontier=next;
+  const visCount=visited.filter(Boolean).length;
+  $('lvlVal').textContent=level;
+  $('frontVal').textContent=frontier.length;
+  $('visVal').textContent=visCount+' / '+nodes.length;
+  draw([], -1);
+  if(frontier.length===0){
+    stopAuto(); $('stepBtn').disabled=true;
+    $('narration').innerHTML='Done. BFS finished in <b>'+level+' levels</b> (= '+level+' parallel time-steps = the span factor). Visited '+visCount+'/'+nodes.length+
+      ' vertices (work = O(V+E), the same as sequential BFS). The number of levels is the graph\'s depth from the source — that is why span ≈ diameter.';
+  } else {
+    $('narration').innerHTML='Level '+level+': the frontier expanded to <b>'+frontier.length+'</b> vertex'+(frontier.length===1?'':'es')+
+      ' (distance '+level+'), claiming '+claims+' newly-discovered neighbor'+(claims===1?'':'s') +
+      ' <b>in parallel</b>. Each got distance '+level+'.';
+  }
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(frontier.length===0){ stopAuto(); return; } step(); }, 950 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function noteText(){
+  $('note').innerHTML='Parallel BFS does <b>O(V+E)</b> total work (every edge relaxed once) — work-efficient. But the levels are inherently sequential: you cannot start level k+1 before level k finishes. So the <b>span is Θ(D·log n)</b>, where D is the graph\'s diameter (the per-level scan/claim costs the log n). '+
+    'A <b>small-world</b> graph has tiny diameter (a few levels) → great parallelism. A <b>chain</b> has diameter n → BFS is almost entirely sequential, no matter how many processors you have. Try both graphs above and compare the level count.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
