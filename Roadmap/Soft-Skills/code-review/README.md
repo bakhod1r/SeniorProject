@@ -11,8 +11,8 @@
 - [05. When to Approve](05-when-to-approve/) — coverage of concerns, scope creep, follow-up TODOs
 
 **Companion materials:**
-- [Clean Code / PR Review Checklist](../../Programming/code-craft/clean-code/checklists/pr-review.md) — design-level review checklist
-- [Clean Code / Pre-Commit Checklist](../../Programming/code-craft/clean-code/checklists/pre-commit.md) — what the author should do before requesting review
+- [Clean Code / PR Review Checklist](../../Programming/code-craft/clean-code/README.md) — design-level review checklist
+- [Clean Code / Pre-Commit Checklist](../../Programming/code-craft/clean-code/README.md) — what the author should do before requesting review
 
 ---
 

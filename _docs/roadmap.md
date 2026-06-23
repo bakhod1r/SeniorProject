@@ -704,7 +704,7 @@ hide:
     ??? note "[Language Internals](Roadmap/Programming/language-internals/README.md)"
 
         - [Compilers and Interpreters](Roadmap/Programming/language-internals/compilers-and-interpreters/README.md)
-        - [Concurrency](Roadmap/Programming/language-internals/concurrency/README.md)
+        - [Concurrency](Roadmap/Programming/language-internals/concurrency-async-parallel/README.md)
         - [Memory Management](Roadmap/Programming/language-internals/memory-management/README.md)
         - [Metaprogramming](Roadmap/Programming/language-internals/metaprogramming/README.md)
         - [Type Systems](Roadmap/Programming/language-internals/type-systems/README.md)
