@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallel Map &amp; Reduce — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.5em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 110px; }
+  .field b { color: var(--text); }
+  .field select { background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font-size: .9em; }
+  svg { width: 100%; height: auto; display: block; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 110px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.2em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 10px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 8px; justify-content:center; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Parallel Map &amp; Reduce — Interactive Visualization</h1>
+  <div class="subtitle"><b>Map</b>: transform every element at once (span 1). <b>Reduce</b>: combine them with an associative operator up a tree (span log n).</div>
+
+  <div class="panel">
+    <h2>map f, then reduce ⊕ — one parallel level per step</h2>
+    <div class="field">
+      <label>n elements <b id="nLbl">8</b></label>
+      <input type="range" id="nRange" min="2" max="5" step="1" value="3" oninput="rebuild()"><span style="font-size:.78em">(n = 2^<b id="nExp">3</b>)</span>
+      &nbsp;<label>map f =</label>
+      <select id="mapSel" onchange="rebuild()"><option value="sq">x²</option><option value="x2">2x</option><option value="id">x (identity)</option></select>
+      &nbsp;<label>reduce ⊕ =</label>
+      <select id="redSel" onchange="rebuild()"><option value="add">+</option><option value="max">max</option><option value="mul">×</option></select>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="500"></div>
+    </div>
+    <svg id="canvas" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="stats">
+      <div class="stat"><div class="lbl">phase</div><div class="val" id="phaseVal" style="font-size:.95em">ready</div></div>
+      <div class="stat"><div class="lbl">parallel time-steps (span)</div><div class="val" id="spanVal" style="color:var(--green)">0</div></div>
+      <div class="stat"><div class="lbl">operations (work)</div><div class="val" id="workVal" style="color:var(--orange)">0</div></div>
+    </div>
+    <div class="narration" id="narration">Press <b>Step</b>. First the map applies f to all n elements in <b>one</b> parallel step (span 1, work n). Then the reduce combines them up a binary tree in <b>log n</b> steps (span log n, work n−1).</div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>input</span>
+      <span><span class="sw" style="background:var(--purple)"></span>mapped f(x)</span>
+      <span><span class="sw" style="background:var(--orange)"></span>combining this step</span>
+      <span><span class="sw" style="background:var(--green)"></span>result</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Why map is span 1 and reduce is span log n</h2>
+    <p class="note" id="costNote"></p>
+  </div>
+</div>
+
+<script>
+let EXP, N, input, mapped, levels, phase, redLevel, work, span, autoTimer=null;
+function $(id){ return document.getElementById(id); }
+function mapF(x){ const m=$('mapSel').value; return m==='sq'?x*x : m==='x2'?2*x : x; }
+function redOp(a,b){ const r=$('redSel').value; return r==='add'?a+b : r==='max'?Math.max(a,b) : a*b; }
+function redSym(){ const r=$('redSel').value; return r==='add'?'+':r==='max'?'max':'×'; }
+function mapSym(){ const m=$('mapSel').value; return m==='sq'?'x²':m==='x2'?'2x':'x'; }
+
+function rebuild(){
+  stopAuto();
+  EXP=+$('nRange').value; N=1<<EXP;
+  $('nLbl').textContent=N; $('nExp').textContent=EXP;
+  input=Array.from({length:N},(_,i)=>((i*3+2)%7)+1);
+  mapped=null; levels=null; phase='start'; redLevel=0; work=0; span=0;
+  $('phaseVal').textContent='ready'; $('spanVal').textContent=0; $('workVal').textContent=0;
+  $('stepBtn').disabled=false;
+  draw();
+  $('narration').innerHTML='n='+N+'. Step once to MAP ('+mapSym()+'), then '+EXP+' more steps to REDUCE ('+redSym()+').';
+  costNote();
+}
+
+function step(){
+  if(phase==='start'){
+    mapped=input.map(mapF);
+    levels=[mapped.slice()];
+    phase='mapped'; span=1; work=N;
+    $('phaseVal').textContent='map done';
+    $('spanVal').textContent=span; $('workVal').textContent=work;
+    draw();
+    $('narration').innerHTML='<b>MAP:</b> applied f='+mapSym()+' to all '+N+' elements <b>simultaneously</b> — 1 parallel time-step, '+N+' operations. Now reduce with '+redSym()+'.';
+    return;
+  }
+  if(phase==='mapped' || phase==='reducing'){
+    const prev=levels[levels.length-1];
+    if(prev.length===1){ finish(); return; }
+    const next=[]; let adds=0;
+    for(let i=0;i<prev.length;i+=2){ if(i+1<prev.length){ next.push(redOp(prev[i],prev[i+1])); adds++; } else next.push(prev[i]); }
+    levels.push(next); redLevel++; span++; work+=adds;
+    phase = next.length===1 ? 'done' : 'reducing';
+    $('phaseVal').textContent = next.length===1 ? 'reduce done ✓' : ('reduce level '+redLevel);
+    $('spanVal').textContent=span; $('workVal').textContent=work;
+    draw();
+    if(next.length===1){ finish(); }
+    else $('narration').innerHTML='<b>REDUCE level '+redLevel+':</b> combined '+adds+' pairs with '+redSym()+' <b>in parallel</b> (1 time-step). '+prev.length+' values → '+next.length+'. Span now '+span+'.';
+    return;
+  }
+}
+function finish(){
+  stopAuto(); $('stepBtn').disabled=true; phase='done';
+  const result=levels[levels.length-1][0];
+  // verify against sequential
+  let seq=mapped[0]; for(let i=1;i<mapped.length;i++) seq=redOp(seq,mapped[i]);
+  $('narration').innerHTML='<b>Done.</b> Result = <b style="color:var(--green)">'+result+'</b>'+(result===seq?' (matches the sequential fold)':'')+
+    '. Map took span 1; reduce took span <b>'+EXP+'</b> = log₂'+N+'. Total span '+span+', work '+work+'. Parallelism = work/span ≈ '+(work/span).toFixed(1)+'.';
+}
+
+function draw(){
+  const svg=$('canvas'); const W=900,H=380;
+  let html='';
+  // input row at top
+  const topY=34;
+  function cellRow(arr, y, cls, label){
+    const n=arr.length;
+    arr.forEach((v,i)=>{
+      const x=(i+0.5)*W/Math.max(n,1);
+      let fill='#21262d', stroke='#30363d', tcol='#c9d1d9';
+      if(cls==='input'){ stroke='#58a6ff'; tcol='#58a6ff'; }
+      if(cls==='mapped'){ stroke='#bc8cff'; tcol='#bc8cff'; }
+      const r=Math.max(12,Math.min(20, 320/N));
+      html+='<rect x="'+(x-r)+'" y="'+(y-14)+'" width="'+(2*r)+'" height="28" rx="5" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.5"/>';
+      html+='<text x="'+x+'" y="'+(y+4)+'" font-size="12" text-anchor="middle" fill="'+tcol+'" font-family="Fira Code">'+v+'</text>';
+    });
+    html+='<text x="6" y="'+(y+4)+'" font-size="11" fill="#8b949e" font-family="Fira Code">'+label+'</text>';
+  }
+  // input
+  cellRow(input, topY, 'input', 'in');
+  // mapped row
+  if(mapped){
+    const my=84;
+    // arrows input->mapped
+    for(let i=0;i<N;i++){ const x=(i+0.5)*W/N; html+='<line x1="'+x+'" y1="'+(topY+15)+'" x2="'+x+'" y2="'+(my-15)+'" stroke="#bc8cff" stroke-width="1.2"/>'; }
+    cellRow(mapped, my, 'mapped', 'f(x)');
+    // reduce tree below
+    if(levels){
+      const baseY=140, levelH=(H-baseY-20)/Math.max(EXP,1);
+      for(let L=1;L<levels.length;L++){
+        const below=levels[L-1], cur=levels[L];
+        const yB=baseY+(L-1)*levelH, yC=baseY+L*levelH;
+        for(let i=0;i<cur.length;i++){
+          const xC=(i+0.5)*W/cur.length;
+          // children indices 2i, 2i+1 in below
+          for(const ci of [2*i,2*i+1]){ if(ci<below.length){ const xB=(ci+0.5)*W/below.length;
+            const active=(L===redLevel+0 && false);
+            html+='<line x1="'+xC+'" y1="'+(yC-14)+'" x2="'+xB+'" y2="'+(yB+14)+'" stroke="'+(L<=redLevel?'#3fb95066':'#30363d')+'" stroke-width="1.4"/>'; } }
+          const last=(cur.length===1);
+          const fill=last?'#1a3a24':'#21262d', stroke=last?'#3fb950':(L<=redLevel?'#d29922':'#30363d'), tcol=last?'#3fb950':'#c9d1d9';
+          const r=Math.max(12,Math.min(20,320/Math.max(cur.length,1)));
+          html+='<rect x="'+(xC-r)+'" y="'+(yC-14)+'" width="'+(2*r)+'" height="28" rx="5" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.5"/>';
+          html+='<text x="'+xC+'" y="'+(yC+4)+'" font-size="12" text-anchor="middle" fill="'+tcol+'" font-family="Fira Code">'+cur[i]+'</text>';
+        }
+      }
+    }
+  }
+  svg.innerHTML=html;
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(phase==='done'){ stopAuto(); return; } step(); }, 950 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function costNote(){
+  $('costNote').innerHTML='<b>Map</b> has no dependencies between elements, so with n processors all n applications of f happen in one step: work Θ(n), span Θ(1). '+
+    '<b>Reduce</b> needs the operator '+redSym()+' to be <b>associative</b> so it can re-group as a balanced tree: ((a⊕b)⊕(c⊕d)) instead of a serial chain. The tree has '+EXP+
+    ' = log₂'+N+' levels → span Θ(log n), work n−1. A serial fold would have span n. (For floats, the tree can give a slightly different sum than the serial order — '+
+    '<code>⊕</code> is associative in math but not in floating point.)';
+}
+
+rebuild();
+</script>
+</body>
+</html>
