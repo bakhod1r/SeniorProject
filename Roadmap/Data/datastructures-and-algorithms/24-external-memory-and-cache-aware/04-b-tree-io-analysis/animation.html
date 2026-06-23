@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B-Tree I/O Analysis — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 130px; }
+  .field b { color: var(--text); }
+  .lanes { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .lane { flex: 1 1 460px; }
+  .lane h3 { font-size: 0.86em; margin-bottom: 8px; color: var(--text2); text-align: center; }
+  .tree { display: flex; flex-direction: column; gap: 16px; align-items: center; padding: 8px 0; min-height: 200px; }
+  .lvl { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .node { border: 1px solid var(--border); border-radius: 5px; background: var(--bg); display: flex; }
+  .node.btree { padding: 2px; }
+  .node.cur { border-color: var(--orange); box-shadow: 0 0 10px var(--orange); }
+  .node.hit { border-color: var(--green); box-shadow: 0 0 10px var(--green); }
+  .node .k { font-size: 0.62em; font-family: 'Fira Code', monospace; color: var(--text2);
+    padding: 2px 4px; border-right: 1px solid var(--border); }
+  .node .k:last-child { border-right: none; }
+  .node .k.target { color: var(--orange); font-weight: bold; }
+  .node.bst { width: 26px; height: 22px; align-items: center; justify-content: center; font-size: 0.64em; font-family: 'Fira Code', monospace; }
+  .ellipsis { color: var(--text2); font-size: 0.7em; align-self: center; }
+  .lanestat { text-align: center; margin-top: 8px; font-size: 0.84em; font-family: 'Fira Code', monospace; }
+  .lanestat .io { font-size: 1.4em; font-weight: bold; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  table.math { width: 100%; border-collapse: collapse; font-size: 0.84em; margin-top: 8px; }
+  table.math th, table.math td { padding: 5px 10px; border-bottom: 1px solid var(--border); text-align: right; font-family: 'Fira Code', monospace; }
+  table.math th { color: var(--text2); font-weight: normal; }
+  table.math td:first-child, table.math th:first-child { text-align: left; }
+  table.math td.g { color: var(--green); font-weight: bold; }
+  table.math td.r { color: var(--red); }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>B-Tree I/O Analysis — Interactive Visualization</h1>
+  <div class="subtitle">Each node read is one I/O. Fat B-tree nodes (fanout B) give height <i>log<sub>B</sub>N</i> — a handful of I/Os where a binary tree needs <i>log<sub>2</sub>N</i>.</div>
+
+  <div class="panel">
+    <h2>Search the same keys: B-tree vs binary search tree</h2>
+    <div class="field">
+      <label>number of keys N <b id="nLbl">63</b></label>
+      <input type="range" id="nRange" min="15" max="255" step="1" value="63" oninput="rebuild()">
+      &nbsp; <label>B-tree fanout B <b id="bLbl">4</b></label>
+      <input type="range" id="bRange" min="3" max="8" step="1" value="4" oninput="rebuild()">
+      &nbsp; <label>search for key <b id="tLbl">50</b></label>
+      <input type="range" id="tRange" min="0" max="62" step="1" value="50" oninput="setTarget()">
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="700" value="450"></div>
+    </div>
+
+    <div class="lanes">
+      <div class="lane">
+        <h3>B-TREE (fanout B, one node = one block = one I/O)</h3>
+        <div class="tree" id="btree"></div>
+        <div class="lanestat">I/Os so far: <span class="io" id="ioB" style="color:var(--green)">0</span> &nbsp;·&nbsp; height = ⌈log<sub>B</sub>N⌉</div>
+      </div>
+      <div class="lane">
+        <h3>BINARY SEARCH TREE (one node = one I/O)</h3>
+        <div class="tree" id="bst"></div>
+        <div class="lanestat">I/Os so far: <span class="io" id="ioBST" style="color:var(--red)">0</span> &nbsp;·&nbsp; height = ⌈log<sub>2</sub>N⌉</div>
+      </div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Step</b> to descend both trees one level at a time. Every level visited costs one I/O. Watch how few levels the B-tree needs.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Why height ≈ log<sub>B</sub>N matters at scale</h2>
+    <table class="math" id="mathTable"></table>
+    <p class="note" id="mathNote"></p>
+  </div>
+</div>
+
+<script>
+let N, B, target;
+let bLevels = [];   // B-tree: array of levels; each level = array of node objects {keys:[...]}
+let bstPath = [];   // BST: the root-to-target node sequence (values)
+let bPath = [];     // B-tree: indices of node visited per level
+let stepIdx = 0;
+let ioB = 0, ioBST = 0;
+let autoTimer = null;
+const MAXSHOW = 9;  // cap nodes drawn per level
+
+function $(id){ return document.getElementById(id); }
+
+// Build a conceptual B-tree over sorted keys 0..N-1 by bulk-loading:
+// level 0 = leaves grouped into nodes of up to (B-1) keys; higher levels route.
+function buildBTree(){
+  // leaves: chunk keys into nodes of (B-1) keys
+  let leaves=[]; const cap=B-1;
+  for(let i=0;i<N;i+=cap){ leaves.push({keys: Array.from({length:Math.min(cap,N-i)},(_,k)=>i+k)}); }
+  let levels=[leaves];
+  while(levels[0].length>1){
+    const below=levels[0]; const parents=[];
+    // group up to B children per parent; parent's keys = first key of each child after the first (router separators)
+    for(let i=0;i<below.length;i+=B){
+      const group=below.slice(i,i+B);
+      const seps=group.slice(1).map(c=>c.keys[0]);
+      parents.push({keys:seps, children:group, _childStart:i});
+    }
+    // attach child pointers by reference
+    levels.unshift(parents);
+  }
+  return levels;
+}
+// find the path (one node per level, top-down) to the leaf containing target
+function bTreePath(levels){
+  const path=[];
+  let node=levels[0][0]; let levelIdx=0;
+  path.push({level:0, node});
+  while(levelIdx<levels.length-1){
+    // choose child: number of separators = children-1; pick first child whose range covers target
+    const children=node.children;
+    let ci=children.length-1;
+    for(let s=0;s<node.keys.length;s++){ if(target<node.keys[s]){ ci=s; break; } }
+    node=children[ci]; levelIdx++;
+    path.push({level:levelIdx, node});
+  }
+  return path;  // length = height
+}
+// Build a balanced BST over sorted keys; return root-to-target path (values)
+function bstHeightPath(){
+  // balanced BST: recursively pick middle; descend toward target counting levels
+  const path=[];
+  function rec(lo,hi){
+    if(lo>hi) return;
+    const mid=(lo+hi)>>1;
+    path.push(mid);
+    if(target===mid) return;
+    if(target<mid) rec(lo,mid-1); else rec(mid+1,hi);
+  }
+  rec(0,N-1);
+  return path;
+}
+
+function rebuild(){
+  stopAuto();
+  N=+$('nRange').value; B=+$('bRange').value;
+  $('tRange').max=N-1; if(+$('tRange').value>N-1) $('tRange').value=N-1;
+  target=+$('tRange').value;
+  $('nLbl').textContent=N; $('bLbl').textContent=B; $('tLbl').textContent=target;
+  bLevels=buildBTree();
+  bPath=bTreePath(bLevels);
+  bstPath=bstHeightPath();
+  stepIdx=0; ioB=0; ioBST=0;
+  $('ioB').textContent=0; $('ioBST').textContent=0;
+  drawBTree(-1); drawBST(-1);
+  $('stepBtn').disabled=false;
+  $('narration').innerHTML='Searching for key <b style="color:var(--orange)">'+target+'</b>. B-tree height = '+bPath.length+
+    ' levels → '+bPath.length+' I/Os; BST height = '+bstPath.length+' levels → '+bstPath.length+' I/Os.';
+  computeMath();
+}
+function setTarget(){ target=+$('tRange').value; $('tLbl').textContent=target;
+  bPath=bTreePath(bLevels); bstPath=bstHeightPath(); stepIdx=0; ioB=0; ioBST=0;
+  $('ioB').textContent=0; $('ioBST').textContent=0; drawBTree(-1); drawBST(-1);
+  $('stepBtn').disabled=false;
+  $('narration').innerHTML='Searching for key <b style="color:var(--orange)">'+target+'</b>. Press Step.';
+}
+
+function drawBTree(activeLevel){
+  const el=$('btree'); el.innerHTML='';
+  bLevels.forEach((level,li)=>{
+    const row=document.createElement('div'); row.className='lvl';
+    const curNode = (li<=activeLevel && bPath[li]) ? bPath[li].node : null;
+    const shown=level.slice(0,MAXSHOW);
+    shown.forEach(node=>{
+      const nd=document.createElement('div'); nd.className='node btree';
+      if(node===curNode){ nd.classList.add(li===activeLevel ? (li===bLevels.length-1?'hit':'cur') : ''); }
+      // keys to show (cap)
+      const ks = node.keys.length? node.keys : [];
+      const disp = ks.slice(0,B-1);
+      if(disp.length===0){ const k=document.createElement('div'); k.className='k'; k.textContent='·'; nd.appendChild(k); }
+      disp.forEach(v=>{ const k=document.createElement('div'); k.className='k'; if(v===target) k.classList.add('target'); k.textContent=v; nd.appendChild(k); });
+      row.appendChild(nd);
+    });
+    if(level.length>MAXSHOW){ const e=document.createElement('div'); e.className='ellipsis'; e.textContent='… +'+(level.length-MAXSHOW)+' nodes'; row.appendChild(e); }
+    el.appendChild(row);
+  });
+}
+function drawBST(activeDepth){
+  const el=$('bst'); el.innerHTML='';
+  // draw the path as a vertical chain (we only animate the search path; full tree is huge)
+  bstPath.forEach((v,di)=>{
+    const row=document.createElement('div'); row.className='lvl';
+    const nd=document.createElement('div'); nd.className='node bst';
+    if(di<=activeDepth){ nd.classList.add(di===activeDepth ? (v===target?'hit':'cur') : ''); }
+    nd.textContent=v; row.appendChild(nd);
+    if(di<bstPath.length-1){ const e=document.createElement('div'); e.className='ellipsis'; e.textContent=(target<v?'↙ go left':'↘ go right'); row.appendChild(e); }
+    el.appendChild(row);
+  });
+}
+
+function step(){
+  // advance B-tree one level and BST one level (independent counters)
+  let msg=[];
+  if(stepIdx<bPath.length){ ioB++; $('ioB').textContent=ioB; drawBTree(stepIdx);
+    const node=bPath[stepIdx].node; const isLeaf=stepIdx===bLevels.length-1;
+    msg.push('B-tree level '+(stepIdx+1)+': read node ('+node.keys.length+' keys) → <b style="color:var(--green)">I/O '+ioB+'</b>'+(isLeaf?' — found '+target+'.':'')); }
+  if(stepIdx<bstPath.length){ ioBST++; $('ioBST').textContent=ioBST; drawBST(stepIdx);
+    const v=bstPath[stepIdx]; const isLeaf=stepIdx===bstPath.length-1;
+    msg.push('BST level '+(stepIdx+1)+': read node ['+v+'] → <b style="color:var(--red)">I/O '+ioBST+'</b>'+(isLeaf?' — found '+target+'.':'')); }
+  stepIdx++;
+  $('narration').innerHTML=msg.join('<br>');
+  if(stepIdx>=bPath.length && stepIdx>=bstPath.length){
+    stopAuto(); $('stepBtn').disabled=true;
+    $('narration').innerHTML+='<br><b>Done.</b> B-tree: <b style="color:var(--green)">'+ioB+' I/Os</b> vs BST: <b style="color:var(--red)">'+ioBST+
+      ' I/Os</b> for the same '+N+' keys — the B-tree is shallower because each node fans out to B children.';
+  }
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if($('stepBtn').disabled){ stopAuto(); return; } step(); }, 760 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function computeMath(){
+  const rows=[[1e6,'1 million'],[1e9,'1 billion'],[1e12,'1 trillion']];
+  const Bs=[2,100,1000];
+  let html='<tr><th>N keys</th><th>binary tree<br>⌈log₂N⌉ I/Os</th><th>B-tree B=100<br>⌈log₁₀₀N⌉</th><th>B-tree B=1000<br>⌈log₁₀₀₀N⌉</th></tr>';
+  rows.forEach(([n,lbl])=>{
+    const l2=Math.ceil(Math.log2(n)), l100=Math.ceil(Math.log(n)/Math.log(100)), l1000=Math.ceil(Math.log(n)/Math.log(1000));
+    html+='<tr><td>'+lbl+'</td><td class="r">'+l2+'</td><td class="g">'+l100+'</td><td class="g">'+l1000+'</td></tr>';
+  });
+  $('mathTable').innerHTML=html;
+  $('mathNote').innerHTML='A binary tree over a billion keys is ~30 levels — 30 random disk reads per lookup. A B-tree with fanout 1000 is just <b>3</b> levels, and the top one or two stay cached in memory, so a lookup is effectively <b>one</b> disk read. That base-change from <code>log₂</code> to <code>log_B</code> is why every database index and filesystem is a B-tree / B+-tree.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
