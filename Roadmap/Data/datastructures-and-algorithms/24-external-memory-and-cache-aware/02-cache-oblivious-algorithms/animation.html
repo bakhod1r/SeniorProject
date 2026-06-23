@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache-Oblivious Algorithms — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-btn { background: var(--bg3); border: 2px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.82em; transition: all 0.2s; }
+  .preset-btn:hover { border-color: var(--blue); }
+  .preset-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.1); color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 120px; }
+  .field b { color: var(--text); }
+  .lanes { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .lane { text-align: center; }
+  .lane h3 { font-size: 0.84em; margin-bottom: 8px; color: var(--text2); }
+  .grid { display: grid; gap: 2px; justify-content: center; margin: 0 auto; }
+  .gc { width: 17px; height: 17px; border-radius: 2px; background: var(--bg3); border: 1px solid transparent; }
+  .gc.visited { background: rgba(88,166,255,0.25); }
+  .gc.cur { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  .gc.miss { background: var(--red); box-shadow: 0 0 7px var(--red); }
+  .lanestat { margin-top: 8px; font-size: 0.82em; font-family: 'Fira Code', monospace; }
+  .lanestat .io { color: var(--orange); font-size: 1.3em; font-weight: bold; }
+  .memrow { margin-top: 6px; font-size: 0.7em; color: var(--text2); }
+  .memrow .blk { display: inline-block; width: 10px; height: 14px; margin: 1px; border-radius: 2px; background: var(--bg3); vertical-align: middle; }
+  .memrow .blk.res { background: rgba(63,185,80,0.5); }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 14px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 10px; justify-content: center; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Cache-Oblivious Algorithms — Interactive Visualization</h1>
+  <div class="subtitle">A recursive "divide until it fits" traversal gets good locality at <b>every</b> block size — without ever being told B.</div>
+
+  <div class="panel">
+    <h2>Matrix transpose: naive loops vs recursive (cache-oblivious)</h2>
+    <p class="note" style="margin-top:0">
+      An n×n matrix is stored <b>row-major</b> in memory, split into blocks of B cells (a "cache line"). Reading element (r,c)
+      of the <i>source</i> and writing (c,r) of the <i>destination</i> touches whatever block that address falls in.
+      The <b>naive</b> double loop walks the source row-by-row but writes the destination column-by-column — those column writes
+      jump across many blocks → cache misses. The <b>recursive</b> version splits the matrix into quadrants until a sub-block
+      fits in cache, so both reads and writes stay local. Watch the I/O (block-miss) counters.
+    </p>
+    <div class="field">
+      <label>matrix size n <b id="nLbl">16</b></label>
+      <input type="range" id="nRange" min="8" max="32" step="8" value="16" oninput="rebuild()">
+      &nbsp; <label>block size B <b id="bLbl">4</b> cells</label>
+      <input type="range" id="bRange" min="2" max="8" step="2" value="4" oninput="rebuild()">
+      &nbsp; <label>cache = <b id="cbLbl">6</b> blocks</label>
+      <input type="range" id="cbRange" min="2" max="12" step="1" value="6" oninput="rebuild()">
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" id="runBtn" onclick="runToEnd()">Run to end ⏭</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="180" value="120"></div>
+    </div>
+
+    <div class="lanes">
+      <div class="lane">
+        <h3>NAIVE double loop <span style="color:var(--text2)">(for i: for j: B[j][i]=A[i][j])</span></h3>
+        <div class="grid" id="gridN"></div>
+        <div class="lanestat">dest writes — block misses: <span class="io" id="ioN">0</span></div>
+        <div class="memrow" id="memN"></div>
+      </div>
+      <div class="lane">
+        <h3>RECURSIVE cache-oblivious <span style="color:var(--text2)">(split quadrants)</span></h3>
+        <div class="grid" id="gridR"></div>
+        <div class="lanestat">dest writes — block misses: <span class="io" id="ioR" style="color:var(--green)">0</span></div>
+        <div class="memrow" id="memR"></div>
+      </div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Step</b> or <b>Run to end</b>. Both transposes visit the same cells; the recursive order produces far fewer destination block misses — and it never reads B.</div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>current write (c,r)</span>
+      <span><span class="sw" style="background:rgba(88,166,255,.25)"></span>done</span>
+      <span><span class="sw" style="background:var(--red)"></span>caused a block miss (I/O)</span>
+      <span><span class="sw" style="background:rgba(63,185,80,.5)"></span>block resident in cache</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Why recursion wins at every level</h2>
+    <p class="note" style="margin-top:0">
+      The recursive transpose obeys the recurrence <code>Q(n) = 4·Q(n/2) + O(1)</code> until a sub-matrix fits in a block,
+      giving <code>Θ(n²/B)</code> transfers — <b>optimal</b>, and the same code is optimal for L1, L2, L3 and RAM at once because
+      it never bakes in a particular B. A cache-<i>aware</i> tiled version can be a constant factor faster on one tuned level,
+      but you must tell it the tile size for that level. Cache-oblivious trades a little constant factor for portability across
+      the whole hierarchy. Try different B values above: the recursive miss count tracks <code>Θ(n²/B)</code> without any change to the algorithm.
+    </p>
+  </div>
+</div>
+
+<script>
+let n, B, CB;          // matrix size, block size (cells), cache size (blocks)
+let order = 'naive';   // not used directly; we run both
+// We simulate the DESTINATION write address stream for both traversals.
+// Destination matrix B[c][r] stored row-major: addr(c,r) = c*n + r ; block = floor(addr/Bsize).
+let seqN = [], seqR = [];   // each entry {r,c} = source cell (i,j); dest write at (j,i)
+let posN = 0, posR = 0;
+let cacheN = [], cacheR = [];
+let missN = 0, missR = 0;
+let visitedN = [], visitedR = [];
+let autoTimer = null;
+
+function $(id){ return document.getElementById(id); }
+
+function buildNaive(){
+  const s=[];
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++) s.push({i,j});
+  return s;
+}
+// recursive transpose order over source (i,j); split the index range into quadrants
+function buildRecursive(){
+  const s=[];
+  function rec(r0,r1,c0,c1){
+    if(r1-r0<=2 && c1-c0<=2){
+      for(let i=r0;i<r1;i++) for(let j=c0;j<c1;j++) s.push({i,j});
+      return;
+    }
+    const rm=(r0+r1)>>1, cm=(c0+c1)>>1;
+    rec(r0,rm,c0,cm); rec(r0,rm,cm,c1); rec(rm,r1,c0,cm); rec(rm,r1,cm,c1);
+  }
+  rec(0,n,0,n);
+  return s;
+}
+// destination address for source cell (i,j): we WRITE dest[j][i] = src[i][j]
+function destBlock(cell){ const addr = cell.j*n + cell.i; return Math.floor(addr/B); }
+
+function touch(cache, blk){
+  const at=cache.indexOf(blk);
+  if(at===-1){ if(cache.length>=CB) cache.shift(); cache.push(blk); return true; }
+  cache.splice(at,1); cache.push(blk); return false;
+}
+
+function rebuild(){
+  stopAuto();
+  n=+$('nRange').value; B=+$('bRange').value; CB=+$('cbRange').value;
+  $('nLbl').textContent=n; $('bLbl').textContent=B; $('cbLbl').textContent=CB;
+  seqN=buildNaive(); seqR=buildRecursive();
+  posN=posR=0; cacheN=[]; cacheR=[]; missN=missR=0;
+  visitedN=Array.from({length:n},()=>new Array(n).fill(false));
+  visitedR=Array.from({length:n},()=>new Array(n).fill(false));
+  drawGrid('gridN',visitedN,null,null);
+  drawGrid('gridR',visitedR,null,null);
+  $('ioN').textContent=0; $('ioR').textContent=0;
+  drawMem('memN',cacheN); drawMem('memR',cacheR);
+  $('stepBtn').disabled=false; $('runBtn').disabled=false;
+  $('narration').innerHTML='Ready. Destination is written transposed — naive column-writes scatter across blocks; recursive quadrants stay local.';
+}
+
+function drawGrid(id, visited, cur, miss){
+  const g=$(id); g.style.gridTemplateColumns='repeat('+n+', 17px)';
+  // rebuild only if cell count changed
+  if(g.children.length!==n*n){ g.innerHTML=''; for(let k=0;k<n*n;k++){ const d=document.createElement('div'); d.className='gc'; g.appendChild(d);} }
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    const el=g.children[r*n+c]; el.className='gc';
+    if(visited[r][c]) el.classList.add('visited');
+  }
+  if(cur){ const e=g.children[cur.r*n+cur.c]; e.classList.add(miss?'miss':'cur'); }
+}
+function drawMem(id, cache){
+  const m=$(id); let h='cache: ';
+  for(let i=0;i<CB;i++){ h+='<span class="blk'+(i<cache.length?' res':'')+'"></span>'; }
+  m.innerHTML=h;
+}
+
+function stepLane(seq, posKey){
+  // advances one lane; returns info
+}
+
+function step(){
+  let advanced=false, msg=[];
+  if(posN<seqN.length){
+    const cell=seqN[posN]; const blk=destBlock(cell);
+    const miss=touch(cacheN,blk); if(miss) missN++;
+    visitedN[cell.j][cell.i]=true;
+    drawGrid('gridN',visitedN,{r:cell.j,c:cell.i},miss);
+    drawMem('memN',cacheN); $('ioN').textContent=missN;
+    posN++; advanced=true;
+    msg.push('naive writes dest('+cell.j+','+cell.i+') → block '+blk+(miss?' <b style="color:var(--red)">MISS</b>':' hit'));
+  }
+  if(posR<seqR.length){
+    const cell=seqR[posR]; const blk=destBlock(cell);
+    const miss=touch(cacheR,blk); if(miss) missR++;
+    visitedR[cell.j][cell.i]=true;
+    drawGrid('gridR',visitedR,{r:cell.j,c:cell.i},miss);
+    drawMem('memR',cacheR); $('ioR').textContent=missR;
+    posR++; advanced=true;
+    msg.push('recursive writes dest('+cell.j+','+cell.i+') → block '+blk+(miss?' <b style="color:var(--red)">MISS</b>':' hit'));
+  }
+  $('narration').innerHTML=msg.join('<br>');
+  if(!advanced){ finish(); }
+}
+function finish(){
+  stopAuto();
+  $('stepBtn').disabled=true; $('runBtn').disabled=true;
+  const ratio=(missN/Math.max(missR,1)).toFixed(2);
+  $('narration').innerHTML='Done. Same '+(n*n)+' writes. Naive: <b style="color:var(--red)">'+missN+
+    '</b> block misses vs recursive: <b style="color:var(--green)">'+missR+'</b> — the cache-oblivious order made <b>'+ratio+
+    '×</b> fewer transfers, and it never read B. Change B and re-run: recursive stays ≈ Θ(n²/B).';
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(step, 200 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+function runToEnd(){ stopAuto(); while(posN<seqN.length || posR<seqR.length) step(); }
+
+rebuild();
+</script>
+</body>
+</html>
