@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sequence CRDT — Concurrent Insert Convergence</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.4em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:10px;}
+  .seg button { background:var(--bg3); border:none; color:var(--text2); padding:6px 14px; cursor:pointer; font-size:.84em; }
+  .seg button.on { background:rgba(88,166,255,.18); color:var(--blue); }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .reps { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px){ .reps { grid-template-columns: 1fr; } }
+  .rep { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; transition:border-color .2s, box-shadow .2s;}
+  .rep h3 { font-size: 0.8em; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; text-align:center;}
+  .rep.flash { border-color: var(--blue); box-shadow: 0 0 12px rgba(88,166,255,.4); }
+  .rep.converged { border-color: var(--green); }
+  .doc { text-align:center; font-family:'Fira Code',monospace; font-size:1.5em; letter-spacing:2px; color:var(--green); min-height:34px; padding:6px;}
+  .doc .ch { display:inline-block; }
+  .doc .ch.r0 { color:var(--blue); }
+  .doc .ch.r1 { color:var(--purple); }
+  .nodes { font-family:'Fira Code',monospace; font-size:.68em; color:var(--text2); margin-top:6px; line-height:1.5; word-break:break-all;}
+  .ctrls2 { display:flex; justify-content:center; gap:6px; margin-top:8px; flex-wrap:wrap; align-items:center;}
+  .mini { font-size:.74em; padding:4px 8px; }
+  .ctrls2 input { width:34px; background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:3px; font-family:'Fira Code',monospace; text-align:center;}
+  .ctrls2 select { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:3px; font-size:.8em;}
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 130px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.1em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Sequence &amp; Text CRDT — Stable IDs Beat Indices</h1>
+  <div class="subtitle">An RGA-style sequence: every character has a permanent <b>id</b> and points to the id it was inserted <b>after</b>. Two replicas insert concurrently at the same spot; the network delivers ops in <b>different orders</b>, yet both converge to the <b>same string</b> — because order is decided by ids, not shifting indices.</div>
+
+  <div class="panel">
+    <h2>Two editors, one document</h2>
+    <div class="seg">
+      <button id="segCRDT" class="on" onclick="setMode('crdt')">RGA (stable ids)</button>
+      <button id="segNaive" onclick="setMode('naive')">naive array indices (broken)</button>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="syncBtn" onclick="syncStep()">Deliver one op ▶</button>
+      <button class="btn" id="syncAll" onclick="syncAll()">Deliver all ⏩</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+    </div>
+
+    <div class="reps" id="reps"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">ops in flight</div><div class="val" id="flightVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">R1 text</div><div class="val" id="t0Val" style="color:var(--blue)">—</div></div>
+      <div class="stat"><div class="lbl">R2 text</div><div class="val" id="t1Val" style="color:var(--purple)">—</div></div>
+      <div class="stat"><div class="lbl">converged?</div><div class="val" id="convVal">—</div></div>
+    </div>
+
+    <div class="narration" id="narration">Both replicas start with "AB". Insert a character on each (pick where), then deliver the ops in any order. RGA converges; naive indices don't.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Why indices fail and ids win</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+// RGA model. Each node: {id:[counter,replica], afterId, ch, deleted}
+// id ordering for concurrent inserts after same anchor: higher counter first, tiebreak higher replica id.
+let mode='crdt';
+let nodes;        // ground-truth set of all created nodes keyed by id-string (each replica gets a copy of delivered ones)
+let repNodes;     // [replica] -> Map idStr -> node (the nodes that replica has integrated)
+let inflight;     // queue of {op, to} delivery events
+let counter;      // lamport-ish counter per creation
+let naiveDocs;    // for naive mode: array of chars per replica
+let flashId;
+
+function $(id){ return document.getElementById(id); }
+function idStr(id){ return id[0]+'.'+id[1]; }
+
+const ROOT={id:[0,-1], afterId:null, ch:'⊥', deleted:false};
+
+function baseNodes(){
+  // seed "AB": A id [1,-1] after root, B id [2,-1] after A  (pre-shared origin)
+  const A={id:[1,-1], afterId:idStr(ROOT.id), ch:'A', deleted:false};
+  const B={id:[2,-1], afterId:idStr(A.id), ch:'B', deleted:false};
+  const m=new Map();
+  m.set(idStr(ROOT.id),ROOT); m.set(idStr(A.id),A); m.set(idStr(B.id),B);
+  return m;
+}
+
+function rebuild(){
+  counter=2; flashId=null;
+  repNodes=[deepCopyMap(baseNodes()), deepCopyMap(baseNodes())];
+  inflight=[];
+  naiveDocs=[['A','B'],['A','B']];
+  $('flightVal').textContent='0';
+  $('convVal').innerHTML='—';
+  $('syncBtn').disabled=false; $('syncAll').disabled=false;
+  render();
+  $('narration').innerHTML = mode==='crdt'
+    ? 'RGA: each insert creates a node with a unique id pointing at the id it follows. Try: R1 inserts "X" after A, R2 inserts "Y" after A — concurrently. Then deliver the ops in either order.'
+    : 'Naive mode: inserts are encoded as (index, char) and replayed literally on the other replica. Watch indices shift out from under the second op and corrupt the result.';
+  noteText();
+}
+function deepCopyMap(m){ const r=new Map(); for(const [k,v] of m) r.set(k,{...v, id:v.id.slice(), }); return r; }
+
+function setMode(m){ mode=m; $('segCRDT').classList.toggle('on',m==='crdt'); $('segNaive').classList.toggle('on',m==='naive'); rebuild(); }
+
+// ---- RGA traversal: produce visible string from a replica's node map ----
+function readRGA(map){
+  // build children: afterId -> list of nodes
+  const children=new Map();
+  for(const n of map.values()){
+    if(n.afterId===null) continue;
+    if(!children.has(n.afterId)) children.set(n.afterId,[]);
+    children.get(n.afterId).push(n);
+  }
+  // sort siblings: higher counter first, then higher replica id (deterministic total order)
+  for(const list of children.values())
+    list.sort((a,b)=> b.id[0]-a.id[0] || b.id[1]-a.id[1]);
+  const out=[];
+  (function dfs(anchorStr){
+    const kids=children.get(anchorStr)||[];
+    for(const n of kids){ if(!n.deleted && n.ch!=='⊥') out.push(n); dfs(idStr(n.id)); }
+  })(idStr(ROOT.id));
+  return out;
+}
+function textOf(map){ return readRGA(map).map(n=>n.ch).join(''); }
+
+// ---- user inserts on a replica (creates op, applies locally, queues delivery to other) ----
+function insertCRDT(rep, afterChar, ch){
+  const map=repNodes[rep];
+  // find the node whose ch===afterChar (first match in visible order); '∅' means after ROOT (start)
+  let anchorStr=idStr(ROOT.id);
+  if(afterChar!=='∅'){
+    const vis=readRGA(map);
+    const found=vis.find(n=>n.ch===afterChar);
+    if(found) anchorStr=idStr(found.id);
+  }
+  const id=[++counter, rep];
+  const node={id, afterId:anchorStr, ch, deleted:false};
+  map.set(idStr(id), node);
+  // queue delivery to the OTHER replica
+  const to=1-rep;
+  inflight.push({op:{...node, id:id.slice()}, to});
+  flashId=rep;
+  $('flightVal').textContent=inflight.length;
+  $('narration').innerHTML='R'+(rep+1)+' inserted "'+ch+'" after '+(afterChar==='∅'?'start':'"'+afterChar+'"')+' → node <code>'+ch+'@'+idStr(id)+'</code> (after '+anchorStr+'). Op queued for R'+(to+1)+'.';
+  render();
+}
+function insertNaive(rep, index, ch){
+  naiveDocs[rep].splice(index,0,ch);
+  const to=1-rep;
+  inflight.push({naive:{index, ch}, to});
+  flashId=rep;
+  $('flightVal').textContent=inflight.length;
+  $('narration').innerHTML='R'+(rep+1)+' inserted "'+ch+'" at index '+index+'. The op is encoded as (index='+index+', "'+ch+'") and queued for R'+(to+1)+' — which will splice at that SAME index, even though its document may have shifted.';
+  render();
+}
+
+function deliver(ev){
+  if(mode==='crdt'){
+    const map=repNodes[ev.to];
+    if(!map.has(idStr(ev.op.id))) map.set(idStr(ev.op.id), {...ev.op, id:ev.op.id.slice()});
+    flashId=ev.to;
+  } else {
+    const d=naiveDocs[ev.to];
+    const i=Math.min(ev.naive.index, d.length);
+    d.splice(i,0,ev.naive.ch);
+    flashId=ev.to;
+  }
+}
+
+function syncStep(){
+  if(inflight.length===0){ $('narration').innerHTML='No ops in flight. Insert something on a replica first.'; return; }
+  const ev=inflight.shift();
+  deliver(ev);
+  $('flightVal').textContent=inflight.length;
+  render();
+  reportConverge();
+}
+function syncAll(){ while(inflight.length){ deliver(inflight.shift()); } $('flightVal').textContent='0'; flashId=null; render(); reportConverge(true); }
+
+function reportConverge(final){
+  const t0 = mode==='crdt'? textOf(repNodes[0]) : naiveDocs[0].join('');
+  const t1 = mode==='crdt'? textOf(repNodes[1]) : naiveDocs[1].join('');
+  const conv = (t0===t1) && inflight.length===0;
+  $('convVal').innerHTML = inflight.length? '<span style="color:var(--text2)">ops pending</span>'
+                          : conv ? '<span style="color:var(--green)">YES ✓</span>'
+                                 : '<span style="color:var(--red)">NO — diverged ✗</span>';
+  if(inflight.length===0){
+    if(mode==='crdt' && conv) $('narration').innerHTML='Both replicas read <code>"'+t0+'"</code>. Even though the ops arrived in different orders, the RGA traversal sorts siblings by id, so the result is <b>identical everywhere</b>. Stable ids → convergence.';
+    else if(mode==='naive' && !conv) $('narration').innerHTML='R1="'+t0+'" vs R2="'+t1+'" — <b>DIVERGED</b>. The second op\'s index referred to a document that had already shifted under the first op. Plain indices are not stable coordinates.';
+    else if(mode==='naive' && conv) $('narration').innerHTML='They happen to match here, but with truly concurrent inserts at overlapping indices naive replay corrupts the text. Try R1 insert at index 1 and R2 insert at index 1 concurrently.';
+  }
+}
+
+function render(){
+  const root=$('reps'); let html='';
+  for(let i=0;i<2;i++){
+    const cls='rep'+(i===flashId?' flash':'');
+    let docHtml, detail;
+    if(mode==='crdt'){
+      const vis=readRGA(repNodes[i]);
+      docHtml = vis.map(n=>'<span class="ch r'+(n.id[1]>=0?n.id[1]:'oot')+'">'+n.ch+'</span>').join('');
+      detail = '<div class="nodes">'+[...repNodes[i].values()].filter(n=>n.ch!=='⊥').sort((a,b)=>a.id[0]-b.id[0]).map(n=>n.ch+'@'+idStr(n.id)+'→'+n.afterId).join(' &nbsp; ')+'</div>';
+    } else {
+      docHtml = naiveDocs[i].map(c=>'<span class="ch">'+c+'</span>').join('');
+      detail = '<div class="nodes">array = ['+naiveDocs[i].join(', ')+']</div>';
+    }
+    const ctrl = mode==='crdt'
+      ? '<div class="ctrls2">insert <input id="ch'+i+'" maxlength="1" value="'+(i===0?'X':'Y')+'"> after '+
+        '<select id="af'+i+'"><option value="∅">start</option><option value="A" selected>A</option><option value="B">B</option><option value="X">X</option><option value="Y">Y</option></select>'+
+        '<button class="btn mini" onclick="doInsert('+i+')">go</button></div>'
+      : '<div class="ctrls2">insert <input id="ch'+i+'" maxlength="1" value="'+(i===0?'X':'Y')+'"> at idx '+
+        '<input id="ix'+i+'" value="1" style="width:30px"><button class="btn mini" onclick="doInsert('+i+')">go</button></div>';
+    html += '<div class="'+cls+'"><h3>Replica '+(i+1)+'</h3><div class="doc">'+(docHtml||'<span style="opacity:.4">(empty)</span>')+'</div>'+detail+ctrl+'</div>';
+  }
+  root.innerHTML=html;
+  $('t0Val').textContent='"'+(mode==='crdt'?textOf(repNodes[0]):naiveDocs[0].join(''))+'"';
+  $('t1Val').textContent='"'+(mode==='crdt'?textOf(repNodes[1]):naiveDocs[1].join(''))+'"';
+}
+
+function doInsert(i){
+  const ch=($('ch'+i).value||'?').slice(0,1);
+  if(mode==='crdt'){ insertCRDT(i, $('af'+i).value, ch); }
+  else { insertNaive(i, Math.max(0,parseInt($('ix'+i).value||'0',10)), ch); }
+}
+
+function noteText(){
+  $('note').innerHTML =
+    '<b>Why array indices fail.</b> An index like "3" is a coordinate in a document that is itself changing. If R1 inserts at index 1 and that op reaches R2 after R2 already inserted at index 1, replaying "insert at index 1" lands in the wrong place — the two edits clobber each other and the replicas diverge. Indices are not stable.<br>'+
+    '<b>Why ids win (RGA).</b> Every character gets a permanent, globally-unique id and records the id it was inserted <i>after</i>. Rendering is a deterministic traversal: among characters sharing the same predecessor, sort by id (here: higher counter first, ties broken by replica number). Because every replica applies the <i>same</i> total order to the <i>same</i> set of ids, they all read the identical string — regardless of the order ops arrived. Deletes leave a <b>tombstone</b> (the id stays as an anchor) rather than renumbering.<br>'+
+    'This stable-identifier idea — fractional indices in Logoot/LSEQ, after-links in RGA/YATA — is the backbone of every collaborative editor (Yjs, Automerge).';
+}
+
+rebuild();
+</script>
+</body>
+</html>
