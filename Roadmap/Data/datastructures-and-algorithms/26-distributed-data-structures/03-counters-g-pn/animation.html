@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>G-Counter & PN-Counter — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.45em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:10px;}
+  .seg button { background:var(--bg3); border:none; color:var(--text2); padding:6px 14px; cursor:pointer; font-size:.84em; }
+  .seg button.on { background:rgba(88,166,255,.18); color:var(--blue); }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .reps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px){ .reps { grid-template-columns: 1fr; } }
+  .rep { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; transition: border-color .2s, box-shadow .2s;}
+  .rep h3 { font-size: 0.8em; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; text-align:center;}
+  .rep.flash { border-color: var(--blue); box-shadow: 0 0 12px rgba(88,166,255,.4); }
+  .rep.converged { border-color: var(--green); }
+  .slots { display:flex; justify-content:center; gap:6px; margin:6px 0; }
+  .slot { font-family:'Fira Code',monospace; font-size:.8em; background:var(--bg3); border:1px solid var(--border); border-radius:5px; padding:4px 8px; min-width:46px; text-align:center;}
+  .slot .nm { color:var(--text2); font-size:.78em; display:block;}
+  .slot.p { border-color: var(--green); }
+  .slot.n { border-color: var(--red); }
+  .slot.bumped { box-shadow:0 0 8px var(--orange); border-color:var(--orange);}
+  .bigval { font-family:'Fira Code',monospace; font-size:1.6em; text-align:center; color:var(--green); margin:6px 0 2px;}
+  .ctrls2 { display:flex; justify-content:center; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .mini { font-size:.74em; padding:4px 8px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 120px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.15em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>G-Counter &amp; PN-Counter — Convergent Counting</h1>
+  <div class="subtitle">Each replica owns one <b>slot</b> it alone increments; the counter value is the <b>sum of all slots</b>; merge takes the <b>elementwise max</b> of each slot. Increment locally (even while partitioned), then gossip — the total always reconciles exactly, with no lock.</div>
+
+  <div class="panel">
+    <h2>Three replicas, per-slot counters</h2>
+    <div class="seg">
+      <button id="segG" class="on" onclick="setMode('G')">G-Counter (increment only)</button>
+      <button id="segPN" onclick="setMode('PN')">PN-Counter (inc &amp; dec)</button>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="syncBtn" onclick="gossipStep()">Gossip one message ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto-sync ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="450"></div>
+    </div>
+
+    <div class="reps" id="reps"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">gossip messages</div><div class="val" id="msgVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">true value (Σ all increments − decrements)</div><div class="val" id="trueVal" style="color:var(--blue)">0</div></div>
+      <div class="stat"><div class="lbl">converged?</div><div class="val" id="convVal">—</div></div>
+    </div>
+
+    <div class="narration" id="narration">Click <b>+</b> on the replicas to increment their own slot (these are concurrent, partition-tolerant edits). Then press <b>Gossip</b> to deliver merges in a shuffled order. Watch every replica converge to the same value.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Why max-per-slot (not sum-per-slot) is the rule</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+const N=3;
+let mode='G';
+let P, Ncnt;          // P[i] = vector of length N at replica i ; Ncnt similarly (PN mode)
+let trueInc, trueDec; // ground-truth totals
+let queue, msgCount, flashId, bumped, autoTimer=null;
+
+function $(id){ return document.getElementById(id); }
+function zeros(){ return Array.from({length:N},()=>new Array(N).fill(0)); }
+
+function setMode(m){ mode=m; $('segG').classList.toggle('on',m==='G'); $('segPN').classList.toggle('on',m==='PN'); rebuild(); }
+
+function rebuild(){
+  stopAuto();
+  P = zeros(); Ncnt = zeros();
+  trueInc=0; trueDec=0;
+  queue=[]; msgCount=0; flashId=-1; bumped={};
+  $('msgVal').textContent='0';
+  $('convVal').innerHTML='—';
+  $('syncBtn').disabled=false;
+  render();
+  $('trueVal').textContent='0';
+  $('narration').innerHTML = mode==='G'
+    ? 'G-Counter: replica i may only increment <b>slot i</b> of its own vector. Value = Σ slots. Merge = elementwise max. Increment a few, then gossip.'
+    : 'PN-Counter: keep TWO G-Counters — P (increments) and N (decrements). Value = ΣP − ΣN. You cannot decrement a grow-only slot, so a decrement bumps the N vector instead.';
+  noteText();
+}
+
+function valueAt(i){
+  const sumP = P[i].reduce((a,b)=>a+b,0);
+  const sumN = mode==='PN' ? Ncnt[i].reduce((a,b)=>a+b,0) : 0;
+  return sumP - sumN;
+}
+function trueValue(){ return trueInc - trueDec; }
+
+function inc(i){
+  P[i][i] += 1; trueInc += 1;
+  bumped={rep:i, kind:'p'};
+  enqueueFrom(i);
+  $('trueVal').textContent=trueValue();
+  $('narration').innerHTML='R'+(i+1)+' incremented its own slot → P['+i+']['+i+'] = '+P[i][i]+'. This needs no coordination; it is a local, monotonic bump. Gossip will carry it to the others.';
+  render();
+}
+function dec(i){
+  Ncnt[i][i] += 1; trueDec += 1;
+  bumped={rep:i, kind:'n'};
+  enqueueFrom(i);
+  $('trueVal').textContent=trueValue();
+  $('narration').innerHTML='R'+(i+1)+' decremented → N['+i+']['+i+'] = '+Ncnt[i][i]+'. A decrement is just an increment of the separate N counter, keeping every slot grow-only (so merge=max still works).';
+  render();
+}
+
+function enqueueFrom(i){
+  // schedule this replica to gossip its state to the other two (deliver later, possibly reordered/duplicated)
+  for(let j=0;j<N;j++) if(j!==i){ queue.push({from:i,to:j}); }
+  // light reshuffle so order is non-trivial but deterministic
+  for(let k=queue.length-1;k>0;k--){ const r=(k*5+1)%(k+1); const t=queue[k]; queue[k]=queue[r]; queue[r]=t; }
+}
+
+function gossipStep(){
+  if(queue.length===0){
+    // top up a full round of all-pairs gossip so user can always converge
+    for(let a=0;a<N;a++) for(let b=0;b<N;b++) if(a!==b) queue.push({from:a,to:b});
+    if(allConverged()){ $('narration').innerHTML='Already converged — every replica holds the same value <b>'+trueValue()+'</b>. Increment more, or switch mode.'; flashId=-1; bumped={}; render(); return; }
+  }
+  const m=queue.shift();
+  // merge: elementwise max on P (and N in PN mode)
+  for(let k=0;k<N;k++){ P[m.to][k]=Math.max(P[m.to][k], P[m.from][k]); if(mode==='PN') Ncnt[m.to][k]=Math.max(Ncnt[m.to][k], Ncnt[m.from][k]); }
+  flashId=m.to; bumped={};
+  msgCount++; $('msgVal').textContent=msgCount;
+  render();
+  const conv=allConverged();
+  $('convVal').innerHTML = conv ? '<span style="color:var(--green)">YES</span>' : '<span style="color:var(--text2)">not yet</span>';
+  $('narration').innerHTML='R'+(m.from+1)+' → R'+(m.to+1)+': elementwise max merge. R'+(m.to+1)+' now reads <b>'+valueAt(m.to)+'</b>. '+
+    (conv ? 'All replicas agree on <b>'+trueValue()+'</b> ✓ — convergence with no coordinator.' : 'Keep gossiping until all three agree.');
+}
+
+function allConverged(){
+  const t=trueValue();
+  for(let i=0;i<N;i++) if(valueAt(i)!==t) return false;
+  return true;
+}
+
+function render(){
+  const reps=$('reps'); const t=trueValue(); let html='';
+  for(let i=0;i<N;i++){
+    const conv = valueAt(i)===t;
+    let cls='rep'+(i===flashId?' flash':'')+(conv && msgCount>0?' converged':'');
+    let slotsP = P[i].map((v,k)=>{
+      const bp = (bumped.rep===i && bumped.kind==='p' && k===i);
+      return '<div class="slot p'+(bp?' bumped':'')+'"><span class="nm">P'+k+'</span>'+v+'</div>';
+    }).join('');
+    let slotsN = mode==='PN' ? '<div class="slots">'+Ncnt[i].map((v,k)=>{
+      const bn=(bumped.rep===i && bumped.kind==='n' && k===i);
+      return '<div class="slot n'+(bn?' bumped':'')+'"><span class="nm">N'+k+'</span>'+v+'</div>';
+    }).join('')+'</div>' : '';
+    html += '<div class="'+cls+'"><h3>Replica '+(i+1)+'</h3>'+
+      '<div class="slots">'+slotsP+'</div>'+ slotsN +
+      '<div class="bigval">'+valueAt(i)+'</div>'+
+      '<div class="ctrls2"><button class="btn mini" onclick="inc('+i+')">+1</button>'+
+      (mode==='PN'?'<button class="btn mini" onclick="dec('+i+')">−1</button>':'')+'</div>'+
+      '</div>';
+  }
+  reps.innerHTML=html;
+}
+
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ gossipStep(); if(allConverged() && queue.length===0){ stopAuto(); } }, 1000 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto-sync ▶▶'; }
+
+function noteText(){
+  $('note').innerHTML =
+    'Each replica increments only <b>its own slot</b>, so every slot is itself a grow-only number that only moves up. The state is therefore a point in the product lattice ℕ<sup>N</sup>, ordered componentwise, and the join (least upper bound) is the <b>elementwise maximum</b>. That is why merge takes the max per slot and never the sum:<br>'+
+    '• <b>max</b> is idempotent — merging a duplicate or stale vector changes nothing, so reordering and redelivery are harmless.<br>'+
+    '• <b>sum</b> would be a disaster — merge two copies of <code>[3,0]</code> by adding and you get <code>[6,0]</code>, double-counting. The value-level sum (Σ slots) is computed only when you <i>read</i>, never when you <i>merge</i>.<br>'+
+    'A <b>PN-Counter</b> can\'t decrement a grow-only slot, so it carries two such vectors, P and N, and reports ΣP − ΣN. Note the honest limit: a PN-Counter can go <b>negative</b> and a CRDT cannot enforce a global "≥ 0" invariant — that needs an escrow / bounded counter.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
