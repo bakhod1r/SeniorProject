@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ski Rental: Deterministic vs Randomized — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.55em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1060px; margin: 0 auto; }
+
+  .view-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab {
+    background: var(--bg3); border: 2px solid var(--border); color: var(--text);
+    padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.86em; transition: all 0.2s;
+    text-align: center;
+  }
+  .tab:hover { border-color: var(--blue); }
+  .tab.active { border-color: var(--blue); background: rgba(88,166,255,0.12); color: var(--blue); }
+  .tab .sub { display: block; font-size: 0.78em; color: var(--text2); margin-top: 2px; }
+  .tab.active .sub { color: var(--green); }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  @media (max-width: 900px){ .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn.rand { background: rgba(188,140,255,0.13); border-color: var(--purple); color: var(--purple); }
+  .btn.rand:hover { background: rgba(188,140,255,0.22); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field label { font-family: 'Fira Code', monospace; }
+  .field input[type=range] { flex: 1; min-width: 110px; accent-color: var(--blue); }
+  .field .val { font-family: 'Fira Code', monospace; color: var(--blue); font-weight: bold; min-width: 40px; }
+  .field .val.green { color: var(--green); }
+
+  .calendar-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .cal-label { font-size: 0.78em; color: var(--text2); margin-bottom: 8px; font-family: 'Fira Code', monospace; }
+  .days { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; min-height: 60px; }
+  .day {
+    width: 38px; height: 50px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg3); display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'Fira Code', monospace; font-size: 0.68em; color: var(--text2);
+    transition: all 0.2s; position: relative;
+  }
+  .day .num { font-size: 0.74em; color: var(--text2); }
+  .day .act { font-size: 0.88em; font-weight: bold; margin-top: 2px; }
+  .day.future { opacity: 0.3; border-style: dashed; }
+  .day.det-rent { background: rgba(88,166,255,0.16); border-color: var(--blue); color: var(--blue); }
+  .day.det-buy { background: rgba(210,153,34,0.22); border-color: var(--orange); color: var(--orange); }
+  .day.det-own { background: rgba(63,185,80,0.14); border-color: var(--green); color: var(--green); }
+  .day.rand-buy { box-shadow: inset 0 0 0 2px var(--purple); }
+  .day .randmark { position: absolute; top: -6px; right: -4px; font-size: 0.7em; color: var(--purple); }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 9px; text-align: center; }
+  .stat-box .value { font-size: 1.15em; font-weight: bold; color: var(--blue); font-family: 'Fira Code', monospace; }
+  .stat-box.det .value { color: var(--blue); }
+  .stat-box.rand .value { color: var(--purple); }
+  .stat-box.opt .value { color: var(--green); }
+  .stat-box.ratio .value { color: var(--orange); }
+  .stat-box .label { font-size: 0.66em; color: var(--text2); margin-top: 2px; }
+
+  .guarantee {
+    background: rgba(88,166,255,0.07); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin: 0 0 12px; text-align: center; font-family: 'Fira Code', monospace;
+    font-size: 0.84em; line-height: 1.7;
+  }
+  .guarantee .det { color: var(--blue); font-weight: bold; }
+  .guarantee .rnd { color: var(--purple); font-weight: bold; }
+
+  .dist-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+  .dist-title { font-size: 0.76em; color: var(--text2); margin-bottom: 8px; font-family: 'Fira Code', monospace; }
+  .dist-bars { display: flex; align-items: flex-end; gap: 3px; height: 70px; }
+  .dist-bar { flex: 1; background: linear-gradient(180deg, var(--purple), #6a4f99); border-radius: 2px 2px 0 0; min-height: 2px; position: relative; transition: all 0.15s; }
+  .dist-bar.picked { background: linear-gradient(180deg, var(--orange), #a06f10); box-shadow: 0 0 6px var(--orange); }
+  .dist-bar .lbl { position: absolute; bottom: -15px; left: 0; right: 0; text-align: center; font-size: 0.6em; color: var(--text2); }
+
+  .bar-wrap { margin: 4px 0 12px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 0.78em; }
+  .bar-row .name { width: 72px; color: var(--text2); text-align: right; font-family: 'Fira Code', monospace; }
+  .bar-track { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; height: 16px; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; transition: width .4s; }
+  .bar-fill.det { background: linear-gradient(90deg, var(--blue), #8ec6ff); }
+  .bar-fill.rand { background: linear-gradient(90deg, var(--purple), #d0b0ff); }
+  .bar-fill.opt { background: linear-gradient(90deg, var(--green), #84d98f); }
+  .bar-row .num { width: 40px; font-family: 'Fira Code', monospace; font-weight: bold; }
+
+  .chart-area { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  canvas { width: 100%; height: 150px; display: block; }
+
+  .verdict { text-align: center; font-size: 0.92em; font-weight: bold; margin: 6px 0; min-height: 1.4em; }
+  .verdict.ok { color: var(--green); }
+  .verdict.tight { color: var(--orange); }
+
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.85em; line-height: 1.55; margin-top: 8px; min-height: 92px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .det { color: var(--blue); font-weight: bold; }
+  .narration .rnd { color: var(--purple); font-weight: bold; }
+  .narration .opt { color: var(--green); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); font-size: 0.92em; }
+
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.8em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.72em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  /* spin-block view */
+  .lock-track { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .cycles { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; min-height: 50px; margin-bottom: 10px; }
+  .cyc {
+    width: 24px; height: 38px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-family: 'Fira Code', monospace; font-size: 0.6em; color: var(--text2); transition: all 0.15s;
+  }
+  .cyc.spin { background: rgba(88,166,255,0.18); border-color: var(--blue); color: var(--blue); }
+  .cyc.block { background: rgba(210,153,34,0.25); border-color: var(--orange); color: var(--orange); transform: scaleY(1.1); }
+  .cyc.acquired { background: rgba(63,185,80,0.18); border-color: var(--green); color: var(--green); }
+  .cyc.future { opacity: 0.3; border-style: dashed; }
+  .thread-state { font-family: 'Fira Code', monospace; font-size: 0.82em; margin-bottom: 8px; }
+  .thread-state .s-spin { color: var(--blue); font-weight: bold; }
+  .thread-state .s-block { color: var(--orange); font-weight: bold; }
+  .thread-state .s-run { color: var(--green); font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Ski Rental: Deterministic vs Randomized</h1>
+<p class="subtitle">Randomization beats the deterministic 2&minus;1/B bound, dropping the competitive ratio to e/(e&minus;1) &asymp; 1.58 &mdash; and the same rule powers adaptive spinlocks</p>
+
+<div class="container">
+  <div class="view-tabs">
+    <button class="tab active" id="tab-rand" onclick="selectView('rand')">
+      Deterministic vs Randomized
+      <span class="sub">2 &nbsp;vs&nbsp; e/(e&minus;1) &asymp; 1.58</span>
+    </button>
+    <button class="tab" id="tab-spin" onclick="selectView('spin')">
+      Spin&minus;then&minus;Block Spinlock
+      <span class="sub">spin = rent, block = buy</span>
+    </button>
+  </div>
+
+  <!-- ============================ VIEW A ============================ -->
+  <div class="view active" id="view-rand">
+    <div class="grid2">
+      <div class="panel">
+        <h2>The Season &mdash; Two Algorithms, Same Unknown Future</h2>
+
+        <div class="field">
+          <label>Buy price B = $</label>
+          <input type="range" id="bSlider" min="4" max="16" value="10">
+          <span class="val" id="bVal">10</span>
+          <span style="font-size:0.92em">rent = $1 / day</span>
+        </div>
+        <div class="field">
+          <label>True length D =</label>
+          <input type="range" id="dSlider" min="1" max="22" value="10">
+          <span class="val green" id="dVal">10</span>
+          <span style="font-size:0.92em">days (hidden from both algorithms)</span>
+        </div>
+
+        <div class="controls">
+          <button class="btn primary" id="btnTrial" onclick="oneTrial()">Run 1 Trial &raquo;</button>
+          <button class="btn rand" id="btnWorst" onclick="setWorst()">Trace Worst Case (D=B)</button>
+          <button class="btn" onclick="resetRand()">Reset</button>
+        </div>
+
+        <div class="calendar-box">
+          <div class="cal-label" id="calLabel">Press "Run 1 Trial" to play one season</div>
+          <div class="days" id="days"></div>
+        </div>
+
+        <div class="legend">
+          <span><span class="dot" style="background:var(--blue)"></span>DET rents</span>
+          <span><span class="dot" style="background:var(--orange)"></span>buys</span>
+          <span><span class="dot" style="background:var(--green)"></span>owns</span>
+          <span><span class="dot" style="background:var(--purple)"></span>RAND buy-day (sampled)</span>
+        </div>
+
+        <h2 style="margin-top:16px">Randomized buy-day distribution P(buy on day i)</h2>
+        <div class="dist-box">
+          <div class="dist-title" id="distTitle">tuned p_i &prop; (1&minus;1/B)^(B&minus;i), i = 1..B</div>
+          <div class="dist-bars" id="distBars"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Head to Head: ALG cost, OPT, and Competitive Ratio</h2>
+
+        <div class="claim">
+          <b>Deterministic break-even.</b> Rent until you have rented <code>B&minus;1</code> days, then buy on day <code>B</code>.
+          Worst case at <code>D = B</code>: ratio = <code>(2B&minus;1)/B = 2 &minus; 1/B</code>.
+          <b>Randomized.</b> Sample a buy-day from a tuned distribution; against an oblivious adversary the
+          expected ratio is <code>e/(e&minus;1) &asymp; 1.582</code> &mdash; strictly below 2.
+        </div>
+
+        <div class="guarantee">
+          DET guarantee:&nbsp; ratio &le; <span class="det" id="detBound">1.90</span> = 2 &minus; 1/B<br>
+          RAND guarantee:&nbsp; E[ratio] &rarr; <span class="rnd">e/(e&minus;1) &asymp; 1.582</span>
+        </div>
+
+        <div class="stats">
+          <div class="stat-box det"><div class="value" id="sDet">&mdash;</div><div class="label">DET cost</div></div>
+          <div class="stat-box rand"><div class="value" id="sRand">&mdash;</div><div class="label">RAND cost (this trial)</div></div>
+          <div class="stat-box opt"><div class="value" id="sOpt">&mdash;</div><div class="label">OPT cost</div></div>
+        </div>
+        <div class="stats">
+          <div class="stat-box ratio"><div class="value" id="sDetR">&mdash;</div><div class="label">DET ratio</div></div>
+          <div class="stat-box ratio"><div class="value" id="sRandR">&mdash;</div><div class="label">RAND ratio (this trial)</div></div>
+          <div class="stat-box rand"><div class="value" id="sAvgR">&mdash;</div><div class="label">avg RAND ratio (all trials)</div></div>
+        </div>
+
+        <div class="controls">
+          <button class="btn rand" id="btn1000" onclick="runManyTrials(1000)">Run 1000 Trials</button>
+          <button class="btn rand" onclick="runManyTrials(10000)">+10000</button>
+          <span class="speed-control" style="margin-left:auto"><span id="trialCount">0 trials</span></span>
+        </div>
+
+        <div class="chart-area"><canvas id="convChart"></canvas></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--purple)"></span>running avg RAND ratio</span>
+          <span><span class="dot" style="background:var(--blue)"></span>DET worst case = 2&minus;1/B</span>
+          <span><span class="dot" style="background:var(--orange)"></span>e/(e&minus;1) &asymp; 1.582</span>
+        </div>
+
+        <div class="verdict" id="verdict"></div>
+        <div class="narration" id="narration"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ VIEW B ============================ -->
+  <div class="view" id="view-spin">
+    <div class="grid2">
+      <div class="panel">
+        <h2>A Thread Waiting on a Held Lock</h2>
+
+        <div class="claim">
+          <b>The mapping.</b> A thread wants a lock held by another thread for an <b>unknown</b> number of cycles W.
+          <b>Spin</b> = rent: burn $1 of CPU per cycle while polling. <b>Block</b> = buy: pay a fixed context-switch
+          cost of <code>B</code> cycles, then sleep until woken. Spin up to <code>B</code> cycles, then block &rarr;
+          this is exactly ski rental, so it is <code>2&minus;1/B</code>-competitive against an oracle that knows W.
+        </div>
+
+        <div class="field">
+          <label>Block cost B = </label>
+          <input type="range" id="bSlider2" min="4" max="16" value="8">
+          <span class="val" id="bVal2">8</span>
+          <span style="font-size:0.9em">cycles (spin = 1 cycle each)</span>
+        </div>
+        <div class="field">
+          <label>Lock held for W =</label>
+          <input type="range" id="wSlider" min="1" max="24" value="6">
+          <span class="val green" id="wVal">6</span>
+          <span style="font-size:0.9em">cycles (thread cannot see this)</span>
+        </div>
+
+        <div class="controls">
+          <button class="btn primary" id="btnStepC" onclick="stepCycle()">Next Cycle &raquo;</button>
+          <button class="btn primary" id="btnPlayC" onclick="togglePlayC()">Auto</button>
+          <button class="btn rand" onclick="setWorstSpin()">Worst Case (W=B)</button>
+          <button class="btn" onclick="resetSpin()">Reset</button>
+          <div class="speed-control"><label>Speed</label><input type="range" id="speedC" min="1" max="10" value="6"></div>
+        </div>
+
+        <div class="lock-track">
+          <div class="thread-state" id="threadState">Thread state: <span class="s-spin">idle</span></div>
+          <div class="cycles" id="cycles"></div>
+          <div class="legend">
+            <span><span class="dot" style="background:var(--blue)"></span>spin (rent, $1)</span>
+            <span><span class="dot" style="background:var(--orange)"></span>block (buy, $B)</span>
+            <span><span class="dot" style="background:var(--green)"></span>lock acquired</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Adaptive Spinlock vs the Oracle</h2>
+
+        <div class="guarantee">
+          spin-then-block cost &le; <span class="det" id="detBound2">1.88</span> &middot; oracle = (2 &minus; 1/B) &middot; oracle
+        </div>
+
+        <div class="stats">
+          <div class="stat-box det"><div class="value" id="cAlg">0</div><div class="label">thread cost (cycles)</div></div>
+          <div class="stat-box opt"><div class="value" id="cOpt">&mdash;</div><div class="label">oracle cost (knows W)</div></div>
+          <div class="stat-box ratio"><div class="value" id="cRatio">&mdash;</div><div class="label">ratio</div></div>
+        </div>
+
+        <div class="bar-wrap">
+          <div class="bar-row">
+            <span class="name">spinlock</span>
+            <span class="bar-track"><span class="bar-fill det" id="cBarAlg"></span></span>
+            <span class="num" id="cNumAlg" style="color:var(--blue)">0</span>
+          </div>
+          <div class="bar-row">
+            <span class="name">oracle</span>
+            <span class="bar-track"><span class="bar-fill opt" id="cBarOpt"></span></span>
+            <span class="num" id="cNumOpt" style="color:var(--green)">&mdash;</span>
+          </div>
+        </div>
+
+        <div class="verdict" id="cVerdict"></div>
+        <div class="narration" id="cNarration"></div>
+
+        <h2 style="margin-top:16px">Why real futexes do this</h2>
+        <div class="claim" style="border-color:var(--border);background:var(--bg)">
+          Linux <code>adaptive mutexes</code>, glibc <code>pthread</code> spin-then-park, and the JVM's
+          biased/adaptive locking all spin briefly before parking the thread. The spin budget is bounded by the
+          cost of a context switch &mdash; spending up to <code>B</code> cycles polling before paying the <code>B</code>-cycle
+          park keeps the worst-case overhead under <code>2&times;</code> the unavoidable wait, with no knowledge of how long the lock is held.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Shared OPT for ski rental: min(D, B)
+// ============================================================
+function optCost(d, b){ return d <= 0 ? 0 : Math.min(d, b); }
+
+// ============================================================
+//  RANDOMIZED buy-day distribution.
+//  Classic tuned distribution for ski rental against an oblivious
+//  adversary giving E[ratio] -> e/(e-1). We use the discrete form
+//  p_i proportional to (1 - 1/B)^(B - i) for i = 1..B, then normalize.
+//  As B grows the achieved expected ratio -> e/(e-1) ~ 1.582.
+// ============================================================
+let B = 10, D = 10;
+let dist = [];        // dist[i] = P(buy on day i), index 1..B
+let cumDist = [];     // cumulative for sampling
+
+function buildDist(){
+  dist = new Array(B + 1).fill(0);
+  let raw = [];
+  let sum = 0;
+  const r = 1 - 1 / B;
+  for (let i = 1; i <= B; i++){
+    const w = Math.pow(r, B - i);   // higher weight near day B
+    raw[i] = w; sum += w;
+  }
+  for (let i = 1; i <= B; i++) dist[i] = raw[i] / sum;
+  cumDist = new Array(B + 1).fill(0);
+  let c = 0;
+  for (let i = 1; i <= B; i++){ c += dist[i]; cumDist[i] = c; }
+  cumDist[B] = 1; // guard against FP drift
+}
+
+function sampleBuyDay(){
+  const u = Math.random();
+  for (let i = 1; i <= B; i++) if (u <= cumDist[i]) return i;
+  return B;
+}
+
+// Cost of a randomized run with buy-day k, given true length D.
+// You rent each day until day k; if you reach day k you buy (pay B),
+// otherwise the season ended before buying. So:
+//   if D < k  -> rent all D days        -> cost D
+//   if D >= k -> rent (k-1) days + buy   -> cost (k-1) + B
+function randCost(k, d){
+  return d < k ? d : (k - 1) + B;
+}
+
+// Deterministic break-even cost given D: that is the k=B case.
+function detCost(d){ return randCost(B, d); }
+
+// ============================================================
+//  VIEW A state
+// ============================================================
+let trials = 0;
+let sumRandRatio = 0;
+let avgHistory = [];     // running avg RAND ratio, sampled for the chart
+let lastTrial = null;    // {k, det, rand, opt, dr, rr}
+
+function resetRand(){
+  trials = 0; sumRandRatio = 0; avgHistory = []; lastTrial = null;
+  buildDist();
+  renderDist(0);
+  renderRandStats();
+  document.getElementById('calLabel').textContent = 'Press "Run 1 Trial" to play one season';
+  document.getElementById('days').innerHTML = '';
+  document.getElementById('verdict').className = 'verdict';
+  document.getElementById('verdict').textContent = '';
+  drawConv();
+  narrate('<b>Setup.</b> Rent costs <span class="det">$1/day</span>, buying costs <span class="hl">B = $' + B + '</span>. '
+    + 'Both algorithms face the same hidden season length <span class="ok">D = ' + D + '</span>. The <span class="det">deterministic</span> '
+    + 'rule always buys on day B; the <span class="rnd">randomized</span> rule samples its buy-day from the distribution on the left. '
+    + 'Run one trial to watch a single sampled season, or run 1000+ trials to watch the average RAND ratio converge toward '
+    + '<code>e/(e&minus;1) &asymp; 1.582</code> &mdash; provably below the deterministic worst case of <code>2 &minus; 1/B</code>.');
+}
+
+function oneTrial(){
+  const k = sampleBuyDay();
+  const det = detCost(D);
+  const rand = randCost(k, D);
+  const opt = optCost(D, B);
+  const dr = opt === 0 ? 0 : det / opt;
+  const rr = opt === 0 ? 0 : rand / opt;
+  trials++; sumRandRatio += rr;
+  avgHistory.push(sumRandRatio / trials);
+  lastTrial = { k, det, rand, opt, dr, rr };
+  renderDist(k);
+  renderSeason(k);
+  renderRandStats();
+  drawConv();
+  narrateTrial();
+}
+
+function runManyTrials(n){
+  const det = detCost(D);
+  const opt = optCost(D, B);
+  let lastK = 0;
+  for (let t = 0; t < n; t++){
+    const k = sampleBuyDay(); lastK = k;
+    const rand = randCost(k, D);
+    const rr = opt === 0 ? 0 : rand / opt;
+    trials++; sumRandRatio += rr;
+    // sample the history so the chart stays light
+    if (trials <= 50 || trials % Math.ceil(trials / 400) === 0)
+      avgHistory.push(sumRandRatio / trials);
+  }
+  const dr = opt === 0 ? 0 : det / opt;
+  const rr = opt === 0 ? 0 : randCost(lastK, D) / opt;
+  lastTrial = { k: lastK, det, rand: randCost(lastK, D), opt, dr, rr };
+  renderDist(lastK);
+  renderSeason(lastK);
+  renderRandStats();
+  drawConv();
+  const avg = sumRandRatio / trials;
+  const target = Math.E / (Math.E - 1);
+  narrate('<b>' + trials.toLocaleString() + ' trials.</b> Empirical average <span class="rnd">RAND ratio = '
+    + avg.toFixed(4) + '</span>. The randomized algorithm samples its buy-day fresh each trial, so over many seasons its '
+    + 'expected competitive ratio converges. For this B the theoretical limit is near <code>e/(e&minus;1) &asymp; ' + target.toFixed(4)
+    + '</code> &mdash; and crucially it sits <span class="ok">below the deterministic ' + (2 - 1/B).toFixed(3)
+    + '</span>. Randomization buys you a strictly better guarantee against an oblivious (oblivious-to-coin-flips) adversary.');
+}
+
+function renderRandStats(){
+  const t = lastTrial;
+  document.getElementById('detBound').textContent = (2 - 1/B).toFixed(2);
+  document.getElementById('trialCount').textContent = trials.toLocaleString() + ' trials';
+  if (!t){
+    ['sDet','sRand','sOpt','sDetR','sRandR'].forEach(id => document.getElementById(id).textContent = '—');
+  } else {
+    document.getElementById('sDet').textContent = '$' + t.det;
+    document.getElementById('sRand').textContent = '$' + t.rand;
+    document.getElementById('sOpt').textContent = '$' + t.opt;
+    document.getElementById('sDetR').textContent = t.opt ? t.dr.toFixed(2) : '—';
+    document.getElementById('sRandR').textContent = t.opt ? t.rr.toFixed(2) : '—';
+  }
+  document.getElementById('sAvgR').textContent = trials ? (sumRandRatio / trials).toFixed(3) : '—';
+}
+
+function narrateTrial(){
+  const t = lastTrial;
+  if (!t) return;
+  const avg = sumRandRatio / trials;
+  let msg = '<b>Trial ' + trials + '.</b> The randomized algorithm sampled buy-day <span class="rnd">k = ' + t.k + '</span> '
+    + '(from the distribution on the left). True length was <span class="ok">D = ' + D + '</span>, so <span class="opt">OPT = $' + t.opt + '</span>. ';
+  msg += 'The <span class="det">deterministic</span> rule (buy on day B) spent <span class="det">$' + t.det + '</span> &rarr; ratio '
+    + (t.opt ? t.dr.toFixed(2) : '—') + '. ';
+  if (D < t.k)
+    msg += 'Here the season ended on day ' + D + ' <i>before</i> RAND’s buy-day ' + t.k + ', so RAND only rented: <span class="rnd">$' + t.rand + '</span>. ';
+  else
+    msg += 'RAND reached its buy-day and bought: rent ' + (t.k - 1) + ' + buy ' + B + ' = <span class="rnd">$' + t.rand + '</span>. ';
+  msg += 'RAND ratio this trial = ' + (t.opt ? t.rr.toFixed(2) : '—') + '; running average over ' + trials
+    + ' trial' + (trials === 1 ? '' : 's') + ' = <span class="rnd">' + avg.toFixed(3) + '</span>.';
+  narrate(msg);
+}
+
+function setWorst(){
+  // worst case for deterministic is D = B; show that RAND still averages ~1.58
+  D = B;
+  document.getElementById('dSlider').value = D;
+  document.getElementById('dVal').textContent = D;
+  resetRand();
+  runManyTrials(2000);
+  const det = detCost(D), opt = optCost(D, B);
+  const dr = det / opt;
+  document.getElementById('verdict').className = 'verdict tight';
+  document.getElementById('verdict').textContent = '⚠ At D = B the DET ratio = ' + dr.toFixed(2) + ' = 2 − 1/B (its worst case)';
+  const avg = sumRandRatio / trials;
+  narrate('<b>Worst case for the deterministic rule: D = B = ' + B + '.</b> DET rents days 1…' + (B-1)
+    + ' ($' + (B-1) + ') then buys ($' + B + ') = <span class="det">$' + det + '</span>, while <span class="opt">OPT = $' + opt
+    + '</span>. So <span class="exp">DET ratio = ' + dr.toFixed(2) + ' = 2 − 1/B</span> &mdash; the tight, unbeatable-by-any-deterministic-rule bound. '
+    + 'But over ' + trials.toLocaleString() + ' randomized trials on this <i>same</i> adversarial input, the average <span class="rnd">RAND ratio = '
+    + avg.toFixed(3) + '</span>, comfortably below 2. <b>That is the whole point:</b> a coin the adversary cannot predict provably lowers '
+    + 'the competitive ratio from <code>2</code> toward <code>e/(e&minus;1) &asymp; 1.582</code>.');
+}
+
+function renderSeason(k){
+  const days = document.getElementById('days');
+  days.innerHTML = '';
+  const detBuy = B;            // det buys on day B
+  const shown = Math.max(D, Math.max(detBuy, k)) ;
+  for (let i = 1; i <= shown; i++){
+    const cell = document.createElement('div');
+    cell.className = 'day';
+    const num = document.createElement('div'); num.className = 'num'; num.textContent = 'd' + i;
+    const act = document.createElement('div'); act.className = 'act';
+    if (i > D){
+      cell.classList.add('future'); act.textContent = '—';
+    } else {
+      // what did DET do on day i?
+      if (i < detBuy){ cell.classList.add('det-rent'); act.textContent = 'rent'; }
+      else if (i === detBuy){ cell.classList.add('det-buy'); act.textContent = 'BUY'; }
+      else { cell.classList.add('det-own'); act.textContent = 'own'; }
+    }
+    // mark RAND's sampled buy-day (if it falls within the played season)
+    if (i === k){
+      cell.classList.add('rand-buy');
+      const rm = document.createElement('div'); rm.className = 'randmark'; rm.textContent = 'R'; cell.appendChild(rm);
+    }
+    cell.appendChild(num); cell.appendChild(act);
+    days.appendChild(cell);
+  }
+  document.getElementById('calLabel').textContent =
+    'Season D = ' + D + ' · DET buys day ' + B + ' · RAND sampled buy-day ' + k
+    + (D < k ? ' (season ended first — RAND never bought)' : '');
+}
+
+function renderDist(picked){
+  const box = document.getElementById('distBars');
+  box.innerHTML = '';
+  const maxP = Math.max(...dist.slice(1));
+  for (let i = 1; i <= B; i++){
+    const bar = document.createElement('div');
+    bar.className = 'dist-bar' + (i === picked ? ' picked' : '');
+    bar.style.height = (dist[i] / maxP * 100) + '%';
+    bar.title = 'P(buy on day ' + i + ') = ' + dist[i].toFixed(3);
+    if (B <= 16 && (i === 1 || i === B || i === picked)){
+      const l = document.createElement('div'); l.className = 'lbl'; l.textContent = i; bar.appendChild(l);
+    }
+    box.appendChild(bar);
+  }
+  document.getElementById('distTitle').textContent =
+    'tuned p_i ∝ (1−1/B)^(B−i), i = 1..B' + (picked ? '  —  sampled k = ' + picked : '');
+}
+
+function drawConv(){
+  const canvas = document.getElementById('convChart');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = 300;
+  ctx.setTransform(1,0,0,1,0,0); ctx.scale(2,2);
+  const w = canvas.offsetWidth, h = 150;
+  ctx.clearRect(0,0,w,h);
+  const padL = 34, padR = 10, padT = 10, padB = 18;
+  const cw = w - padL - padR, ch = h - padT - padB;
+
+  const detB = 2 - 1/B;
+  const eTarget = Math.E / (Math.E - 1);
+  const yMin = 1.0, yMax = Math.max(2.1, detB + 0.15);
+  const yAt = v => padT + ch - ((v - yMin) / (yMax - yMin)) * ch;
+
+  // grid + y labels
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+  ctx.fillStyle = '#8b949e'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  for (let g = 1.0; g <= yMax + 1e-9; g += 0.25){
+    const y = yAt(g);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillText(g.toFixed(2), padL - 4, y + 3);
+  }
+  ctx.textAlign = 'center';
+  ctx.fillText('trials →', w/2, h - 3);
+
+  // DET worst-case reference line (blue dashed)
+  ctx.setLineDash([5,4]); ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5;
+  let y = yAt(detB);
+  ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+  // e/(e-1) target line (orange dashed)
+  ctx.strokeStyle = '#d29922';
+  y = yAt(eTarget);
+  ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // running avg curve (purple)
+  if (avgHistory.length){
+    const n = avgHistory.length;
+    const xAt = i => n === 1 ? padL + cw/2 : padL + (i/(n-1))*cw;
+    ctx.beginPath(); ctx.strokeStyle = '#bc8cff'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    for (let i = 0; i < n; i++){
+      const x = xAt(i), yy = yAt(Math.min(yMax, Math.max(yMin, avgHistory[i])));
+      if (i === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+    // last value dot
+    const lx = xAt(n-1), ly = yAt(Math.min(yMax, Math.max(yMin, avgHistory[n-1])));
+    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI*2); ctx.fillStyle = '#bc8cff'; ctx.fill();
+    ctx.fillStyle = '#bc8cff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(avgHistory[n-1].toFixed(3), Math.min(w - padR, lx - 5), Math.max(padT + 9, ly - 6));
+  }
+  // labels for the two reference lines
+  ctx.font = '8px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#58a6ff'; ctx.fillText('2−1/B = ' + detB.toFixed(3), padL + 4, yAt(detB) - 3);
+  ctx.fillStyle = '#d29922'; ctx.fillText('e/(e−1) = ' + eTarget.toFixed(3), padL + 4, yAt(eTarget) + 9);
+}
+
+function narrate(html){ document.getElementById('narration').innerHTML = html; }
+
+// ============================================================
+//  VIEW B: spin-then-block
+// ============================================================
+let B2 = 8, W = 6;
+let cyc = 0;          // current cycle index simulated
+let blocked = false;  // has the thread blocked yet?
+let blockCycle = 0;
+let acquired = false; // lock acquired
+let algCost = 0;
+let cFinished = false;
+let playingC = false, timerC = null;
+
+function oracleCost(w, b){ return w <= 0 ? 0 : Math.min(w, b); }
+
+function resetSpin(){
+  stopPlayC();
+  cyc = 0; blocked = false; blockCycle = 0; acquired = false; algCost = 0; cFinished = false;
+  document.getElementById('btnStepC').disabled = false;
+  document.getElementById('btnPlayC').disabled = false;
+  document.getElementById('detBound2').textContent = (2 - 1/B2).toFixed(2);
+  document.getElementById('cVerdict').className = 'verdict';
+  document.getElementById('cVerdict').textContent = '';
+  renderSpin('idle');
+  cNarrate('<b>Setup.</b> Another thread holds the lock for <span class="ok">W = ' + W + '</span> cycles, but our waiting thread cannot see W. '
+    + 'It <span class="det">spins</span> (rents CPU at $1/cycle) and, if it has spun <code>B = ' + B2 + '</code> cycles without success, it <span class="hl">blocks</span> '
+    + '(buys a context switch costing <code>B</code> cycles). Press <b>Next Cycle</b> to advance. This is ski rental: spin = rent, block = buy.');
+}
+
+function stepCycle(){
+  if (cFinished) return;
+  // Has the lock been released? It releases after W cycles of waiting.
+  // If the thread acquires (either it is still spinning when lock frees, or it was blocked and gets woken).
+  cyc++;
+  let state;
+  if (!blocked && cyc >= W){
+    // lock freed while still spinning: acquire this cycle (pay the spin for this cycle)
+    algCost += 1; acquired = true; state = 'acquired-spin';
+    finishSpin(state); renderSpin(state); cNarrateStep(state); return;
+  }
+  if (!blocked && cyc > B2){
+    // we've spun B2 cycles already (cycles 1..B2) without success -> block now
+    blocked = true; blockCycle = cyc; algCost += B2; state = 'block';
+    renderSpin(state); cNarrateStep(state);
+    return;
+  }
+  if (!blocked){
+    // spin this cycle
+    algCost += 1; state = 'spin';
+    renderSpin(state); cNarrateStep(state);
+    return;
+  }
+  // already blocked: thread is parked, waiting to be woken when lock frees at cycle W
+  if (blocked && cyc >= W){
+    acquired = true; state = 'acquired-block';
+    finishSpin(state); renderSpin(state); cNarrateStep(state); return;
+  }
+  state = 'parked';
+  renderSpin(state); cNarrateStep(state);
+}
+
+function finishSpin(state){
+  cFinished = true; stopPlayC();
+  document.getElementById('btnStepC').disabled = true;
+  document.getElementById('btnPlayC').disabled = true;
+  updateSpinStats();
+}
+
+function renderSpin(state){
+  const track = document.getElementById('cycles');
+  track.innerHTML = '';
+  const shown = Math.max(W, Math.max(B2 + 1, cyc)) + 1;
+  for (let i = 1; i <= shown; i++){
+    const c = document.createElement('div');
+    c.className = 'cyc';
+    if (i > cyc){
+      c.classList.add('future'); c.textContent = '·';
+    } else if (acquired && i >= (blocked ? blockCycle : cyc) && i === cyc){
+      c.classList.add('acquired'); c.textContent = '✓';
+    } else if (blocked && i >= blockCycle){
+      c.classList.add('block'); c.textContent = i === blockCycle ? 'B' : 'z';
+    } else {
+      c.classList.add('spin'); c.textContent = 's';
+    }
+    track.appendChild(c);
+  }
+  const ts = document.getElementById('threadState');
+  if (state === 'idle') ts.innerHTML = 'Thread state: <span class="s-spin">idle</span>';
+  else if (state === 'spin') ts.innerHTML = 'Thread state: <span class="s-spin">SPINNING</span> (cycle ' + cyc + ', cost so far ' + algCost + ')';
+  else if (state === 'block') ts.innerHTML = 'Thread state: <span class="s-block">BLOCKING</span> — paid B = ' + B2 + ' to park';
+  else if (state === 'parked') ts.innerHTML = 'Thread state: <span class="s-block">PARKED</span> (asleep, waiting for wake)';
+  else if (state === 'acquired-spin') ts.innerHTML = 'Thread state: <span class="s-run">ACQUIRED</span> while spinning — never had to block';
+  else if (state === 'acquired-block') ts.innerHTML = 'Thread state: <span class="s-run">ACQUIRED</span> after being woken from park';
+  updateSpinStats();
+}
+
+function updateSpinStats(){
+  const opt = oracleCost(W, B2);
+  document.getElementById('cAlg').textContent = algCost;
+  document.getElementById('cNumAlg').textContent = algCost;
+  if (cFinished){
+    const ratio = opt ? algCost / opt : 0;
+    document.getElementById('cOpt').textContent = opt;
+    document.getElementById('cNumOpt').textContent = opt;
+    document.getElementById('cRatio').textContent = opt ? ratio.toFixed(2) : '—';
+    const scale = Math.max(algCost, opt, 1);
+    document.getElementById('cBarAlg').style.width = (algCost/scale*100) + '%';
+    document.getElementById('cBarOpt').style.width = (opt/scale*100) + '%';
+    const bound = 2 - 1/B2;
+    const v = document.getElementById('cVerdict');
+    if (ratio >= bound - 1e-9){
+      v.className = 'verdict tight';
+      v.textContent = '⚠ Worst case W = B: ratio = ' + ratio.toFixed(2) + ' = 2 − 1/B';
+    } else {
+      v.className = 'verdict ok';
+      v.textContent = '✓ ratio = ' + ratio.toFixed(2) + ' ≤ ' + bound.toFixed(2) + ' = 2 − 1/B';
+    }
+  } else {
+    document.getElementById('cOpt').textContent = '?';
+    document.getElementById('cNumOpt').textContent = '?';
+    document.getElementById('cRatio').textContent = '?';
+    const scale = Math.max(algCost, 1);
+    document.getElementById('cBarAlg').style.width = (algCost/scale*100) + '%';
+    document.getElementById('cBarOpt').style.width = '0%';
+  }
+}
+
+function cNarrate(html){ document.getElementById('cNarration').innerHTML = html; }
+
+function cNarrateStep(state){
+  const opt = oracleCost(W, B2);
+  if (state === 'spin'){
+    const left = B2 - cyc;
+    cNarrate('<b>Cycle ' + cyc + ' — spinning.</b> The thread burns 1 CPU cycle polling the lock ($1, like renting). '
+      + 'It does not know W. It will keep spinning until it has spun <code>B = ' + B2 + '</code> cycles; <span class="hl">' + left
+      + '</span> more spin cycle' + (left === 1 ? '' : 's') + ' before it gives up and blocks. Cost so far = <span class="det">' + algCost + '</span>.');
+  } else if (state === 'block'){
+    cNarrate('<b>Cycle ' + cyc + ' — break-even reached.</b> The thread has already spun <code>B = ' + B2 + '</code> cycles ($' + B2 + ') with no luck. '
+      + 'Spinning more would beat paying for a switch, so it <span class="hl">blocks</span>: pays a fixed <code>B = ' + B2 + '</code>-cycle context switch and parks. '
+      + 'Cost so far = <span class="det">' + algCost + '</span>. This is exactly “buy on day B.”');
+  } else if (state === 'parked'){
+    cNarrate('<b>Cycle ' + cyc + ' — parked.</b> The thread is asleep, costing nothing extra while it waits to be woken. '
+      + 'The OS will wake it when the lock is released at cycle ' + W + '. Cost frozen at <span class="det">' + algCost + '</span>.');
+  } else if (state === 'acquired-spin'){
+    cNarrate('<b>Cycle ' + cyc + ' — acquired while spinning!</b> The lock was released after W = ' + W + ' cycles, before the spin budget ran out. '
+      + 'The thread never paid for a context switch — total cost <span class="det">' + algCost + '</span> vs oracle <span class="opt">' + opt
+      + '</span>. Short waits favor spinning, just like a short ski season favors renting.');
+  } else if (state === 'acquired-block'){
+    cNarrate('<b>Cycle ' + cyc + ' — woken and acquired.</b> The lock released at W = ' + W + '; the parked thread is woken. '
+      + 'Total cost = spin ' + (blockCycle - 1) + ' + block ' + B2 + ' = <span class="det">' + algCost + '</span>; the oracle, knowing W ≥ B, would have '
+      + 'blocked immediately for <span class="opt">' + opt + '</span>. The spin-then-block overhead stays within 2− 1/B of optimal.');
+  }
+}
+
+function setWorstSpin(){
+  stopPlayC();
+  W = B2;
+  document.getElementById('wSlider').value = W;
+  document.getElementById('wVal').textContent = W;
+  resetSpin();
+  while (!cFinished) stepCycle();
+  const opt = oracleCost(W, B2);
+  const ratio = algCost / opt;
+  cNarrate('<b>Worst case: W = B = ' + B2 + '.</b> The lock is released the instant after the thread gives up spinning and blocks. '
+    + 'The thread spun ' + (B2) + ' cycle' + (B2===1?'':'s') + ' ($' + B2 + ') then blocked ($' + B2 + ') = <span class="det">' + algCost + '</span>, '
+    + 'but a clairvoyant oracle would have blocked immediately for <span class="opt">' + opt + '</span> (or spun all W — same cost). '
+    + 'Ratio = <span class="exp">' + algCost + '/' + opt + ' = ' + ratio.toFixed(2) + ' = 2 − 1/B</span> — the tight worst case. '
+    + 'No fixed spin budget can beat this deterministically; this is why production spinlocks cap the spin near the context-switch cost.');
+}
+
+function togglePlayC(){
+  if (playingC){ stopPlayC(); return; }
+  if (cFinished) return;
+  playingC = true;
+  document.getElementById('btnPlayC').textContent = 'Pause';
+  const tick = () => {
+    if (!playingC) return;
+    stepCycle();
+    if (cFinished){ stopPlayC(); return; }
+    const speed = parseInt(document.getElementById('speedC').value);
+    timerC = setTimeout(tick, Math.max(180, 1100 - speed * 95));
+  };
+  tick();
+}
+function stopPlayC(){
+  playingC = false;
+  if (timerC){ clearTimeout(timerC); timerC = null; }
+  document.getElementById('btnPlayC').textContent = 'Auto';
+}
+
+// ============================================================
+//  View switching + sliders + init
+// ============================================================
+function selectView(v){
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + v).classList.add('active');
+  document.getElementById('view-' + v).classList.add('active');
+  if (v === 'rand') drawConv();
+}
+
+document.getElementById('bSlider').addEventListener('input', e => {
+  B = parseInt(e.target.value);
+  document.getElementById('bVal').textContent = B;
+  if (D > 22) D = 22;
+  resetRand();
+});
+document.getElementById('dSlider').addEventListener('input', e => {
+  D = parseInt(e.target.value);
+  document.getElementById('dVal').textContent = D;
+  resetRand();
+});
+document.getElementById('bSlider2').addEventListener('input', e => {
+  B2 = parseInt(e.target.value);
+  document.getElementById('bVal2').textContent = B2;
+  resetSpin();
+});
+document.getElementById('wSlider').addEventListener('input', e => {
+  W = parseInt(e.target.value);
+  document.getElementById('wVal').textContent = W;
+  resetSpin();
+});
+
+window.addEventListener('resize', () => { if (document.getElementById('view-rand').classList.contains('active')) drawConv(); });
+
+resetRand();
+resetSpin();
+</script>
+</body>
+</html>
