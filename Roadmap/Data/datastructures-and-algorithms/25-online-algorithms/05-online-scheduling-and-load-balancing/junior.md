@@ -42,7 +42,7 @@ The beautiful thing is that an almost embarrassingly simple rule already comes w
 - **Required:** The competitive-analysis framework — online vs offline, the clairvoyant benchmark **OPT**, and the competitive ratio `ALG(σ) ≤ c·OPT(σ) + α`. See [Competitive Analysis](../01-competitive-analysis/junior.md). We apply all of it here without re-deriving it.
 - **Required:** Big-O basics — what O(1), O(n), O(n log n) mean. See [Big-O Notation](../../06-algorithmic-complexity/04-asymptotic-notation/01-big-o-notation/junior.md).
 - **Required:** Comfort reading a greedy algorithm (make a local choice, move on). List scheduling *is* a greedy algorithm. See [Greedy Algorithms](../../14-greedy-algorithms/).
-- **Helpful:** Familiarity with a min-heap / priority queue — the efficient list-scheduling implementation pulls the least-loaded machine from one. See [Heaps](../../10-heaps/junior.md).
+- **Helpful:** Familiarity with a min-heap / priority queue — the efficient list-scheduling implementation pulls the least-loaded machine from one. See [Priority Queue](../../10-heaps/02-priority-queue/junior.md).
 - **Helpful:** Having seen [Ski Rental and Rent-or-Buy](../02-ski-rental-and-rent-or-buy/junior.md) and [Paging and Caching Theory](../03-paging-and-caching-theory/junior.md), the two siblings in this section, so the "online decision + clairvoyant OPT + ratio" rhythm already feels natural.
 
 No probability is needed — everything here is deterministic and counted by hand. We use only arithmetic and a couple of simple inequalities.
@@ -675,4 +675,4 @@ The big idea to carry forward: **a trivially simple greedy — "put the next job
 - **[Online Scheduling and Load Balancing — Middle](./middle.md)** — rigorous proofs, randomized scheduling, and machine-model variants.
 - **[Ski Rental and Rent-or-Buy](../02-ski-rental-and-rent-or-buy/junior.md)** and **[Paging and Caching Theory](../03-paging-and-caching-theory/junior.md)** — the sibling online problems in this section.
 - **[Greedy Algorithms](../../14-greedy-algorithms/)** — list scheduling and the bin-packing rules are all greedy; the connection is worth seeing.
-- **[Heaps](../../10-heaps/junior.md)** — the min-heap that makes "find the least-loaded machine" O(log m).
+- **[Priority Queue](../../10-heaps/02-priority-queue/junior.md)** — the min-heap that makes "find the least-loaded machine" O(log m).

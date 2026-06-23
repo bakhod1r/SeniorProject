@@ -685,5 +685,3 @@ The big idea to carry forward: the price of blindness in moving `k` resources ar
 - **[Competitive Analysis](../01-competitive-analysis/junior.md)** — the framework (online/offline, OPT, competitive ratio, adversary) this file applies.
 - **[Paging and Caching Theory](../03-paging-and-caching-theory/junior.md)** — the uniform-metric special case of k-server, in full detail.
 - **[The k-Server Problem — Middle](./middle.md)** — the potential-function proof of DC, the work-function algorithm, trees, and randomization.
-</content>
-</invoke>
