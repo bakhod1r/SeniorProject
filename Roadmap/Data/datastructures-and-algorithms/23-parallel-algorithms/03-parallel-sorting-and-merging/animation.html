@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallel Sorting (Bitonic Network) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.5em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 110px; }
+  .field b { color: var(--text); }
+  .arr { display: flex; gap: 6px; justify-content: center; align-items: flex-end; height: 200px; margin: 14px 0; }
+  .bar { width: 46px; border-radius: 4px 4px 0 0; background: linear-gradient(var(--blue), #1f6feb);
+    display: flex; align-items: flex-start; justify-content: center; color: #fff; font-size: 0.74em; font-family: 'Fira Code', monospace; padding-top: 3px; position: relative; transition: height .25s, background .2s; }
+  .bar.cmp { background: linear-gradient(var(--orange), #b07d12); }
+  .bar.swapped { background: linear-gradient(var(--red), #b62a22); }
+  .bar.sorted { background: linear-gradient(var(--green), #2ea043); }
+  .bar .ix { position: absolute; bottom: -16px; left: 0; width: 100%; text-align: center; color: var(--text2); font-size: 0.85em; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 18px 0 8px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 110px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.25em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 10px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 8px; justify-content:center; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Parallel Sorting — Bitonic Sorting Network</h1>
+  <div class="subtitle">A fixed, data-oblivious pattern of compare-and-swaps that sorts any input. Each <b>stage</b> runs all its compares <b>in parallel</b> — depth Θ(log²n).</div>
+
+  <div class="panel">
+    <h2>Bitonic sort: one parallel stage per step</h2>
+    <div class="field">
+      <label>n elements <b id="nLbl">8</b></label>
+      <input type="range" id="nRange" min="2" max="4" step="1" value="3" oninput="rebuild()"><span style="font-size:.78em">(n = 2^<b id="nExp">3</b>)</span>
+      &nbsp;<button class="btn" onclick="shuffle()">shuffle values</button>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step (one parallel stage) ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="500"></div>
+    </div>
+
+    <div class="arr" id="arr"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">stage (parallel step)</div><div class="val" id="stageVal" style="color:var(--green)">0 / 6</div></div>
+      <div class="stat"><div class="lbl">depth so far (= span)</div><div class="val" id="depthVal" style="color:var(--purple)">0</div></div>
+      <div class="stat"><div class="lbl">compares so far (= work)</div><div class="val" id="workVal" style="color:var(--orange)">0</div></div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Step</b>. Each stage compares fixed index pairs and swaps the out-of-order ones — every compare in a stage is independent, so a parallel machine does the whole stage in one time-step.</div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--orange)"></span>being compared this stage</span>
+      <span><span class="sw" style="background:var(--red)"></span>just swapped</span>
+      <span><span class="sw" style="background:var(--green)"></span>sorted</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>The cost: oblivious network depth Θ(log²n)</h2>
+    <p class="note" id="costNote"></p>
+  </div>
+</div>
+
+<script>
+let EXP, N, a, stages, stageIdx, work, autoTimer=null;
+function $(id){ return document.getElementById(id); }
+
+// Precompute the bitonic network as a list of stages; each stage = list of [i,l,dir] compare-swaps (dir: true=ascending)
+function buildStages(n){
+  const st=[];
+  for(let k=2;k<=n;k*=2){
+    for(let j=k/2;j>0;j=Math.floor(j/2)){
+      const comps=[];
+      for(let i=0;i<n;i++){ const l=i^j; if(l>i){ const asc=((i&k)===0); comps.push([i,l,asc]); } }
+      st.push(comps);
+    }
+  }
+  return st;
+}
+
+function rebuild(){
+  stopAuto();
+  EXP=+$('nRange').value; N=1<<EXP;
+  $('nLbl').textContent=N; $('nExp').textContent=EXP;
+  if(!a || a.length!==N) a=defaultVals(N);
+  stages=buildStages(N); stageIdx=0; work=0;
+  $('stageVal').textContent='0 / '+stages.length;
+  $('depthVal').textContent=0; $('workVal').textContent=0;
+  $('stepBtn').disabled=false;
+  draw(new Set(), new Set(), false);
+  $('narration').innerHTML='Sorting '+N+' values. The bitonic network has <b>'+stages.length+' stages</b> (depth = 1+2+…+log n = Θ(log²n)); each stage does up to n/2 compares in parallel.';
+  costNote();
+}
+function defaultVals(n){ const base=[5,2,8,1,7,3,6,4,9,0,11,10,13,12,15,14]; return base.slice(0,n); }
+function shuffle(){ // deterministic rotate-based reshuffle so it stays reproducible
+  a=defaultVals(N); for(let i=0;i<N;i++){ const j=(i*5+3)%N; const t=a[i]; a[i]=a[j]; a[j]=t; } rebuild();
+}
+
+function draw(cmpSet, swapSet, sorted){
+  const el=$('arr'); el.innerHTML='';
+  const maxv=Math.max(...a,1);
+  a.forEach((v,i)=>{
+    const b=document.createElement('div'); b.className='bar';
+    if(sorted) b.classList.add('sorted');
+    else if(swapSet.has(i)) b.classList.add('swapped');
+    else if(cmpSet.has(i)) b.classList.add('cmp');
+    b.style.height=(28+ v/maxv*150)+'px';
+    b.textContent=v;
+    const ix=document.createElement('div'); ix.className='ix'; ix.textContent=i; b.appendChild(ix);
+    el.appendChild(b);
+  });
+}
+
+function step(){
+  if(stageIdx>=stages.length){ return; }
+  const comps=stages[stageIdx];
+  const cmpSet=new Set(), swapSet=new Set();
+  comps.forEach(([i,l,asc])=>{
+    cmpSet.add(i); cmpSet.add(l); work++;
+    const lo=Math.min(i,l), hi=Math.max(i,l);
+    // ascending: want a[lo]<=a[hi]; descending: want a[lo]>=a[hi]
+    if(asc ? a[lo]>a[hi] : a[lo]<a[hi]){ const t=a[lo]; a[lo]=a[hi]; a[hi]=t; swapSet.add(lo); swapSet.add(hi); }
+  });
+  stageIdx++;
+  $('stageVal').textContent=stageIdx+' / '+stages.length;
+  $('depthVal').textContent=stageIdx;
+  $('workVal').textContent=work;
+  const done=stageIdx>=stages.length;
+  draw(cmpSet, swapSet, false);
+  if(done){
+    stopAuto(); $('stepBtn').disabled=true;
+    const sorted=a.every((v,i,arr)=>i===0||arr[i-1]<=v);
+    setTimeout(()=>draw(new Set(),new Set(),sorted), 250);
+    $('narration').innerHTML='Done after <b>'+stages.length+' parallel stages</b>. Array is '+(sorted?'<b style="color:var(--green)">sorted</b>':'NOT sorted')+
+      '. Total compares (work) = <b>'+work+'</b> ≈ (n/2)·log²n; span (stages) = <b>'+stages.length+'</b> = Θ(log²n). The network used the SAME compares regardless of the input values — that is what "oblivious" means.';
+  } else {
+    const swaps=swapSet.size/2;
+    $('narration').innerHTML='Stage '+stageIdx+': '+comps.length+' independent compare-swaps done <b>in parallel</b> ('+swaps+' swap'+(swaps===1?'':'s')+'). These index pairs are fixed by the network, not by the data.';
+  }
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(stageIdx>=stages.length){ stopAuto(); return; } step(); }, 950 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function costNote(){
+  const depth=stages.length, w=(N/2)*EXP*(EXP+1)/2;
+  $('costNote').innerHTML='For n='+N+': depth = 1+2+…+'+EXP+' = <b>'+depth+'</b> stages (Θ(log²n) span); comparators ≈ (n/2)·(log²n+log n)/2 ≈ <b>'+Math.round(w)+
+    '</b> (Θ(n log²n) work). Bitonic is <i>not</i> work-efficient (n log²n &gt; n log n), but its fixed, branch-free, data-oblivious structure maps perfectly onto <code>GPU</code>/SIMD hardware — which is why it is widely used for on-chip and small/fixed-size parallel sorts. For work-efficiency at scale, sample sort or radix sort win.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
