@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Competitive Analysis — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1040px; margin: 0 auto; }
+  .grid2 { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+  @media (max-width: 880px){ .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn.adv { background: rgba(248,81,73,0.13); border-color: var(--red); color: var(--red); }
+  .btn.adv:hover { background: rgba(248,81,73,0.22); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 80px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field label { font-family: 'Fira Code', monospace; }
+  .field input[type=range] { flex: 1; min-width: 120px; accent-color: var(--blue); }
+  .field .val { font-family: 'Fira Code', monospace; color: var(--blue); font-weight: bold; min-width: 60px; }
+  .field .val.green { color: var(--green); }
+
+  .calendar-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .cal-label { font-size: 0.78em; color: var(--text2); margin-bottom: 8px; font-family: 'Fira Code', monospace; }
+  .days { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; min-height: 88px; }
+  .day {
+    width: 40px; height: 52px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg3); display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'Fira Code', monospace; font-size: 0.7em; color: var(--text2);
+    transition: all 0.25s; position: relative;
+  }
+  .day .num { font-size: 0.74em; color: var(--text2); }
+  .day .act { font-size: 0.92em; font-weight: bold; margin-top: 2px; }
+  .day.future { opacity: 0.32; border-style: dashed; }
+  .day.fog { background: repeating-linear-gradient(45deg,#1a1f26,#1a1f26 4px,#161b22 4px,#161b22 8px); }
+  .day.rent { background: rgba(88,166,255,0.16); border-color: var(--blue); color: var(--blue); }
+  .day.rent .act { color: var(--blue); }
+  .day.buy { background: rgba(210,153,34,0.22); border-color: var(--orange); color: var(--orange); transform: scale(1.06); }
+  .day.buy .act { color: var(--orange); }
+  .day.own { background: rgba(63,185,80,0.14); border-color: var(--green); color: var(--green); }
+  .day.own .act { color: var(--green); }
+  .day.current { box-shadow: 0 0 0 2px var(--blue); }
+  .fog-note { font-size: 0.74em; color: var(--text2); margin-top: 8px; font-style: italic; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .stat-box .value { font-size: 1.3em; font-weight: bold; color: var(--blue); font-family: 'Fira Code', monospace; }
+  .stat-box.alg .value { color: var(--blue); }
+  .stat-box.opt .value { color: var(--purple); }
+  .stat-box.ratio .value { color: var(--orange); }
+  .stat-box .label { font-size: 0.68em; color: var(--text2); margin-top: 2px; }
+
+  .guarantee {
+    background: rgba(88,166,255,0.07); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin: 0 0 12px; text-align: center; font-family: 'Fira Code', monospace;
+    font-size: 0.9em; line-height: 1.6;
+  }
+  .guarantee .bnd { color: var(--blue); font-weight: bold; }
+  .guarantee .ach { color: var(--orange); font-weight: bold; }
+
+  .bar-wrap { margin: 4px 0 12px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 0.78em; }
+  .bar-row .name { width: 64px; color: var(--text2); text-align: right; font-family: 'Fira Code', monospace; }
+  .bar-track { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; height: 18px; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; transition: width .4s; }
+  .bar-fill.alg { background: linear-gradient(90deg, var(--blue), #8ec6ff); }
+  .bar-fill.opt { background: linear-gradient(90deg, var(--purple), #d0b0ff); }
+  .bar-row .num { width: 34px; font-family: 'Fira Code', monospace; font-weight: bold; }
+
+  .verdict { text-align: center; font-size: 0.94em; font-weight: bold; margin: 6px 0; min-height: 1.4em; }
+  .verdict.ok { color: var(--green); }
+  .verdict.tight { color: var(--orange); }
+
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.85em; line-height: 1.55; margin-top: 8px; min-height: 92px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .alg { color: var(--blue); font-weight: bold; }
+  .narration .opt { color: var(--purple); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); font-size: 0.92em; }
+
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.74em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  /* strategy comparison */
+  .strat-table { width: 100%; border-collapse: collapse; font-size: 0.78em; margin-top: 4px; }
+  .strat-table th, .strat-table td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--border); font-family: 'Fira Code', monospace; }
+  .strat-table th { color: var(--text2); font-weight: 600; }
+  .strat-table td.name { text-align: left; color: var(--text); }
+  .strat-table td.win { color: var(--green); font-weight: bold; }
+  .strat-table td.bad { color: var(--red); font-weight: bold; }
+  .strat-table tr.robust td.name { color: var(--green); }
+</style>
+</head>
+<body>
+<h1>Competitive Analysis</h1>
+<p class="subtitle">Ski Rental: an online algorithm with no future knowledge stays within 2&minus;1/B of the clairvoyant optimum</p>
+
+<div class="container">
+  <div class="grid2">
+    <!-- LEFT: the season unfolds -->
+    <div class="panel">
+      <h2>The Season, Revealed One Day at a Time</h2>
+
+      <div class="field">
+        <label>Buy price B = $</label>
+        <input type="range" id="bSlider" min="3" max="14" value="10">
+        <span class="val" id="bVal">10</span>
+        <span style="font-size:0.92em">rent = $1 / day</span>
+      </div>
+      <div class="field">
+        <label>True season length D =</label>
+        <input type="range" id="dSlider" min="1" max="24" value="6">
+        <span class="val green" id="dVal">6</span>
+        <span style="font-size:0.92em">days (online ALG can't see this!)</span>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="btnStep" onclick="stepDay()">Next Day &raquo;</button>
+        <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+        <button class="btn adv" id="btnAdv" onclick="runAdversary()">Adversary</button>
+        <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+        <div class="speed-control">
+          <label>Speed</label>
+          <input type="range" id="speedSlider" min="1" max="10" value="6">
+        </div>
+      </div>
+
+      <div class="calendar-box">
+        <div class="cal-label" id="calLabel">Day 0 — season not started</div>
+        <div class="days" id="days"></div>
+        <div class="fog-note">Hatched / dashed days are <b>fog of war</b>: the online algorithm does not know whether the season continues. It must decide each morning blind.</div>
+      </div>
+
+      <div class="legend">
+        <span><span class="dot" style="background:var(--blue)"></span>rented today ($1)</span>
+        <span><span class="dot" style="background:var(--orange)"></span>bought today ($B)</span>
+        <span><span class="dot" style="background:var(--green)"></span>own — ski free</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: costs, ratio, guarantee -->
+    <div class="panel">
+      <h2>ALG vs OPT, and the Competitive Ratio</h2>
+
+      <div class="claim">
+        <b>Online ALG (break-even rule).</b> Rent each morning. Once you have rented <code>B&minus;1</code> days,
+        on day <code>B</code> you <b>buy</b> instead of renting — and ski free forever after.
+        <b>Offline OPT (clairvoyant).</b> Knowing the true length D: if <code>D &lt; B</code> rent all D days
+        (cost D); if <code>D &ge; B</code> buy on day 1 (cost B).
+      </div>
+
+      <div class="guarantee">
+        guarantee:&nbsp; ALG <span class="bnd">&le; (2 &minus; 1/B) &middot; OPT</span>
+        &nbsp;=&nbsp;<span class="bnd" id="bndVal">1.90</span> &middot; OPT<br>
+        achieved:&nbsp;&nbsp; ratio = ALG / OPT = <span class="ach" id="ratioBig">&mdash;</span>
+      </div>
+
+      <div class="stats">
+        <div class="stat-box alg">
+          <div class="value" id="statAlg">$0</div>
+          <div class="label">ALG cost (online)</div>
+        </div>
+        <div class="stat-box opt">
+          <div class="value" id="statOpt">&mdash;</div>
+          <div class="label">OPT cost (clairvoyant)</div>
+        </div>
+        <div class="stat-box ratio">
+          <div class="value" id="statRatio">&mdash;</div>
+          <div class="label">ratio ALG/OPT</div>
+        </div>
+      </div>
+
+      <div class="bar-wrap">
+        <div class="bar-row">
+          <span class="name">ALG</span>
+          <span class="bar-track"><span class="bar-fill alg" id="barAlg"></span></span>
+          <span class="num" id="numAlg" style="color:var(--blue)">$0</span>
+        </div>
+        <div class="bar-row">
+          <span class="name">OPT</span>
+          <span class="bar-track"><span class="bar-fill opt" id="barOpt"></span></span>
+          <span class="num" id="numOpt" style="color:var(--purple)">&mdash;</span>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+      <div class="narration" id="narration"></div>
+
+      <h2 style="margin-top:16px">Strategies across all D (why break-even wins)</h2>
+      <table class="strat-table" id="stratTable"></table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== PARAMETERS =====================
+let B = 10;          // buy price
+let D = 6;           // true season length (revealed to OPT only)
+let day = 0;         // current day index already simulated (online)
+let rentedDays = 0;  // how many days the online ALG has rented so far
+let bought = false;  // has the online ALG bought yet?
+let buyDay = 0;      // day on which ALG bought (0 = not yet)
+let algCost = 0;     // online cost accumulated
+let finished = false;
+let playing = false, timer = null;
+
+// ===================== OFFLINE OPT (clairvoyant, correct) =====================
+function optCost(d, b) {
+  if (d <= 0) return 0;
+  return Math.min(d, b);   // rent all d days, OR buy on day 1 for b
+}
+
+// ===================== SIMULATE ONE ONLINE DAY =====================
+// Break-even rule: rent until you have rented B-1 days; on the B-th ski day, buy.
+function stepDay() {
+  if (finished) return;
+  if (day >= D) { finishSeason(); return; }
+  day++;
+  let action;
+  if (bought) {
+    action = 'own';                 // already own skis, this day is free
+  } else if (rentedDays >= B - 1) {
+    // This is day number B of skiing without owning -> BUY now.
+    bought = true; buyDay = day; algCost += B; action = 'buy';
+  } else {
+    rentedDays++; algCost += 1; action = 'rent';
+  }
+  render(action);
+  narrateDay(action);
+  if (day >= D) finishSeason(false);
+}
+
+function finishSeason(announce) {
+  if (announce === undefined) announce = true;
+  finished = true;
+  stopPlay();
+  document.getElementById('btnStep').disabled = true;
+  document.getElementById('btnPlay').disabled = true;
+  render(null);
+  updateRatio();
+  if (announce) narrateFinal();
+  else narrateFinal();   // always summarise once the season ends
+}
+
+// ===================== RENDER =====================
+function render(action) {
+  // calendar: show D true days (+ a couple of dashed "could continue" days for fog)
+  const days = document.getElementById('days');
+  days.innerHTML = '';
+  const shown = Math.max(D, day) + 2;   // a little fog past the known end
+  for (let i = 1; i <= shown; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'day';
+    const num = document.createElement('div'); num.className = 'num'; num.textContent = 'd' + i;
+    const act = document.createElement('div'); act.className = 'act';
+    if (i > day) {
+      // not yet simulated -> fog of war (online algorithm cannot see it)
+      cell.classList.add(i <= D ? 'future' : 'fog');
+      act.textContent = '?';
+    } else {
+      // simulated day: determine what happened
+      if (bought && i > buyDay) { cell.classList.add('own'); act.textContent = 'ski'; }
+      else if (bought && i === buyDay) { cell.classList.add('buy'); act.textContent = 'BUY'; }
+      else { cell.classList.add('rent'); act.textContent = 'rent'; }
+    }
+    if (i === day && !finished) cell.classList.add('current');
+    cell.appendChild(num); cell.appendChild(act);
+    days.appendChild(cell);
+  }
+  document.getElementById('calLabel').textContent = finished
+    ? `Season ended — D = ${D} ski days, ALG total $${algCost}`
+    : (day === 0 ? 'Day 0 — season not started' : `Day ${day} of an unknown-length season`);
+
+  // ALG cost stat + bar
+  document.getElementById('statAlg').textContent = '$' + algCost;
+  document.getElementById('numAlg').textContent = '$' + algCost;
+
+  if (finished) updateRatio(); else partialBars();
+  buildStratTable();
+}
+
+function partialBars() {
+  // during the season OPT is unknown to ALG; show only ALG bar, OPT as "?"
+  const opt = optCost(D, B);
+  const scale = Math.max(algCost, opt, 1);
+  document.getElementById('barAlg').style.width = (algCost / scale * 100) + '%';
+  document.getElementById('barOpt').style.width = '0%';
+  document.getElementById('statOpt').textContent = '?';
+  document.getElementById('numOpt').textContent = '?';
+  document.getElementById('statRatio').textContent = '?';
+  document.getElementById('ratioBig').textContent = '?';
+}
+
+function updateRatio() {
+  const opt = optCost(D, B);
+  const ratio = opt === 0 ? 0 : algCost / opt;
+  document.getElementById('statOpt').textContent = '$' + opt;
+  document.getElementById('numOpt').textContent = '$' + opt;
+  document.getElementById('statRatio').textContent = opt === 0 ? '—' : ratio.toFixed(2);
+  document.getElementById('ratioBig').textContent = opt === 0 ? '—' : ratio.toFixed(2);
+  const scale = Math.max(algCost, opt, 1);
+  document.getElementById('barAlg').style.width = (algCost / scale * 100) + '%';
+  document.getElementById('barOpt').style.width = (opt / scale * 100) + '%';
+
+  const bound = 2 - 1 / B;
+  const v = document.getElementById('verdict');
+  if (opt === 0) { v.className = 'verdict'; v.textContent = ''; return; }
+  const tight = Math.abs(ratio - bound) < 1e-9 || ratio >= bound - 1e-9;
+  if (ratio >= bound - 1e-9) {
+    v.className = 'verdict tight';
+    v.textContent = `⚠ Worst case hit: ratio = ${ratio.toFixed(2)} = 2 − 1/B, the most the guarantee allows`;
+  } else {
+    v.className = 'verdict ok';
+    v.textContent = `✓ ratio = ${ratio.toFixed(2)}  ≤  ${bound.toFixed(2)} = 2 − 1/B  (guarantee holds)`;
+  }
+}
+
+// ===================== NARRATION =====================
+function narrate(html){ document.getElementById('narration').innerHTML = html; }
+
+function narrateDay(action) {
+  if (action === 'rent') {
+    const left = (B - 1) - rentedDays;
+    narrate(`<b>Morning of day ${day}.</b> The online algorithm has <span class="exp">no idea</span> if the season ends today or runs for months. `
+      + `Following the break-even rule it <span class="alg">rents</span> for $1 (rented ${rentedDays} day${rentedDays===1?'':'s'} so far). `
+      + (left > 0
+          ? `It will keep renting until it has rented <code>B−1 = ${B-1}</code> days; <span class="hl">${left}</span> more rental day${left===1?'':'s'} until the buy threshold.`
+          : `That was rental day <code>B−1 = ${B-1}</code>: <b>if it skis again, it buys.</b>`));
+  } else if (action === 'buy') {
+    narrate(`<b>Day ${day} — break-even reached.</b> The algorithm has already spent $${B-1} on rentals (days 1…${B-1}); renting once more would match the buy price, so it <span class="hl">BUYS for $${B}</span> now and owns the skis. `
+      + `Online cost so far = <span class="alg">$${algCost}</span>. From here every ski day is free — it can never lose more than a constant factor regardless of how long the season turns out to be.`);
+  } else if (action === 'own') {
+    narrate(`<b>Day ${day}.</b> The algorithm already <span class="ok">owns</span> skis (bought on day ${buyDay}), so today costs <span class="ok">$0</span>. `
+      + `Online cost stays at <span class="alg">$${algCost}</span>. Every extra ski day now widens OPT's bill too — pushing the ratio back down toward 1.`);
+  }
+}
+
+function narrateFinal() {
+  const opt = optCost(D, B);
+  const ratio = opt === 0 ? 0 : algCost / opt;
+  const bound = 2 - 1 / B;
+  const optStrategy = D < B ? `rent all ${D} day${D===1?'':'s'} (cost $${D})` : `buy on day 1 (cost $${B})`;
+  let msg = `<b>Season over.</b> The true length was <span class="ok">D = ${D}</span> — now revealed. `
+    + `A clairvoyant who knew this in advance would <span class="opt">${optStrategy}</span>, so <span class="opt">OPT = $${opt}</span>. `
+    + `The online algorithm, deciding blind each day, spent <span class="alg">ALG = $${algCost}</span>. `;
+  if (opt === 0) {
+    msg += `No ski days, no cost either way.`;
+  } else {
+    msg += `Competitive ratio = <span class="hl">${algCost} / ${opt} = ${ratio.toFixed(2)}</span>. `;
+    if (ratio >= bound - 1e-9) {
+      msg += `This is the <span class="exp">worst case</span>: D = B, so ALG pays B−1 rentals + B buy = $${algCost} while OPT just buys for $${B}. `
+        + `The ratio equals <code>(2B−1)/B = 2 − 1/B = ${bound.toFixed(2)}</code> — the bound is <b>tight</b>, no online rule can guarantee better.`;
+    } else if (ratio <= 1 + 1e-9) {
+      msg += `Here the online rule was <span class="ok">essentially optimal</span> (ratio ≈ 1): the future happened to be friendly. `
+        + `But the guarantee <code>≤ 2 − 1/B</code> holds on <i>every</i> input, lucky or not.`;
+    } else {
+      msg += `Comfortably under the worst-case bound <code>2 − 1/B = ${bound.toFixed(2)}</code>. `
+        + `The point of competitive analysis: this ${ratio.toFixed(2)}× is the <i>guaranteed ceiling</i> across all adversarial inputs, not just this one.`;
+    }
+  }
+  narrate(msg);
+}
+
+// ===================== STRATEGY COMPARISON TABLE =====================
+// Compares three fixed strategies' worst-case ratio over all D, for current B.
+function worstRatio(stratCostFn) {
+  // scan D = 1..3B, take max of cost(D)/OPT(D)
+  let worst = 0;
+  for (let d = 1; d <= 3 * B; d++) {
+    const opt = optCost(d, B);
+    if (opt === 0) continue;
+    const r = stratCostFn(d) / opt;
+    if (r > worst) worst = r;
+  }
+  return worst;
+}
+function costBuyNow(d){ return d > 0 ? B : 0; }                       // buy on day 1 always
+function costRentForever(d){ return d; }                              // never buy
+function costBreakEven(d){ return d < B ? d : (B - 1) + B; }          // rent B-1, then buy
+
+function buildStratTable() {
+  const t = document.getElementById('stratTable');
+  const rBuy = worstRatio(costBuyNow);
+  const rRent = worstRatio(costRentForever);
+  const rBreak = (2 - 1 / B);
+  // current-D cost of each
+  const cBuy = costBuyNow(D), cRent = costRentForever(D), cBreak = (D < B ? D : (B-1)+B);
+  const opt = optCost(D, B);
+  function cell(v){ return opt ? (v/opt).toFixed(2) : '—'; }
+  t.innerHTML = `
+    <tr><th>strategy</th><th>cost @ D=${D}</th><th>ratio @ D=${D}</th><th>worst-case ratio (any D)</th></tr>
+    <tr><td class="name">buy on day 1</td><td>$${cBuy}</td><td>${cell(cBuy)}</td><td class="bad">${rBuy === Infinity ? '∞' : rBuy.toFixed(2)} → ∞ as D→0⁺</td></tr>
+    <tr><td class="name">rent forever</td><td>$${cRent}</td><td>${cell(cRent)}</td><td class="bad">∞  (D→∞)</td></tr>
+    <tr class="robust"><td class="name">break-even (ALG)</td><td>$${cBreak}</td><td>${cell(cBreak)}</td><td class="win">${rBreak.toFixed(2)} = 2 − 1/B</td></tr>`;
+}
+
+// ===================== ADVERSARY =====================
+// Force the worst case: set D = B, run the season, then narrate the trap.
+function runAdversary() {
+  stopPlay();
+  D = B;
+  document.getElementById('dSlider').value = D;
+  document.getElementById('dVal').textContent = D;
+  resetState();
+  // run all B days
+  while (!finished) stepDay();
+  const opt = optCost(D, B);
+  const ratio = algCost / opt;
+  const bound = 2 - 1 / B;
+  narrate(`<b>Adversary attack.</b> The adversary watches the online algorithm and sets the season to exactly <span class="exp">D = B = ${B}</span> days. `
+    + `So the algorithm dutifully rents days 1…${B-1} ($${B-1}), then on day ${B} it reaches break-even and <span class="hl">buys for $${B}</span> — `
+    + `<span class="exp">and the snow stops the very next day</span>. ALG paid <span class="alg">$${algCost}</span> for skis it used once. `
+    + `The clairvoyant OPT simply rents all ${B} days for <span class="opt">$${opt}</span>... actually buying or renting both cost $${B} here, so OPT = $${opt}. `
+    + `Ratio = <span class="hl">${algCost}/${opt} = ${ratio.toFixed(2)} = 2 − 1/B</span>. `
+    + `This is the <span class="exp">tight worst case</span> — every online ski-rental rule can be forced this close to 2×.`);
+}
+
+// ===================== PLAY / RESET / CONTROLS =====================
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  if (finished) return;
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    stepDay();
+    if (finished) { stopPlay(); return; }
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(160, 1100 - speed * 95));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto';
+}
+
+function resetState() {
+  day = 0; rentedDays = 0; bought = false; buyDay = 0; algCost = 0; finished = false;
+  document.getElementById('btnStep').disabled = false;
+  document.getElementById('btnPlay').disabled = false;
+  document.getElementById('verdict').className = 'verdict';
+  document.getElementById('verdict').textContent = '';
+  render(null);
+}
+
+function resetSim() {
+  stopPlay();
+  resetState();
+  const bound = 2 - 1 / B;
+  document.getElementById('bndVal').textContent = bound.toFixed(2);
+  narrate(`<b>Setup.</b> Renting skis costs <span class="alg">$1/day</span>; buying costs <span class="hl">B = $${B}</span> once. `
+    + `The season length <span class="ok">D = ${D}</span> is the truth, but the <b>online algorithm cannot see it</b> — it learns each day only when that day arrives. `
+    + `Press <b>Next Day »</b> to advance. The break-even rule rents until it has rented <code>B−1 = ${B-1}</code> days, then buys. `
+    + `When the season ends we reveal the clairvoyant <span class="opt">OPT</span> and read off the competitive ratio. `
+    + `Guarantee for this B: ratio ≤ <code>2 − 1/B = ${bound.toFixed(2)}</code>.`);
+}
+
+// ===================== SLIDERS =====================
+document.getElementById('bSlider').addEventListener('input', e => {
+  B = parseInt(e.target.value);
+  document.getElementById('bVal').textContent = B;
+  if (D > 24) { D = 24; }
+  resetSim();
+});
+document.getElementById('dSlider').addEventListener('input', e => {
+  D = parseInt(e.target.value);
+  document.getElementById('dVal').textContent = D;
+  resetSim();
+});
+
+// ===================== INIT =====================
+resetSim();
+</script>
+</body>
+</html>
