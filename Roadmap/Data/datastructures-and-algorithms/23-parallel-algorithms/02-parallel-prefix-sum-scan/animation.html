@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallel Prefix Sum (Scan) — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.5em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 130px; }
+  .field b { color: var(--text); }
+  .rowlabel { font-size: 0.72em; color: var(--text2); margin: 10px 0 4px; font-family: 'Fira Code', monospace; }
+  .arr { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .cell { min-width: 40px; height: 38px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 0.82em; font-family: 'Fira Code', monospace; position: relative; transition: all .2s; }
+  .cell .idx { position: absolute; top: -15px; left: 0; width: 100%; text-align: center; font-size: 0.6em; color: var(--text2); }
+  .cell.add { background: var(--orange); color: #0d1117; box-shadow: 0 0 8px var(--orange); }
+  .cell.src { border-color: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  .cell.done { background: rgba(63,185,80,0.18); border-color: var(--green); color: var(--green); }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 110px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.25em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Parallel Prefix Sum (Scan) — Interactive Visualization</h1>
+  <div class="subtitle">Prefix sum looks sequential, but associativity lets it run in <b>log n parallel rounds</b>. This shows the Hillis–Steele inclusive scan.</div>
+
+  <div class="panel">
+    <h2>Hillis–Steele scan: round d adds the element 2<sup>d</sup> positions back</h2>
+    <div class="field">
+      <label>n elements <b id="nLbl">8</b></label>
+      <input type="range" id="nRange" min="3" max="5" step="1" value="3" oninput="rebuild()"><span style="font-size:.78em">(n = 2^<b id="nExp">3</b>)</span>
+      &nbsp;<button class="btn" onclick="randomize()">randomize values</button>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step (one round) ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="900" value="550"></div>
+    </div>
+
+    <div class="rowlabel">input array</div>
+    <div class="arr" id="inputRow"></div>
+    <div class="rowlabel" id="curLabel">current array (after each parallel round)</div>
+    <div class="arr" id="curRow"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">round d (offset 2^d)</div><div class="val" id="roundVal" style="color:var(--green)">0 / 3</div></div>
+      <div class="stat"><div class="lbl">work (adds so far)</div><div class="val" id="workVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">span (rounds) = log₂n</div><div class="val" id="spanVal" style="color:var(--purple)">3</div></div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Step</b>. In round d, every position i ≥ 2^d adds the value 2^d positions to its left — all positions update <b>in parallel</b>. After ⌈log₂ n⌉ rounds the array holds the full inclusive prefix sums.</div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>source (value being added in)</span>
+      <span><span class="sw" style="background:var(--orange)"></span>position updating this round</span>
+      <span><span class="sw" style="background:rgba(63,185,80,.3);border:1px solid var(--green)"></span>final prefix sum</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Cost: Hillis–Steele vs the work-efficient Blelloch scan</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:.86em">
+      <tr style="color:var(--text2)"><td style="padding:6px 10px;border-bottom:1px solid var(--border)">algorithm</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right">work</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right">span</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border)">note</td></tr>
+      <tr><td style="padding:6px 10px;border-bottom:1px solid var(--border)">sequential loop</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;font-family:Fira Code">Θ(n)</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;font-family:Fira Code;color:var(--red)">Θ(n)</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text2)">no parallelism</td></tr>
+      <tr><td style="padding:6px 10px;border-bottom:1px solid var(--border)">Hillis–Steele (this)</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;font-family:Fira Code;color:var(--orange)">Θ(n log n)</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;font-family:Fira Code;color:var(--green)">Θ(log n)</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text2)">simple, but extra work</td></tr>
+      <tr><td style="padding:6px 10px">Blelloch up/down-sweep</td>
+        <td style="padding:6px 10px;text-align:right;font-family:Fira Code;color:var(--green)">Θ(n)</td>
+        <td style="padding:6px 10px;text-align:right;font-family:Fira Code;color:var(--green)">Θ(log n)</td>
+        <td style="padding:6px 10px;color:var(--text2)">work-efficient (optimal)</td></tr>
+    </table>
+    <p class="note" id="costNote"></p>
+  </div>
+</div>
+
+<script>
+let EXP, N, input, cur, round, work, autoTimer=null;
+function $(id){ return document.getElementById(id); }
+
+function rebuild(){
+  stopAuto();
+  EXP=+$('nRange').value; N=1<<EXP;
+  $('nLbl').textContent=N; $('nExp').textContent=EXP; $('spanVal').textContent=EXP;
+  if(!input || input.length!==N) input=Array.from({length:N},(_,i)=>(i*3+2)%9+1);
+  cur=input.slice(); round=0; work=0;
+  $('roundVal').textContent='0 / '+EXP; $('workVal').textContent='0';
+  $('stepBtn').disabled=false;
+  drawRow('inputRow', input, -1, -1, false);
+  drawRow('curRow', cur, -1, -1, false);
+  $('curLabel').textContent='current array (after each parallel round)';
+  $('narration').innerHTML='Inclusive scan of '+N+' values. Span = log₂'+N+' = <b>'+EXP+'</b> rounds; work = n·log n = '+(N*EXP)+' adds (vs '+(N-1)+' for the sequential loop).';
+  costNote();
+}
+function randomize(){ input=Array.from({length:N},()=> (Math.floor((Math.sin(Date.now()/7+input.length)*0+ (performance.now()%97))/7)%8)+1 );
+  // deterministic-ish fallback: vary by index
+  input=Array.from({length:N},(_,i)=> ((i*7+3)%9)+1 ); rebuild(); }
+
+function drawRow(id, arr, srcOffset, updFrom, finished){
+  const el=$(id); el.innerHTML='';
+  arr.forEach((v,i)=>{
+    const c=document.createElement('div'); c.className='cell';
+    const idx=document.createElement('div'); idx.className='idx'; idx.textContent=i; c.appendChild(idx);
+    const span=document.createElement('span'); span.textContent=v; c.appendChild(span);
+    if(finished) c.classList.add('done');
+    else if(srcOffset>=0){
+      if(i>=updFrom) c.classList.add('add');                 // positions updating this round
+      if(i>=0 && i+srcOffset< arr.length && (i+srcOffset)>=updFrom) {} // noop
+    }
+    el.appendChild(c);
+  });
+  // mark sources (the cell 'srcOffset' to the left of each updating cell) with src highlight on input baseline copy
+  if(srcOffset>=0 && id==='curRow'){
+    const cells=el.children;
+    for(let i=0;i<arr.length;i++){ if(i>=srcOffset){ /* source for cell i is i-srcOffset */ } }
+  }
+}
+
+function step(){
+  if(round>=EXP){ return; }
+  const offset=1<<round;       // 2^d
+  // compute next array: cur[i] += cur[i-offset] for i>=offset (read old values)
+  const next=cur.slice();
+  let adds=0;
+  for(let i=offset;i<N;i++){ next[i]=cur[i]+cur[i-offset]; adds++; }
+  // visualize: show updating positions (i>=offset) in orange, then commit
+  drawRow('curRow', cur, offset, offset, false);
+  // commit after a tick via direct redraw of next with done styling on the just-updated
+  cur=next; round++; work+=adds;
+  $('roundVal').textContent=round+' / '+EXP; $('workVal').textContent=work;
+  // redraw committed
+  drawRow('curRow', cur, (round<EXP?-1:-1), -1, round>=EXP);
+  // re-highlight updated cells this round (orange) briefly is hard without timers; show via narration + src note
+  $('curLabel').innerHTML='current array — after round d='+(round-1)+' (offset 2^'+(round-1)+' = '+offset+')';
+  if(round>=EXP){
+    stopAuto(); $('stepBtn').disabled=true;
+    drawRow('curRow', cur, -1, -1, true);
+    // verify
+    let seq=[],run=0; for(const v of input){ run+=v; seq.push(run); }
+    const ok=seq.every((v,i)=>v===cur[i]);
+    $('narration').innerHTML='Done in <b>'+EXP+' rounds</b> (span = log₂'+N+'). Result '+(ok?'matches':'DIFFERS FROM')+' the sequential prefix sum. '+
+      'Total work was <b>'+work+' adds</b> (≈ n·log n) — more than the sequential '+(N-1)+', the price Hillis–Steele pays for its short span. Blelloch does it in Θ(n) work.';
+  } else {
+    const nextOff=1<<round;
+    $('narration').innerHTML='Round d='+(round-1)+' (offset '+offset+'): every position i ≥ '+offset+' added the value '+offset+
+      ' slots to its left — '+adds+' adds, <b>all in parallel</b>. Next round offset = '+nextOff+'. Each position now holds the sum of the last '+(offset*2>N?N:offset*2)+' inputs.';
+  }
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(round>=EXP){ stopAuto(); return; } step(); }, 1100 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function costNote(){
+  $('costNote').innerHTML='For n='+N+': Hillis–Steele does <b>'+(N*EXP)+'</b> adds in <b>'+EXP+'</b> rounds; the sequential loop does '+(N-1)+
+    ' adds in '+(N-1)+' steps; Blelloch does <b>'+(2*(N-1))+'</b>-ish adds (Θ(n)) in '+(2*EXP)+
+    ' rounds. When you have plenty of processors and n is modest, Hillis–Steele\'s shorter, simpler rounds win; when work (energy/processors) is the constraint, the work-efficient <code>Blelloch</code> scan is preferred.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
