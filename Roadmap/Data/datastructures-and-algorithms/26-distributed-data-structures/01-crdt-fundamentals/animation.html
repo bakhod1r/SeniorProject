@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRDT Fundamentals — Convergence Visualizer</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.5em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field label.cb { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .reps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px){ .reps { grid-template-columns: 1fr; } }
+  .rep { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; min-height: 150px; transition: border-color .25s, box-shadow .25s; }
+  .rep h3 { font-size: 0.8em; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; text-align: center; }
+  .rep.flash { border-color: var(--blue); box-shadow: 0 0 12px rgba(88,166,255,.4); }
+  .rep.partitioned { border-color: var(--red); opacity: .65; }
+  .rep.converged { border-color: var(--green); }
+  .setbox { font-family: 'Fira Code', monospace; font-size: 0.92em; color: var(--green); text-align: center; padding: 10px 4px; word-break: break-word; min-height: 38px; }
+  .elem { display:inline-block; background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
+    padding: 2px 8px; margin: 3px; font-size: 0.82em; color: var(--green); }
+  .elem.fresh { border-color: var(--green); box-shadow: 0 0 8px rgba(63,185,80,.5); color:#fff; }
+  .replog { font-size: 0.72em; color: var(--text2); font-family: 'Fira Code', monospace; margin-top: 8px; min-height: 32px; line-height:1.4; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 130px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.2em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+  .pill { display:inline-block; font-size:.72em; padding:1px 7px; border-radius:10px; border:1px solid var(--border); margin-left:6px; }
+  .pill.ok { color: var(--green); border-color: var(--green); }
+  .pill.bad { color: var(--red); border-color: var(--red); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>CRDT Fundamentals — Convergence of a Grow-only Set</h1>
+  <div class="subtitle">Three replicas take <b>concurrent</b> edits, then gossip their states in a <b>random, duplicated</b> order. Because merge = set <b>union</b> (a join-semilattice LUB) — commutative, associative, idempotent — they always reconcile to the <b>same</b> set with no coordinator.</div>
+
+  <div class="panel">
+    <h2>Replicas: local adds, then anti-entropy gossip</h2>
+    <div class="field">
+      <label class="cb"><input type="checkbox" id="dupe" checked onchange="rebuild()"> redeliver some messages (tests <b>idempotence</b>)</label>
+      <label class="cb"><input type="checkbox" id="partition" onchange="rebuild()"> start <b>partitioned</b> (R3 isolated until heal)</label>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="430"></div>
+    </div>
+
+    <div class="reps" id="reps"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">phase</div><div class="val" id="phaseVal" style="font-size:.95em">ready</div></div>
+      <div class="stat"><div class="lbl">gossip messages delivered</div><div class="val" id="msgVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">converged?</div><div class="val" id="convVal">—</div></div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Step</b>. First each replica makes its own concurrent edits; then the network delivers state-merge messages in a shuffled order (with duplicates) until every replica holds the identical union.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Why union always converges</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+// ---- model ----
+const N = 3;
+// concurrent local edits each replica makes before any gossip
+const EDITS = [
+  ['a', 'b'],        // R1
+  ['b', 'c'],        // R2  (note 'b' also added at R1 — duplicates across replicas are fine)
+  ['d']              // R3
+];
+let sets, queue, phase, msgCount, autoTimer=null, flashId=-1, freshById={};
+
+function $(id){ return document.getElementById(id); }
+function eqSets(a,b){ if(a.size!==b.size) return false; for(const x of a) if(!b.has(x)) return false; return true; }
+function sorted(s){ return [...s].sort(); }
+
+function buildQueue(){
+  // anti-entropy: each replica sends its current state to each other replica.
+  // We snapshot edits-only states as the payloads (the sim re-reads live state at delivery time,
+  // which is realistic: a replica gossips whatever it currently knows).
+  const dupe = $('dupe').checked;
+  const part = $('partition').checked;
+  const msgs = [];
+  for(let from=0; from<N; from++) for(let to=0; to<N; to++) if(from!==to){
+    msgs.push({from, to});
+    if(dupe && (from+to)%2===0) msgs.push({from, to}); // redeliver ~half — must be harmless
+  }
+  // deterministic shuffle (no Math.random) — index-mixing permutation
+  for(let i=msgs.length-1;i>0;i--){ const j=(i*7+3)%(i+1); const t=msgs[i]; msgs[i]=msgs[j]; msgs[j]=t; }
+  // if partitioned, R3's incoming/outgoing messages are deferred to the end ("heal")
+  if(part){
+    const normal = msgs.filter(m=>m.from!==2 && m.to!==2);
+    const healed = msgs.filter(m=>m.from===2 || m.to===2);
+    return normal.concat([{heal:true}]).concat(healed);
+  }
+  return msgs;
+}
+
+function rebuild(){
+  stopAuto();
+  sets = EDITS.map(e=>new Set(e));
+  queue = buildQueue();
+  phase = 0; msgCount = 0; flashId=-1; freshById={};
+  $('phaseVal').textContent='local edits';
+  $('msgVal').textContent='0';
+  $('convVal').innerHTML='—';
+  $('stepBtn').disabled=false;
+  render();
+  $('narration').innerHTML = 'Each replica applied its own <b>concurrent</b> adds: R1 ⟵ {a,b}, R2 ⟵ {b,c}, R3 ⟵ {d}. No replica has seen the others yet. Press <b>Step</b> to start gossip — the order is shuffled'+($('dupe').checked?' and some messages arrive twice':'')+'.';
+  noteText();
+}
+
+function render(){
+  const part = $('partition').checked;
+  const reps = $('reps'); let html='';
+  const target = unionAll();
+  for(let i=0;i<N;i++){
+    const conv = eqSets(sets[i], target) && phase>0;
+    let cls='rep';
+    if(i===flashId) cls+=' flash';
+    if(phase>0 && conv) cls+=' converged';
+    if(part && i===2 && phase>0 && !healed) cls+=' partitioned';
+    const elems = sorted(sets[i]).map(x=>{
+      const fresh = (freshById[i]||new Set()).has(x);
+      return '<span class="elem'+(fresh?' fresh':'')+'">'+x+'</span>';
+    }).join('');
+    html += '<div class="'+cls+'"><h3>Replica '+(i+1)+(part&&i===2?' 🚧':'')+'</h3>'+
+      '<div class="setbox">{ '+elems+' }</div>'+
+      '<div class="replog">|S| = '+sets[i].size+'</div></div>';
+  }
+  reps.innerHTML = html;
+}
+
+let healed=false;
+function unionAll(){ const u=new Set(); EDITS.flat().forEach(x=>u.add(x)); return u; }
+
+function step(){
+  if(phase===0){ phase=1; $('phaseVal').textContent='gossiping'; }
+  if(queue.length===0){ finish(); return; }
+  const m = queue.shift();
+  if(m.heal){ healed=true; $('narration').innerHTML='<b>Partition healed.</b> R3 can now exchange state with R1 and R2. Watch it catch up — and the others learn <code>d</code>.'; render(); return; }
+  // deliver: target merges sender's CURRENT state via union (the LUB / join)
+  const before = sets[m.to].size;
+  const fresh = new Set();
+  for(const x of sets[m.from]) if(!sets[m.to].has(x)){ sets[m.to].add(x); fresh.add(x); }
+  freshById[m.to]=fresh;
+  flashId = m.to;
+  msgCount++;
+  $('msgVal').textContent=msgCount;
+  const grew = sets[m.to].size - before;
+  const dup = grew===0;
+  $('narration').innerHTML = 'R'+(m.from+1)+' → R'+(m.to+1)+': merge by <b>union</b>. '+
+    (dup
+      ? 'R'+(m.to+1)+' already had everything R'+(m.from+1)+' sent — the merge changed <b>nothing</b>. That is <b>idempotence</b>: redelivered or out-of-order messages are safe.'
+      : 'R'+(m.to+1)+' absorbed <b>'+grew+'</b> new element'+(grew===1?'':'s')+' ('+sorted(fresh).join(', ')+'). Order does not matter — union is <b>commutative & associative</b>.');
+  render();
+  if(queue.length===0) setTimeout(()=>{ if(phase===1) finish(); }, 0);
+}
+
+function finish(){
+  phase=2; $('phaseVal').textContent='converged ✓'; $('stepBtn').disabled=true; flashId=-1; freshById={};
+  const target = unionAll();
+  const all = sets.every(s=>eqSets(s,target));
+  $('convVal').innerHTML = all ? 'YES <span class="pill ok">SEC</span>' : 'NO <span class="pill bad">bug</span>';
+  render();
+  $('narration').innerHTML = all
+    ? 'All three replicas hold the identical set <code>{ '+sorted(target).join(', ')+' }</code> — the <b>least upper bound</b> of every local edit. They reached <b>strong eventual consistency</b> with no coordinator, no locks, and tolerated reordering'+($('dupe').checked?' and duplication':'')+($('partition').checked?' and a partition':'')+'.'
+    : 'Replicas disagree — that would mean merge is not a proper join. (It is, so this should not happen.)';
+}
+
+function toggleAuto(){
+  if(autoTimer) stopAuto();
+  else { $('autoBtn').textContent='Pause ⏸';
+    autoTimer=setInterval(()=>{ if(phase===2){ stopAuto(); return; } step(); }, 1000 - +$('speed').value); }
+}
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function noteText(){
+  $('note').innerHTML =
+    'The grow-only set\'s merge is plain <b>set union</b>, and union is the <b>least upper bound</b> in the lattice of subsets ordered by ⊆. Three algebraic facts make convergence automatic:<br>'+
+    '• <b>Commutative</b> — <code>A ∪ B = B ∪ A</code> ⇒ the gossip <i>order</i> is irrelevant.<br>'+
+    '• <b>Associative</b> — <code>(A ∪ B) ∪ C = A ∪ (B ∪ C)</code> ⇒ messages may be <i>batched</i> or regrouped freely.<br>'+
+    '• <b>Idempotent</b> — <code>A ∪ A = A</code> ⇒ a <i>redelivered</i> message is harmless, so the network only needs at-least-once delivery.<br>'+
+    'Any data type whose state forms a join-semilattice and whose local updates only move <i>up</i> that lattice gets these guarantees for free. Toggle redelivery and the partition above: the final set never changes — that invariance <i>is</i> the CRDT promise.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
