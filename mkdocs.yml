@@ -105,24 +105,24 @@ plugins:
         - assets/pagefind-init.css
         - assets/fonts/intel-one-mono.css
   - redirects:
-      # Programming-Languages restructure: legacy URLs that external
+      # Programming restructure: legacy URLs that external
       # bookmarks / search engines still point at after the move.
       # NOTE: redirects must run AFTER minify so its stubs are emitted
       # after asset post-processing — minify mutates extra_javascript
       # entries in on_pre_build, and re-runs of on_post_build break
       # if a later plugin's pre/post-build cycle is triggered.
       redirect_maps:
-        'Roadmap/Programming-Languages/golang/README.md': 'Roadmap/Programming-Languages/languages/golang/README.md'
-        'Roadmap/Programming-Languages/java/README.md': 'Roadmap/Programming-Languages/languages/java/README.md'
-        'Roadmap/Programming-Languages/python/README.md': 'Roadmap/Programming-Languages/languages/python/README.md'
-        'Roadmap/Programming-Languages/rust/README.md': 'Roadmap/Programming-Languages/languages/rust/README.md'
-        'Roadmap/Programming-Languages/sql/README.md': 'Roadmap/Programming-Languages/languages/sql/README.md'
-        'Roadmap/Programming-Languages/clean-code/README.md': 'Roadmap/Programming-Languages/code-craft/clean-code/README.md'
-        'Roadmap/Programming-Languages/refactoring/README.md': 'Roadmap/Programming-Languages/code-craft/refactoring/README.md'
-        'Roadmap/Programming-Languages/design-patterns/README.md': 'Roadmap/Programming-Languages/code-craft/design-patterns/README.md'
-        'Roadmap/Programming-Languages/testing/README.md': 'Roadmap/Programming-Languages/quality-engineering/testing/README.md'
-        'Roadmap/Programming-Languages/performance/README.md': 'Roadmap/Programming-Languages/quality-engineering/performance/README.md'
-        'Roadmap/Programming-Languages/concurrency/README.md': 'Roadmap/Programming-Languages/language-internals/concurrency/README.md'
+        'Roadmap/Programming/golang/README.md': 'Roadmap/Programming/languages/golang/README.md'
+        'Roadmap/Programming/java/README.md': 'Roadmap/Programming/languages/java/README.md'
+        'Roadmap/Programming/python/README.md': 'Roadmap/Programming/languages/python/README.md'
+        'Roadmap/Programming/rust/README.md': 'Roadmap/Programming/languages/rust/README.md'
+        'Roadmap/Programming/sql/README.md': 'Roadmap/Programming/languages/sql/README.md'
+        'Roadmap/Programming/clean-code/README.md': 'Roadmap/Programming/code-craft/clean-code/README.md'
+        'Roadmap/Programming/refactoring/README.md': 'Roadmap/Programming/code-craft/refactoring/README.md'
+        'Roadmap/Programming/design-patterns/README.md': 'Roadmap/Programming/code-craft/design-patterns/README.md'
+        'Roadmap/Programming/testing/README.md': 'Roadmap/Programming/quality-engineering/testing/README.md'
+        'Roadmap/Programming/performance/README.md': 'Roadmap/Programming/quality-engineering/performance/README.md'
+        'Roadmap/Programming/concurrency/README.md': 'Roadmap/Programming/language-internals/concurrency/README.md'
 
 markdown_extensions:
   - admonition

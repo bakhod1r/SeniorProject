@@ -42,13 +42,13 @@ topics are **not** re-authored here; learn them at their authoritative home:
 
 | roadmap.sh topic | Learn it here |
 |-------|---------------|
-| Pick a Language | [choosing-a-language-and-polyglot](../../Programming-Languages/choosing-a-language-and-polyglot/) · [languages/](../../Programming-Languages/languages/) |
+| Pick a Language | [choosing-a-language-and-polyglot](../../Programming/choosing-a-language-and-polyglot/) · [languages/](../../Programming/languages/) |
 | Data Structures | [DSA · basic-data-structures](../../Data/datastructures-and-algorithms/05-basic-data-structures/) · [trees](../../Data/datastructures-and-algorithms/09-trees/) · [graphs](../../Data/datastructures-and-algorithms/11-graphs/) |
 | Asymptotic Notation | [DSA · asymptotic-notation](../../Data/datastructures-and-algorithms/06-algorithmic-complexity/04-asymptotic-notation/) |
 | Common Algorithms | [DSA · sorting](../../Data/datastructures-and-algorithms/07-sorting-algorithms/) · [search](../../Data/datastructures-and-algorithms/08-search-algorithms/) · [greedy](../../Data/datastructures-and-algorithms/14-greedy-algorithms/) · [strings](../../Data/datastructures-and-algorithms/17-string-algorithms/) |
-| Data Representation | [language-internals/data-representation-and-numerics](../../Programming-Languages/language-internals/data-representation-and-numerics/) (endianness, IEEE-754, Unicode) |
-| Common UML Diagrams | [documentation/12-uml-diagrams](../../Programming-Languages/code-craft/documentation/12-uml-diagrams/) · [diagrams-as-code](../../Programming-Languages/code-craft/documentation/08-diagrams-as-code/) |
-| Design Patterns | [code-craft/design-patterns](../../Programming-Languages/code-craft/design-patterns/) *(authoritative catalog)* |
+| Data Representation | [language-internals/data-representation-and-numerics](../../Programming/language-internals/data-representation-and-numerics/) (endianness, IEEE-754, Unicode) |
+| Common UML Diagrams | [documentation/12-uml-diagrams](../../Programming/code-craft/documentation/12-uml-diagrams/) · [diagrams-as-code](../../Programming/code-craft/documentation/08-diagrams-as-code/) |
+| Design Patterns | [code-craft/design-patterns](../../Programming/code-craft/design-patterns/) *(authoritative catalog)* |
 | Complexity Classes (P/NP) | [DSA · complexity-classes-p-np](../../Data/datastructures-and-algorithms/06-algorithmic-complexity/06-complexity-classes-p-np/) — deeper in [02. Theory of Computation](02-theory-of-computation/) |
 | Tries | [DSA · trie](../../Data/datastructures-and-algorithms/09-trees/05-trie/) · [advanced-structures](../../Data/datastructures-and-algorithms/21-advanced-structures/) |
 | Balanced Search Trees | [DSA · trees](../../Data/datastructures-and-algorithms/09-trees/) (BST · AVL · Red-Black · 2-3 · 2-3-4 · B-Tree) |

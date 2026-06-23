@@ -78,7 +78,7 @@ This single fact reorganizes everything:
 - Optimizing the **90%** is nearly worthless, because making cold code 2× faster of *zero* time is still zero.
 - You **cannot tell which is which by reading.** The hot 10% is invisible to the eye — it's determined by the workload (how often each path runs), not by how the code looks.
 
-[Amdahl's Law](../../../../../Programming-Languages/code-craft/README.md) makes the ceiling concrete: if a function is 5% of runtime, making it *infinitely* fast — free — speeds the program up by at most 5%. Premature optimization is, almost by definition, effort poured into that 5% (or 0.5%) while the dominating 90% is never touched. A profiler is the instrument that tells you which is which; without it, you're betting on a coin flip with a readability cost as the stake.
+[Amdahl's Law](../../../../../Programming/code-craft/README.md) makes the ceiling concrete: if a function is 5% of runtime, making it *infinitely* fast — free — speeds the program up by at most 5%. Premature optimization is, almost by definition, effort poured into that 5% (or 0.5%) while the dominating 90% is never touched. A profiler is the instrument that tells you which is which; without it, you're betting on a coin flip with a readability cost as the stake.
 
 ---
 

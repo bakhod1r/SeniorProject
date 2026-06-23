@@ -562,4 +562,4 @@ Mistakes seniors make with synchronization misuse at scale:
 - [Clean Code → Concurrency](../../../clean-code/11-concurrency/README.md) — the positive disciplines: limit shared mutable state, keep critical sections small, prefer immutability.
 - [Clean Code → Immutability](../../../clean-code/14-immutability/README.md) — the structural escape from this entire category: immutable, safely-published state needs no further synchronization.
 - [Concurrency Anti-Patterns (chapter)](../README.md) — the sibling categories: Coordination (deadlocks, lock-during-I/O, wrong granularity) and Shared State (unprotected shared mutable state — the root cause every pattern here is a failed attempt to coordinate).
-- [Language Internals → Concurrency, Async & Parallelism](../../../../../Programming-Languages/language-internals/concurrency-async-parallel/README.md) — how the runtime and CPU implement the primitives this file reasons about.
+- [Language Internals → Concurrency, Async & Parallelism](../../../../../Programming/language-internals/concurrency-async-parallel/README.md) — how the runtime and CPU implement the primitives this file reasons about.

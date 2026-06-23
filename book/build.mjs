@@ -22,7 +22,7 @@ import puppeteer from "puppeteer";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROADMAP_ROOT = path.resolve(
   __dirname,
-  "../Roadmap/Programming-Languages/languages/golang"
+  "../Roadmap/Programming/languages/golang"
 );
 const OUT_DIR = path.join(__dirname, "out");
 

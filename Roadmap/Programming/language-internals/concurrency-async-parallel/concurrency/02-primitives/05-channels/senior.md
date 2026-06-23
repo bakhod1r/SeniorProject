@@ -758,7 +758,7 @@ The deeper lesson: most code does not need lock-free magic. Most code needs a bo
 - [Semaphore](../06-semaphore/README.md) — what a buffered channel of `struct{}` actually is.
 - [Cond variable](../07-cond-variable/README.md) — when channels are overkill for "wait for state change".
 - [Concurrency models](../../01-models/README.md) — CSP, actor, shared-memory, and where channels fit.
-- [Profiling techniques](/Roadmap/Programming-Languages/quality-engineering/performance/README.md) — block profiles, trace viewer.
+- [Profiling techniques](/Roadmap/Programming/quality-engineering/performance/README.md) — block profiles, trace viewer.
 - [Backpressure and flow control](../../async-programming/README.md) — how async runtimes generalise the same idea.
 
 ---

@@ -33,7 +33,7 @@ CATEGORY_ORDER: list[str] = [
     "DevOps",
     "Frontend",
     "Mobile",
-    "Programming-Languages",
+    "Programming",
     "Security",
     "Soft-Skills",
     "Tools-and-Platforms",
@@ -49,7 +49,7 @@ CATEGORY_ICONS = {
     "DevOps": "material-cloud-cog",
     "Frontend": "material-monitor-dashboard",
     "Mobile": "material-cellphone",
-    "Programming-Languages": "material-code-tags",
+    "Programming": "material-code-tags",
     "Security": "material-shield-lock",
     "Soft-Skills": "material-account-group",
     "Tools-and-Platforms": "material-tools",
@@ -63,7 +63,7 @@ CATEGORY_TITLES = {
     "DevOps": "DevOps",
     "Frontend": "Frontend",
     "Mobile": "Mobile",
-    "Programming-Languages": "Programming Languages",
+    "Programming": "Programming Languages",
     "Security": "Security",
     "Soft-Skills": "Soft Skills",
     "Tools-and-Platforms": "Tools & Platforms",
@@ -355,7 +355,7 @@ def render_card(category: str) -> list[str]:
     lines.append("    ---")
     lines.append("")
 
-    if category == "Programming-Languages":
+    if category == "Programming":
         lines.extend(render_programming_languages(cat_path))
     else:
         for topic in list_subdirs(cat_path):

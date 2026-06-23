@@ -17,7 +17,7 @@
 
 ## 2. Object Oriented Programming
 
-> **Moved.** The Object-Oriented Programming roadmap is now a top-level, paradigm-level section: [**Programming-Languages → Object-Oriented Programming**](../../object-oriented-programming/). It covers basics of OOP, advanced features, object contracts & semantics, method dispatch & internals, design principles, anti-patterns & code smells, and tactical DDD. Object-thinking (behavior-first, tell-don't-ask, CRC cards) moved to [Engineering Thinking → Object Thinking](../../engineering-thinking/08-object-thinking/).
+> **Moved.** The Object-Oriented Programming roadmap is now a top-level, paradigm-level section: [**Programming → Object-Oriented Programming**](../../object-oriented-programming/). It covers basics of OOP, advanced features, object contracts & semantics, method dispatch & internals, design principles, anti-patterns & code smells, and tactical DDD. Object-thinking (behavior-first, tell-don't-ask, CRC cards) moved to [Engineering Thinking → Object Thinking](../../engineering-thinking/08-object-thinking/).
 
 ## 3. Exception Handling
 

@@ -196,7 +196,7 @@ Withers preserve immutability while letting callers express "this address but wi
 | Aggregates | `03-aggregates/` | VOs are the building blocks aggregates compose. |
 | Primitive Obsession smell | `Refactoring/code-smells/primitive-obsession/` | The smell VOs cure. |
 | Immutability patterns | `02-object-oriented-programming/.../immutability/` | The mechanical foundation under VOs. |
-| Records & sealed types | `Programming-Languages/languages/java/.../records/` | The Java carrier of choice for VOs. |
+| Records & sealed types | `Programming/languages/java/.../records/` | The Java carrier of choice for VOs. |
 
 ---
 

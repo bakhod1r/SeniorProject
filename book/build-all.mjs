@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROADMAP_ROOT = path.resolve(__dirname, "../Roadmap/Programming-Languages/languages/golang");
+const ROADMAP_ROOT = path.resolve(__dirname, "../Roadmap/Programming/languages/golang");
 const OUT_DIR = path.join(__dirname, "out");
 
 // ~174 words/page (Kindle profile, measured on Book 01). A part targets ~600

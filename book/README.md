@@ -1,7 +1,7 @@
 # Go Roadmap → e-reader books
 
 Builds books from the Go roadmap markdown content
-(`Roadmap/Programming-Languages/languages/golang`, 18 sections). Two outputs:
+(`Roadmap/Programming/languages/golang`, 18 sections). Two outputs:
 
 - **EPUB** (current deliverable) — reflowable, ideal for Kindle Scribe → `book/epub/`
 - **PDF** — fixed-layout, Kindle-Scribe page geometry → `book/out/`

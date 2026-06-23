@@ -16,7 +16,7 @@ The **architecture-level** answer to "how do we split this system?" — bounded 
 
 ---
 
-## Why this lives in Architecture, not Programming-Languages
+## Why this lives in Architecture, not Programming
 
 DDD is about how a *system* is sliced — the seams between services, modules, and teams. The actual code-level techniques (rich domain models, anemic vs. behaviour-rich entities, repository interfaces) build *on top* of these slices. When the bounded contexts are wrong, no amount of clean code rescues the architecture.
 

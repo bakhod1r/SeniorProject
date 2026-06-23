@@ -687,41 +687,41 @@ hide:
 
     ---
 
-    ??? note "[Code Craft](Roadmap/Programming-Languages/code-craft/README.md)"
+    ??? note "[Code Craft](Roadmap/Programming/code-craft/README.md)"
 
-        - [Anti Patterns](Roadmap/Programming-Languages/code-craft/anti-patterns/README.md)
-        - [Clean Code](Roadmap/Programming-Languages/code-craft/clean-code/README.md)
-        - [Design Patterns](Roadmap/Programming-Languages/code-craft/design-patterns/README.md)
-        - [Functional Programming](Roadmap/Programming-Languages/code-craft/functional-programming/README.md)
-        - [Refactoring](Roadmap/Programming-Languages/code-craft/refactoring/README.md)
+        - [Anti Patterns](Roadmap/Programming/code-craft/anti-patterns/README.md)
+        - [Clean Code](Roadmap/Programming/code-craft/clean-code/README.md)
+        - [Design Patterns](Roadmap/Programming/code-craft/design-patterns/README.md)
+        - [Functional Programming](Roadmap/Programming/code-craft/functional-programming/README.md)
+        - [Refactoring](Roadmap/Programming/code-craft/refactoring/README.md)
 
-    ??? note "[Diagnostics](Roadmap/Programming-Languages/diagnostics/README.md)"
+    ??? note "[Diagnostics](Roadmap/Programming/diagnostics/README.md)"
 
-        - [Debugging](Roadmap/Programming-Languages/diagnostics/debugging/README.md)
-        - [Error Handling](Roadmap/Programming-Languages/diagnostics/error-handling/README.md)
-        - [Logging](Roadmap/Programming-Languages/diagnostics/logging/README.md)
+        - [Debugging](Roadmap/Programming/diagnostics/debugging/README.md)
+        - [Error Handling](Roadmap/Programming/diagnostics/error-handling/README.md)
+        - [Logging](Roadmap/Programming/diagnostics/logging/README.md)
 
-    ??? note "[Language Internals](Roadmap/Programming-Languages/language-internals/README.md)"
+    ??? note "[Language Internals](Roadmap/Programming/language-internals/README.md)"
 
-        - [Compilers and Interpreters](Roadmap/Programming-Languages/language-internals/compilers-and-interpreters/README.md)
-        - [Concurrency](Roadmap/Programming-Languages/language-internals/concurrency/README.md)
-        - [Memory Management](Roadmap/Programming-Languages/language-internals/memory-management/README.md)
-        - [Metaprogramming](Roadmap/Programming-Languages/language-internals/metaprogramming/README.md)
-        - [Type Systems](Roadmap/Programming-Languages/language-internals/type-systems/README.md)
+        - [Compilers and Interpreters](Roadmap/Programming/language-internals/compilers-and-interpreters/README.md)
+        - [Concurrency](Roadmap/Programming/language-internals/concurrency/README.md)
+        - [Memory Management](Roadmap/Programming/language-internals/memory-management/README.md)
+        - [Metaprogramming](Roadmap/Programming/language-internals/metaprogramming/README.md)
+        - [Type Systems](Roadmap/Programming/language-internals/type-systems/README.md)
 
-    ??? note "[Languages](Roadmap/Programming-Languages/languages/README.md)"
+    ??? note "[Languages](Roadmap/Programming/languages/README.md)"
 
-        - [Go](Roadmap/Programming-Languages/languages/golang/README.md)
-        - [Java](Roadmap/Programming-Languages/languages/java/README.md)
-        - [Python](Roadmap/Programming-Languages/languages/python/README.md)
-        - [Rust](Roadmap/Programming-Languages/languages/rust/README.md)
-        - [SQL](Roadmap/Programming-Languages/languages/sql/README.md)
+        - [Go](Roadmap/Programming/languages/golang/README.md)
+        - [Java](Roadmap/Programming/languages/java/README.md)
+        - [Python](Roadmap/Programming/languages/python/README.md)
+        - [Rust](Roadmap/Programming/languages/rust/README.md)
+        - [SQL](Roadmap/Programming/languages/sql/README.md)
 
-    ??? note "[Quality Engineering](Roadmap/Programming-Languages/quality-engineering/README.md)"
+    ??? note "[Quality Engineering](Roadmap/Programming/quality-engineering/README.md)"
 
-        - [Build Systems](Roadmap/Programming-Languages/quality-engineering/build-systems/README.md)
-        - [Performance](Roadmap/Programming-Languages/quality-engineering/performance/README.md)
-        - [Testing](Roadmap/Programming-Languages/quality-engineering/testing/README.md)
+        - [Build Systems](Roadmap/Programming/quality-engineering/build-systems/README.md)
+        - [Performance](Roadmap/Programming/quality-engineering/performance/README.md)
+        - [Testing](Roadmap/Programming/quality-engineering/testing/README.md)
 
 -   :material-shield-lock:{ .lg .middle } **Security**
 

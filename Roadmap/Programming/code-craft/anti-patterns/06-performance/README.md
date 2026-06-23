@@ -34,7 +34,7 @@ graph LR
 
 Every anti-pattern here is diagnosed and confirmed with a **profiler or benchmark**, never intuition. Premature Optimization is the failure of optimizing without step 1; the other three are the failures a profiler points you *to*. Naming them lets you recognize the shape fast — but the numbers decide whether it matters.
 
-See [big-o-analysis](../../../../../Programming-Languages/code-craft/README.md) and the `profiling-techniques`, `memory-leak-detection`, and `big-o-analysis` skills for the measurement toolkit.
+See [big-o-analysis](../../../../../Programming/code-craft/README.md) and the `profiling-techniques`, `memory-leak-detection`, and `big-o-analysis` skills for the measurement toolkit.
 
 ---
 
