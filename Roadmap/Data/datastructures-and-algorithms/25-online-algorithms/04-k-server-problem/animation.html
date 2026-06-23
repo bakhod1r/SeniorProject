@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The k-Server Problem: Greedy vs Double Coverage — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 {
+    color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+
+  .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-btn {
+    background: var(--bg3); border: 2px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8em; transition: all 0.2s; text-align: left;
+  }
+  .preset-btn:hover { border-color: var(--blue); }
+  .preset-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.1); color: var(--blue); }
+  .preset-btn.danger.active { border-color: var(--red); background: rgba(248,81,73,0.12); color: var(--red); }
+  .preset-btn .label { font-weight: bold; display: block; }
+  .preset-btn .sub { color: var(--text2); font-size: 0.86em; }
+
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field label { font-family: 'Fira Code', monospace; }
+  .field input[type=range] { width: 120px; accent-color: var(--blue); }
+  .field .val { font-family: 'Fira Code', monospace; color: var(--blue); font-weight: bold; min-width: 24px; }
+
+  /* request stream */
+  .stream-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; }
+  .stream-label { font-size: 0.76em; color: var(--text2); margin-bottom: 8px; font-family: 'Fira Code', monospace; }
+  .stream { display: flex; gap: 4px; }
+  .req {
+    min-width: 34px; height: 36px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-family: 'Fira Code', monospace; font-size: 0.88em; font-weight: bold; color: var(--text2);
+    transition: all 0.2s; flex-shrink: 0; position: relative;
+  }
+  .req.done { color: var(--text); opacity: 0.6; }
+  .req.current { box-shadow: 0 0 0 2px var(--blue); background: rgba(88,166,255,0.18); color: var(--blue); opacity: 1; transform: scale(1.1); }
+
+  /* lanes */
+  .lane { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .lane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 8px; }
+  .lane-title { font-family: 'Fira Code', monospace; font-weight: bold; font-size: 0.94em; }
+  .lane-title .tag { font-size: 0.72em; color: var(--text2); font-weight: normal; margin-left: 6px; }
+  .lane.greedy .lane-title { color: var(--orange); }
+  .lane.dc .lane-title { color: var(--green); }
+  .lane.opt .lane-title { color: var(--purple); }
+  .lane-stats { font-family: 'Fira Code', monospace; font-size: 0.82em; color: var(--text2); }
+  .lane-stats b { color: var(--text); }
+  .lane-stats .cost { color: var(--orange); }
+  .lane.dc .lane-stats .cost { color: var(--green); }
+  .lane.opt .lane-stats .cost { color: var(--purple); }
+
+  /* number line svg */
+  .line-svg { width: 100%; height: 60px; display: block; }
+
+  /* costs / ratios */
+  .ratios { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 4px 0 12px; }
+  .ratio-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .ratio-box .value { font-size: 1.3em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .ratio-box.greedy .value { color: var(--orange); }
+  .ratio-box.dc .value { color: var(--green); }
+  .ratio-box.opt .value { color: var(--purple); }
+  .ratio-box .label { font-size: 0.68em; color: var(--text2); margin-top: 2px; }
+  .ratio-box .ksub { font-size: 0.66em; color: var(--text2); margin-top: 2px; font-family: 'Fira Code', monospace; }
+
+  .narration {
+    background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px; font-size: 0.86em; line-height: 1.55; margin-top: 8px; min-height: 96px;
+  }
+  .narration .hl { color: var(--orange); font-weight: bold; }
+  .narration .ok { color: var(--green); font-weight: bold; }
+  .narration .greedy { color: var(--orange); font-weight: bold; }
+  .narration .dc { color: var(--green); font-weight: bold; }
+  .narration .opt { color: var(--purple); font-weight: bold; }
+  .narration .exp { color: var(--red); font-weight: bold; }
+  .narration code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); font-size: 0.92em; }
+
+  .claim {
+    background: rgba(188,140,255,0.08); border: 1px solid var(--purple); border-radius: 6px;
+    padding: 10px 12px; font-size: 0.82em; line-height: 1.5; margin-bottom: 12px; color: var(--text);
+  }
+  .claim b { color: var(--purple); }
+  .claim code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+
+  .callout {
+    background: rgba(88,166,255,0.07); border: 1px solid var(--border); border-radius: 6px;
+    padding: 9px 12px; font-size: 0.8em; line-height: 1.5; margin-top: 12px; color: var(--text2);
+  }
+  .callout b { color: var(--blue); }
+  .callout code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; color: var(--orange); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.74em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<h1>The k-Server Problem: Greedy vs Double Coverage</h1>
+<p class="subtitle">On a line, "move the nearest server" is not competitive — Double Coverage moves servers together and is k-competitive</p>
+
+<div class="container">
+
+  <div class="panel">
+    <h2>Setup</h2>
+    <div class="preset-btns" id="presets"></div>
+    <div class="controls">
+      <button class="btn primary" id="btnStep" onclick="step()">Next Request &raquo;</button>
+      <button class="btn primary" id="btnPlay" onclick="togglePlay()">Auto</button>
+      <button class="btn" id="btnRun" onclick="runAll()">Run to End</button>
+      <button class="btn" id="btnReset" onclick="resetSim()">Reset</button>
+      <div class="speed-control">
+        <label>Speed</label>
+        <input type="range" id="speedSlider" min="1" max="10" value="6">
+      </div>
+    </div>
+    <div class="stream-box">
+      <div class="stream-label" id="streamLabel">request sequence</div>
+      <div class="stream" id="stream"></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--blue)"></span>server</span>
+      <span><span class="dot" style="background:var(--red)"></span>request point</span>
+      <span><span class="dot" style="background:var(--green)"></span>server that served</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Two Online Strategies, One Request Stream</h2>
+    <div class="claim">
+      <b>GREEDY</b> moves the single <i>nearest</i> server to each request. Simple, but on a line it can be driven to
+      unbounded cost. <b>DOUBLE COVERAGE (DC)</b>: if the request lies <i>between</i> two servers, move <b>both</b>
+      neighbours toward it at equal speed until one arrives; if the request is outside all servers, move the single
+      nearest. <b>OPT</b> is the offline optimum total movement, computed by dynamic programming over server
+      configurations — the benchmark every online cost is measured against.
+    </div>
+    <div class="lane greedy" id="laneGreedy"></div>
+    <div class="lane dc" id="laneDC"></div>
+    <div class="lane opt" id="laneOpt"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Total Movement &amp; Competitive Ratios</h2>
+    <div class="ratios" id="ratios"></div>
+    <div class="narration" id="narration"></div>
+    <div class="callout">
+      <b>Paging is k-server on a uniform metric.</b> If every point is at distance 1 from every other, a cache of size
+      <code>k</code> holding <code>k</code> pages is exactly <code>k</code> servers, and a page fault is a request to a
+      point with no server on it. The line metric here is the harder, geometric cousin where Double Coverage shines.
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===================== PRESETS =====================
+// Each preset gives initial server positions and a request sequence on [0,100].
+const PRESETS = [
+  {
+    id: 'killer',
+    danger: true,
+    label: 'Greedy-killer (oscillation)',
+    sub: 'requests alternate in the middle gap',
+    servers: [0, 100],
+    // Both request points (40, 60) sit in the middle, far from BOTH servers.
+    // Greedy keeps dragging whichever server moved last across the 20-unit gap,
+    // so its cost grows ~linearly with the sequence length. DC slides both
+    // outer servers inward once; they then straddle 40/60 and barely move.
+    // Verified: GREEDY=340, DC=80, OPT=80 -> G/OPT=4.25x, DC/OPT=1.00x at len 16.
+    seq: [40, 60, 40, 60, 40, 60, 40, 60, 40, 60, 40, 60, 40, 60, 40, 60]
+  },
+  {
+    id: 'between',
+    label: 'Between two servers',
+    sub: 'requests land in the middle gap',
+    servers: [20, 80],
+    seq: [50, 35, 65, 50, 45, 55, 50, 60]
+  },
+  {
+    id: 'benign',
+    label: 'Benign (local clusters)',
+    sub: 'requests stay near a server',
+    servers: [25, 75],
+    seq: [27, 23, 26, 73, 77, 74, 28, 76]
+  },
+  {
+    id: 'three',
+    label: 'Three servers',
+    sub: 'k = 3, mixed requests',
+    servers: [15, 50, 85],
+    seq: [40, 60, 30, 70, 50, 20, 80, 45]
+  }
+];
+
+// ===================== STATE =====================
+let servers0 = [];       // initial positions
+let seq = [];
+let pos = -1;            // index of current (last processed) request
+let activePreset = 'killer';
+let playing = false, timer = null;
+
+// per-strategy live server positions + accumulated cost + last-move log
+let G = null;   // greedy
+let DC = null;  // double coverage
+let OPT = null; // offline optimum (positions tracked via DP reconstruction)
+
+function clone(a){ return a.slice(); }
+
+function resetStrategies() {
+  G  = { pos: clone(servers0), cost: 0, moved: [], served: -1, log: '' };
+  DC = { pos: clone(servers0), cost: 0, moved: [], served: -1, log: '' };
+  OPT = computeOPT(servers0, seq);   // full offline optimum up front
+  OPT.live = clone(servers0); OPT.cost = 0; OPT.served = -1; OPT.log = '';
+}
+
+// ===================== GREEDY =====================
+// Move the single nearest server to the request point.
+function stepGreedy(req) {
+  const p = G.pos;
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < p.length; i++) {
+    const d = Math.abs(p[i] - req);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  const from = p[best];
+  p[best] = req;
+  G.cost += bestD;
+  G.served = best;
+  G.moved = [best];
+  G.log = `nearest server moved ${dist(from, req)} (from ${from} to ${req})`;
+}
+
+// ===================== DOUBLE COVERAGE =====================
+// If request is strictly between the smallest server >= req and the largest <= req,
+// move BOTH neighbours toward it at equal speed until one reaches it; the other
+// moves by the same distance. If the request is outside the span of all servers,
+// move the single nearest (the boundary server).
+function stepDC(req) {
+  const p = DC.pos;
+  // find nearest server on the left (<= req) and on the right (>= req)
+  let leftIdx = -1, rightIdx = -1, leftPos = -Infinity, rightPos = Infinity;
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] <= req && p[i] > leftPos) { leftPos = p[i]; leftIdx = i; }
+    if (p[i] >= req && p[i] < rightPos) { rightPos = p[i]; rightIdx = i; }
+  }
+  // a server already on the point: zero cost
+  if (leftIdx !== -1 && p[leftIdx] === req) {
+    DC.served = leftIdx; DC.moved = []; DC.log = `a server already sits on ${req} — free`; return;
+  }
+  if (rightIdx !== -1 && p[rightIdx] === req) {
+    DC.served = rightIdx; DC.moved = []; DC.log = `a server already sits on ${req} — free`; return;
+  }
+
+  if (leftIdx !== -1 && rightIdx !== -1) {
+    // strictly between two servers: double coverage
+    const dl = req - p[leftIdx];   // left server moves right by this much to reach req
+    const dr = p[rightIdx] - req;  // right server moves left by this much to reach req
+    const move = Math.min(dl, dr); // both move this distance; the closer one arrives
+    // move both toward req by `move`
+    p[leftIdx]  += move;
+    p[rightIdx] -= move;
+    DC.cost += 2 * move;           // both servers travel `move`
+    // whichever reached req is the server that serves; nudge the other if rounding
+    let server;
+    if (dl <= dr) { p[leftIdx] = req; server = leftIdx; }
+    else { p[rightIdx] = req; server = rightIdx; }
+    DC.served = server;
+    DC.moved = (dl === dr) ? [leftIdx, rightIdx] : [leftIdx, rightIdx];
+    DC.log = `between servers: left moved +${move}, right moved -${move} (both ${move}); ` +
+             `${dl <= dr ? 'left' : 'right'} server reached ${req}. Total movement ${2*move}`;
+  } else {
+    // request outside all servers: move the single nearest boundary server
+    const idx = (leftIdx !== -1) ? leftIdx : rightIdx;
+    const from = p[idx];
+    const d = Math.abs(from - req);
+    p[idx] = req;
+    DC.cost += d;
+    DC.served = idx;
+    DC.moved = [idx];
+    DC.log = `request outside all servers: nearest boundary server moved ${d} (from ${from} to ${req})`;
+  }
+}
+
+// ===================== OFFLINE OPT via DP over configurations =====================
+// State: which servers occupy which points. Since servers are interchangeable,
+// the optimal offline cost is computed over multisets of positions. We track the
+// reachable set of configurations after each request with their minimum cost,
+// then reconstruct one optimal trajectory to display.
+//
+// Points the optimum ever needs are the initial positions plus all request points
+// (a classic exchange argument shows an optimal solution only ever sits servers on
+// such points). We enumerate configurations as sorted multisets over this point set.
+function computeOPT(initial, requests) {
+  const k = initial.length;
+  // candidate points = initial positions ∪ request points
+  const ptsSet = new Set(initial);
+  requests.forEach(r => ptsSet.add(r));
+  const pts = [...ptsSet].sort((a,b)=>a-b);
+
+  // a configuration = sorted array of k positions (servers interchangeable)
+  const key = c => c.join(',');
+  const startConf = clone(initial).sort((a,b)=>a-b);
+
+  // layer: map from configKey -> { cost, conf, prevKey }
+  let layer = new Map();
+  layer.set(key(startConf), { cost: 0, conf: startConf, prevKey: null, layerIdx: -1 });
+  const allLayers = [layer];
+
+  for (let r = 0; r < requests.length; r++) {
+    const req = requests[r];
+    const next = new Map();
+    for (const [, st] of layer) {
+      const conf = st.conf;
+      // if request already covered, zero-cost stay
+      if (conf.includes(req)) {
+        relax(next, conf, st.cost, key(conf), r, allLayers.length);
+        continue;
+      }
+      // otherwise, move exactly one server to req (moving more than one is never
+      // beneficial for a single request in this metric).
+      for (let i = 0; i < k; i++) {
+        const nc = clone(conf);
+        const add = Math.abs(conf[i] - req);
+        nc[i] = req;
+        nc.sort((a,b)=>a-b);
+        relax(next, nc, st.cost + add, key(conf), r, allLayers.length);
+      }
+    }
+    layer = next;
+    allLayers.push(layer);
+  }
+
+  // pick min-cost final configuration
+  let bestKey = null, bestCost = Infinity;
+  for (const [kk, st] of layer) { if (st.cost < bestCost) { bestCost = st.cost; bestKey = kk; } }
+
+  // reconstruct trajectory of configurations
+  const traj = [];
+  let li = allLayers.length - 1, curKey = bestKey;
+  while (li >= 0 && curKey !== null) {
+    const st = allLayers[li].get(curKey);
+    traj.unshift(st.conf);
+    curKey = st.prevKey;
+    li--;
+  }
+  // traj[0] = start config, traj[r+1] = config after request r
+  return { total: bestCost, traj, pts };
+
+  function relax(map, conf, cost, prevKey, reqIdx, layerIdx) {
+    const kk = key(conf);
+    const ex = map.get(kk);
+    if (!ex || cost < ex.cost) map.set(kk, { cost, conf, prevKey, layerIdx });
+  }
+}
+
+// distance helper for narration
+function dist(a, b){ return Math.abs(a - b); }
+
+// ===================== DRIVER =====================
+function step() {
+  if (pos >= seq.length - 1) return;
+  pos++;
+  const req = seq[pos];
+  stepGreedy(req);
+  stepDC(req);
+  stepOPTdisplay(pos);
+  render();
+  narrateStep(req);
+  if (pos >= seq.length - 1) { stopPlay(); narrateFinal(); }
+}
+
+function stepOPTdisplay(idx) {
+  // OPT.traj[idx+1] is the config after processing request idx.
+  const before = OPT.traj[idx];
+  const after  = OPT.traj[idx + 1];
+  // incremental cost = sum of |after - before| matched greedily (sorted multisets)
+  let inc = 0;
+  for (let i = 0; i < after.length; i++) inc += Math.abs(after[i] - before[i]);
+  OPT.cost += inc;
+  OPT.live = clone(after);
+  OPT.log = inc === 0 ? `optimum already covers ${seq[idx]} — free`
+                      : `optimum reconfigures for cost ${inc}`;
+}
+
+function runAll() {
+  stopPlay();
+  while (pos < seq.length - 1) {
+    pos++;
+    const req = seq[pos];
+    stepGreedy(req);
+    stepDC(req);
+    stepOPTdisplay(pos);
+  }
+  render();
+  narrateFinal();
+}
+
+// ===================== RENDER =====================
+function render() {
+  // stream
+  const s = document.getElementById('stream');
+  s.innerHTML = '';
+  seq.forEach((pg, i) => {
+    const d = document.createElement('div');
+    d.className = 'req' + (i < pos ? ' done' : '') + (i === pos ? ' current' : '');
+    d.textContent = pg;
+    s.appendChild(d);
+  });
+  const cur = s.querySelector('.current');
+  if (cur) cur.scrollIntoView({ inline: 'center', block: 'nearest' });
+
+  document.getElementById('streamLabel').textContent =
+    pos < 0 ? `request sequence (${seq.length} requests, k=${servers0.length}) — press Next Request`
+            : `request ${pos + 1} / ${seq.length}: point ${seq[pos]}`;
+
+  const curReq = pos >= 0 ? seq[pos] : null;
+  renderLane('laneGreedy', 'greedy', 'GREEDY', 'move nearest', G.pos, G.cost, G.served, G.moved, curReq, G.log);
+  renderLane('laneDC', 'dc', 'DOUBLE COVERAGE', 'move both neighbours', DC.pos, DC.cost, DC.served, DC.moved, curReq, DC.log);
+  renderLane('laneOpt', 'opt', 'OPT', 'offline optimum (DP)', OPT.live, OPT.cost, OPT.served, [], curReq, OPT.log);
+
+  renderRatios();
+}
+
+// map line coordinate [0,100] to svg x with margins
+const SVG_W = 1040, MARGIN = 30;
+function sx(coord){ return MARGIN + (coord / 100) * (SVG_W - 2 * MARGIN); }
+
+function renderLane(elId, cls, name, tag, positions, cost, served, moved, curReq, log) {
+  const lane = document.getElementById(elId);
+  lane.innerHTML = '';
+
+  const head = document.createElement('div');
+  head.className = 'lane-head';
+  head.innerHTML =
+    `<span class="lane-title">${name}<span class="tag">${tag}</span></span>` +
+    `<span class="lane-stats">total movement <b class="cost">${fmt(cost)}</b></span>`;
+  lane.appendChild(head);
+
+  // SVG number line
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'line-svg');
+  svg.setAttribute('viewBox', `0 0 ${SVG_W} 60`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+
+  // base line
+  const baseY = 34;
+  const axis = mk('line', { x1: sx(0), y1: baseY, x2: sx(100), y2: baseY, stroke: '#30363d', 'stroke-width': 2 });
+  svg.appendChild(axis);
+  // ticks
+  for (let t = 0; t <= 100; t += 10) {
+    svg.appendChild(mk('line', { x1: sx(t), y1: baseY - 4, x2: sx(t), y2: baseY + 4, stroke: '#30363d', 'stroke-width': 1 }));
+    const lbl = mk('text', { x: sx(t), y: baseY + 18, fill: '#8b949e', 'font-size': 9, 'text-anchor': 'middle', 'font-family': 'Fira Code, monospace' });
+    lbl.textContent = t;
+    svg.appendChild(lbl);
+  }
+
+  // request marker (red)
+  if (curReq !== null) {
+    svg.appendChild(mk('line', { x1: sx(curReq), y1: 8, x2: sx(curReq), y2: baseY, stroke: '#f85149', 'stroke-width': 1.5, 'stroke-dasharray': '3,3' }));
+    const rm = mk('circle', { cx: sx(curReq), cy: 8, r: 5, fill: '#f85149' });
+    svg.appendChild(rm);
+  }
+
+  // servers (blue, green if it served, brighter if it moved this step)
+  positions.forEach((p, i) => {
+    const isServed = (i === served);
+    const isMoved = moved.includes(i);
+    const color = isServed ? '#3fb950' : '#58a6ff';
+    const r = isMoved || isServed ? 9 : 7;
+    const c = mk('circle', { cx: sx(p), cy: baseY, r: r, fill: color, stroke: '#0d1117', 'stroke-width': 2 });
+    svg.appendChild(c);
+    // server label
+    const sl = mk('text', { x: sx(p), y: baseY - 14, fill: color, 'font-size': 10, 'text-anchor': 'middle', 'font-family': 'Fira Code, monospace', 'font-weight': 'bold' });
+    sl.textContent = String.fromCharCode(65 + i);
+    svg.appendChild(sl);
+  });
+
+  lane.appendChild(svg);
+
+  // move note
+  const note = document.createElement('div');
+  note.style = 'font-size:0.74em;color:var(--text2);font-family:Fira Code,monospace;min-height:1.1em;margin-top:2px;';
+  note.textContent = (pos >= 0 && log) ? log : ' ';
+  lane.appendChild(note);
+}
+
+function mk(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const a in attrs) el.setAttribute(a, attrs[a]);
+  return el;
+}
+
+function fmt(x){ return Number.isInteger(x) ? x : x.toFixed(1); }
+
+function renderRatios() {
+  const optC = OPT.cost;
+  const gC = G.cost, dcC = DC.cost;
+  const r = x => optC === 0 ? (x === 0 ? '1.00×' : '∞') : (x / optC).toFixed(2) + '×';
+  const wrap = document.getElementById('ratios');
+  const k = servers0.length;
+  wrap.innerHTML =
+    `<div class="ratio-box greedy"><div class="value">${r(gC)}</div><div class="label">GREEDY / OPT</div><div class="ksub">${fmt(gC)} / ${fmt(optC)} moved</div></div>` +
+    `<div class="ratio-box dc"><div class="value">${r(dcC)}</div><div class="label">DC / OPT</div><div class="ksub">${fmt(dcC)} / ${fmt(optC)} moved</div></div>` +
+    `<div class="ratio-box opt"><div class="value">${fmt(optC)}</div><div class="label">OPT movement (optimal)</div><div class="ksub">DC bound = k = ${k}×</div></div>`;
+}
+
+// ===================== NARRATION =====================
+function narrate(html) { document.getElementById('narration').innerHTML = html; }
+
+function narrateStep(req) {
+  let msg = `<b>Request ${pos + 1}: point <code>${req}</code>.</b> `;
+  msg += `<span class="greedy">GREEDY</span>: ${G.log}. `;
+  msg += `<span class="dc">DC</span>: ${DC.log}. `;
+  msg += `<span class="opt">OPT</span>: ${OPT.log}. `;
+  const optC = OPT.cost;
+  msg += `<br>Running totals — <span class="greedy">GREEDY ${fmt(G.cost)}</span>, <span class="dc">DC ${fmt(DC.cost)}</span>, <span class="opt">OPT ${fmt(optC)}</span>. `;
+  if (optC > 0) {
+    msg += `Ratios: <span class="greedy">${(G.cost/optC).toFixed(2)}×</span> vs <span class="dc">${(DC.cost/optC).toFixed(2)}×</span>.`;
+  }
+  narrate(msg);
+}
+
+function narrateFinal() {
+  const optC = OPT.cost, gC = G.cost, dcC = DC.cost;
+  const k = servers0.length;
+  const gR = optC ? (gC/optC) : 0, dcR = optC ? (dcC/optC) : 0;
+  let msg = `<b>Stream complete (${seq.length} requests, k = ${k}).</b> `;
+  msg += `Total movement: <span class="greedy">GREEDY = ${fmt(gC)}</span>, <span class="dc">DC = ${fmt(dcC)}</span>, <span class="opt">OPT = ${fmt(optC)}</span> (offline optimum). `;
+  if (optC > 0) {
+    msg += `Competitive ratios: <span class="greedy">GREEDY/OPT = ${gR.toFixed(2)}×</span>, <span class="dc">DC/OPT = ${dcR.toFixed(2)}×</span>. `;
+  }
+
+  if (activePreset === 'killer') {
+    msg += `<br><span class="exp">The greedy-killer.</span> Both request points (<code>40</code> and <code>60</code>) sit in the middle, far from <b>both</b> servers at 0 and 100. After greedy first commits one server to the gap, that <i>same</i> lone server is always the nearest, so <span class="greedy">GREEDY</span> shuttles it back and forth across the 20-unit gap forever — paying 20 every step. Its total grows <span class="exp">linearly</span> with the sequence, so the ratio grows <b>without bound</b>: greedy is <b>not competitive</b>. `;
+    msg += `<span class="dc">DC</span> instead slides <i>both</i> outer servers inward once; they come to straddle 40 and 60 and then barely move. Its cost stays flat and equals <span class="opt">OPT</span> here — Double Coverage is <b>k-competitive</b> on the line.`;
+  } else if (activePreset === 'benign') {
+    msg += `<br><span class="ok">Benign stream.</span> Every request sits close to a server that is already the obvious one to use, so "move nearest" and Double Coverage make nearly the same cheap moves. When the input has no adversarial structure, even greedy looks fine — which is exactly why worst-case competitive analysis, not average cases, separates these algorithms.`;
+  } else if (activePreset === 'between') {
+    msg += `<br><span class="dc">Double Coverage</span> earns its name here: requests landing between the two servers make DC slide both inward, so the pair self-centres around the active region. <span class="greedy">GREEDY</span> commits one server and can be pulled off-balance, leaving the other stranded far away.`;
+  } else {
+    msg += `<br>With <span class="opt">k = ${k}</span> servers, Double Coverage generalises: only the two servers immediately bracketing the request move toward it. The k-competitive guarantee (Chrobak–Karloff–Payne–Vishwanathan) holds for any number of servers on the line.`;
+  }
+  narrate(msg);
+}
+
+// ===================== PRESET UI =====================
+function renderPresetButtons() {
+  const wrap = document.getElementById('presets');
+  wrap.innerHTML = '';
+  PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'preset-btn' + (p.danger ? ' danger' : '') + (p.id === activePreset ? ' active' : '');
+    b.innerHTML = `<span class="label">${p.label}</span><span class="sub">${p.sub}</span>`;
+    b.onclick = () => selectPreset(p.id);
+    wrap.appendChild(b);
+  });
+}
+
+function selectPreset(id) {
+  activePreset = id;
+  renderPresetButtons();
+  resetSim();
+}
+
+// ===================== PLAY / RESET =====================
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  if (pos >= seq.length - 1) return;
+  playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  const tick = () => {
+    if (!playing) return;
+    step();
+    if (pos >= seq.length - 1) { stopPlay(); return; }
+    const speed = parseInt(document.getElementById('speedSlider').value);
+    timer = setTimeout(tick, Math.max(260, 1400 - speed * 120));
+  };
+  tick();
+}
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+  document.getElementById('btnPlay').textContent = 'Auto';
+}
+
+function resetSim() {
+  stopPlay();
+  const preset = PRESETS.find(x => x.id === activePreset);
+  servers0 = clone(preset.servers);
+  seq = clone(preset.seq);
+  pos = -1;
+  resetStrategies();
+  render();
+  const intro = {
+    killer: `<b>Setup — the greedy-killer.</b> Two servers start far apart at <code>${preset.servers.join(', ')}</code>. Requests alternate at <code>${preset.seq[0]}</code> and <code>${preset.seq[1]}</code> in the middle gap, far from both servers. Press <b>Run to End</b> and watch <span class="greedy">GREEDY</span>'s total balloon (4.25× by the end) while <span class="dc">DC</span> and <span class="opt">OPT</span> stay flat — the classic proof that "move nearest" is not competitive.`,
+    between: `<b>Setup — between two servers.</b> Servers at <code>${preset.servers.join(', ')}</code>; requests land mostly in the gap. Watch <span class="dc">Double Coverage</span> slide <i>both</i> neighbours inward (cost = twice the smaller move) so the pair re-centres on the action.`,
+    benign: `<b>Setup — benign clusters.</b> Servers at <code>${preset.servers.join(', ')}</code>; requests stay near whichever server is already closest. With no adversarial structure, <span class="greedy">GREEDY</span> and <span class="dc">DC</span> behave almost identically — a reminder that competitive analysis is about the <i>worst</i> case.`,
+    three: `<b>Setup — three servers.</b> Servers at <code>${preset.servers.join(', ')}</code> (k = 3). For each request, Double Coverage moves only the two servers immediately bracketing it. Step through and compare totals against the DP-computed <span class="opt">OPT</span>.`
+  };
+  narrate(intro[activePreset] || intro.killer);
+}
+
+// ===================== INIT =====================
+renderPresetButtons();
+resetSim();
+</script>
+</body>
+</html>
