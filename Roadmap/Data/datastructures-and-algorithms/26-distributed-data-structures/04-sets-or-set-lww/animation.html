@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set CRDTs — OR-Set Add-Wins Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.4em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:10px; flex-wrap:wrap;}
+  .seg button { background:var(--bg3); border:none; color:var(--text2); padding:6px 12px; cursor:pointer; font-size:.82em; }
+  .seg button.on { background:rgba(88,166,255,.18); color:var(--blue); }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .reps { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px){ .reps { grid-template-columns: 1fr; } }
+  .rep { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; transition:border-color .2s, box-shadow .2s;}
+  .rep h3 { font-size: 0.8em; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; text-align:center;}
+  .rep.flash { border-color: var(--blue); box-shadow: 0 0 12px rgba(88,166,255,.4); }
+  .present { text-align:center; font-family:'Fira Code',monospace; font-size:1.1em; color:var(--green); min-height:30px; padding:6px;}
+  .tags { font-family:'Fira Code',monospace; font-size:.72em; color:var(--text2); margin-top:6px; line-height:1.5;}
+  .tag { display:inline-block; padding:1px 6px; margin:2px; border-radius:4px; border:1px solid var(--border);}
+  .tag.live { color:var(--green); border-color:var(--green);}
+  .tag.dead { color:var(--red); border-color:var(--red); text-decoration:line-through; opacity:.7;}
+  .ctrls2 { display:flex; justify-content:center; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .mini { font-size:.74em; padding:4px 10px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 130px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.1em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Set CRDTs — Concurrent Add vs Remove</h1>
+  <div class="subtitle">Add is easy (union). <b>Remove</b> is the hard part: if you and I concurrently <b>add</b> and <b>remove</b> the same element, who wins? Compare an <b>OR-Set</b> (observed-remove, unique tags → <b>add-wins</b>, re-add works) against a <b>2P-Set</b> (tombstones → remove is forever).</div>
+
+  <div class="panel">
+    <h2>Two replicas editing element "x"</h2>
+    <div class="seg">
+      <button id="segOR" class="on" onclick="setMode('OR')">OR-Set (unique tags)</button>
+      <button id="segPN" onclick="setMode('2P')">2P-Set (tombstones)</button>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="syncBtn" onclick="merge()">Merge replicas (sync) ⇄</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control" style="margin-left:auto;color:var(--text2);font-size:.8em">tip: do concurrent ops, THEN merge</div>
+    </div>
+
+    <div class="reps" id="reps"></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">merges performed</div><div class="val" id="mergeVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">converged?</div><div class="val" id="convVal">—</div></div>
+      <div class="stat"><div class="lbl">final verdict for "x"</div><div class="val" id="verdVal">—</div></div>
+    </div>
+
+    <div class="narration" id="narration">Try this: on R1 press <b>add x</b>; on R2 press <b>add x</b> then <b>remove x</b> (R2 only ever saw its own add). Now <b>Merge</b>. In an OR-Set, R1's add carries a tag R2 never observed, so it survives → <b>add-wins</b>, "x" stays.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Why OR-Set wins where 2P-Set fails</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+const EL='x';
+let mode='OR';
+let nextTag;        // global unique tag source (counter; deterministic, no randomness)
+// OR-Set replica state: { tags:Set of live tag-ids for x }, plus observed-removed set of tag-ids
+// 2P-Set replica state: A (added once, bool), R (tombstone, bool)
+let reps;          // array of replica states
+let merges, flashId;
+
+function $(id){ return document.getElementById(id); }
+
+function rebuild(){
+  nextTag=1; merges=0; flashId=-1;
+  if(mode==='OR') reps=[{tags:new Set(), rem:new Set()},{tags:new Set(), rem:new Set()}];
+  else reps=[{A:false,R:false},{A:false,R:false}];
+  $('mergeVal').textContent='0';
+  $('convVal').innerHTML='—'; $('verdVal').innerHTML='—';
+  $('syncBtn').disabled=false;
+  render();
+  $('narration').innerHTML = mode==='OR'
+    ? 'OR-Set: every <b>add</b> mints a fresh unique tag. A <b>remove</b> only kills the tags this replica has currently OBSERVED. Concurrent adds bring new, unseen tags — so add-wins, and re-adding always works.'
+    : '2P-Set: an add-set A and a remove-set R (tombstones). Element present iff added and not tombstoned. Once removed it is in R <b>forever</b> — you can never re-add it.';
+  noteText();
+}
+
+function setMode(m){ mode=m; $('segOR').classList.toggle('on',m==='OR'); $('segPN').classList.toggle('on',m==='2P'); rebuild(); }
+
+function present(s){
+  if(mode==='OR'){ for(const t of s.tags) if(!s.rem.has(t)) return true; return false; }
+  return s.A && !s.R;
+}
+
+function addEl(i){
+  const s=reps[i];
+  if(mode==='OR'){ const t=nextTag++; s.tags.add(t); $('narration').innerHTML='R'+(i+1)+' add(x): minted unique tag <code>x@'+t+'</code>. The set now contains x via a tag no other replica has seen yet.'; }
+  else { s.A=true; $('narration').innerHTML='R'+(i+1)+' add(x): set A = true. (2P-Set can add at most once meaningfully.)'; }
+  flashId=i; render(); postOp();
+}
+function remEl(i){
+  const s=reps[i];
+  if(mode==='OR'){
+    let killed=[]; for(const t of s.tags) if(!s.rem.has(t)){ s.rem.add(t); killed.push(t); }
+    $('narration').innerHTML = killed.length
+      ? 'R'+(i+1)+' remove(x): killed only the OBSERVED tags ['+killed.map(t=>'x@'+t).join(', ')+']. A concurrent add elsewhere with a different tag is untouched.'
+      : 'R'+(i+1)+' remove(x): nothing observed to remove here yet.';
+  } else {
+    s.R=true; $('narration').innerHTML='R'+(i+1)+' remove(x): tombstone R = true. This is permanent — even a future add cannot bring x back.';
+  }
+  flashId=i; render(); postOp();
+}
+
+function postOp(){
+  $('convVal').innerHTML = sameView()? '<span style="color:var(--green)">YES</span>':'<span style="color:var(--text2)">replicas differ — merge to converge</span>';
+}
+
+function merge(){
+  // bidirectional merge (state-based join), applied both directions so both converge
+  const a=reps[0], b=reps[1];
+  if(mode==='OR'){
+    const tags=new Set([...a.tags, ...b.tags]);
+    const rem=new Set([...a.rem, ...b.rem]);
+    reps[0]={tags:new Set(tags), rem:new Set(rem)};
+    reps[1]={tags:new Set(tags), rem:new Set(rem)};
+  } else {
+    const A=a.A||b.A, R=a.R||b.R;
+    reps[0]={A,R}; reps[1]={A,R};
+  }
+  merges++; $('mergeVal').textContent=merges; flashId=-1;
+  render();
+  const p=present(reps[0]);
+  $('convVal').innerHTML='<span style="color:var(--green)">YES</span>';
+  $('verdVal').innerHTML = p ? '<span style="color:var(--green)">x is PRESENT</span>' : '<span style="color:var(--red)">x is ABSENT</span>';
+  if(mode==='OR'){
+    const liveTags=[...reps[0].tags].filter(t=>!reps[0].rem.has(t));
+    $('narration').innerHTML = p
+      ? 'Merged (union of tags, union of removed). x is <b>PRESENT</b> via surviving tag'+(liveTags.length>1?'s':'')+' ['+liveTags.map(t=>'x@'+t).join(', ')+'] — a concurrent add\'s tag was never in anyone\'s observed-remove set. <b>Add-wins.</b>'
+      : 'Merged. Every tag for x has been observed-removed, so x is <b>ABSENT</b>. Press add again — a brand-new tag re-adds it cleanly (no resurrection problem).';
+  } else {
+    $('narration').innerHTML = p
+      ? 'Merged. x is present (added, no tombstone yet).'
+      : 'Merged. R has the tombstone, so x is <b>ABSENT — permanently</b>. Press add on either replica: nothing happens after merge, because the tombstone always wins. This is the 2P-Set "no re-add" limitation.';
+  }
+}
+
+function sameView(){ return present(reps[0])===present(reps[1]) && JSON.stringify(serial(0))===JSON.stringify(serial(1)); }
+function serial(i){ const s=reps[i]; return mode==='OR' ? {t:[...s.tags].sort(), r:[...s.rem].sort()} : {A:s.A,R:s.R}; }
+
+function render(){
+  const root=$('reps'); let html='';
+  for(let i=0;i<2;i++){
+    const s=reps[i];
+    const cls='rep'+(i===flashId?' flash':'');
+    const p=present(s);
+    let tagHtml='';
+    if(mode==='OR'){
+      const all=[...s.tags].sort((x,y)=>x-y);
+      tagHtml = all.length ? all.map(t=>'<span class="tag '+(s.rem.has(t)?'dead':'live')+'">x@'+t+'</span>').join('') : '<span style="opacity:.6">(no tags)</span>';
+      tagHtml = '<div class="tags">tags: '+tagHtml+'</div>';
+    } else {
+      tagHtml = '<div class="tags">A='+s.A+' &nbsp; R(tombstone)='+s.R+'</div>';
+    }
+    html += '<div class="'+cls+'"><h3>Replica '+(i+1)+'</h3>'+
+      '<div class="present">{ '+(p?'<b>x</b>':'')+' }</div>'+ tagHtml +
+      '<div class="ctrls2"><button class="btn mini" onclick="addEl('+i+')">add x</button>'+
+      '<button class="btn mini" onclick="remEl('+i+')">remove x</button></div>'+
+      '</div>';
+  }
+  root.innerHTML=html;
+}
+
+function noteText(){
+  $('note').innerHTML =
+    'Plain union makes <b>add</b> trivial, but a naive <b>remove</b> ("delete x") is undone by the next merge with a replica that still has x — the element <b>resurrects</b>. The fix is to make remove operate on identity, not value:<br>'+
+    '• <b>OR-Set (Observed-Remove).</b> Each add carries a globally-unique tag. Remove deletes only the tags it has <i>observed</i>. A concurrent add brings a fresh tag no remove saw, so it survives — <b>add-wins</b> — and re-adding is just a new tag, so no resurrection paradox. (Production variant: <b>ORSWOT</b> drops the tombstones and uses a version vector instead.)<br>'+
+    '• <b>2P-Set.</b> Simpler — an add-set plus a permanent tombstone set — but once removed, an element is in the tombstone set <i>forever</i>, so it can never be re-added. Fine for "deactivate once" data, wrong for a shopping cart.<br>'+
+    'Both converge; they just encode a different <i>policy</i> for the concurrent add|remove race. You must pick one — a CRDT cannot make a concurrent add and remove "both win."';
+}
+
+rebuild();
+</script>
+</body>
+</html>
