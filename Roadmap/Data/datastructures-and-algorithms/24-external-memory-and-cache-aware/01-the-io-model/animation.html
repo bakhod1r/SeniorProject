@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The I/O Model — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-btn { background: var(--bg3); border: 2px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8em; transition: all 0.2s; text-align: left; }
+  .preset-btn:hover { border-color: var(--blue); }
+  .preset-btn.active { border-color: var(--blue); background: rgba(88,166,255,0.1); color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 130px; }
+  .field b { color: var(--text); }
+  /* disk */
+  .diskwrap { overflow-x: auto; padding: 6px 0; }
+  .disk { display: flex; gap: 4px; min-width: min-content; }
+  .block { display: flex; gap: 1px; padding: 3px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); position: relative; }
+  .block.resident { border-color: var(--green); box-shadow: 0 0 0 1px var(--green) inset; }
+  .block.loading { border-color: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .block .bid { position: absolute; top: -16px; left: 0; font-size: 0.62em; color: var(--text2); width: 100%; text-align: center; }
+  .cell { width: 13px; height: 22px; border-radius: 2px; background: var(--bg3); }
+  .cell.touched { background: rgba(88,166,255,0.35); }
+  .cell.cursor { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  /* cache */
+  .cache { display: flex; gap: 6px; flex-wrap: wrap; min-height: 34px; align-items: center; }
+  .cslot { padding: 5px 9px; border: 1px solid var(--green); border-radius: 4px; background: rgba(63,185,80,0.12);
+    color: var(--green); font-size: 0.78em; font-family: 'Fira Code', monospace; }
+  .cslot.empty { border-color: var(--border); background: var(--bg); color: var(--text2); }
+  /* stats */
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 120px; }
+  .stat .lbl { font-size: 0.72em; color: var(--text2); }
+  .stat .val { font-size: 1.4em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .barrow { margin: 6px 0; }
+  .barlbl { font-size: 0.78em; color: var(--text2); margin-bottom: 3px; }
+  .bartrack { background: var(--bg3); border-radius: 4px; height: 22px; overflow: hidden; }
+  .barfill { height: 100%; border-radius: 4px; transition: width 0.4s; display: flex; align-items: center;
+    justify-content: flex-end; padding-right: 8px; font-size: 0.74em; font-family: 'Fira Code', monospace; color: #fff; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.76em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  table.math { width: 100%; border-collapse: collapse; font-size: 0.84em; margin-top: 8px; }
+  table.math td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.math td:first-child { color: var(--text2); }
+  table.math td:last-child { font-family: 'Fira Code', monospace; color: var(--text); text-align: right; }
+  table.math td.big { color: var(--green); font-weight: bold; font-size: 1.05em; }
+  .note { font-size: 0.8em; color: var(--text2); margin-top: 10px; line-height: 1.5; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>The I/O Model — Interactive Visualization</h1>
+  <div class="subtitle">Cost = block transfers between slow disk and small fast memory. Sequential access amortizes a block over B elements; random access pays per element.</div>
+
+  <div class="panel">
+    <h2>Block transfers: sequential scan vs random access</h2>
+    <div class="preset-btns">
+      <div class="preset-btn active" data-pat="seq" onclick="setPattern('seq')">Sequential scan<br><span style="color:var(--text2);font-size:.86em">read element 0,1,2,…,N−1</span></div>
+      <div class="preset-btn" data-pat="rand" onclick="setPattern('rand')">Random access<br><span style="color:var(--text2);font-size:.86em">read N elements in random order</span></div>
+      <div class="preset-btn" data-pat="stride" onclick="setPattern('stride')">Strided (step B)<br><span style="color:var(--text2);font-size:.86em">one element per block — worst waste</span></div>
+    </div>
+    <div class="field">
+      <label>N (elements) <b id="nLbl">48</b></label>
+      <input type="range" id="nRange" min="16" max="96" step="8" value="48" oninput="rebuild()">
+      &nbsp; <label>B (block size) <b id="bLbl">4</b></label>
+      <input type="range" id="bRange" min="2" max="8" step="1" value="4" oninput="rebuild()">
+      &nbsp; <label>cache = M/B blocks <b id="mbLbl">4</b></label>
+      <input type="range" id="mbRange" min="1" max="8" step="1" value="4" oninput="rebuild()">
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" id="runBtn" onclick="runToEnd()">Run to end ⏭</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="40" max="600" value="240"></div>
+    </div>
+
+    <div style="font-size:.8em;color:var(--text2);margin:4px 0 2px">FAST MEMORY (holds M/B blocks, LRU eviction)</div>
+    <div class="cache" id="cache"></div>
+
+    <div style="font-size:.8em;color:var(--text2);margin:14px 0 18px">SLOW DISK (array of N cells in blocks of B)</div>
+    <div class="diskwrap"><div class="disk" id="disk"></div></div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">accesses served</div><div class="val" id="accVal">0 / 48</div></div>
+      <div class="stat"><div class="lbl">I/Os (block transfers)</div><div class="val" id="ioVal" style="color:var(--orange)">0</div></div>
+      <div class="stat"><div class="lbl">lower bound ⌈N/B⌉</div><div class="val" id="lbVal" style="color:var(--green)">12</div></div>
+    </div>
+
+    <div class="barrow"><div class="barlbl">this run's I/Os vs the two extremes</div>
+      <div class="bartrack"><div class="barfill" id="barSeq" style="background:var(--green);width:0%">scan</div></div>
+      <div class="bartrack" style="margin-top:4px"><div class="barfill" id="barCur" style="background:var(--orange);width:0%">current</div></div>
+      <div class="bartrack" style="margin-top:4px"><div class="barfill" id="barRand" style="background:var(--red);width:0%">random</div></div>
+    </div>
+
+    <div class="narration" id="narration">Pick a pattern and press <b>Step</b>. Watch a block transfer happen only when the needed block is not already in fast memory.</div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>current access</span>
+      <span><span class="sw" style="background:rgba(88,166,255,.35)"></span>already read</span>
+      <span><span class="sw" style="background:var(--orange);box-shadow:0 0 6px var(--orange)"></span>block being transferred (I/O)</span>
+      <span><span class="sw" style="background:rgba(63,185,80,.4);border:1px solid var(--green)"></span>resident in cache</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>External merge sort: why only log<sub>M/B</sub> passes</h2>
+    <div class="field">
+      <label>N <b id="nsLbl">1,000,000,000</b></label>
+      <input type="range" id="nsRange" min="6" max="12" step="1" value="9" oninput="sortMath()"><span style="font-size:.78em">(10^<b id="nsExp">9</b> elements)</span>
+    </div>
+    <div class="field">
+      <label>M (fast memory) <b id="msLbl">100,000,000</b></label>
+      <input type="range" id="msRange" min="3" max="9" step="1" value="8" oninput="sortMath()"><span style="font-size:.78em">(10^<b id="msExp">8</b>)</span>
+      &nbsp; <label>B (block) <b id="bsLbl">1,000</b></label>
+      <input type="range" id="bsRange" min="1" max="5" step="1" value="3" oninput="sortMath()"><span style="font-size:.78em">(10^<b id="bsExp">3</b>)</span>
+    </div>
+    <table class="math" id="sortTable"></table>
+    <div class="note" id="sortNote"></div>
+  </div>
+</div>
+
+<script>
+// ---------- View A: block-transfer simulator ----------
+let N, B, MB, pattern = 'seq';
+let order = [];        // access order (indices into disk array)
+let pos = 0;           // next access index in `order`
+let cache = [];        // resident block ids, LRU: index 0 = LRU, end = MRU
+let ios = 0;
+let touched = [];      // which cells have been read
+let loadingBlock = -1; // block id currently flashing as an I/O
+let cursorCell = -1;
+let autoTimer = null;
+
+function $(id){ return document.getElementById(id); }
+function blockOf(i){ return Math.floor(i / B); }
+function numBlocks(){ return Math.ceil(N / B); }
+
+// expected I/Os for the comparison bars (computed deterministically)
+function expectedSeq(){ return Math.ceil(N / B); }
+function expectedRandom(){
+  // random access of N distinct elements with a cache of MB blocks:
+  // worst-realistic estimate = one miss per access until the working set fits.
+  // We just report the simulated random run's count via a quick dry simulation.
+  return simulateCount(randomOrder(seedFixed()));
+}
+function seedFixed(){ return 12345; }
+// deterministic PRNG so bars are stable
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function randomOrder(seed){
+  const r = mulberry32(seed); const a = Array.from({length:N},(_,i)=>i);
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(r()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function strideOrder(){
+  const a=[]; for(let s=0;s<B;s++) for(let blk=0;blk<numBlocks();blk++){ const idx=blk*B+s; if(idx<N) a.push(idx);} return a;
+}
+function buildOrder(){
+  if(pattern==='seq') order = Array.from({length:N},(_,i)=>i);
+  else if(pattern==='rand') order = randomOrder(seedFixed());
+  else order = strideOrder();
+}
+// dry simulation: count I/Os for a given access order with current B, MB (LRU)
+function simulateCount(ord){
+  let c=[], io=0;
+  for(const idx of ord){ const b=blockOf(idx); const at=c.indexOf(b);
+    if(at===-1){ io++; if(c.length>=MB) c.shift(); c.push(b); }
+    else { c.splice(at,1); c.push(b); } }
+  return io;
+}
+
+function rebuild(){
+  stopAuto();
+  N = +$('nRange').value; B = +$('bRange').value; MB = +$('mbRange').value;
+  $('nLbl').textContent=N; $('bLbl').textContent=B; $('mbLbl').textContent=MB;
+  buildOrder();
+  pos=0; cache=[]; ios=0; loadingBlock=-1; cursorCell=-1;
+  touched = new Array(N).fill(false);
+  $('lbVal').textContent = expectedSeq();
+  drawDisk(); drawCache(); updateStats();
+  $('narration').innerHTML = patternIntro();
+  $('stepBtn').disabled=false; $('runBtn').disabled=false;
+}
+function patternIntro(){
+  if(pattern==='seq') return 'SEQUENTIAL SCAN: reading 0,1,2,… Each new block is transferred once; '+B+' elements share one I/O → total <b>⌈N/B⌉ = '+expectedSeq()+'</b>.';
+  if(pattern==='rand') return 'RANDOM ACCESS: each read jumps to an unpredictable block. With a small cache, almost every access is a fresh transfer — the counter explodes toward N.';
+  return 'STRIDED (step B): each access lands in a different block, so every read may transfer a whole block to use just one element — maximal waste.';
+}
+function setPattern(p){
+  pattern=p;
+  document.querySelectorAll('.preset-btn').forEach(e=>e.classList.toggle('active', e.dataset.pat===p));
+  rebuild();
+}
+
+function drawDisk(){
+  const disk=$('disk'); disk.innerHTML='';
+  const nb=numBlocks();
+  for(let b=0;b<nb;b++){
+    const bd=document.createElement('div'); bd.className='block';
+    if(cache.includes(b)) bd.classList.add('resident');
+    if(b===loadingBlock) bd.classList.add('loading');
+    const id=document.createElement('div'); id.className='bid'; id.textContent='b'+b; bd.appendChild(id);
+    for(let k=0;k<B;k++){ const idx=b*B+k; if(idx>=N) break;
+      const c=document.createElement('div'); c.className='cell';
+      if(touched[idx]) c.classList.add('touched');
+      if(idx===cursorCell) c.classList.add('cursor');
+      bd.appendChild(c); }
+    disk.appendChild(bd);
+  }
+}
+function drawCache(){
+  const el=$('cache'); el.innerHTML='';
+  for(let i=0;i<MB;i++){ const s=document.createElement('div');
+    if(i<cache.length){ s.className='cslot'; s.textContent='b'+cache[i]+(i===cache.length-1?' (MRU)':''); }
+    else { s.className='cslot empty'; s.textContent='·'; }
+    el.appendChild(s); }
+}
+function updateStats(){
+  $('accVal').textContent = pos+' / '+N;
+  $('ioVal').textContent = ios;
+  const seq=expectedSeq(), rnd=Math.max(expectedRandom(), seq+1);
+  const maxv = Math.max(rnd, ios, 1);
+  $('barSeq').style.width = (100*seq/maxv)+'%'; $('barSeq').textContent='scan '+seq;
+  $('barCur').style.width = (100*ios/maxv)+'%'; $('barCur').textContent='current '+ios;
+  $('barRand').style.width = (100*rnd/maxv)+'%'; $('barRand').textContent='random '+rnd;
+}
+
+function step(){
+  if(pos>=N){ finish(); return; }
+  const idx=order[pos]; const b=blockOf(idx);
+  cursorCell=idx; touched[idx]=true;
+  const at=cache.indexOf(b);
+  let msg;
+  if(at===-1){ ios++; loadingBlock=b;
+    if(cache.length>=MB){ const ev=cache.shift(); msg='access elem '+idx+' → block b'+b+' NOT cached → <b style="color:var(--orange)">I/O #'+ios+'</b> (evict LRU b'+ev+').'; }
+    else msg='access elem '+idx+' → block b'+b+' NOT cached → <b style="color:var(--orange)">I/O #'+ios+'</b> (load into free slot).';
+    cache.push(b);
+  } else { cache.splice(at,1); cache.push(b); loadingBlock=-1;
+    msg='access elem '+idx+' → block b'+b+' already resident → <b style="color:var(--green)">HIT, 0 I/O</b>.'; }
+  pos++;
+  $('narration').innerHTML=msg;
+  drawDisk(); drawCache(); updateStats();
+  if(pos>=N) setTimeout(finish, 300);
+}
+function finish(){
+  stopAuto(); loadingBlock=-1; cursorCell=-1; drawDisk();
+  const seq=expectedSeq();
+  let verdict;
+  if(pattern==='seq') verdict='Sequential scan finished in exactly <b>⌈N/B⌉ = '+seq+'</b> I/Os — every block transferred once.';
+  else verdict='Finished in <b style="color:var(--orange)">'+ios+'</b> I/Os vs the sequential <b style="color:var(--green)">'+seq+'</b>. Same '+N+' elements, '+ (ios/seq).toFixed(1) +'× more transfers — that is the cost of poor locality.';
+  $('narration').innerHTML=verdict;
+  $('stepBtn').disabled=true; $('runBtn').disabled=true;
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(pos>=N){ stopAuto(); return; } step(); }, 640 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+function runToEnd(){ stopAuto(); while(pos<N) step(); }
+
+// ---------- View B: external sort math ----------
+function fmt(x){ return x.toLocaleString('en-US'); }
+function sortMath(){
+  const ne=+$('nsRange').value, me=+$('msRange').value, be=+$('bsRange').value;
+  const N=Math.pow(10,ne), M=Math.pow(10,me), B=Math.pow(10,be);
+  $('nsExp').textContent=ne; $('msExp').textContent=me; $('bsExp').textContent=be;
+  $('nsLbl').textContent=fmt(N); $('msLbl').textContent=fmt(M); $('bsLbl').textContent=fmt(B);
+  const tb=$('sortTable');
+  // validity: need B <= M and M <= N
+  if(B>M || M>N || M/B < 2){
+    tb.innerHTML='<tr><td>invalid parameters</td><td>need B ≤ M ≤ N and M/B ≥ 2</td></tr>';
+    $('sortNote').textContent='Adjust the sliders so the block fits in memory (B ≤ M), memory fits the data (M ≤ N), and the merge fan-in M/B is at least 2.';
+    return;
+  }
+  const runs=N/M;                       // sorted runs after run-formation
+  const fanin=M/B;                      // (M/B)-way merge
+  const mergePasses=Math.ceil(Math.log(runs)/Math.log(fanin));
+  const totalPasses=mergePasses+1;     // +1 for run formation
+  const ioPerPass=Math.ceil(2*N/B);    // read + write
+  const total=ioPerPass*totalPasses;
+  const naive=N;                        // a thrashing per-element scheme ~ N random I/Os (illustrative floor)
+  tb.innerHTML =
+    row('sorted runs after run-formation  (N/M)', fmt(runs))+
+    row('merge fan-in  (M/B)', fmt(fanin)+'-way')+
+    row('merge passes  ⌈log<sub>M/B</sub>(N/M)⌉', mergePasses)+
+    row('total passes  (+1 run formation)', totalPasses)+
+    row('I/Os per pass  (≈ 2N/B)', fmt(ioPerPass))+
+    rowBig('TOTAL I/Os  ≈ (N/B)·log<sub>M/B</sub>(N/B)', fmt(total));
+  $('sortNote').innerHTML='With a '+fmt(fanin)+'-way merge, each pass cuts the number of runs by a factor '+fmt(fanin)+
+    ', so it takes only <b>'+mergePasses+'</b> merge pass'+(mergePasses===1?'':'es')+' to go from '+fmt(runs)+
+    ' runs down to one — a base-'+fmt(fanin)+' logarithm, not base 2. Sorting '+fmt(N)+
+    ' elements costs ≈ <b>'+fmt(total)+'</b> block transfers, versus ~'+fmt(N)+
+    ' for a layout that ignores blocking. <b>This is why <code>sort(N)=Θ((N/B)·log<sub>M/B</sub>(N/B))</code> is the currency of external-memory complexity.</b>';
+}
+function row(l,v){ return '<tr><td>'+l+'</td><td>'+v+'</td></tr>'; }
+function rowBig(l,v){ return '<tr><td>'+l+'</td><td class="big">'+v+'</td></tr>'; }
+
+// init
+rebuild();
+sortMath();
+</script>
+</body>
+</html>
