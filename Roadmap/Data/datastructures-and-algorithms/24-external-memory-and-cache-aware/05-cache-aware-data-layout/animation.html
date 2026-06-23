@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache-Aware Data Layout — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.6em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field input[type=range] { accent-color: var(--blue); width: 130px; }
+  .field b { color: var(--text); }
+  .lane { margin-bottom: 18px; }
+  .lane h3 { font-size: 0.86em; margin-bottom: 8px; color: var(--text2); }
+  .mem { display: flex; flex-wrap: wrap; gap: 3px; }
+  .line { display: flex; gap: 1px; padding: 3px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); position: relative; margin-bottom: 12px; }
+  .line.fetched { border-color: var(--orange); box-shadow: 0 0 7px rgba(210,153,34,.5); }
+  .line .tag { position: absolute; top: -15px; left: 0; font-size: 0.58em; color: var(--text2); }
+  .cell { width: 20px; height: 22px; border-radius: 2px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.6em; font-family: 'Fira Code', monospace; background: var(--bg3); color: var(--text2); }
+  .cell.want { background: rgba(88,166,255,0.22); color: var(--blue); }   /* the field we sum */
+  .cell.cur { background: var(--blue); color: #fff; box-shadow: 0 0 6px var(--blue); }
+  .cell.used { background: rgba(63,185,80,0.3); color: var(--green); }
+  .cell.waste { opacity: .55; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 7px 13px; min-width: 130px; }
+  .stat .lbl { font-size: 0.68em; color: var(--text2); }
+  .stat .val { font-size: 1.25em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 8px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.74em; color: var(--text2); margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Cache-Aware Data Layout — Interactive Visualization</h1>
+  <div class="subtitle">Same loop, same complexity — different memory layout. Summing one field: <b>Array-of-Structs</b> drags whole records through cache; <b>Struct-of-Arrays</b> packs the field you need.</div>
+
+  <div class="panel">
+    <h2>Summing one field over many records: AoS vs SoA</h2>
+    <div class="field">
+      <label>records <b id="recLbl">16</b></label>
+      <input type="range" id="recRange" min="8" max="32" step="4" value="16" oninput="rebuild()">
+      &nbsp; <label>fields per record d <b id="dLbl">4</b></label>
+      <input type="range" id="dRange" min="2" max="8" step="1" value="4" oninput="rebuild()">
+      &nbsp; <label>cache line = <b id="lineLbl">8</b> cells</label>
+      <input type="range" id="lineRange" min="4" max="8" step="2" value="8" oninput="rebuild()">
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" id="runBtn" onclick="runToEnd()">Run to end ⏭</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="280" value="170"></div>
+    </div>
+
+    <div class="lane">
+      <h3>AoS — <code>struct{f0,f1,…}</code> records back-to-back; we read only field f0 (blue)</h3>
+      <div class="mem" id="memAoS"></div>
+      <div class="stats">
+        <div class="stat"><div class="lbl">cache lines fetched</div><div class="val" id="ioAoS" style="color:var(--red)">0</div></div>
+        <div class="stat"><div class="lbl">useful bytes / fetched</div><div class="val" id="useAoS" style="color:var(--red)">—</div></div>
+      </div>
+    </div>
+
+    <div class="lane">
+      <h3>SoA — all f0 values contiguous in their own array</h3>
+      <div class="mem" id="memSoA"></div>
+      <div class="stats">
+        <div class="stat"><div class="lbl">cache lines fetched</div><div class="val" id="ioSoA" style="color:var(--green)">0</div></div>
+        <div class="stat"><div class="lbl">useful bytes / fetched</div><div class="val" id="useSoA" style="color:var(--green)">—</div></div>
+      </div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Run to end</b>. Each time the loop reads an f0 value whose cache line isn't already loaded, a whole line is fetched. AoS lines carry mostly other fields (wasted); SoA lines are all f0.</div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--blue)"></span>field f0 being read now</span>
+      <span><span class="sw" style="background:rgba(88,166,255,.22)"></span>f0 (what we want)</span>
+      <span><span class="sw" style="background:rgba(63,185,80,.3)"></span>f0 already summed</span>
+      <span><span class="sw" style="background:var(--bg3)"></span>other fields (fetched but wasted in AoS)</span>
+      <span><span class="sw" style="background:var(--orange)"></span>line currently fetched</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>The math: why SoA is up to d/f faster</h2>
+    <p class="note" id="mathNote"></p>
+  </div>
+</div>
+
+<script>
+let R, D, LINE;     // records, fields per record, cells per cache line
+// AoS memory = R*D cells; cell index of f0 of record i = i*D
+// SoA memory (the f0 column) = R cells; cell index of f0 of record i = i
+let aosCells, soaCells;
+let order = [];     // record indices to read (0..R-1)
+let pos = 0;
+let aosLines = new Set(), soaLines = new Set();
+let aosFetch = 0, soaFetch = 0;
+let curAosLine = -1, curSoaLine = -1;
+let summed = [];    // which records summed
+let autoTimer = null;
+
+function $(id){ return document.getElementById(id); }
+
+function rebuild(){
+  stopAuto();
+  R=+$('recRange').value; D=+$('dRange').value; LINE=+$('lineRange').value;
+  $('recLbl').textContent=R; $('dLbl').textContent=D; $('lineLbl').textContent=LINE;
+  aosCells=R*D; soaCells=R;
+  order=Array.from({length:R},(_,i)=>i);
+  pos=0; aosLines=new Set(); soaLines=new Set(); aosFetch=0; soaFetch=0; curAosLine=-1; curSoaLine=-1;
+  summed=new Array(R).fill(false);
+  $('ioAoS').textContent=0; $('ioSoA').textContent=0; $('useAoS').textContent='—'; $('useSoA').textContent='—';
+  drawAoS(); drawSoA();
+  $('stepBtn').disabled=false; $('runBtn').disabled=false;
+  $('narration').innerHTML='Reading field f0 of '+R+' records. AoS stores '+D+' fields per record back-to-back; SoA stores all f0 together. Step through to count cache lines.';
+  computeMath();
+}
+
+function drawAoS(){
+  const el=$('memAoS'); el.innerHTML='';
+  const numLines=Math.ceil(aosCells/LINE);
+  for(let L=0;L<numLines;L++){
+    const ld=document.createElement('div'); ld.className='line'; if(L===curAosLine) ld.classList.add('fetched');
+    const tag=document.createElement('div'); tag.className='tag'; tag.textContent='line '+L; ld.appendChild(tag);
+    for(let c=0;c<LINE;c++){ const idx=L*LINE+c; if(idx>=aosCells) break;
+      const rec=Math.floor(idx/D), fld=idx%D;
+      const cell=document.createElement('div'); cell.className='cell';
+      if(fld===0){ cell.classList.add('want'); cell.textContent='f0'; if(summed[rec]) cell.classList.add('used');
+        if(pos<R && order[pos]===rec) cell.classList.add('cur'); }
+      else { cell.classList.add('waste'); cell.textContent='f'+fld; }
+      ld.appendChild(cell); }
+    el.appendChild(ld);
+  }
+}
+function drawSoA(){
+  const el=$('memSoA'); el.innerHTML='';
+  const numLines=Math.ceil(soaCells/LINE);
+  for(let L=0;L<numLines;L++){
+    const ld=document.createElement('div'); ld.className='line'; if(L===curSoaLine) ld.classList.add('fetched');
+    const tag=document.createElement('div'); tag.className='tag'; tag.textContent='line '+L; ld.appendChild(tag);
+    for(let c=0;c<LINE;c++){ const idx=L*LINE+c; if(idx>=soaCells) break;
+      const rec=idx;
+      const cell=document.createElement('div'); cell.className='cell want'; cell.textContent='f0'; cell.style.fontSize='0.55em';
+      if(summed[rec]) cell.classList.add('used');
+      if(pos<R && order[pos]===rec) cell.classList.add('cur');
+      ld.appendChild(cell); }
+    el.appendChild(ld);
+  }
+}
+
+function step(){
+  if(pos>=R){ finish(); return; }
+  const rec=order[pos];
+  const aosIdx=rec*D;          // f0 of record rec in AoS
+  const soaIdx=rec;            // f0 of record rec in SoA
+  const aosLine=Math.floor(aosIdx/LINE);
+  const soaLine=Math.floor(soaIdx/LINE);
+  let msg=[];
+  if(!aosLines.has(aosLine)){ aosLines.add(aosLine); aosFetch++; curAosLine=aosLine;
+    msg.push('AoS: f0 of record '+rec+' is in line '+aosLine+' — not cached → <b style="color:var(--red)">fetch (I/O '+aosFetch+')</b>; only '+1+' of '+LINE+' cells useful.');
+  } else { curAosLine=aosLine; msg.push('AoS: f0 of record '+rec+' already in line '+aosLine+' → hit.'); }
+  if(!soaLines.has(soaLine)){ soaLines.add(soaLine); soaFetch++; curSoaLine=soaLine;
+    msg.push('SoA: f0 of record '+rec+' is in line '+soaLine+' — not cached → <b style="color:var(--green)">fetch (I/O '+soaFetch+')</b>; all '+LINE+' cells are f0 (useful).');
+  } else { curSoaLine=soaLine; msg.push('SoA: f0 of record '+rec+' already in line '+soaLine+' → hit.'); }
+  summed[rec]=true; pos++;
+  $('ioAoS').textContent=aosFetch; $('ioSoA').textContent=soaFetch;
+  // useful fraction: AoS fetched aosFetch lines = aosFetch*LINE cells, useful = number of f0 summed so far
+  const usefulSoFar=pos;
+  $('useAoS').textContent=usefulSoFar+' / '+(aosFetch*LINE);
+  $('useSoA').textContent=usefulSoFar+' / '+(soaFetch*LINE);
+  drawAoS(); drawSoA();
+  $('narration').innerHTML=msg.join('<br>');
+  if(pos>=R) setTimeout(finish, 250);
+}
+function finish(){
+  stopAuto(); curAosLine=-1; curSoaLine=-1; drawAoS(); drawSoA();
+  $('stepBtn').disabled=true; $('runBtn').disabled=true;
+  const ratio=(aosFetch/Math.max(soaFetch,1)).toFixed(2);
+  $('narration').innerHTML='Done. Summing f0 over '+R+' records: AoS fetched <b style="color:var(--red)">'+aosFetch+
+    '</b> cache lines, SoA fetched <b style="color:var(--green)">'+soaFetch+'</b> — <b>'+ratio+'×</b> fewer for SoA. '+
+    'AoS wasted '+(D-1)+' of every '+D+' fetched cells; SoA wasted none. Same loop, same O(R) work.';
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(pos>=R){ stopAuto(); return; } step(); }, 320 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+function runToEnd(){ stopAuto(); while(pos<R) step(); }
+
+function computeMath(){
+  const f=1; // we read 1 field
+  $('mathNote').innerHTML='When a loop touches <b>f</b> of a record\'s <b>d='+D+'</b> fields, AoS fetches whole records, so a fraction <code>(d−f)/d = '+
+    ((D-1)/D).toFixed(2)+'</code> of every cache line is wasted. SoA stores that field contiguously, so every fetched byte is useful — up to a <code>d/f = '+D+
+    '×</code> reduction in memory traffic (and it lets the CPU vectorize the loop with SIMD). The catch: if you instead touch <i>all</i> '+D+
+    ' fields of a few random records, AoS wins — keep the layout matched to the access pattern.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
