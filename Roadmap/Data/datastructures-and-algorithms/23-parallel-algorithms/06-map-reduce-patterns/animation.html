@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MapReduce Patterns — Interactive Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+    --text: #c9d1d9; --text2: #8b949e;
+    --blue: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; padding: 20px; }
+  h1 { text-align: center; color: var(--blue); font-size: 1.5em; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--text2); font-size: 0.9em; margin-bottom: 16px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { color: var(--blue); font-size: 1em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.84em; transition: all 0.2s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-control { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 0.82em; color: var(--text2); }
+  .speed-control input { width: 90px; accent-color: var(--blue); }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 0.84em; color: var(--text2); flex-wrap: wrap; }
+  .field label.cb { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+  @media (max-width: 800px){ .cols { grid-template-columns: 1fr 1fr; } }
+  .col { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 260px; }
+  .col h3 { font-size: 0.74em; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; text-align: center; }
+  .item { background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; padding: 4px 7px; margin-bottom: 5px;
+    font-size: 0.74em; font-family: 'Fira Code', monospace; transition: all .2s; }
+  .item.doc { border-color: var(--blue); color: var(--blue); }
+  .item.pair { color: var(--purple); }
+  .item.group { border-color: var(--orange); }
+  .item.group .k { color: var(--orange); font-weight: bold; }
+  .item.out { border-color: var(--green); color: var(--green); }
+  .item.flash { box-shadow: 0 0 8px var(--blue); border-color: var(--blue); }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; min-width: 130px; }
+  .stat .lbl { font-size: 0.7em; color: var(--text2); }
+  .stat .val { font-size: 1.2em; font-weight: bold; font-family: 'Fira Code', monospace; }
+  .narration { background: var(--bg3); border-left: 3px solid var(--blue); border-radius: 4px;
+    padding: 10px 14px; font-size: 0.86em; line-height: 1.5; min-height: 44px; font-family: 'Fira Code', monospace; margin-top: 12px; }
+  .note { font-size: 0.82em; color: var(--text2); margin-top: 12px; line-height: 1.55; }
+  code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: 'Fira Code', monospace; color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MapReduce Patterns — Word Count</h1>
+  <div class="subtitle">map (parse each doc → (word,1)) → shuffle (group by word) → reduce (sum). The framework parallelizes the map over docs and the reduce over keys; only the <b>shuffle</b> moves data.</div>
+
+  <div class="panel">
+    <h2>The map → shuffle → reduce pipeline</h2>
+    <div class="field">
+      <label class="cb"><input type="checkbox" id="combiner" onchange="rebuild()"> use a <b>combiner</b> (local per-doc reduce — cuts shuffle volume)</label>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" onclick="step()">Step (one phase) ▶</button>
+      <button class="btn" id="autoBtn" onclick="toggleAuto()">Auto ▶▶</button>
+      <button class="btn" onclick="rebuild()">Reset ↺</button>
+      <div class="speed-control">speed <input type="range" id="speed" min="0" max="850" value="450"></div>
+    </div>
+
+    <div class="cols">
+      <div class="col"><h3>1 · input docs</h3><div id="cDocs"></div></div>
+      <div class="col"><h3>2 · map → (key,1)</h3><div id="cMap"></div></div>
+      <div class="col"><h3>3 · shuffle (by key)</h3><div id="cShuf"></div></div>
+      <div class="col"><h3>4 · reduce (sum)</h3><div id="cRed"></div></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">phase</div><div class="val" id="phaseVal" style="font-size:.95em">ready</div></div>
+      <div class="stat"><div class="lbl">pairs shuffled (network)</div><div class="val" id="shufVal" style="color:var(--orange)">—</div></div>
+      <div class="stat"><div class="lbl">distinct keys</div><div class="val" id="keyVal" style="color:var(--green)">—</div></div>
+    </div>
+
+    <div class="narration" id="narration">Press <b>Step</b> to run the four phases. Map is parallel over the 4 docs; reduce is parallel over the distinct words; the shuffle is the only all-to-all data movement.</div>
+  </div>
+
+  <div class="panel">
+    <h2>The combiner: a local reduce that shrinks the shuffle</h2>
+    <p class="note" id="note"></p>
+  </div>
+</div>
+
+<script>
+const DOCS = [
+  "the cat sat",
+  "the dog ran",
+  "the cat ran fast",
+  "the dog sat"
+];
+let phase, mapPairs, groups, output, shufCount, autoTimer=null;
+function $(id){ return document.getElementById(id); }
+
+function rebuild(){
+  stopAuto();
+  phase=0; mapPairs=null; groups=null; output=null; shufCount=0;
+  $('phaseVal').textContent='ready';
+  $('shufVal').textContent='—'; $('keyVal').textContent='—';
+  $('stepBtn').disabled=false;
+  // render docs
+  $('cDocs').innerHTML = DOCS.map((d,i)=>'<div class="item doc">doc'+i+': "'+d+'"</div>').join('');
+  $('cMap').innerHTML=''; $('cShuf').innerHTML=''; $('cRed').innerHTML='';
+  $('narration').innerHTML = $('combiner').checked
+    ? 'Combiner ON: each map task locally sums repeats before shuffling, so it emits one pair per distinct word PER DOC.'
+    : 'Combiner OFF: each map task emits one (word,1) pair per word occurrence — more pairs to shuffle.';
+  noteText();
+}
+
+function step(){
+  if(phase===0){ // MAP
+    const useComb=$('combiner').checked;
+    mapPairs=[]; // list of {doc, pairs:[[k,v]...]}
+    DOCS.forEach((d,i)=>{
+      const words=d.split(' ');
+      if(useComb){ const m={}; words.forEach(w=>m[w]=(m[w]||0)+1);
+        mapPairs.push({doc:i, pairs:Object.entries(m).map(([k,v])=>[k,v])}); }
+      else mapPairs.push({doc:i, pairs:words.map(w=>[w,1])});
+    });
+    const flat=mapPairs.flatMap(mp=>mp.pairs);
+    shufCount=flat.length;
+    $('cMap').innerHTML = mapPairs.map(mp=>
+      '<div class="item pair"><span style="color:var(--text2)">doc'+mp.doc+':</span> '+
+      mp.pairs.map(([k,v])=>'('+k+','+v+')').join(' ')+'</div>').join('');
+    phase=1; $('phaseVal').textContent='1 · map done';
+    $('narration').innerHTML='<b>MAP</b> ran on all 4 docs <b>in parallel</b>. '+
+      (useComb?'With the combiner each doc pre-summed its words, ':'')+'producing <b>'+shufCount+'</b> intermediate pairs.';
+    return;
+  }
+  if(phase===1){ // SHUFFLE
+    groups={};
+    mapPairs.flatMap(mp=>mp.pairs).forEach(([k,v])=>{ (groups[k]=groups[k]||[]).push(v); });
+    const keys=Object.keys(groups).sort();
+    $('cShuf').innerHTML = keys.map(k=>
+      '<div class="item group"><span class="k">'+k+'</span> → ['+groups[k].join(',')+']</div>').join('');
+    $('shufVal').textContent=shufCount; $('keyVal').textContent=keys.length;
+    phase=2; $('phaseVal').textContent='2 · shuffle done';
+    $('narration').innerHTML='<b>SHUFFLE</b>: the framework grouped all '+shufCount+' pairs by key (a distributed sort/group-by) and routed each key to a reducer. <b>'+keys.length+'</b> distinct keys. This network all-to-all is the costly step.';
+    return;
+  }
+  if(phase===2){ // REDUCE
+    output={};
+    Object.keys(groups).sort().forEach(k=>{ output[k]=groups[k].reduce((a,b)=>a+b,0); });
+    $('cRed').innerHTML = Object.entries(output).map(([k,v])=>
+      '<div class="item out">('+k+', <b>'+v+'</b>)</div>').join('');
+    phase=3; $('phaseVal').textContent='3 · reduce done ✓'; $('stepBtn').disabled=true;
+    // verify against sequential count
+    const seq={}; DOCS.join(' ').split(' ').forEach(w=>seq[w]=(seq[w]||0)+1);
+    const ok=Object.keys(seq).every(k=>seq[k]===output[k]);
+    $('narration').innerHTML='<b>REDUCE</b> summed each key\'s list <b>in parallel across keys</b> → final counts'+
+      (ok?' (verified against a sequential count)':'')+'. e.g. <code>the</code>='+output['the']+', <code>cat</code>='+output['cat']+', <code>ran</code>='+output['ran']+'.';
+    return;
+  }
+}
+function toggleAuto(){ if(autoTimer) stopAuto(); else { $('autoBtn').textContent='Pause ⏸';
+  autoTimer=setInterval(()=>{ if(phase>=3){ stopAuto(); return; } step(); }, 1000 - +$('speed').value); } }
+function stopAuto(){ if(autoTimer){ clearInterval(autoTimer); autoTimer=null; } $('autoBtn').textContent='Auto ▶▶'; }
+
+function noteText(){
+  // compute pair counts both ways
+  let noComb=0, withComb=0;
+  DOCS.forEach(d=>{ const words=d.split(' '); noComb+=words.length; const m={}; words.forEach(w=>m[w]=1); withComb+=Object.keys(m).length; });
+  $('note').innerHTML='A <b>combiner</b> is a local reduce run on the map side before the shuffle. Because word count\'s reduce (sum) is <b>associative and commutative</b>, it is safe to pre-aggregate. '+
+    'For these 4 docs it cuts the shuffled pairs from <b>'+noComb+'</b> (combiner off) to <b>'+withComb+'</b> (combiner on) — and at real scale that difference is gigabytes of network traffic. '+
+    'Note: not every reduce can use a plain combiner — <code>average</code> isn\'t associative, so you carry <code>(sum,count)</code> pairs instead. Toggle the combiner above and re-run to see the shuffle count change.';
+}
+
+rebuild();
+</script>
+</body>
+</html>
