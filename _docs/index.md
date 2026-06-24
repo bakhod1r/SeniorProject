@@ -39,6 +39,22 @@ The knowledge required for modern software development is scattered across count
 
     [:octicons-arrow-right-24: Open System Design](system-design.md)
 
+- :material-rocket-launch:{ .lg .middle } **Projects**
+
+    ---
+
+    Hands-on high-load & big-data engineering project briefs for senior/staff Go backend — each staged from correctness to scale.
+
+    [:octicons-arrow-right-24: Browse projects](Projects/README.md)
+
+- :material-comment-question:{ .lg .middle } **Interview Questions**
+
+    ---
+
+    Senior Go backend interview questions across 23 sections, with deep, structured answers.
+
+    [:octicons-arrow-right-24: Open question bank](Interview%20Question/README.md)
+
 </div>
 
 ## Domains covered
