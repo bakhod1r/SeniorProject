@@ -7,3 +7,7 @@ nav:
   - System Design:
     - Overview: system-design.md
     - ... | regex=^System Design/.+
+  - Interview Questions:
+    - ... | regex=^Interview Question/.+
+  - Projects:
+    - ... | regex=^Projects/.+
