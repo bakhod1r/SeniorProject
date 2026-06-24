@@ -136,6 +136,11 @@ load harness + SLOs → 2; Experiments + full SLOs → 3.
 | 07 | [Saga: orchestration vs choreography](distributed-patterns/07-saga-orchestration-vs-choreography/) | Build both; compare coupling, failure handling, observability, compensation | 11, 12, 13 |
 | 08 | [TCC (Try-Confirm-Cancel)](distributed-patterns/08-tcc-try-confirm-cancel/) | Reservation/confirm/cancel, idempotency, timeout-driven cancellation; payment txns | 13, 11, 16 |
 
+### `networking/` — Sockets & Network Performance
+| # | Project | Trains | Interview sections |
+|---|---------|--------|--------------------|
+| 01 | [High-performance TCP socket server](networking/01-high-performance-tcp-socket-server/) | Raw sockets, framing, goroutine-per-conn vs epoll, TCP tuning, zero-copy, C10K→C10M | 9, 2, 17 |
+
 ### `senior/` — Service builds (high-load baked in)
 | # | Project | Trains | Interview sections |
 |---|---------|--------|--------------------|
