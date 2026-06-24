@@ -151,6 +151,7 @@ load harness + SLOs → 2; Experiments + full SLOs → 3.
 | 05 | [Content-addressed storage (S3-like)](senior/05-content-addressed-storage/) | Chunking, dedup, multipart, throughput | 5, 20, 16 |
 | 06 | [Observability backend](senior/06-observability-backend/) | High-cardinality OTLP ingest, Go perf | 18, 17 |
 | 07 | [Event-driven order/payment service](senior/07-event-driven-order-payment-service/) ⭐ **flagship** | Go · Postgres · Kafka · Outbox · DDD, end-to-end | 01, 05, 11, 12, 13, 15, 18 |
+| 08 | [API gateway / edge proxy](senior/08-api-gateway/) | Reverse proxy, JWT/JWKS, per-route rate limit + breaker, hot-reload, 150k+ req/s | 10, 9, 22, 16, 18 |
 
 ### `staff/` — Systems at scale
 | # | Project | Trains | Interview sections |
