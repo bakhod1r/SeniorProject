@@ -78,6 +78,7 @@ theme:
 hooks:
   - mkdocs/hooks/sibling_nav.py
   - mkdocs/hooks/read_manifest.py
+  - mkdocs/hooks/seo_meta.py
 
 plugins:
   - awesome-pages:
