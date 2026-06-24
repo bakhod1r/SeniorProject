@@ -35,6 +35,31 @@ findings note beats eight half-built repos.
 
 ---
 
+## The scale matrix — build every project in 4 stages
+
+"High load" isn't one thing. It has **two independent axes** — *data volume* and
+*request rate* — and they fail in completely different ways. So every project is a
+4-rung ladder. Build Stage 0 correct first (it's your control); then push each
+axis on its own; then push both together. **Don't tune what isn't yet correct.**
+
+| Stage | Data | Request rate | What it stresses |
+|-------|------|--------------|------------------|
+| **0 · Simple** | small | low | correctness only — the **baseline** you measure everything else against |
+| **1 · Big data** | **huge** | low | storage layout, indexing, memory, compaction, query plans |
+| **2 · High RPS** | small | **very high** | connection pools, locking/contention, tail latency, backpressure |
+| **3 · Big data + High RPS** | **huge** | **very high** | the **interaction**: hot keys in a huge set under concurrency, cache working-set misses, tail amplification — full SLOs |
+
+The two axes are independent: a system can ace Stage 1 and fall over at Stage 2
+(or vice versa). Stage 3 is the production boss fight where they compound. A
+project is only **"senior/staff done" at Stage 3** — measured and defended.
+
+Each project instantiates the axes in its own terms (a rate limiter's "big data" =
+millions of keys; a columnar store's "high RPS" = many concurrent queries). The
+stages map onto the TZ sections: Functional reqs → 0; Load & data profile → 1;
+load harness + SLOs → 2; Experiments + full SLOs → 3.
+
+---
+
 ## Tiers
 
 - **`labs/`** — Data-systems load labs. The core of this library: push a single
@@ -89,6 +114,27 @@ findings note beats eight half-built repos.
 | 02 | [Chaos & fault injection](load-testing/02-chaos-and-fault-injection/) | Latency/error/kill injection, steady-state hypothesis, blast radius | 13, 22, 18 |
 | 03 | [Soak & leak hunting](load-testing/03-soak-and-leak-hunting/) | 24h endurance, goroutine/memory/fd leaks, pprof over time | 1, 17, 18 |
 | 04 | [Capacity & breakpoint testing](load-testing/04-capacity-and-breakpoint-testing/) | Stress to breaking point, USE method, Little's Law, the knee | 17, 22, 14 |
+| 05 | [Go memory & zero-allocation](load-testing/05-go-memory-and-zero-allocation/) | Escape analysis, sync.Pool, GOGC/GOMEMLIMIT, arenas/mmap, alloc reduction | 1, 17, 2 |
+| 06 | [Microbenchmarking & benchstat](load-testing/06-microbenchmarking-and-benchstat/) | testing.B pitfalls, benchstat A/B significance, CI perf-regression gates | 1, 17, 15 |
+| 07 | [Profiling-guided optimization](load-testing/07-profiling-guided-optimization/) | pprof CPU/heap/block/mutex, flame graphs, runtime/trace, optimize a hot path | 17, 1, 18 |
+
+### `observability/` — Logging & Monitoring at scale
+| # | Project | Trains | Interview sections |
+|---|---------|--------|--------------------|
+| 01 | [Centralized logging pipeline](observability/01-centralized-logging-pipeline/) | High-volume structured logging: ship→buffer→index→query, sampling, cardinality, backpressure | 18, 17, 22 |
+| 02 | [Metrics, monitoring & alerting](observability/02-metrics-monitoring-and-alerting/) | Prometheus instrumentation, scrape, alerting rules, SLO/error-budget burn, alert fatigue | 18, 22, 17 |
+
+### `distributed-patterns/` — Coordination & Distributed-Transaction Patterns
+| # | Project | Trains | Interview sections |
+|---|---------|--------|--------------------|
+| 01 | [Leader election](distributed-patterns/01-leader-election/) | Lease-based / Raft-lease election, split-brain avoidance, fencing | 13, 2, 22 |
+| 02 | [Distributed lock with fencing](distributed-patterns/02-distributed-lock-with-fencing/) | Redis/etcd locks, fencing tokens, the Redlock debate, liveness vs safety | 13, 7, 2 |
+| 03 | [Scatter-gather aggregator](distributed-patterns/03-scatter-gather-aggregator/) | Fan a request to N shards/services, aggregate, straggler/timeout handling | 13, 22, 9 |
+| 04 | [Claim-check](distributed-patterns/04-claim-check/) | Large payloads via a store + reference through the queue; broker-size limits | 11, 13, 20 |
+| 05 | [Fan-out / fan-in pipeline](distributed-patterns/05-fan-out-fan-in-pipeline/) | Parallel fan-out then join, bounded concurrency, partial-failure handling | 2, 13, 17 |
+| 06 | [2PC / 3PC coordinator](distributed-patterns/06-2pc-3pc-coordinator/) | Two/three-phase commit, coordinator-failure blocking, recovery log, why it doesn't scale | 13, 5, 15 |
+| 07 | [Saga: orchestration vs choreography](distributed-patterns/07-saga-orchestration-vs-choreography/) | Build both; compare coupling, failure handling, observability, compensation | 11, 12, 13 |
+| 08 | [TCC (Try-Confirm-Cancel)](distributed-patterns/08-tcc-try-confirm-cancel/) | Reservation/confirm/cancel, idempotency, timeout-driven cancellation; payment txns | 13, 11, 16 |
 
 ### `senior/` — Service builds (high-load baked in)
 | # | Project | Trains | Interview sections |
