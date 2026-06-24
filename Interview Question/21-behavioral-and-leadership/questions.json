@@ -1,0 +1,602 @@
+{
+  "section": "Behavioral & Leadership",
+  "slug": "behavioral-and-leadership",
+  "level": "senior",
+  "description": "STAR-based coaching for senior Go backend behavioral and leadership interviews, covering technical problem-solving, production reliability, ownership, mentorship, collaboration, delivery, and customer-facing communication.",
+  "topics": [
+    {
+      "topic": "Method: STAR & Story Structure",
+      "questions": [
+        {
+          "id": "behav-001",
+          "question": "Walk me through how you structure a strong behavioral answer.",
+          "difficulty": "warmup",
+          "answer": "**What's probed:** Whether you can communicate clearly under pressure and self-edit — a senior signal in itself.\n\n**Structure (STAR):**\n- **Situation** (15s): one or two sentences of context. Team size, your role, the stakes. No backstory dump.\n- **Task** (15s): what specifically *you* needed to achieve and why it mattered.\n- **Action** (60s): the bulk. *Your* decisions and trade-offs, in first person singular. This is where seniority shows.\n- **Result** (20s): quantified outcome plus what you learned.\n\nAim for ~2 minutes. Lead with a one-line headline so the interviewer knows where you're going: *\"I'll tell you about the time we cut p99 latency by 60% during a Black-Friday-style spike.\"*\n\n**Example skeleton:** \"At [company] I owned the payments gateway (S). When a partner doubled traffic, p99 blew past our 300ms SLO (T). I profiled with pprof, found a lock-contention hotspot, and moved to a sharded sync.Map plus a worker pool (A). p99 dropped to 110ms and we held the SLO through the event; I also added a load test to CI so we'd catch regressions (R).\"",
+          "key_points": [
+            "Lead with a one-line headline, then STAR",
+            "Spend ~60% of time on Action, in first-person singular",
+            "Always quantify the Result and add a learning",
+            "Avoid the common trap of over-explaining Situation"
+          ],
+          "follow_ups": [
+            "Can you give me the same story but the version where it didn't go well?",
+            "What was your specific contribution versus the team's?"
+          ],
+          "tags": ["star", "communication", "structure"]
+        },
+        {
+          "id": "behav-002",
+          "question": "How do you quantify the impact of your work when the metrics aren't obvious?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Senior engineers tie work to outcomes, not activity. They want to see you think in business and reliability terms, not lines of code.\n\n**Strong approach:** Reach for one of four buckets and pick the most honest, defensible number:\n1. **Performance/cost** — latency percentiles, throughput, infra cost (e.g. \"cut EC2 spend ~$4k/mo by right-sizing pods\").\n2. **Reliability** — incident count, MTTR, error rate, SLO attainment.\n3. **Velocity** — deploy frequency, lead time, reduced on-call pages, hours saved per week across the team.\n4. **Business** — conversion, churn, revenue unblocked, customers retained.\n\nIf you genuinely lack a clean number, estimate transparently: *\"We didn't instrument it precisely, but the manual reconciliation took roughly two engineer-days a month, which the automation removed.\"* Interviewers respect a defensible estimate over a fabricated metric.\n\n**Mistake to avoid:** Vanity metrics (\"wrote 5k lines\", \"closed 30 tickets\") or numbers you can't explain when probed. If you say 60%, be ready to say 60% of *what*, measured *how*.",
+          "key_points": [
+            "Map impact to performance, reliability, velocity, or business",
+            "A defensible estimate beats a fabricated precise number",
+            "Be ready to explain the baseline and measurement method",
+            "Avoid vanity/activity metrics"
+          ],
+          "follow_ups": [
+            "How did you measure that baseline?",
+            "What would the cost of not doing it have been?"
+          ],
+          "tags": ["impact", "metrics", "star"]
+        },
+        {
+          "id": "behav-003",
+          "question": "Tell me about a time you made a mistake. How did you handle it?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Accountability and growth. They want a real mistake you owned, not a humble-brag like \"I work too hard.\"\n\n**Strong structure:**\n- **Situation/Task:** a genuine, non-trivial error with real consequences.\n- **Action:** how you *noticed and owned* it — told stakeholders early, contained the blast radius, fixed it. Emphasize speed of disclosure over hiding.\n- **Result:** the fix plus the *systemic* change so it can't recur (a test, a guardrail, a process), and what it changed in how you work.\n\nPick a mistake that's real but not disqualifying — a bad technical call or a missed assumption, not negligence or an integrity failure.\n\n**Example skeleton:** \"I shipped a migration that added a non-concurrent index on a hot Postgres table and locked writes for ~90 seconds in production (S/T). I caught it on the dashboards, rolled back, and posted in the incident channel within minutes rather than waiting (A). Then I made it systemic: I added `CONCURRENTLY` to our migration linter and a pre-merge check, so the whole team is protected now (R). The lesson was to treat schema changes as production changes with the same review rigor.\"",
+          "key_points": [
+            "Choose a real, consequential mistake — never a fake weakness",
+            "Emphasize early disclosure and containing blast radius",
+            "End with a systemic fix, not just 'I was more careful'",
+            "Don't blame teammates or circumstances"
+          ],
+          "follow_ups": [
+            "Who did you tell first, and when?",
+            "Has anything like it happened again since?"
+          ],
+          "tags": ["ownership", "accountability", "star"]
+        }
+      ]
+    },
+    {
+      "topic": "Technical Challenge & Problem Solving",
+      "questions": [
+        {
+          "id": "behav-004",
+          "question": "What's the hardest technical problem you've solved?",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Depth of your technical ceiling and how you reason through genuine difficulty — not just whether you can recite a hard topic.\n\n**Strong structure:** Pick a problem that was hard for a *substantive* reason (concurrency, distributed correctness, performance at scale, data consistency), not just tedious. Make the difficulty legible: explain *why* the obvious solutions failed before you reached yours.\n- **Situation/Task:** frame the constraint that made it hard.\n- **Action:** show the investigation — hypotheses tried and rejected, tools used (pprof, traces, flame graphs), the trade-off you finally chose.\n- **Result:** quantified outcome and what made the solution durable.\n\n**Go-flavored example skeleton:** \"Our event consumer fell behind under load and we suspected GC (S/T). I profiled and found the real cost was per-message allocation churning the heap; I tried tuning GOGC first but that only masked it (A). I redesigned the hot path to reuse buffers via `sync.Pool` and batch-decode protobufs, cutting allocations ~80% and GC pause time enough to keep the consumer caught up at 3x the previous throughput (R).\"\n\n**Mistake to avoid:** Choosing a problem that's hard to *explain* rather than hard to *solve*; or narrating the team's work as if it were yours.",
+          "key_points": [
+            "Pick problems hard for a substantive reason, not tedium",
+            "Show rejected hypotheses — that's where reasoning lives",
+            "Name the real tools and the decisive trade-off",
+            "Be ready to go arbitrarily deep on follow-ups"
+          ],
+          "follow_ups": [
+            "What alternatives did you reject, and why?",
+            "How did you validate the fix actually worked under load?"
+          ],
+          "tags": ["problem-solving", "go", "performance"]
+        },
+        {
+          "id": "behav-005",
+          "question": "Describe a time you were given an ambiguous problem with no clear requirements.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Seniors create clarity instead of waiting for it. They want to see you decompose ambiguity, not freeze.\n\n**Strong structure:** Show your method for converting fog into a plan:\n- **Situation/Task:** the vague ask and the missing pieces.\n- **Action:** how you reduced ambiguity — talked to stakeholders/users, wrote a short design doc or RFC, framed assumptions explicitly, sliced the problem into a small testable first deliverable, and de-risked the riskiest unknown first.\n- **Result:** alignment achieved and shipped outcome.\n\n**Example skeleton:** \"Product asked for 'real-time notifications' with no spec (S/T). I interviewed three stakeholders to learn what 'real-time' meant to them — turned out 'within a few seconds' was fine, not sub-100ms, which changed the architecture entirely. I wrote a one-page RFC with two options (polling vs. SSE) and their cost/complexity trade-offs, got sign-off, and shipped a thin SSE prototype to one customer first (A). That validated the approach before we built the full fan-out, and we avoided over-engineering a Kafka pipeline nobody needed (R).\"\n\n**Mistake to avoid:** Implying you just started coding, or that you needed someone to hand you the spec.",
+          "key_points": [
+            "Demonstrate a repeatable method for de-fogging",
+            "Surface assumptions explicitly and get them validated",
+            "De-risk the biggest unknown first; ship a thin slice",
+            "Show you avoided over-engineering"
+          ],
+          "follow_ups": [
+            "How did you decide what to build first?",
+            "What did you do when a stakeholder disagreed with your assumptions?"
+          ],
+          "tags": ["ambiguity", "design", "ownership"]
+        },
+        {
+          "id": "behav-006",
+          "question": "Tell me about a nasty production bug you debugged.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Your systematic debugging discipline under pressure — hypothesis-driven, evidence-based, not guess-and-pray.\n\n**Strong structure:**\n- **Situation/Task:** symptoms, impact, and why it was hard (intermittent, no repro, heisenbug).\n- **Action:** the *method* — narrowed scope from logs/metrics/traces, formed and tested hypotheses, used the right tools (pprof, race detector, `GODEBUG`, distributed traces), bisected, reproduced in isolation.\n- **Result:** root cause, fix, and the guardrail you added.\n\n**Go example skeleton:** \"We had sporadic data corruption under load, no repro locally (S/T). Metrics pointed to a specific endpoint; I ran the service under `-race` in staging and it flagged a data race on a shared map written from multiple goroutines without a mutex (A). The fix was an `sync.RWMutex` and I added `-race` to the CI test stage so future races fail the build. Corruption reports went to zero and we caught two more races in the next month before they shipped (R).\"\n\n**Mistake to avoid:** \"I just added logs and eventually found it\" — that reads junior. Emphasize the hypotheses and the elimination process.",
+          "key_points": [
+            "Lead with method: hypothesis -> evidence -> isolate -> fix",
+            "Name concrete Go tools (race detector, pprof, GODEBUG, traces)",
+            "Explain why it was hard to reproduce",
+            "Close the loop with a guardrail that prevents recurrence"
+          ],
+          "follow_ups": [
+            "What was the first hypothesis and why was it wrong?",
+            "How long did it take, and what would have made it faster?"
+          ],
+          "tags": ["debugging", "go", "production"]
+        }
+      ]
+    },
+    {
+      "topic": "Production & Reliability",
+      "questions": [
+        {
+          "id": "behav-007",
+          "question": "Walk me through an outage you handled end to end.",
+          "difficulty": "staff",
+          "answer": "**What's probed:** Incident maturity — calm under fire and a full detect -> mitigate -> root-cause -> prevent loop. This is a core senior signal.\n\n**Strong structure (let the four phases be your STAR Action):**\n- **Detect:** how you found out (alert, customer report) and how fast.\n- **Mitigate:** restore service *first* — roll back, fail over, shed load, feature-flag off. Stop the bleeding before chasing root cause.\n- **Root cause:** after recovery, what actually broke.\n- **Prevent:** the durable fix and the systemic guardrail.\n\nEmphasize that mitigation precedes diagnosis, and that you communicated to stakeholders throughout.\n\n**Example skeleton:** \"At 02:00 PagerDuty fired on elevated 5xx (detect). A bad deploy had introduced an unbounded goroutine leak; I rolled back to the last green release within ~8 minutes to restore service (mitigate), posting status updates every few minutes. Once stable, I reproduced the leak with pprof and found a missing `context` cancellation in a fan-out (root cause). The fix was proper context propagation plus a goroutine-count alert and a load test gate in CI (prevent). MTTR for this class dropped because we now catch leaks pre-merge.\"\n\n**Mistake to avoid:** Diving into root cause while users are still down; or being a hero who fixed it alone without communicating.",
+          "key_points": [
+            "Mitigate before you diagnose — restore service first",
+            "Communicate status to stakeholders throughout",
+            "Cover all four phases explicitly",
+            "End with a systemic prevention, not just the patch"
+          ],
+          "follow_ups": [
+            "What was your MTTR and how did you measure it?",
+            "Who else did you pull in, and how did you coordinate?"
+          ],
+          "tags": ["incident", "reliability", "on-call"]
+        },
+        {
+          "id": "behav-008",
+          "question": "Describe your experience with postmortems and blameless culture.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Whether you treat failure as a systems problem, not a people problem — and whether you actually drive learning, not paperwork.\n\n**Strong structure:** Show you've authored or driven a real postmortem and that you focus on *systemic* causes and follow-through.\n- Explain that blameless means asking \"what about the system let this happen\" rather than \"who messed up\" — because blaming people hides the real causes and kills honesty.\n- Show the artifacts: timeline, contributing factors (often multiple), action items with owners and due dates, and that you *track them to completion*.\n\n**Example skeleton:** \"After the goroutine-leak outage I wrote the postmortem. I kept it blameless — the deploy that triggered it passed all our checks, so the real finding was that our checks didn't cover goroutine growth (S/T/A). I framed three action items with owners: a goroutine-count alert, a load-test CI gate, and a runbook update. I followed up in the next two retros to make sure they actually shipped, not just got filed (R). The point of the postmortem isn't the document — it's the action items getting done.\"\n\n**Mistake to avoid:** Treating a postmortem as blame assignment, or describing one you wrote that had no tracked follow-through.",
+          "key_points": [
+            "Blameless = system focus; blame hides true causes and kills honesty",
+            "Identify multiple contributing factors, not one culprit",
+            "Action items need owners, dates, and tracked completion",
+            "The value is in follow-through, not the document"
+          ],
+          "follow_ups": [
+            "How do you make sure action items don't rot in a backlog?",
+            "Have you ever had to keep a postmortem blameless when emotions ran high?"
+          ],
+          "tags": ["postmortem", "reliability", "culture"]
+        },
+        {
+          "id": "behav-009",
+          "question": "How do you approach on-call and incident command?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Operational maturity and whether you can run an incident, not just participate. Customer-facing roles especially want calm coordination.\n\n**Strong structure:** Cover both being on-call and *commanding* an incident:\n- **On-call hygiene:** actionable alerts only, good runbooks, sustainable rotation, reducing pager noise over time (track and kill flappy alerts).\n- **Incident command:** establish roles (commander, comms, ops), keep one clear decision-maker, time-box investigation, communicate to stakeholders/customers in plain language, hand off cleanly if it's long.\n\n**Example skeleton:** \"On our rotation I pushed to cut alert noise — we'd been paging on symptoms that auto-recovered, so I tuned thresholds and deleted a dozen non-actionable alerts, which dropped night pages by ~40% (A). When I'm incident commander I separate roles immediately: I drive, someone owns customer comms, someone digs into logs — so I'm coordinating, not heads-down debugging. For customer-facing incidents I write status updates a non-technical reader can act on (R).\"\n\n**Mistake to avoid:** Conflating 'I fix things fast' with command. Command is about coordination, comms, and clear decisions — sometimes you shouldn't be the one in the code.",
+          "key_points": [
+            "Separate incident-commander role from hands-on debugging",
+            "Keep alerts actionable; actively reduce pager noise",
+            "Communicate to customers in plain, actionable language",
+            "Sustainable rotation and clean handoffs matter"
+          ],
+          "follow_ups": [
+            "How do you decide when to escalate or pull more people in?",
+            "What does a good runbook contain?"
+          ],
+          "tags": ["on-call", "incident-command", "reliability"]
+        }
+      ]
+    },
+    {
+      "topic": "Ownership & Architecture",
+      "questions": [
+        {
+          "id": "behav-010",
+          "question": "Tell me about a system you owned end to end.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** True ownership — design, build, operate, evolve — versus shipping a feature and walking away. Senior roles need people who own the lifecycle.\n\n**Strong structure:** Pick a system where you owned the full lifecycle and make the breadth visible:\n- **Design:** the requirements and the architecture you chose, with trade-offs.\n- **Build & ship:** how you delivered incrementally.\n- **Operate:** SLOs, monitoring, on-call, how it behaved in production.\n- **Evolve:** how you scaled or refactored it as needs changed.\n\nQuantify scale (RPS, data volume, users) and reliability (SLO attainment).\n\n**Example skeleton:** \"I owned our event-driven order-processing service in Go (S/T). I designed it around an idempotent consumer over Kafka with an outbox pattern for exactly-once-ish delivery, chose Postgres for the source of truth, and shipped it behind a flag to 5% of traffic first (A — design/build). I set a 99.9% SLO, wired up metrics and alerts, and carried the pager for it. As volume grew 4x I added consumer-group partitioning and a dead-letter queue. It's processed millions of orders with the SLO intact (R — operate/evolve).\"\n\n**Mistake to avoid:** Describing only the build phase; ownership is most credible when you can speak to operating it in production.",
+          "key_points": [
+            "Cover the full lifecycle: design, build, operate, evolve",
+            "Quantify scale and reliability",
+            "Show you carried the pager / owned the SLO",
+            "Mention how it evolved under growth"
+          ],
+          "follow_ups": [
+            "What broke in production that you didn't anticipate?",
+            "If you rebuilt it today, what would change?"
+          ],
+          "tags": ["ownership", "architecture", "event-driven"]
+        },
+        {
+          "id": "behav-011",
+          "question": "Describe a significant technical decision you made and its trade-offs.",
+          "difficulty": "staff",
+          "answer": "**What's probed:** Engineering judgment. Seniors don't pick the trendy option — they reason about trade-offs against context and constraints.\n\n**Strong structure:**\n- **Situation/Task:** the decision and the constraints (scale, team, timeline, ops budget).\n- **Action:** the options you weighed, the criteria, and *why* you chose. Name what you gave up — every real decision has a cost.\n- **Result:** the outcome, and honest reflection on whether it held up.\n\nThe credibility signal is naming the downside you accepted *on purpose*.\n\n**Example skeleton:** \"We had to choose between gRPC and REST for internal service-to-service comms (S/T). I weighed type-safety and performance (gRPC) against tooling familiarity and debuggability (REST). Given we had latency-sensitive internal calls and a Go-everywhere stack, I chose gRPC — accepting the cost of a steeper onboarding curve and worse browser/debug ergonomics, which I mitigated with a REST gateway at the edge (A). It paid off in latency and contract safety; the one regret is we underinvested in gRPC tracing early, which I'd fix sooner next time (R).\"\n\n**Mistake to avoid:** Presenting a decision as obviously correct with no downside — that signals you didn't actually weigh alternatives.",
+          "key_points": [
+            "Name the criteria and the constraints driving the choice",
+            "Explicitly state the downside you accepted on purpose",
+            "Reflect honestly on whether it held up",
+            "Avoid resume-driven / trend-driven choices"
+          ],
+          "follow_ups": [
+            "What would have changed your decision?",
+            "How did you bring the team along on it?"
+          ],
+          "tags": ["architecture", "trade-offs", "judgment"]
+        },
+        {
+          "id": "behav-012",
+          "question": "Looking back at a project, what would you do differently?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Reflective capacity and intellectual honesty. They want a real lesson, applied — not 'nothing, it went great.'\n\n**Strong structure:**\n- Briefly set up a project that succeeded *enough* to be worth discussing.\n- Identify a genuine improvement — a sequencing mistake, premature optimization, under-investing in tests/observability, or scope you should have cut.\n- Show how the lesson *changed your behavior* on a later project. The applied lesson is what separates senior reflection from rumination.\n\n**Example skeleton:** \"We shipped the order service successfully, but I went straight to a fully partitioned Kafka design when traffic at launch didn't need it (S/T). It cost us weeks and made early debugging harder. Knowing what I know now, I'd have started with a simpler single-consumer design and a clear migration path, and only partitioned when metrics demanded it (A). I applied exactly that on the next service — shipped the simple version first, scaled when the data told me to — and we hit production a month earlier (R).\"\n\n**Mistake to avoid:** 'I'd do nothing differently' (no growth) or trashing the whole project (no judgment). Pick one sharp, honest thing.",
+          "key_points": [
+            "Choose a real, specific improvement — not a non-answer",
+            "Show the lesson applied to a later project",
+            "Common senior lesson: avoid premature scale/optimization",
+            "Stay constructive, not self-flagellating"
+          ],
+          "follow_ups": [
+            "How did you know it was over-engineered at the time?",
+            "What signal would have told you to scale earlier?"
+          ],
+          "tags": ["reflection", "architecture", "growth"]
+        }
+      ]
+    },
+    {
+      "topic": "Code Quality & Craft",
+      "questions": [
+        {
+          "id": "behav-013",
+          "question": "What's your approach to code review, as both author and reviewer?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Whether you raise the bar for the team and handle the human side of review well — critical for a senior who mentors.\n\n**Strong structure — cover both hats:**\n- **As author:** small, focused PRs; clear description of *why*, not just what; self-review first; pre-empt questions; make the reviewer's job easy.\n- **As reviewer:** prioritize correctness, security, and design over style (let `gofmt`/linters handle style); ask questions rather than issue commands; distinguish blocking issues from nits (label nits explicitly); be timely so you don't block others; praise good work, not just flaws.\n\n**Example skeleton:** \"As an author I keep PRs under ~400 lines and write the 'why' in the description so reviewers aren't guessing (A). As a reviewer I focus on correctness and design — I let linters handle formatting — and I phrase feedback as questions like 'what happens if this context is cancelled here?' rather than 'this is wrong.' I tag nits as `nit:` so the author knows what's blocking versus optional. I review within a few hours because a stale PR blocks the team (R).\"\n\n**Mistake to avoid:** Describing review as nitpicking style, or being a gatekeeper who blocks on personal preference.",
+          "key_points": [
+            "Author: small PRs, explain the 'why', self-review first",
+            "Reviewer: prioritize correctness/design over style",
+            "Ask questions, label nits, be timely",
+            "Let tooling handle formatting; don't gatekeep on taste"
+          ],
+          "follow_ups": [
+            "How do you handle a reviewer and author who disagree and stall?",
+            "What's a comment you'd block a merge on?"
+          ],
+          "tags": ["code-review", "craft", "collaboration"]
+        },
+        {
+          "id": "behav-014",
+          "question": "Tell me about a time you received tough feedback on your code or design.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Ego strength and coachability. Seniors who can't take feedback are a team liability.\n\n**Strong structure:**\n- **Situation/Task:** the feedback and why it stung or surprised you.\n- **Action:** how you *processed* it — separated the technical merit from the delivery, asked clarifying questions, verified rather than reflexively agreeing or defending, and decided based on the merits.\n- **Result:** what you changed and what you learned.\n\nThe senior signal is *engaging technically* with feedback: not blind agreement, not defensiveness — verification.\n\n**Example skeleton:** \"A staff engineer pushed back hard on my proposal to use channels for a worker pool, arguing a bounded `errgroup` was simpler and less leak-prone (S/T). My first instinct was to defend it, but I sat with it, prototyped both, and ran the race detector — the `errgroup` version was genuinely cleaner and I'd been pattern-matching from habit (A). I switched, and I took the broader lesson to prototype-and-measure when challenged rather than argue from preference (R).\"\n\n**Mistake to avoid:** A story where you either caved instantly (no judgment) or 'proved them wrong' (no coachability). Show genuine engagement and a real update to your view.",
+          "key_points": [
+            "Separate technical merit from delivery tone",
+            "Verify and prototype rather than reflexively agree or defend",
+            "Show a genuine update to your thinking",
+            "Avoid both blind agreement and ego defense"
+          ],
+          "follow_ups": [
+            "Was there a time you got tough feedback and concluded you were right?",
+            "How do you respond when the feedback is delivered poorly?"
+          ],
+          "tags": ["feedback", "coachability", "craft"]
+        },
+        {
+          "id": "behav-015",
+          "question": "How do you maintain code quality under a tight deadline?",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Whether you can balance pragmatism and craft — neither a perfectionist who misses deadlines nor a cowboy who ships rot.\n\n**Strong structure:** Show you make the trade-off *deliberately and visibly*:\n- Distinguish what's non-negotiable (tests on critical paths, security, data integrity, observability) from what can be deferred (polish, refactors, edge cases behind flags).\n- Take on debt *consciously*: write it down, ticket it, communicate it to stakeholders. Deliberate, documented debt is fine; silent debt is not.\n- Reduce scope before reducing quality where possible.\n\n**Example skeleton:** \"Under a launch deadline for the payments flow, I protected the non-negotiables — tests on the money path, idempotency, and alerting — and explicitly deferred the admin dashboard polish and a caching optimization (S/T/A). I filed tickets for the deferred work and flagged the debt to the PM so it was a shared decision, not a hidden surprise. We hit the date, the money path was solid, and we paid down the debt in the next sprint (R).\"\n\n**Mistake to avoid:** Implying you either always ship perfect code (unrealistic) or 'just get it done' by cutting tests on critical paths (reckless). The senior move is the conscious, communicated trade-off.",
+          "key_points": [
+            "Protect critical-path tests, security, data integrity, observability",
+            "Cut scope before cutting quality where possible",
+            "Take debt deliberately: ticket it and communicate it",
+            "Make it a shared decision, not a hidden one"
+          ],
+          "follow_ups": [
+            "How do you decide what's a non-negotiable versus deferrable?",
+            "Did that debt actually get paid down, or did it linger?"
+          ],
+          "tags": ["quality", "deadlines", "tech-debt"]
+        },
+        {
+          "id": "behav-016",
+          "question": "Describe a tech-debt decision you drove — to take it on or to pay it down.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Whether you can make a *business case* for engineering work — a key staff-level skill — rather than refactoring for its own sake.\n\n**Strong structure:**\n- Frame the debt in terms of *cost*: slowed velocity, recurring incidents, on-call pain, onboarding friction — quantified if possible.\n- Show how you *prioritized* it against features, made the case to stakeholders in their language, and chose an incremental paydown path (strangler-fig, not a big-bang rewrite).\n- Result: measurable improvement.\n\n**Example skeleton:** \"Our legacy notification module caused ~2 incidents a month and every change took days because it had no tests (S/T). Rather than ask for a rewrite quarter, I quantified the cost — roughly a week of eng time a month lost to incidents and slow changes — and proposed an incremental plan: characterization tests first, then strangle the worst module behind a new interface (A). I got buy-in by framing it as 'this buys back a week of capacity a month,' not 'the code is ugly.' Incidents dropped to near zero and change lead time fell by half (R).\"\n\n**Mistake to avoid:** Advocating debt paydown on aesthetic grounds, or pitching a risky big-bang rewrite. Lead with cost and choose incremental.",
+          "key_points": [
+            "Quantify debt as business/velocity cost, not aesthetics",
+            "Make the case in stakeholder language",
+            "Prefer incremental strangler-fig over big-bang rewrite",
+            "Show a measurable result"
+          ],
+          "follow_ups": [
+            "How did you sell this against shipping features?",
+            "When have you decided NOT to pay down debt?"
+          ],
+          "tags": ["tech-debt", "prioritization", "judgment"]
+        }
+      ]
+    },
+    {
+      "topic": "Mentorship & Leadership",
+      "questions": [
+        {
+          "id": "behav-017",
+          "question": "Tell me about a time you mentored a junior engineer.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Whether you grow people, not just code — and whether you teach for independence rather than fostering dependence.\n\n**Strong structure:**\n- **Situation/Task:** the junior's specific gap or goal.\n- **Action:** what you *did* — paired, set up gradually harder tasks, reviewed with teaching intent (explaining the 'why'), asked guiding questions instead of handing answers, gave timely specific feedback.\n- **Result:** their concrete growth, ideally something they can now do independently.\n\nThe senior signal is teaching them to *fish*: success is measured by their increasing autonomy.\n\n**Example skeleton:** \"A junior on my team struggled with concurrency bugs and leaned on me to fix them (S/T). Instead of just patching their code, I paired on one bug, walked through how to reason about goroutine lifetimes and the race detector, then had them lead the next one while I asked questions (A). Within a couple months they were catching concurrency issues in others' reviews and gave a brown-bag talk on context cancellation to the team. The win wasn't bugs fixed — it was that they no longer needed me for that class of problem (R).\"\n\n**Mistake to avoid:** Mentorship stories where you did the work for them, or where 'mentoring' meant just answering questions. Show transfer of capability.",
+          "key_points": [
+            "Measure success by their growing autonomy",
+            "Teach the 'why' and guiding questions, not answers",
+            "Use graduated challenge and timely feedback",
+            "Avoid creating dependence by doing their work"
+          ],
+          "follow_ups": [
+            "How did you adapt when your usual approach wasn't landing?",
+            "Have you mentored someone whose growth stalled? What did you do?"
+          ],
+          "tags": ["mentorship", "leadership", "people"]
+        },
+        {
+          "id": "behav-018",
+          "question": "Give an example of leading without formal authority.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Whether you can drive outcomes through influence — exactly what a senior IC does, since you rarely have authority over peers.\n\n**Strong structure:**\n- **Situation/Task:** an initiative you drove where you couldn't *tell* anyone what to do.\n- **Action:** how you led — built a clear proposal, won people over with data and shared goals, addressed objections, did the early unglamorous work yourself to build momentum, gave others credit.\n- **Result:** adoption and impact.\n\nThe signal is influence through credibility, listening, and demonstrated value — not positional power.\n\n**Example skeleton:** \"Our services had inconsistent error handling and no shared observability, but I had no mandate to standardize it (S/T). I wrote a lightweight proposal, built a small shared package and instrumented one service to *show* the value rather than just argue for it, and brought concerns from skeptical teammates into the design (A). Once two teams saw the dashboards it gave them, adoption spread by pull, not push. Within a quarter most services used it and our incident triage got noticeably faster (R).\"\n\n**Mistake to avoid:** A story that's really about authority, or where you 'led' by complaining until someone else acted. Show you created momentum and brought people along.",
+          "key_points": [
+            "Lead by proposal, data, and shared goals — not orders",
+            "Demonstrate value early instead of only arguing",
+            "Incorporate objections; give credit generously",
+            "Drive adoption by pull, not push"
+          ],
+          "follow_ups": [
+            "What did you do about the people who resisted?",
+            "How did you keep momentum when it was just you at first?"
+          ],
+          "tags": ["leadership", "influence", "initiative"]
+        },
+        {
+          "id": "behav-019",
+          "question": "How do you share knowledge and grow the capability of a team?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Whether you scale yourself — turning your knowledge into team capability rather than being a bottleneck or a hero.\n\n**Strong structure:** Show concrete mechanisms, not just 'I'm helpful':\n- Documentation (runbooks, ADRs, design docs), brown-bags/tech talks, pairing, intentional code reviews as teaching, onboarding guides, and reducing bus-factor by spreading ownership.\n- Emphasize you optimize the team's throughput, not your own — being indispensable is an anti-pattern.\n\n**Example skeleton:** \"I noticed I'd become the single point of knowledge for our Kafka consumers — every question routed to me, which was a bus-factor risk (S/T). I wrote a consumer runbook and an ADR explaining the design decisions, ran a brown-bag on the failure modes, and deliberately let two teammates lead the next two consumer changes with me reviewing (A). Questions stopped routing only to me, on-call got smoother, and I freed myself for higher-leverage work. Making myself less indispensable was the goal (R).\"\n\n**Mistake to avoid:** Equating knowledge sharing with being the always-available expert. Real seniority is removing yourself as the bottleneck.",
+          "key_points": [
+            "Use durable mechanisms: docs, ADRs, talks, pairing, onboarding",
+            "Reduce bus-factor; spread ownership deliberately",
+            "Optimize team throughput over personal indispensability",
+            "Being the bottleneck is an anti-pattern, not a flex"
+          ],
+          "follow_ups": [
+            "Which mechanism had the most impact and why?",
+            "How do you keep documentation from going stale?"
+          ],
+          "tags": ["knowledge-sharing", "leadership", "team"]
+        }
+      ]
+    },
+    {
+      "topic": "Collaboration & Conflict",
+      "questions": [
+        {
+          "id": "behav-020",
+          "question": "Tell me about a time you disagreed with a teammate on a technical decision.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** How you handle conflict — whether you can disagree productively, stay focused on the best outcome, and disagree-and-commit when needed.\n\n**Strong structure:**\n- **Situation/Task:** the disagreement and why it mattered.\n- **Action:** how you engaged — sought to understand their reasoning first, grounded the debate in data/prototypes/criteria rather than opinion, escalated to a tie-breaker or experiment if stuck, and committed fully once a decision was made even if it wasn't yours.\n- **Result:** the outcome and the preserved relationship.\n\nSenior signal: separate ego from the decision; the goal is the right answer, not winning.\n\n**Example skeleton:** \"A teammate wanted to introduce a new message broker; I thought our existing one was sufficient and the migration risk wasn't justified (S/T). Rather than argue abstractly, I asked what problem they were solving, and we agreed on the criteria that mattered — operational cost, delivery guarantees, team familiarity. We did a small spike to test their throughput concern, and it turned out our current broker handled it fine with tuning (A). They agreed, no hard feelings — and crucially, I'd made clear that if the spike had gone the other way I'd have committed to their plan (R).\"\n\n**Mistake to avoid:** A story where you 'won' by being louder, or where the conflict damaged the relationship. Show disagree-and-commit and respect.",
+          "key_points": [
+            "Understand their reasoning before arguing yours",
+            "Ground the debate in criteria, data, or a spike",
+            "Disagree-and-commit once a decision is made",
+            "Preserve the relationship; the goal is the right answer"
+          ],
+          "follow_ups": [
+            "What if the spike had favored their approach?",
+            "Tell me about a disagreement you lost — how did you handle it?"
+          ],
+          "tags": ["conflict", "collaboration", "decision-making"]
+        },
+        {
+          "id": "behav-021",
+          "question": "Describe a time you disagreed with your manager.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Whether you can push back upward respectfully and constructively — and whether you commit gracefully when overruled. A maturity test.\n\n**Strong structure:**\n- **Situation/Task:** the disagreement, usually a priority, timeline, or technical-risk call.\n- **Action:** how you raised it — privately, with data and the business impact framed in their terms, offering options rather than just objecting, and listening for context you might be missing.\n- **Result:** either you changed their mind with evidence, or you disagreed-and-committed and supported the decision fully.\n\nThe senior signal is voicing risk clearly *and* being a team player about the outcome.\n\n**Example skeleton:** \"My manager wanted to ship a feature before we'd hardened the retry logic, and I believed it risked duplicate charges (S/T). I raised it one-on-one, showed the specific failure scenario and a one-day mitigation, and framed it as 'here's the customer/financial risk and here's the cheapest way to remove it' rather than 'we can't ship' (A). She agreed to the one-day hardening. Had she still chosen to ship, I'd have committed and made sure we had alerting and a rollback ready — but documenting the risk mattered (R).\"\n\n**Mistake to avoid:** Stories that read as insubordination, or as caving without voicing the concern. Both raise the concern *and* respect the final call.",
+          "key_points": [
+            "Raise it privately, with data and business framing",
+            "Offer options and a mitigation, not just objections",
+            "Listen for context you may be missing",
+            "Commit fully if overruled; document the risk"
+          ],
+          "follow_ups": [
+            "What did you do when you were overruled?",
+            "How do you decide whether something is worth pushing back on?"
+          ],
+          "tags": ["conflict", "communication", "upward-management"]
+        },
+        {
+          "id": "behav-022",
+          "question": "How do you work with Product Owners, designers, and BI/analytics?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Cross-functional collaboration — whether you partner with non-engineers or throw work over the wall. Important in an agile, cross-functional team.\n\n**Strong structure:** Show you engage *early* and translate across domains:\n- **With Product:** clarify the *problem and the why* before estimating; surface technical constraints and cheaper alternatives; co-own scope trade-offs.\n- **With design:** flag technical feasibility and edge cases early, before designs are final.\n- **With BI/analytics:** instrument events thoughtfully, agree on metric definitions, ensure data you emit is actually queryable and trustworthy.\n\n**Example skeleton:** \"On the notifications feature I joined the discovery early rather than waiting for a finished spec (S/T). With the PO I dug into what 'real-time' meant and offered a cheaper near-real-time option that hit the goal at a fraction of the cost. With design I flagged early that a per-user preference matrix had edge cases their mockups missed. And I worked with BI up front to define the events and properties so their dashboards were trustworthy from day one (A). The feature shipped faster and the data was usable immediately (R).\"\n\n**Mistake to avoid:** Treating non-engineers as ticket-writers, or only engaging once specs are 'done.' Show early, two-way partnership.",
+          "key_points": [
+            "Engage early — at discovery, not just at spec hand-off",
+            "Translate technical constraints into trade-offs for Product",
+            "Define metrics/events with BI up front for trustworthy data",
+            "Partner, don't take orders or throw work over the wall"
+          ],
+          "follow_ups": [
+            "Tell me about a time a PO and engineering disagreed on scope.",
+            "How do you handle a design that's technically very expensive?"
+          ],
+          "tags": ["cross-functional", "collaboration", "product"]
+        },
+        {
+          "id": "behav-023",
+          "question": "Tell me about a time you faced strong pushback on your idea.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Resilience and whether you handle resistance with curiosity rather than defensiveness — and whether you can change your mind.\n\n**Strong structure:**\n- **Situation/Task:** your idea and the pushback.\n- **Action:** how you responded — got curious about the objection (it often contains real information), addressed concerns with evidence or by adjusting the plan, and either won support or genuinely updated your view.\n- **Result:** outcome and what you learned about the objection.\n\nSenior signal: treat pushback as a source of information, not an attack.\n\n**Example skeleton:** \"I proposed adopting gRPC internally and got real pushback that it would hurt debuggability for the on-call team (S/T). Instead of defending, I dug into the concern — it was legitimate, our tracing wasn't ready (A). So I adjusted the plan to land tracing and a REST debug gateway *first*, which turned the objectors into supporters because I'd taken their pain seriously. The end state was better than my original proposal (R).\"\n\n**Mistake to avoid:** Framing pushback as something to overcome by persistence alone, or a story where you steamrolled. Show that the objection improved the outcome.",
+          "key_points": [
+            "Treat objections as information, not attacks",
+            "Adjust the plan to address legitimate concerns",
+            "Show the outcome improved because of the pushback",
+            "Avoid steamrolling or pure persistence"
+          ],
+          "follow_ups": [
+            "Was there a time the pushback was wrong and you held your ground?",
+            "How do you tell a legitimate concern from resistance to change?"
+          ],
+          "tags": ["conflict", "resilience", "collaboration"]
+        }
+      ]
+    },
+    {
+      "topic": "Delivery & Prioritization",
+      "questions": [
+        {
+          "id": "behav-024",
+          "question": "Tell me about a time you had to deliver under a tight deadline.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Pragmatism, prioritization, and whether you protect quality and the team while hitting dates.\n\n**Strong structure:**\n- **Situation/Task:** the deadline and the stakes.\n- **Action:** how you made it work — ruthlessly prioritized the must-haves, cut or deferred scope (negotiating with stakeholders), parallelized work, protected critical-path quality, and managed the team's load sustainably.\n- **Result:** delivered, with the trade-offs visible and acceptable.\n\nThe signal is *scope management*, not heroics or crunch.\n\n**Example skeleton:** \"We had a hard regulatory deadline for a payment-reporting feature (S/T). I broke it into must-have (the compliant report itself, correct and tested) versus nice-to-have (the self-serve UI, export formats), negotiated the latter out of v1 with the PM, and kept the team focused on the critical path (A). We shipped the compliant version on time with solid tests, and delivered the UI two weeks later. No weekend crunch — we cut scope, not corners (R).\"\n\n**Mistake to avoid:** A 'we worked nights and pulled it off' story. Crunch reads as poor planning. Emphasize scope and prioritization instead.",
+          "key_points": [
+            "Manage scope, not heroics — cut nice-to-haves explicitly",
+            "Protect critical-path quality (tests, correctness)",
+            "Negotiate deferrals with stakeholders openly",
+            "Keep the team's load sustainable"
+          ],
+          "follow_ups": [
+            "What did you cut, and how did you get buy-in?",
+            "What would you have done if the must-haves still didn't fit?"
+          ],
+          "tags": ["delivery", "prioritization", "deadlines"]
+        },
+        {
+          "id": "behav-025",
+          "question": "Describe a time you had to say no, or push back on scope.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Whether you can protect the team and the system from over-commitment while staying collaborative — a senior necessity.\n\n**Strong structure:**\n- Say no to the *request*, not the person, and offer an alternative — 'no, but here's what we can do.'\n- Ground the no in concrete trade-offs: what would slip, what risk it introduces, what it costs.\n- Make it the stakeholder's informed decision, not a unilateral wall.\n\n**Example skeleton:** \"Mid-sprint, a stakeholder wanted a new dashboard 'by Friday' on top of a committed payments deliverable (S/T). I didn't just refuse — I laid out the trade-off: we could do it, but the payments work, which had a hard dependency for another team, would slip a week. I offered a lighter version of the dashboard that fit the gaps, or doing it fully next sprint (A). Framed as a trade-off they owned, they chose the lighter version. Saying no protected the committed work without me being the blocker (R).\"\n\n**Mistake to avoid:** A flat 'I said no' (rigid) or 'I just absorbed it and burned out' (no boundaries). The senior move is 'no, but' with the trade-off made explicit.",
+          "key_points": [
+            "Say no to the request, not the person; offer an alternative",
+            "Make the trade-off explicit and let them decide",
+            "Protect committed work and dependencies",
+            "Avoid both rigidity and absorbing everything"
+          ],
+          "follow_ups": [
+            "What if they insisted on everything?",
+            "How do you say no to your own manager?"
+          ],
+          "tags": ["prioritization", "boundaries", "delivery"]
+        },
+        {
+          "id": "behav-026",
+          "question": "How do you approach estimation and agile/scrum practices?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Practical delivery maturity — realistic estimates, healthy use of agile rather than ceremony for its own sake.\n\n**Strong structure:** Show how you actually estimate and work in a sprint:\n- **Estimation:** break work down until it's understood; estimate relatively (points/T-shirt) rather than false-precision hours; surface unknowns and spike them; include testing/observability/review in the estimate; communicate ranges and risk, not single numbers.\n- **Agile:** use ceremonies to serve delivery — refinement to de-risk upcoming work, standups for unblocking not status theater, retros that actually produce changes; keep WIP low; deliver in thin vertical slices.\n\n**Example skeleton:** \"I estimate by decomposing until each piece is concrete, then size relatively and flag the riskiest unknowns to spike before committing (A). I deliberately include review, tests, and observability in estimates because that's where teams routinely under-count. In sprints I push for small vertical slices over big-bang stories so we get feedback early, and I treat retros as the place we actually fix process pain — if a retro doesn't change anything, it's wasted. That keeps our delivery predictable rather than optimistic (R).\"\n\n**Mistake to avoid:** Either dogmatic ceremony-worship or 'agile is pointless.' Show you use it pragmatically to deliver predictably.",
+          "key_points": [
+            "Decompose, estimate relatively, spike unknowns",
+            "Include testing/review/observability in estimates",
+            "Thin vertical slices and low WIP",
+            "Ceremonies serve delivery; retros must produce change"
+          ],
+          "follow_ups": [
+            "How do you handle a chronically over-optimistic team?",
+            "What do you do when an estimate turns out badly wrong mid-sprint?"
+          ],
+          "tags": ["estimation", "agile", "delivery"]
+        }
+      ]
+    },
+    {
+      "topic": "Growth & Motivation",
+      "questions": [
+        {
+          "id": "behav-027",
+          "question": "Tell me about a significant mistake and what you learned from it.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Distinct from the 'mistake' question in the method section — here the emphasis is on the *learning arc* and durable growth, not incident handling.\n\n**Strong structure:**\n- A real mistake with consequences (technical or judgment).\n- The lesson, stated as a *principle* you now operate by.\n- Evidence the lesson stuck — a later situation where you applied it.\n\n**Example skeleton:** \"Early on I rewrote a working but ugly billing module from scratch instead of refactoring it incrementally, and I introduced subtle regressions that cost us a week of bug-hunting (S/T). The lesson — which I now treat as a rule — is that big-bang rewrites of working systems are a trap; prefer characterization tests and incremental strangling (A). On a later legacy project I deliberately wrapped the old code in tests and replaced it piece by piece, and that migration shipped with zero incidents (R). The mistake permanently changed how I approach legacy code.\"\n\n**Mistake to avoid:** A vague lesson ('I learned to be careful') or no evidence it changed your behavior. Make the lesson a concrete principle, and prove it stuck.",
+          "key_points": [
+            "State the lesson as a durable principle, not a platitude",
+            "Prove it stuck with a later applied example",
+            "Pick a consequential, real mistake",
+            "Focus on the growth arc, not just the incident"
+          ],
+          "follow_ups": [
+            "What other principles have you formed from mistakes?",
+            "How do you make sure a lesson actually sticks?"
+          ],
+          "tags": ["growth", "reflection", "learning"]
+        },
+        {
+          "id": "behav-028",
+          "question": "How do you stay current as an engineer?",
+          "difficulty": "warmup",
+          "answer": "**What's probed:** Curiosity and self-direction, plus *judgment* about what's worth learning — not chasing every new framework.\n\n**Strong structure:** Show concrete, sustainable habits and a filter for signal vs. hype:\n- **Inputs:** specific sources (Go release notes and proposals, key blogs, papers, conference talks, source code of tools you use).\n- **Practice:** building things, reading production code, post-incident learning.\n- **Filter:** you learn deeply where it pays off (fundamentals, your stack) and stay merely aware of the rest. Depth over breadth.\n\n**Example skeleton:** \"I read the Go release notes and follow a few proposals to understand where the language is heading — generics and the loop-var change both affected how I write code. I learn most from reading the source of tools we depend on and from postmortems, mine and public ones. I'm deliberate about depth: I go deep on distributed systems and Go internals because that's my leverage, and stay lightly aware of trends without chasing every framework. The filter is 'does this make me better at the problems I actually solve?'\"\n\n**Mistake to avoid:** Listing trendy buzzwords or implying you adopt everything new. Show a filter and depth, not breadth-chasing.",
+          "key_points": [
+            "Name specific, credible sources (Go release notes, papers, source)",
+            "Learn by building and from postmortems",
+            "Apply a signal-vs-hype filter; depth over breadth",
+            "Tie learning to your actual problem space"
+          ],
+          "follow_ups": [
+            "What's something you learned recently and applied?",
+            "What's a hyped technology you deliberately chose NOT to adopt?"
+          ],
+          "tags": ["growth", "motivation", "learning"]
+        },
+        {
+          "id": "behav-029",
+          "question": "Why this role, and why event-driven / distributed systems?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Genuine motivation and fit. They want to know your interest is real and aligned with the work, not a generic 'I like coding.'\n\n**Strong structure:**\n- Connect your *demonstrated* interest (what you've built, gone deep on, chosen to learn) to what this role actually involves.\n- Be specific about why event-driven/distributed appeals — the intellectual challenge of consistency, scale, failure modes — and back it with experience.\n- Show you've researched the company/product and have a concrete reason it fits your trajectory.\n\n**Example skeleton:** \"I've gravitated to event-driven systems because the hard, interesting problems live there — ordering, idempotency, exactly-once-ish delivery, designing for partial failure. I chose to build our order pipeline as an event-driven system and went deep on the consistency trade-offs, and that's the work I want more of (A). This role centers on exactly that, at a scale I haven't worked at yet, which is the growth I'm looking for. I also care about the customer-facing side — I've found that explaining these systems to non-engineers sharpens my own thinking (R).\"\n\n**Mistake to avoid:** Generic enthusiasm ('I love tech'), or a 'why' that's really about comp/title. Ground it in what you've actually done and want next.",
+          "key_points": [
+            "Connect demonstrated past interest to the role's actual work",
+            "Be specific about what draws you to distributed/event-driven",
+            "Research the company; tie it to your trajectory",
+            "Avoid generic enthusiasm or comp-driven framing"
+          ],
+          "follow_ups": [
+            "What's the hardest part of event-driven systems in your experience?",
+            "Where do you want to be technically in a few years?"
+          ],
+          "tags": ["motivation", "fit", "event-driven"]
+        }
+      ]
+    },
+    {
+      "topic": "Communication & English",
+      "questions": [
+        {
+          "id": "behav-030",
+          "question": "Explain a complex technical topic so a non-technical stakeholder can act on it.",
+          "difficulty": "hard",
+          "answer": "**What's probed:** Customer-facing communication — can you translate engineering into business language and drive a decision? Critical for this role and a direct English/C1 check.\n\n**Strong structure:**\n- Lead with the *impact and the decision*, not the mechanism: what it means for them, what choice they face.\n- Use an analogy or concrete numbers; avoid jargon, or define it once.\n- End with a clear recommendation and the trade-off.\n\nIn the interview, *demonstrate* this — if asked, actually explain something (e.g., why an outage happened, or eventual consistency) plainly, live. That's the real test.\n\n**Example skeleton:** \"A customer was worried that data sometimes looked 'out of date' for a few seconds. Instead of explaining replication lag, I said: 'To stay fast and reliable, we keep copies of your data in several places. After a change, those copies sync within a couple of seconds — like a document syncing across your devices. During that brief window you might see the older version. We can make it instant, but it would slow every request and cost more — here's the trade-off, and here's what I'd recommend for your use case.' That gave them a decision they could actually make (A/R).\"\n\n**Mistake to avoid:** Drowning them in jargon, or oversimplifying to the point of being wrong. Lead with impact, offer a clear recommendation.",
+          "key_points": [
+            "Lead with impact and the decision, not the mechanism",
+            "Use analogy/numbers; define or avoid jargon",
+            "End with a clear recommendation and trade-off",
+            "Be ready to demonstrate it live in the interview"
+          ],
+          "follow_ups": [
+            "Now explain it to me as if I were the engineer who'll fix it.",
+            "How do you handle a stakeholder who wants a guarantee you can't give?"
+          ],
+          "tags": ["communication", "customer-facing", "english"]
+        },
+        {
+          "id": "behav-031",
+          "question": "How do you collaborate effectively across time zones and remotely?",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Remote and async-collaboration maturity — relevant given a remote-first then hybrid setup and possible distributed teammates.\n\n**Strong structure:** Show deliberate async habits and overlap discipline:\n- **Async-first:** write clear, complete updates (decisions, blockers, context) so work continues without you; document in durable places, not ephemeral chat; default to written design docs.\n- **Overlap discipline:** protect the shared hours for the things that truly need synchronous discussion; come prepared so meetings are short.\n- **Trust and clarity:** over-communicate intent, make work visible, and respect others' working hours.\n\n**Example skeleton:** \"Working with teammates several hours offset, I leaned hard on async: I'd write detailed PR descriptions and design docs so reviewers in another time zone had everything they needed without a call, and I'd post end-of-day handoffs with blockers clearly flagged (A). I reserved the few overlap hours for genuinely synchronous decisions and came with a tight agenda. The result was that the time-zone gap rarely blocked anyone — work moved forward around the clock because context was always written down (R).\"\n\n**Mistake to avoid:** Implying you rely on being online at the same time, or that remote means less communication. Show *more*, written, intentional communication.",
+          "key_points": [
+            "Async-first: complete written updates and durable docs",
+            "Protect overlap hours for what truly needs sync",
+            "Over-communicate intent; make work visible",
+            "Respect working hours; don't rely on constant overlap"
+          ],
+          "follow_ups": [
+            "Tell me about a misunderstanding that happened over async — what did you change?",
+            "How do you build trust with teammates you rarely see live?"
+          ],
+          "tags": ["remote", "communication", "collaboration"]
+        },
+        {
+          "id": "behav-032",
+          "question": "Tell me about a time poor communication caused a problem, and how you fixed it.",
+          "difficulty": "medium",
+          "answer": "**What's probed:** Self-awareness about communication and whether you proactively close gaps — not just technical ability.\n\n**Strong structure:**\n- **Situation/Task:** a real miscommunication and its concrete cost (rework, missed expectation, an incident).\n- **Action:** how you diagnosed the gap and fixed it — and the *systemic* change you made so it wouldn't recur (a written spec, a confirmation step, a status cadence).\n- **Result:** the fix plus the improved practice.\n\n**Example skeleton:** \"A feature got built to the wrong spec because the requirements lived only in a verbal standup conversation and I'd assumed I understood them (S/T). We lost about three days of rework. I owned my part — I should have written my understanding back for confirmation (A). The fix was both immediate (rebuilt it correctly) and systemic: I started writing a short 'here's what I'm building and why' note on non-trivial tickets and getting a thumbs-up before coding. That confirm-back habit caught two more near-misses in the following months (R).\"\n\n**Mistake to avoid:** Blaming the other party entirely, or a fix that's just 'we communicated more.' Own your share and show a concrete, repeatable safeguard.",
+          "key_points": [
+            "Own your share of the miscommunication",
+            "Quantify the cost (rework, missed expectation)",
+            "Install a systemic safeguard (confirm-back, written spec)",
+            "Avoid blaming the other party entirely"
+          ],
+          "follow_ups": [
+            "What's your default now for confirming you understood a request?",
+            "How do you communicate bad news, like a slip or an outage?"
+          ],
+          "tags": ["communication", "self-awareness", "process"]
+        }
+      ]
+    }
+  ]
+}

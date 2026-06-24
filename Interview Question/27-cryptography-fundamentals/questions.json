@@ -1,0 +1,641 @@
+{
+  "section": "Cryptography Fundamentals",
+  "slug": "cryptography-fundamentals",
+  "level": "senior",
+  "description": "Core cryptographic primitives, attacks, and correct Go usage that a senior backend engineer must reason about beyond applied TLS/JWT/password handling.",
+  "topics": [
+    {
+      "topic": "Hashing vs Encryption vs Encoding",
+      "questions": [
+        {
+          "id": "crypto-001",
+          "question": "Explain the difference between hashing, encryption, and encoding, and give one correct use for each.",
+          "difficulty": "warmup",
+          "answer": "These solve three different problems and are constantly confused. **Encoding** (base64, hex, URL-encoding) is a reversible, keyless transformation for representation/transport; it provides **zero** confidentiality — anyone can decode it. **Encryption** is reversible **with a key**, providing confidentiality: ciphertext reveals nothing without the key, and you can recover the plaintext. **Hashing** is a one-way function: arbitrary input maps to a fixed-size digest with no key and no inverse; you can verify a value by re-hashing but never recover the input. Use encoding to safely put binary in JSON or a URL; use encryption to protect data you must read back (a stored credit-card token); use hashing for integrity checks and password verification (with a slow KDF, never plain SHA-256). The classic interview red flag is calling base64 'encryption' or storing passwords with reversible encryption.",
+          "key_points": [
+            "Encoding: reversible, keyless, representation only — no security",
+            "Encryption: reversible with a key — confidentiality",
+            "Hashing: one-way, keyless, fixed-size digest — integrity/verification",
+            "Base64 is NOT encryption; encrypting passwords is wrong (hash them)"
+          ],
+          "follow_ups": [
+            "Why is hashing preferred over encryption for passwords?",
+            "Is base64 ever a security control?"
+          ],
+          "tags": ["fundamentals", "hashing", "encryption", "encoding"]
+        },
+        {
+          "id": "crypto-002",
+          "question": "When would you choose encryption over hashing, and vice versa, for a piece of sensitive data?",
+          "difficulty": "medium",
+          "answer": "The deciding question is: **do you ever need the original value back?** If yes, you must encrypt — e.g. a payment account number you later detokenize, a third-party API secret, PII you must display. Use AEAD (AES-GCM) with a properly managed key, ideally via envelope encryption/KMS. If you only ever need to **verify** a presented value, hash it — passwords (slow KDF: argon2/bcrypt), API-key lookups (HMAC or SHA-256 of the key), file integrity. Hashing is preferred whenever possible because a breach of hashed data is far less catastrophic than leaking decryptable ciphertext plus its key. A common mistake is encrypting passwords 'so we can email them back' — that requirement itself is the bug; reset flows should issue new credentials, never reveal old ones.",
+          "key_points": [
+            "Need the original back → encrypt; only need to verify → hash",
+            "Passwords/API keys: hash (slow KDF for passwords)",
+            "PII/secrets you must read: encrypt with AEAD + KMS",
+            "Reversible password storage is an anti-pattern"
+          ],
+          "follow_ups": [
+            "How do you support 'search by encrypted email' without decrypting everything?",
+            "What is a blind index / deterministic encryption trade-off?"
+          ],
+          "tags": ["fundamentals", "data-protection", "design"]
+        }
+      ]
+    },
+    {
+      "topic": "Symmetric Cryptography & Block Cipher Modes",
+      "questions": [
+        {
+          "id": "crypto-003",
+          "question": "Contrast block ciphers and stream ciphers, and explain how a block cipher mode turns AES into something usable for arbitrary-length data.",
+          "difficulty": "medium",
+          "answer": "AES is a **block cipher**: a keyed permutation over fixed 128-bit blocks. By itself it only encrypts one 16-byte block, so a **mode of operation** chains blocks to handle real messages. A **stream cipher** (e.g. ChaCha20) generates a keystream you XOR with the plaintext, encrypting byte-by-byte without padding. Counter-based modes like **CTR** actually turn a block cipher into a stream cipher: AES encrypts an incrementing counter to produce a keystream, then XORs it with plaintext. The mode determines security properties far more than the cipher does — the same AES key is safe under GCM and catastrophic under ECB. So when someone says 'we use AES,' the real question is 'in what mode, and how do you handle the IV/nonce?'",
+          "key_points": [
+            "Block cipher = fixed-block permutation; needs a mode for real data",
+            "Stream cipher = XOR plaintext with a keystream (no padding)",
+            "CTR mode makes AES behave as a stream cipher",
+            "Mode + IV handling matters more than the cipher choice"
+          ],
+          "follow_ups": [
+            "Why does CTR not need padding?",
+            "Is AES-CTR by itself safe to ship?"
+          ],
+          "tags": ["symmetric", "aes", "block-cipher", "stream-cipher"]
+        },
+        {
+          "id": "crypto-004",
+          "question": "Why must ECB mode never be used? What does it leak?",
+          "difficulty": "medium",
+          "answer": "ECB (Electronic Codebook) encrypts each block independently with no chaining, so **identical plaintext blocks produce identical ciphertext blocks**. This leaks structure and equality: the famous 'ECB penguin' image stays visibly recognizable after encryption because repeated pixel patterns map to repeated ciphertext. For backend data it means an attacker can detect repeated records, infer field boundaries, and sometimes cut-and-paste ciphertext blocks to forge meaningful messages (no integrity either). ECB provides confidentiality only in the trivial single-block, single-message case. There is essentially no correct production use; if you see ECB it's a bug. The fix is a semantically secure mode with a unique IV/nonce per message — and for real systems, an AEAD mode like GCM that also gives integrity.",
+          "key_points": [
+            "Each block encrypted independently → equal plaintext = equal ciphertext",
+            "Leaks patterns/structure (ECB penguin), enables block cut-and-paste",
+            "No semantic security, no integrity",
+            "No legitimate production use — always a red flag"
+          ],
+          "follow_ups": [
+            "How does CBC fix the repeated-block problem?",
+            "Can an attacker reorder GCM blocks the way they can with ECB?"
+          ],
+          "tags": ["symmetric", "ecb", "modes", "anti-pattern"]
+        },
+        {
+          "id": "crypto-005",
+          "question": "Compare CBC, CTR, and GCM. What does the IV/nonce do in each, and what breaks if it is reused?",
+          "difficulty": "hard",
+          "answer": "**CBC** XORs each plaintext block with the previous ciphertext block before encrypting; the IV seeds the first block. The IV must be **unpredictable (random)** — a predictable IV enabled the BEAST attack — and CBC needs padding plus a separate MAC (encrypt-then-MAC) or it's vulnerable to padding-oracle attacks. **CTR** XORs plaintext with AES(counter); the nonce seeds the counter. **GCM** is CTR for confidentiality plus a GHASH-based authentication tag (AEAD). For CTR and GCM the nonce only needs to be **unique**, not secret or random. Nonce reuse is catastrophic for both: with the same key+nonce the keystream repeats, so XORing two ciphertexts cancels the keystream and leaks plaintext XOR plaintext. For **GCM specifically**, nonce reuse is worse — it also leaks the GHASH authentication subkey, letting an attacker **forge arbitrary messages**, not just read them. Hence: never reuse a (key, nonce) pair; rotate keys before the nonce space is exhausted.",
+          "key_points": [
+            "CBC: chained, needs random/unpredictable IV + separate MAC + padding",
+            "CTR/GCM: nonce must be unique, not secret; reuse repeats keystream",
+            "Nonce reuse leaks plaintext XOR plaintext (confidentiality break)",
+            "GCM nonce reuse also leaks the auth key → message forgery"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/aes\"\n\t\"crypto/cipher\"\n\t\"crypto/rand\"\n\t\"io\"\n)\n\n// Correct AES-GCM: fresh random nonce per message, prepended to ciphertext.\nfunc seal(key, plaintext, aad []byte) ([]byte, error) {\n\tblock, err := aes.NewCipher(key) // key is 16/24/32 bytes\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tgcm, err := cipher.NewGCM(block)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tnonce := make([]byte, gcm.NonceSize()) // 12 bytes\n\tif _, err := io.ReadFull(rand.Reader, nonce); err != nil {\n\t\treturn nil, err\n\t}\n\t// Seal appends ciphertext+tag to nonce so we store both together.\n\treturn gcm.Seal(nonce, nonce, plaintext, aad), nil\n}",
+          "follow_ups": [
+            "Why is a 96-bit GCM nonce a counter exhaustion concern at scale?",
+            "What is AES-GCM-SIV and which problem does it mitigate?"
+          ],
+          "tags": ["symmetric", "gcm", "ctr", "cbc", "nonce-reuse"]
+        }
+      ]
+    },
+    {
+      "topic": "Authenticated Encryption (AEAD)",
+      "questions": [
+        {
+          "id": "crypto-006",
+          "question": "What is AEAD and why should you prefer it over plain encryption?",
+          "difficulty": "medium",
+          "answer": "AEAD (Authenticated Encryption with Associated Data) provides **confidentiality and integrity/authenticity in one primitive**, plus the ability to authenticate (but not encrypt) extra 'associated data' like headers, version bytes, or a record ID. Plain encryption (CBC/CTR alone) gives confidentiality but no integrity: an attacker can flip ciphertext bits to flip plaintext bits, and CBC without a MAC is open to padding-oracle attacks. The robust construction is **encrypt-then-MAC**, and AEAD modes (AES-GCM, ChaCha20-Poly1305) bake that in correctly so you can't get the ordering wrong. The associated data binds context — e.g. you can put the message's intended recipient or key-version in the AAD so a valid ciphertext can't be replayed in a different context. Rule of thumb: in 2020s code, default to an AEAD; never ship raw CBC/CTR without authentication.",
+          "key_points": [
+            "AEAD = confidentiality + integrity + authenticated associated data",
+            "Plain CTR/CBC is malleable / padding-oracle vulnerable without a MAC",
+            "Encrypt-then-MAC is the correct order; AEAD enforces it",
+            "AAD binds context (headers, IDs) without encrypting it"
+          ],
+          "follow_ups": [
+            "Why is encrypt-then-MAC preferred over MAC-then-encrypt?",
+            "What goes in AAD vs the ciphertext body?"
+          ],
+          "tags": ["aead", "integrity", "encrypt-then-mac"]
+        },
+        {
+          "id": "crypto-007",
+          "question": "When would you choose ChaCha20-Poly1305 over AES-GCM?",
+          "difficulty": "hard",
+          "answer": "Both are modern AEADs with comparable security; the choice is mostly about hardware and implementation safety. **AES-GCM** is fastest when the CPU has AES-NI and carryless-multiply (PCLMULQDQ) instructions — true on most server x86/ARM, so it's the default for backend TLS. **ChaCha20-Poly1305** is a software stream cipher that's fast and **constant-time without special hardware**, so it wins on mobile, embedded, or older CPUs lacking AES-NI, where a software AES would be both slower and more timing-side-channel prone. ChaCha20 also has a larger effective nonce margin (XChaCha20 offers a 192-bit nonce, making random nonces safe at huge volume), whereas GCM's 96-bit nonce limits how many messages a single key can safely encrypt. In Go you get AES-GCM via crypto/cipher and ChaCha20-Poly1305 via golang.org/x/crypto/chacha20poly1305 (including XChaCha20).",
+          "key_points": [
+            "AES-GCM: fastest with AES-NI hardware (typical servers)",
+            "ChaCha20-Poly1305: constant-time in software, better for no-AES-NI devices",
+            "XChaCha20's 192-bit nonce makes random nonces safe at scale",
+            "GCM's 96-bit nonce limits messages-per-key before rotation"
+          ],
+          "follow_ups": [
+            "Why does software AES risk cache-timing side channels?",
+            "Roughly how many messages can one AES-GCM key encrypt with random nonces?"
+          ],
+          "tags": ["aead", "chacha20", "aes-gcm", "performance"]
+        }
+      ]
+    },
+    {
+      "topic": "Asymmetric Cryptography",
+      "questions": [
+        {
+          "id": "crypto-008",
+          "question": "Explain public vs private key roles and why asymmetric crypto is used for key exchange and signatures rather than bulk data.",
+          "difficulty": "medium",
+          "answer": "In asymmetric crypto each party has a keypair: the **public key** is shared freely, the **private key** is kept secret. The roles depend on the operation. For **confidentiality**, you encrypt with the recipient's public key and only their private key decrypts. For **signatures/authenticity**, you sign with your private key and anyone verifies with your public key — proving the message came from the holder of the private key. The catch is performance: asymmetric operations are orders of magnitude slower than symmetric ones because they rely on hard math (integer factorization for RSA, discrete log on elliptic curves for ECC) over large numbers. So real protocols use a **hybrid** scheme: asymmetric crypto to authenticate parties and agree on a fresh symmetric key, then fast symmetric AEAD for the actual bulk data. TLS is exactly this — handshake is asymmetric, the session is symmetric.",
+          "key_points": [
+            "Public key shared, private key secret; roles flip by operation",
+            "Encrypt to public / decrypt with private; sign with private / verify with public",
+            "Slow: based on factoring (RSA) or elliptic-curve discrete log (ECC)",
+            "Hybrid: asymmetric to exchange a key, symmetric for bulk data"
+          ],
+          "follow_ups": [
+            "Why is RSA encryption of bulk data a bad idea even ignoring speed?",
+            "How does TLS combine the two worlds in one handshake?"
+          ],
+          "tags": ["asymmetric", "rsa", "ecc", "hybrid"]
+        },
+        {
+          "id": "crypto-009",
+          "question": "Compare RSA, ECDSA, and Ed25519 for signatures. Which would you pick for a new service and why?",
+          "difficulty": "hard",
+          "answer": "**RSA** is well-understood and widely supported but needs large keys (2048–4096 bits) for equivalent security, giving slow key generation and big signatures; it also has padding pitfalls (always use RSA-PSS for signatures and OAEP for encryption, never PKCS#1 v1.5 in new code). **ECDSA** (e.g. P-256) gives RSA-level security with much smaller keys, but it has a brutal footgun: it requires a unique, secret random nonce `k` per signature — nonce reuse or bias **leaks the private key** (the PlayStation 3 break, and many Bitcoin key losses). **Ed25519** (EdDSA over Curve25519) is the modern default: fast, small (32-byte keys, 64-byte signatures), and it derives `k` deterministically from the message and key, eliminating the ECDSA nonce footgun, with a misuse-resistant API. For a new service, pick **Ed25519** unless an external system mandates RSA or a specific NIST curve. Go exposes all three via crypto/rsa, crypto/ecdsa, and crypto/ed25519.",
+          "key_points": [
+            "RSA: big keys, slow keygen; use PSS (sign) / OAEP (encrypt), not PKCS#1v1.5",
+            "ECDSA: small keys but per-signature secret nonce reuse/bias leaks the key",
+            "Ed25519: deterministic nonce, fast, small, misuse-resistant — modern default",
+            "Pick Ed25519 unless interop forces RSA/NIST curves"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/ed25519\"\n\t\"crypto/rand\"\n)\n\nfunc demo(msg []byte) (bool, error) {\n\tpub, priv, err := ed25519.GenerateKey(rand.Reader)\n\tif err != nil {\n\t\treturn false, err\n\t}\n\tsig := ed25519.Sign(priv, msg)        // deterministic, no nonce footgun\n\treturn ed25519.Verify(pub, msg, sig), nil\n}",
+          "follow_ups": [
+            "Exactly how does reusing k leak an ECDSA private key?",
+            "What does deterministic ECDSA (RFC 6979) change?"
+          ],
+          "tags": ["asymmetric", "ecdsa", "ed25519", "rsa", "signatures"]
+        }
+      ]
+    },
+    {
+      "topic": "Cryptographic Hash Functions",
+      "questions": [
+        {
+          "id": "crypto-010",
+          "question": "Name the security properties of a cryptographic hash function and what an attack on each lets an adversary do.",
+          "difficulty": "medium",
+          "answer": "Three properties matter. **Preimage resistance**: given a digest h, you can't find any input m with hash(m)=h — breaking it lets an attacker invert a hash (e.g. recover something from a digest). **Second-preimage resistance**: given a specific m1, you can't find a different m2 with the same hash — breaking it lets an attacker substitute a forged document that matches an existing one's digest. **Collision resistance**: you can't find any two distinct inputs with the same hash — this is the easiest to attack (birthday bound ~2^(n/2)) and breaking it undermines signatures and certificates, since an attacker can craft a benign and a malicious file sharing a digest and get the benign one signed. Collision resistance is why MD5 and SHA-1 are dead. For a backend, use SHA-256 or SHA-3/BLAKE2 for integrity, and a dedicated slow KDF (not a bare hash) for passwords.",
+          "key_points": [
+            "Preimage: can't invert a digest",
+            "Second-preimage: can't forge a different input matching a given one",
+            "Collision: can't find any two colliding inputs (birthday bound 2^(n/2))",
+            "Collisions break signatures/certs — why MD5/SHA-1 are retired"
+          ],
+          "follow_ups": [
+            "Why is collision resistance the weakest of the three?",
+            "Why is a bare SHA-256 wrong for password storage?"
+          ],
+          "tags": ["hashing", "collision-resistance", "sha-256"]
+        },
+        {
+          "id": "crypto-011",
+          "question": "Why are MD5 and SHA-1 considered broken, and what does a real-world collision attack enable?",
+          "difficulty": "medium",
+          "answer": "Both fail **collision resistance** at practical cost. MD5 collisions are trivial (seconds on a laptop) and SHA-1 fell to the SHAttered attack in 2017 (a chosen-prefix collision, later cheap enough to be commodity). A collision attack means an adversary can produce two different inputs with the same digest. The damage is in **anything that trusts the hash to bind an identity**: a CA that signed a certificate over an MD5/SHA-1 digest could be tricked into effectively signing a forged certificate (the Flame malware abused MD5 in code-signing); two PDFs/executables with the same hash let a signed-benign / swapped-malicious attack. Note collisions do **not** break preimage resistance — you still can't easily invert a given hash — but signatures, certificates, and integrity checks rely on collision resistance, so MD5/SHA-1 must not be used there. They survive only in non-security contexts (e.g. checksums against accidental corruption), and even that is best avoided.",
+          "key_points": [
+            "MD5/SHA-1 broken for collision resistance (SHAttered, 2017)",
+            "Chosen-prefix collisions enable forged certificates / signed malware",
+            "Collision break ≠ preimage break, but signatures need collision resistance",
+            "Acceptable only for non-adversarial checksums; avoid in security paths"
+          ],
+          "follow_ups": [
+            "What is a chosen-prefix collision vs an identical-prefix collision?",
+            "Why was MD5 in TLS certificates such a serious problem?"
+          ],
+          "tags": ["hashing", "md5", "sha-1", "collision-attack"]
+        },
+        {
+          "id": "crypto-012",
+          "question": "What is a length-extension attack, which hashes are vulnerable, and how do you defend against it?",
+          "difficulty": "hard",
+          "answer": "Merkle–Damgård hashes (MD5, SHA-1, SHA-256) compute the digest as the final internal state after absorbing padded blocks. Because the output **is** that internal state, an attacker who knows `hash(secret || message)` and the length of `secret` can resume the computation and compute `hash(secret || message || padding || attacker_data)` **without knowing the secret**. This breaks the naive 'MAC' construction `hash(secret || message)`: an attacker can append data and produce a valid-looking digest. Defenses: (1) use **HMAC**, which nests the key in two hash passes specifically to resist length extension; (2) use a hash not vulnerable to it — **SHA-3/Keccak** (sponge construction), BLAKE2/BLAKE3, or the truncated SHA-512/256; (3) never invent your own keyed-hash MAC. In Go, reach for crypto/hmac, never `sha256.Sum256(append(secret, msg...))`.",
+          "key_points": [
+            "Merkle–Damgård output = final internal state → attacker can resume hashing",
+            "Lets attacker extend hash(secret||msg) without the secret",
+            "Affects MD5/SHA-1/SHA-256; SHA-3/BLAKE2/SHA-512-256 are immune",
+            "Fix: use HMAC (crypto/hmac), never raw hash(secret||message)"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/hmac\"\n\t\"crypto/sha256\"\n)\n\n// WRONG: vulnerable to length extension.\nfunc badMAC(key, msg []byte) []byte {\n\th := sha256.New()\n\th.Write(key)\n\th.Write(msg)\n\treturn h.Sum(nil)\n}\n\n// RIGHT: HMAC is length-extension resistant.\nfunc goodMAC(key, msg []byte) []byte {\n\tm := hmac.New(sha256.New, key)\n\tm.Write(msg)\n\treturn m.Sum(nil)\n}",
+          "follow_ups": [
+            "Why doesn't HMAC's double-hashing have the same flaw?",
+            "Why is SHA-3's sponge construction immune?"
+          ],
+          "tags": ["hashing", "length-extension", "hmac", "sha-3"]
+        }
+      ]
+    },
+    {
+      "topic": "MAC vs Digital Signature",
+      "questions": [
+        {
+          "id": "crypto-013",
+          "question": "When do you use an HMAC versus a digital signature? What property does each give that the other doesn't?",
+          "difficulty": "medium",
+          "answer": "**HMAC** is a symmetric MAC: both parties share one secret key, and the MAC proves the message wasn't tampered with **and** came from someone holding the key. It's fast and ideal when both endpoints are under your control or share a secret — webhook verification, API request signing, session-cookie integrity. Its limitation is **no non-repudiation**: because both sides know the key, either could have produced the tag, so neither can prove to a third party that the *other* sent it, and you can't publish a verification key. A **digital signature** is asymmetric: signed with a private key, verified with a public key. Anyone can verify without being able to forge, giving **non-repudiation** and public verifiability — essential for software releases, JWTs verified by many services, certificates, and anything a third party must audit. Trade-off: signatures are much slower and require key distribution/PKI. Rule: shared trust + speed → HMAC; public verification or accountability → signature.",
+          "key_points": [
+            "HMAC: shared secret, fast, integrity+authenticity, NO non-repudiation",
+            "Signature: private-sign/public-verify, non-repudiation + public verifiability",
+            "HMAC for internal/webhook/API signing; signatures for releases/JWT/certs",
+            "Signatures need key distribution/PKI and are slower"
+          ],
+          "follow_ups": [
+            "Why can't HMAC give non-repudiation?",
+            "Where does JWT use each (HS256 vs RS256)?"
+          ],
+          "tags": ["mac", "hmac", "signatures", "non-repudiation"]
+        },
+        {
+          "id": "crypto-014",
+          "question": "How should you verify an HMAC on an incoming webhook, and what's the subtle bug most people ship?",
+          "difficulty": "medium",
+          "answer": "Recompute the HMAC over the raw request body (the exact bytes received, before any JSON re-serialization) using the shared secret, then compare it to the signature header. The subtle bugs: (1) comparing with `==` or `bytes.Equal`, which can leak the correct tag via **timing** — you must use `hmac.Equal`, which is constant-time; (2) hashing a re-marshalled body instead of the raw bytes, so a semantically-equal but byte-different payload fails or, worse, you normalize away an attacker's tampering; (3) not including a timestamp/nonce in the signed data, allowing replay. Also verify the algorithm and key are what you expect — don't trust an algorithm field from the request. Use a fixed, server-side secret and reject if lengths differ before even comparing.",
+          "key_points": [
+            "HMAC over the RAW received bytes, not a re-serialized body",
+            "Compare with hmac.Equal (constant-time), never == / bytes.Equal",
+            "Sign a timestamp/nonce too, to block replay",
+            "Don't trust an algorithm field supplied by the caller"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/hmac\"\n\t\"crypto/sha256\"\n\t\"encoding/hex\"\n)\n\nfunc validWebhook(secret, rawBody []byte, headerSig string) bool {\n\tm := hmac.New(sha256.New, secret)\n\tm.Write(rawBody)\n\texpected := m.Sum(nil)\n\tgot, err := hex.DecodeString(headerSig)\n\tif err != nil {\n\t\treturn false\n\t}\n\treturn hmac.Equal(expected, got) // constant-time\n}",
+          "follow_ups": [
+            "Why does == leak timing information here?",
+            "How would you bound replay windows in practice?"
+          ],
+          "tags": ["hmac", "webhooks", "constant-time", "verification"]
+        }
+      ]
+    },
+    {
+      "topic": "Key Exchange & Forward Secrecy",
+      "questions": [
+        {
+          "id": "crypto-015",
+          "question": "How do Diffie-Hellman / ECDH let two parties derive a shared secret over an insecure channel?",
+          "difficulty": "hard",
+          "answer": "Each party generates a private scalar and a corresponding public value, exchanges the public values in the clear, and combines its own private value with the peer's public value to compute the same shared secret. In classic DH over a prime field: public p, g; Alice picks a, sends g^a mod p; Bob picks b, sends g^b mod p; both compute g^(ab) mod p. An eavesdropper sees g^a and g^b but recovering ab requires solving the **discrete logarithm**, which is infeasible for proper parameters. **ECDH** does the same on an elliptic curve (e.g. X25519): the secret is the x-coordinate of `a·(b·G)`, with smaller keys and better performance. The raw DH output is then fed through a **KDF (HKDF)** to produce actual encryption keys — never used directly. Crucially, plain DH gives **no authentication**: it's vulnerable to a man-in-the-middle who runs DH with each side separately, which is why DH is paired with signatures/certificates (as in TLS).",
+          "key_points": [
+            "Exchange public values; combine with own private to get the same secret",
+            "Security rests on the discrete-log (or ECDLP) hardness",
+            "ECDH/X25519: same idea on a curve, smaller/faster",
+            "Run the DH output through HKDF; pair with auth to stop MITM"
+          ],
+          "follow_ups": [
+            "Why is unauthenticated DH MITM-able and how does TLS fix it?",
+            "Why feed the DH output through HKDF instead of using it raw?"
+          ],
+          "tags": ["key-exchange", "diffie-hellman", "ecdh", "x25519"]
+        },
+        {
+          "id": "crypto-016",
+          "question": "What is forward secrecy (PFS), how is it achieved, and why does it matter?",
+          "difficulty": "hard",
+          "answer": "Perfect Forward Secrecy means that compromising a long-term private key **later** does not let an attacker decrypt **past** sessions. It's achieved by using **ephemeral** key-exchange keys: for each session, both sides generate a fresh DH/ECDH keypair (ECDHE), derive the session key from those ephemeral values, then discard the ephemeral private keys. The long-term key (the server's certificate key) is used only to *authenticate* the ephemeral exchange via a signature, not to encrypt the session. So even if an adversary records all ciphertext and later steals the server's private key, there's no ephemeral key left to recover the session secret. The counterexample is old RSA key-transport TLS, where the client encrypted the premaster secret to the server's long-term RSA key — steal that key and every recorded session decrypts. This is the whole motivation behind TLS 1.3 mandating (EC)DHE and dropping static-RSA key exchange.",
+          "key_points": [
+            "PFS: future key compromise doesn't expose past sessions",
+            "Achieved via ephemeral (EC)DHE keys, discarded after each session",
+            "Long-term key only authenticates the exchange, doesn't encrypt traffic",
+            "Static-RSA key transport lacked PFS; TLS 1.3 requires ephemeral DH"
+          ],
+          "follow_ups": [
+            "Why does 'record now, decrypt later' make PFS urgent?",
+            "Does session resumption (tickets) weaken forward secrecy?"
+          ],
+          "tags": ["forward-secrecy", "ecdhe", "tls", "key-exchange"]
+        }
+      ]
+    },
+    {
+      "topic": "PKI & Certificates",
+      "questions": [
+        {
+          "id": "crypto-017",
+          "question": "Explain X.509 certificates and the chain of trust. How does a client decide to trust a server's certificate?",
+          "difficulty": "medium",
+          "answer": "An X.509 certificate binds an identity (a domain in the Subject/SAN) to a public key, and is **signed by a Certificate Authority's** private key. Trust is transitive: the client trusts a small set of **root CA** certificates shipped in its trust store; a root signs **intermediate** CAs, which sign **leaf** (server) certificates. To validate, the client builds a chain from the server's leaf up to a trusted root, and at each link verifies the signature using the issuer's public key, checks validity dates, key usage/extended key usage, name constraints, and that the **hostname matches the SAN**. It also checks revocation. If the chain terminates at a trusted root and every check passes, the certificate is trusted. The CA's role is to vouch — via domain validation or stronger — that the keyholder controls that identity. This is exactly what TLS does during the handshake before agreeing on session keys.",
+          "key_points": [
+            "Cert binds identity → public key, signed by a CA",
+            "Chain: trusted root → intermediate → leaf; verify each signature",
+            "Client also checks dates, key usage, SAN/hostname, revocation",
+            "Roots live in the client trust store; trust is transitive down the chain"
+          ],
+          "follow_ups": [
+            "Why use intermediate CAs instead of signing leaves with the root directly?",
+            "What does hostname verification protect against?"
+          ],
+          "tags": ["pki", "x509", "chain-of-trust", "tls"]
+        },
+        {
+          "id": "crypto-018",
+          "question": "Self-signed vs CA-signed certificates, and how does certificate revocation (CRL vs OCSP) work?",
+          "difficulty": "medium",
+          "answer": "A **CA-signed** cert chains to a publicly trusted root, so browsers/clients trust it automatically. A **self-signed** cert is its own issuer — no external authority vouches for it — so clients reject it unless you explicitly add it to a trust store; that's fine for internal services or a private CA, never for public web. **Revocation** handles certs that must be invalidated before expiry (key compromise, mis-issuance). A **CRL** (Certificate Revocation List) is a periodically published, signed list of revoked serials the client downloads — simple but bulky and laggy. **OCSP** lets the client query the CA in real time for a single cert's status, but it adds latency, leaks browsing to the CA, and clients often 'soft-fail' (treat no answer as good), undermining it. **OCSP stapling** fixes this: the server periodically fetches a signed OCSP response and 'staples' it to the TLS handshake, so the client gets fresh status without contacting the CA. Modern practice also leans on short-lived certs (e.g. 90-day ACME) to limit the revocation window.",
+          "key_points": [
+            "CA-signed chains to a trusted root; self-signed needs manual trust",
+            "CRL: signed list of revoked serials, bulky and laggy",
+            "OCSP: real-time status query; privacy + latency + soft-fail issues",
+            "OCSP stapling delivers fresh status via the handshake; short-lived certs help"
+          ],
+          "follow_ups": [
+            "Why is OCSP soft-fail a security weakness?",
+            "How do short-lived certificates reduce reliance on revocation?"
+          ],
+          "tags": ["pki", "revocation", "ocsp", "crl", "certificates"]
+        }
+      ]
+    },
+    {
+      "topic": "Key Derivation Functions",
+      "questions": [
+        {
+          "id": "crypto-019",
+          "question": "Contrast PBKDF2, bcrypt, scrypt, and argon2 for password hashing. Which do you choose and how do you set the work factor?",
+          "difficulty": "hard",
+          "answer": "All are **deliberately slow** KDFs that turn a low-entropy password into a verifier, with a tunable cost so offline cracking stays expensive. **PBKDF2** is CPU-hard only (iterated HMAC) — acceptable in FIPS contexts but weak against GPUs/ASICs because it uses little memory. **bcrypt** is solid and battle-tested but caps input at 72 bytes and has fixed, modest memory use. **scrypt** adds **memory-hardness**, raising the cost of parallel hardware attacks. **argon2** (specifically **argon2id**) is the current recommendation: memory-hard, with separate memory, iteration, and parallelism parameters, and a hybrid mode resisting both side-channel and GPU attacks. Choose **argon2id** for new systems (bcrypt is a fine fallback). Tune parameters so a single hash takes a target wall-clock time on your hardware (commonly ~100–500 ms) — e.g. argon2id with ~64 MB memory, a few iterations, parallelism matched to cores — and re-tune as hardware improves. Always combine with a unique random salt (these KDFs handle salting internally).",
+          "key_points": [
+            "All are intentionally slow with a tunable cost factor",
+            "PBKDF2: CPU-hard only (GPU-weak); bcrypt: solid, 72-byte cap",
+            "scrypt/argon2: memory-hard → resist parallel cracking hardware",
+            "Default argon2id; tune memory/iters to ~100–500 ms per hash; unique salt"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/rand\"\n\t\"golang.org/x/crypto/argon2\"\n)\n\nfunc hashPassword(pw []byte) (salt, hash []byte) {\n\tsalt = make([]byte, 16)\n\t_, _ = rand.Read(salt)\n\t// time=3, memory=64MB, threads=4, keyLen=32\n\thash = argon2.IDKey(pw, salt, 3, 64*1024, 4, 32)\n\treturn salt, hash\n}",
+          "follow_ups": [
+            "What does 'memory-hard' buy you against GPU/ASIC attackers?",
+            "How do you migrate stored bcrypt hashes to argon2 without forcing resets?"
+          ],
+          "tags": ["kdf", "argon2", "bcrypt", "passwords", "work-factor"]
+        },
+        {
+          "id": "crypto-020",
+          "question": "What is the difference between a password KDF (argon2/bcrypt) and HKDF, and when do you use each?",
+          "difficulty": "hard",
+          "answer": "They solve opposite problems. **Password KDFs** (argon2, bcrypt, scrypt, PBKDF2) take a **low-entropy** secret (a human password) and are intentionally **slow and memory-hard** to make brute force expensive. **HKDF** (HMAC-based KDF) takes an already **high-entropy** secret — like a Diffie-Hellman shared secret or a master key — and is intentionally **fast**; its job isn't to slow attackers but to *extract* uniform randomness and *expand* it into one or more strong subkeys, with a context/`info` label to domain-separate keys (e.g. derive distinct encryption and MAC keys from one master). Using HKDF on a raw password is wrong (no brute-force resistance); using argon2 to split a session key is wrong (needlessly slow and not designed for expansion). Rule: human secret → password KDF; cryptographic secret you need to turn into keys → HKDF. Go provides golang.org/x/crypto/hkdf and the argon2/bcrypt/scrypt/pbkdf2 packages.",
+          "key_points": [
+            "Password KDF: low-entropy input, slow + memory-hard (brute-force defense)",
+            "HKDF: high-entropy input, fast — extract + expand into subkeys",
+            "HKDF 'info' label domain-separates derived keys",
+            "Don't HKDF a password; don't argon2 a key-expansion task"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/sha256\"\n\t\"io\"\n\t\"golang.org/x/crypto/hkdf\"\n)\n\n// Derive a 32-byte encryption key from a high-entropy shared secret.\nfunc deriveKey(sharedSecret, salt []byte) ([]byte, error) {\n\tr := hkdf.New(sha256.New, sharedSecret, salt, []byte(\"app:v1:encryption\"))\n\tkey := make([]byte, 32)\n\t_, err := io.ReadFull(r, key)\n\treturn key, err\n}",
+          "follow_ups": [
+            "What do HKDF's extract and expand steps each accomplish?",
+            "Why does the info/context string matter for key separation?"
+          ],
+          "tags": ["kdf", "hkdf", "key-derivation", "argon2"]
+        }
+      ]
+    },
+    {
+      "topic": "Randomness & CSPRNG",
+      "questions": [
+        {
+          "id": "crypto-021",
+          "question": "What's the difference between crypto/rand and math/rand in Go, and why is using the wrong one a classic security bug?",
+          "difficulty": "medium",
+          "answer": "`math/rand` is a **pseudo-random** generator seeded from a small state; it's deterministic, predictable, and made for simulations/load distribution — given enough output (or a known/weak seed) an attacker can predict future values. `crypto/rand` is a **CSPRNG** backed by the OS entropy source (getrandom/`/dev/urandom`, CryptGenRandom), designed so output is unpredictable even to an attacker who sees prior output. Using `math/rand` for anything security-sensitive — session tokens, password-reset tokens, API keys, nonces, salts, IVs — is a textbook vulnerability: predictable tokens let attackers forge or guess them. The bug is easy to ship because both packages have a `Read`/`Intn`-style API and the insecure one is the more convenient import. In Go 1.20+ the top-level `math/rand` is auto-seeded, which removes the 'forgot to seed' bug but does **not** make it cryptographically secure. Rule: any value an attacker must not predict comes from `crypto/rand`.",
+          "key_points": [
+            "math/rand: deterministic PRNG, predictable — for simulations only",
+            "crypto/rand: OS-backed CSPRNG, unpredictable — for security",
+            "Tokens/keys/nonces/salts/IVs MUST use crypto/rand",
+            "Go 1.20 auto-seeds math/rand but it's still NOT secure"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/rand\"\n\t\"encoding/base64\"\n)\n\n// Secure random token (URL-safe).\nfunc newToken(nBytes int) (string, error) {\n\tb := make([]byte, nBytes) // e.g. 32 bytes = 256 bits\n\tif _, err := rand.Read(b); err != nil {\n\t\treturn \"\", err // never ignore this error\n\t}\n\treturn base64.RawURLEncoding.EncodeToString(b), nil\n}",
+          "follow_ups": [
+            "Why must you check the error from crypto/rand.Read?",
+            "How many random bytes for a 'practically unguessable' token?"
+          ],
+          "tags": ["randomness", "csprng", "crypto-rand", "go", "anti-pattern"]
+        },
+        {
+          "id": "crypto-022",
+          "question": "How do you correctly generate salts, nonces, and keys, and what mistakes void their security guarantees?",
+          "difficulty": "medium",
+          "answer": "All three come from a **CSPRNG** (crypto/rand) with enough length for their purpose. **Salts** need uniqueness, not secrecy — 16 random bytes per password, stored alongside the hash; their job is to make every hash unique so one rainbow table can't cover all users. **Nonces** for AES-GCM are 12 bytes and must be **unique per (key) use** — generate fresh random ones (safe up to ~2^32 messages per key) or use a strict counter; never reuse, never derive from predictable data. **Keys** are full-entropy random of the cipher's key size (32 bytes for AES-256); derive them via HKDF from a master secret or fetch from a KMS — never hardcode, never reuse one key across unrelated purposes. Fatal mistakes: a constant or low-entropy salt/nonce, reusing a nonce under one key (breaks GCM completely), truncating keys, generating any of these with math/rand, or ignoring the error from rand.Read so you silently use a zero buffer.",
+          "key_points": [
+            "Everything from crypto/rand; size to purpose (salt 16B, GCM nonce 12B, AES-256 key 32B)",
+            "Salts: unique not secret; nonces: unique per key (never reuse)",
+            "Keys: full-entropy, via HKDF/KMS, never hardcoded or cross-purpose",
+            "Don't ignore rand.Read's error → silent all-zero buffer"
+          ],
+          "follow_ups": [
+            "Why is a random 12-byte GCM nonce risky past ~2^32 messages?",
+            "How does a KMS change where keys are generated?"
+          ],
+          "tags": ["randomness", "salt", "nonce", "keys", "csprng"]
+        }
+      ]
+    },
+    {
+      "topic": "Salting, Peppering & Rainbow Tables",
+      "questions": [
+        {
+          "id": "crypto-023",
+          "question": "What is a rainbow table and how do salts defeat it? How does a pepper differ from a salt?",
+          "difficulty": "medium",
+          "answer": "A **rainbow table** is a precomputed mapping from candidate passwords to their (unsalted) hashes, letting an attacker reverse a stolen hash by lookup instead of brute force. A **salt** — a unique random value per password, stored with the hash — defeats this: because each user's salt differs, the attacker would need a separate table per salt, making precomputation worthless; they're forced into per-password brute force (slow, especially with a memory-hard KDF). Salts are **not secret**; their power is uniqueness. A **pepper** is a separate **secret** value mixed into the hash (e.g. HMAC the password with a server-side key, or use an app-wide secret), but stored **outside the database** — in a config secret or HSM/KMS. So if only the database leaks, peppered hashes are uncrackable without also stealing the pepper. Salt protects against precomputation and cross-user reuse; pepper adds a defense-in-depth secret that survives a DB-only breach. Use a per-user salt always; add a pepper when you can manage the secret safely.",
+          "key_points": [
+            "Rainbow table = precomputed hash→password reverse lookup",
+            "Per-password unique salt makes one table useless → forces brute force",
+            "Salt: unique, stored with hash, NOT secret",
+            "Pepper: secret, stored outside the DB (KMS/config) → survives DB-only leak"
+          ],
+          "follow_ups": [
+            "Why does reusing one salt for all users partially reintroduce the problem?",
+            "What are the operational risks of a pepper (rotation, loss)?"
+          ],
+          "tags": ["salting", "pepper", "rainbow-table", "passwords"]
+        }
+      ]
+    },
+    {
+      "topic": "Envelope Encryption & KMS",
+      "questions": [
+        {
+          "id": "crypto-024",
+          "question": "Explain envelope encryption with a KMS. Why use a data key and a master key instead of one key?",
+          "difficulty": "hard",
+          "answer": "In **envelope encryption** you encrypt data with a per-object **data key (DEK)**, then encrypt that DEK with a **master/key-encryption key (KEK)** held in a KMS/HSM, and store the **encrypted DEK alongside the ciphertext**. To read, you send the wrapped DEK to the KMS, which unwraps it (the KEK never leaves the KMS), and you decrypt locally. Benefits: the high-value master key never leaves the hardware boundary and is never on app servers; bulk encryption stays fast and local (symmetric AEAD with the DEK) rather than calling the KMS for every byte; and you can use millions of distinct DEKs without managing them individually. **Key rotation** becomes cheap: rotating the KEK only requires re-wrapping the small DEKs (or KMS handles versioning transparently), not re-encrypting all data. This is the standard pattern for **encryption at rest** in S3/GCS/RDS and any large datastore. The trade-off is a dependency on the KMS for unwrapping and careful access control on the KEK.",
+          "key_points": [
+            "DEK encrypts data locally; KEK (in KMS/HSM) encrypts the DEK",
+            "Store wrapped DEK with ciphertext; KEK never leaves the KMS",
+            "Fast bulk symmetric crypto, no per-byte KMS calls",
+            "Rotation = re-wrap small DEKs, not re-encrypt all data"
+          ],
+          "follow_ups": [
+            "How does rotating the KEK avoid re-encrypting petabytes of data?",
+            "What happens to availability if the KMS is unreachable?"
+          ],
+          "tags": ["kms", "envelope-encryption", "encryption-at-rest", "key-management"]
+        },
+        {
+          "id": "crypto-025",
+          "question": "How do you handle key rotation for data encrypted at rest without a giant re-encryption migration?",
+          "difficulty": "hard",
+          "answer": "Decouple rotation of the **KEK** from the data. With envelope encryption, rotating the KEK means each object only needs its small wrapped **DEK** re-wrapped under the new KEK — the bulk ciphertext is untouched. Better, store a **key-version identifier** with each ciphertext so multiple KEK versions can coexist: new writes use the current version, old reads still resolve their version, and you re-wrap lazily on access or via a background job. For the DEK itself, rotate it on rewrite — when an object is next written, generate a fresh DEK; you rarely need to proactively re-encrypt cold data. Distinguish rotation reasons: routine/scheduled rotation (limit blast radius and satisfy compliance) can be lazy; rotation due to **suspected key compromise** must force re-encryption of everything that key protected. Keep old key versions available for decryption until all data has migrated, and only then disable them. KMS services (AWS KMS, GCP KMS, Vault) provide versioned keys precisely to make this transparent.",
+          "key_points": [
+            "Rotate KEK → only re-wrap DEKs, not the data",
+            "Tag ciphertext with a key-version so versions coexist; re-wrap lazily",
+            "Rotate DEK on rewrite; avoid mass re-encryption for routine rotation",
+            "Compromise rotation forces full re-encryption; keep old versions until migrated"
+          ],
+          "follow_ups": [
+            "How do you re-encrypt only on access vs a sweep job — trade-offs?",
+            "Why distinguish scheduled rotation from compromise rotation?"
+          ],
+          "tags": ["kms", "key-rotation", "encryption-at-rest", "operations"]
+        }
+      ]
+    },
+    {
+      "topic": "Timing Attacks & Constant-Time Comparison",
+      "questions": [
+        {
+          "id": "crypto-026",
+          "question": "Why does comparing secrets with == leak information, and how do you compare them safely in Go?",
+          "difficulty": "medium",
+          "answer": "Normal byte/string comparison (`==`, `bytes.Equal`, `strings.Compare`) **short-circuits at the first differing byte**. An attacker who can measure response time can therefore learn how many leading bytes of their guess match the secret, and byte-by-byte recover a MAC tag, API key, or token — a classic **timing side channel**, exploitable even over a network with enough samples. The defense is a **constant-time** comparison that always inspects every byte and whose timing doesn't depend on the data: in Go, `subtle.ConstantTimeCompare(a, b)` for general secrets and `hmac.Equal(a, b)` for MAC tags (which wraps the constant-time compare). Note `ConstantTimeCompare` returns early **only** if the lengths differ, so don't let the length itself be the secret. Apply this anywhere you compare an attacker-supplied value to a secret: HMAC verification, token/session-ID checks, password-hash output comparison, CSRF tokens.",
+          "key_points": [
+            "== / bytes.Equal short-circuit → timing reveals matching-prefix length",
+            "Network-observable; lets attacker recover tokens/tags byte by byte",
+            "Use subtle.ConstantTimeCompare or hmac.Equal (constant-time)",
+            "Length mismatch can still leak; keep compared values fixed-length"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/subtle\"\n)\n\nfunc tokensMatch(provided, stored []byte) bool {\n\t// Returns 1 iff equal, in constant time (when lengths are equal).\n\treturn subtle.ConstantTimeCompare(provided, stored) == 1\n}",
+          "follow_ups": [
+            "Why is hmac.Equal preferred for verifying MAC tags?",
+            "How can length differences still leak — and how do you avoid it?"
+          ],
+          "tags": ["timing-attack", "constant-time", "subtle", "hmac"]
+        }
+      ]
+    },
+    {
+      "topic": "Don't Roll Your Own Crypto",
+      "questions": [
+        {
+          "id": "crypto-027",
+          "question": "What does 'don't roll your own crypto' actually mean, and what are the most common fatal mistakes engineers ship?",
+          "difficulty": "medium",
+          "answer": "It means: don't design your own algorithms **and** don't naively assemble standard primitives — both fail silently because crypto bugs produce correct-looking output while being broken. Use vetted, high-level libraries (in Go: crypto/* and golang.org/x/crypto, or libraries like NaCl/age) that are misuse-resistant. The recurring fatal mistakes: **ECB mode** (leaks structure), **nonce/IV reuse** under GCM/CTR (breaks confidentiality and, for GCM, enables forgery), **hardcoded or committed keys** (in source, env dumps, container images), **weak RNG** (math/rand for tokens/keys), **non-constant-time comparison** of secrets, **homemade MACs** like `hash(secret||msg)` (length extension), **encrypt without authenticate** (malleable/padding oracles), **wrong RSA padding** (PKCS#1 v1.5), and **deprecated primitives** (MD5/SHA-1, DES). The senior instinct is to reach for an AEAD with a managed key, a CSPRNG, a real KDF, and constant-time comparisons — and to treat any custom scheme as guilty until reviewed by a cryptographer.",
+          "key_points": [
+            "Don't invent algorithms OR hand-assemble primitives — use vetted libs",
+            "Top killers: ECB, nonce reuse, hardcoded keys, weak RNG, == on secrets",
+            "Homemade MAC (hash(secret||msg)), encrypt-without-auth, PKCS#1v1.5",
+            "Default to AEAD + CSPRNG + real KDF + constant-time compare"
+          ],
+          "follow_ups": [
+            "How would you detect hardcoded keys and weak RNG in CI?",
+            "Why do crypto bugs evade normal testing?"
+          ],
+          "tags": ["best-practices", "anti-patterns", "secure-coding"]
+        }
+      ]
+    },
+    {
+      "topic": "Go Crypto Packages in Practice",
+      "questions": [
+        {
+          "id": "crypto-028",
+          "question": "Map the main Go standard-library and x/crypto packages to the cryptographic jobs you'd use them for.",
+          "difficulty": "medium",
+          "answer": "Standard library: **crypto/aes** + **crypto/cipher** for AES, with `cipher.NewGCM` for the AEAD you should default to; **crypto/rand** for all security randomness (keys/nonces/salts/tokens); **crypto/hmac** for MACs and constant-time tag comparison via `hmac.Equal`; **crypto/subtle** for `ConstantTimeCompare`; **crypto/sha256** / **crypto/sha512** for hashing; **crypto/rsa** (use OAEP/PSS, not PKCS#1 v1.5), **crypto/ecdsa**, and **crypto/ed25519** for asymmetric signing; **crypto/tls** and **crypto/x509** for TLS/PKI. From **golang.org/x/crypto**: **bcrypt** / **argon2** / **scrypt** / **pbkdf2** for password hashing, **hkdf** for key derivation, **chacha20poly1305** for the non-AES AEAD, and **nacl/secretbox** & **nacl/box** for high-level, hard-to-misuse symmetric/asymmetric boxes. The selection principle: prefer the highest-level, misuse-resistant option (GCM, NaCl, ed25519, argon2) and only drop to low-level pieces when a protocol demands it.",
+          "key_points": [
+            "AEAD: crypto/aes+crypto/cipher (GCM) or x/crypto/chacha20poly1305",
+            "Randomness crypto/rand; MAC crypto/hmac; constant-time crypto/subtle",
+            "Asymmetric: crypto/rsa (OAEP/PSS), crypto/ecdsa, crypto/ed25519",
+            "x/crypto: bcrypt/argon2/scrypt, hkdf, nacl/secretbox & box"
+          ],
+          "follow_ups": [
+            "Why prefer NaCl/secretbox over assembling AES-GCM yourself?",
+            "Which RSA functions in crypto/rsa should new code avoid?"
+          ],
+          "tags": ["go", "crypto-packages", "x-crypto", "stdlib"]
+        },
+        {
+          "id": "crypto-029",
+          "question": "Walk through encrypting then decrypting a message with AES-GCM in Go correctly, including key and nonce handling.",
+          "difficulty": "hard",
+          "answer": "Use a 32-byte key (AES-256) sourced from crypto/rand or a KMS-unwrapped DEK — never a password directly (run it through a KDF first). Build the cipher with `aes.NewCipher`, wrap it in `cipher.NewGCM`, and for **each message** generate a fresh 12-byte nonce from crypto/rand. `gcm.Seal` produces ciphertext+tag; prepend the nonce so decryption can recover it. On decrypt, split the nonce, call `gcm.Open`, and **treat any error as authentication failure** — never use the plaintext if Open errors, because that means the tag didn't verify (tampering or wrong key). Optionally bind context via the AAD argument (must match on both sides). The critical rules: unique nonce per (key, message), never ignore the rand or Open errors, and store/transport the nonce with the ciphertext (it's not secret). The snippet below shows the round trip; note Open verifies before returning any plaintext.",
+          "key_points": [
+            "32-byte key from crypto/rand or KMS; password → KDF first, never raw",
+            "Fresh 12-byte nonce per message; prepend to ciphertext (not secret)",
+            "gcm.Open error = auth failure → discard, do not use plaintext",
+            "Use AAD to bind context; never reuse a nonce under one key"
+          ],
+          "code": "package main\n\nimport (\n\t\"crypto/aes\"\n\t\"crypto/cipher\"\n\t\"crypto/rand\"\n\t\"errors\"\n\t\"io\"\n)\n\nfunc Encrypt(key, plaintext, aad []byte) ([]byte, error) {\n\tgcm, err := newGCM(key)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tnonce := make([]byte, gcm.NonceSize())\n\tif _, err := io.ReadFull(rand.Reader, nonce); err != nil {\n\t\treturn nil, err\n\t}\n\treturn gcm.Seal(nonce, nonce, plaintext, aad), nil // nonce||ciphertext||tag\n}\n\nfunc Decrypt(key, blob, aad []byte) ([]byte, error) {\n\tgcm, err := newGCM(key)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tn := gcm.NonceSize()\n\tif len(blob) < n {\n\t\treturn nil, errors.New(\"ciphertext too short\")\n\t}\n\tnonce, ct := blob[:n], blob[n:]\n\treturn gcm.Open(nil, nonce, ct, aad) // error => tampered/wrong key\n}\n\nfunc newGCM(key []byte) (cipher.AEAD, error) {\n\tb, err := aes.NewCipher(key)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn cipher.NewGCM(b)\n}",
+          "follow_ups": [
+            "What should the caller do when Decrypt returns an error?",
+            "How would you add a key-version byte and rotate keys with this layout?"
+          ],
+          "tags": ["go", "aes-gcm", "aead", "implementation"]
+        }
+      ]
+    },
+    {
+      "topic": "JWT/JWS/JWE Signing Crypto",
+      "questions": [
+        {
+          "id": "crypto-030",
+          "question": "Explain the JWS algorithm-confusion (alg) attack between RS256 and HS256, and how to prevent it.",
+          "difficulty": "staff",
+          "answer": "A JWS token's header declares its `alg`. **RS256** is asymmetric (sign with RSA private key, verify with the **public** key), while **HS256** is symmetric HMAC (sign and verify with the same **secret**). The classic attack: a server expects RS256 and holds the RSA **public** key for verification. An attacker forges a token with the header changed to `alg: HS256` and signs it using the server's **public key as the HMAC secret** — that public key is, by design, not secret. If the verification code naively trusts the header's `alg` and passes the RSA public key as the HMAC key, the HMAC check succeeds and the forged token is accepted. The root cause is treating a public verification key as an HMAC secret and letting the **attacker choose the algorithm**. Prevention: **pin the expected algorithm(s)** server-side and reject anything else; never derive the verification method from the token header; use separate, type-tagged keys for HMAC vs RSA; and reject `alg: none` outright. Most mature JWT libraries now require you to specify allowed algorithms for exactly this reason.",
+          "key_points": [
+            "RS256 verifies with public key; HS256 uses a shared secret",
+            "Attacker sets alg=HS256 and HMACs with the server's PUBLIC key",
+            "Naive verifier trusts header alg → forged token accepted",
+            "Fix: pin allowed alg server-side; never let the token pick; reject alg=none"
+          ],
+          "follow_ups": [
+            "Why is alg:none historically dangerous, and how do libs handle it now?",
+            "How do separate key types/IDs (kid) reduce confusion risk?"
+          ],
+          "tags": ["jwt", "jws", "alg-confusion", "rs256", "hs256"]
+        },
+        {
+          "id": "crypto-031",
+          "question": "How do you handle keys safely for JWT signing/verification, including key rotation and the kid header?",
+          "difficulty": "hard",
+          "answer": "Keep signing keys per-role and never mix them: HMAC secrets must be high-entropy (>=256-bit, from crypto/rand) and treated as secrets on every verifier; asymmetric setups keep the **private** signing key in the issuer/KMS only and distribute the **public** key (often via a JWKS endpoint) to verifiers. Use a **`kid` (key ID)** header so verifiers can select the right key from a set — this enables **rotation without downtime**: publish the new public key, start signing with the new `kid` while still accepting tokens signed by the old `kid` until they expire, then retire the old key. Always **pin the allowed algorithm(s)** (don't trust the token's `alg`), validate standard claims (`exp`, `nbf`, `iss`, `aud`), and prefer short token lifetimes plus a revocation/refresh strategy since stateless JWTs can't be individually revoked. For asymmetric signing, prefer ES256/EdDSA over RS256 for smaller, faster tokens. Treat the JWKS cache TTL so rotations propagate, and rotate immediately (and revoke) on suspected key compromise.",
+          "key_points": [
+            "HMAC secret = real secret on all verifiers; asymmetric private key in KMS, public via JWKS",
+            "Use kid to select keys → rotate by overlapping old+new during token TTL",
+            "Pin allowed alg; validate exp/nbf/iss/aud; keep tokens short-lived",
+            "Stateless JWTs can't be revoked individually — plan refresh/denylist"
+          ],
+          "follow_ups": [
+            "How does a JWKS endpoint + kid enable zero-downtime rotation?",
+            "How do you revoke a still-valid JWT before it expires?"
+          ],
+          "tags": ["jwt", "key-rotation", "jwks", "kid", "key-management"]
+        },
+        {
+          "id": "crypto-032",
+          "question": "What's the difference between JWS and JWE, and when would you actually need JWE?",
+          "difficulty": "hard",
+          "answer": "**JWS** (JSON Web Signature) provides **integrity and authenticity**: the payload is signed but **not encrypted**, so anyone can base64-decode and read it. Most 'JWTs' are JWS — fine for claims that are non-sensitive (user ID, roles, expiry) because the client and intermediaries are *supposed* to read them; the signature just stops tampering. **JWE** (JSON Web Encryption) provides **confidentiality**: the payload is encrypted (typically a content-encryption key wrapped via RSA/ECDH-ES, with the body under AES-GCM or similar AEAD), so its contents are hidden from anyone without the key. You need JWE only when the token itself must carry **secret** data the bearer or middle parties shouldn't see — e.g. embedding sensitive PII or a downstream credential in the token. The common mistake is putting secrets in a plain JWS thinking base64 hides them; it doesn't. The senior default: keep secrets out of tokens entirely (reference them server-side), use JWS for ordinary claims, and reach for JWE only when there's a genuine need to transport encrypted payload, accepting its extra complexity.",
+          "key_points": [
+            "JWS: signed, NOT encrypted — readable by anyone (most JWTs)",
+            "JWE: encrypted payload — confidential contents (AEAD + wrapped key)",
+            "Don't put secrets in a JWS; base64 is not encryption",
+            "Prefer keeping secrets out of tokens; use JWE only when payload must be hidden"
+          ],
+          "follow_ups": [
+            "How does JWE typically combine asymmetric key-wrap with symmetric content encryption?",
+            "Why is referencing server-side data usually better than embedding secrets via JWE?"
+          ],
+          "tags": ["jwt", "jws", "jwe", "encryption", "tokens"]
+        }
+      ]
+    }
+  ]
+}

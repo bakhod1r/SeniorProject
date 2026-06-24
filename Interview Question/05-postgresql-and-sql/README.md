@@ -1,0 +1,1022 @@
+# Relational Databases — PostgreSQL & SQL
+
+> Deep PostgreSQL and SQL interview questions for a senior Go backend engineer building event-driven systems, covering storage internals, MVCC, indexing, query optimization, transactions, locking, replication, sharding, pooling, and zero-downtime migrations.
+
+**43 questions** across **9 topics** · Level: senior
+
+## Topics
+
+- [Internals & Storage](#internals-storage) (7)
+- [Indexes](#indexes) (4)
+- [Query Optimization](#query-optimization) (6)
+- [Transactions & ACID](#transactions-acid) (2)
+- [Isolation Levels & Anomalies](#isolation-levels-anomalies) (3)
+- [Locks & Concurrency](#locks-concurrency) (4)
+- [Scaling: Partitioning, Replication, Sharding, Pooling](#scaling-partitioning-replication-sharding-pooling) (5)
+- [Zero-Downtime Migrations & Analytics Offload](#zero-downtime-migrations-analytics-offload) (3)
+- [Database Design & Normalization](#database-design-normalization) (9)
+
+---
+
+## Internals & Storage
+
+#### 1. Walk me through how PostgreSQL physically stores a table on disk: heap files, pages, and tuples.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `storage`, `heap`, `pages`, `tuples`, `internals`
+
+A table is a **heap** — an unordered collection of rows stored in one or more 1 GB segment files under `base/<db_oid>/<relfilenode>`. Each file is divided into fixed **8 KB pages** (blocks). A page has a header, an array of **item pointers (line pointers)** growing forward, and **tuples** stored from the end growing backward, with free space in the middle. Each tuple has a 23-byte header (xmin, xmax, ctid, infomask, null bitmap) plus the column data. A row's physical address is its **ctid** = (block_number, item_offset). Because the heap is unordered, the only way to find a row by value is a sequential scan or an index that maps values to ctids. Updates may move a tuple to a new ctid, which is why the heap fragments and why indexes must be maintained. The 8 KB page size and 1 GB segment are compile-time defaults that shape I/O behavior — reads and writes happen at page granularity, not row granularity.
+
+**Key points**
+- Heap = unordered rows in 1 GB segment files
+- 8 KB page: header + line pointers (forward) + tuples (backward)
+- ctid = (block, offset) physical row address
+- I/O happens at page granularity, not row granularity
+
+**Follow-ups**
+- What is a HOT (heap-only tuple) update and when does it apply?
+- Why can't you rely on ctid as a stable row identifier?
+
+---
+
+#### 2. Explain MVCC in PostgreSQL using xmin and xmax. How does a row become invisible?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `mvcc`, `xmin`, `xmax`, `visibility`, `internals`
+
+PostgreSQL implements **MVCC** by keeping multiple physical versions of a row and tagging each tuple with two transaction IDs in its header: **xmin** (the txid that inserted/created this version) and **xmax** (the txid that deleted or superseded it; 0 if still live). A transaction sees a row version if its **snapshot** says xmin is committed and visible, and xmax is either 0 or belongs to a transaction not yet committed/visible. An UPDATE is implemented as **delete + insert**: the old tuple gets xmax set to the updating txid, and a brand-new tuple is written with xmin = that txid. Readers never block writers and writers never block readers because old versions stay around until no snapshot needs them. The cost: dead tuples accumulate (bloat) and must be reclaimed by VACUUM, and the system must track transaction visibility, which ties into XID wraparound. The snapshot itself is (xmin horizon, xmax ceiling, list of in-progress xids).
+
+**Key points**
+- xmin = creating txid, xmax = deleting/superseding txid
+- UPDATE = mark old tuple's xmax + insert new tuple
+- Visibility decided by snapshot vs tuple xmin/xmax + commit status
+- Readers don't block writers; cost is dead-tuple bloat
+
+
+```sql
+-- Inspect the hidden system columns
+SELECT xmin, xmax, ctid, * FROM accounts WHERE id = 42;
+
+-- pageinspect lets you see tuple visibility info
+SELECT t_xmin, t_xmax, t_ctid
+FROM heap_page_items(get_raw_page('accounts', 0));
+```
+
+**Follow-ups**
+- How does a snapshot decide whether xmin's transaction is 'visible'?
+- What is the commit log (pg_xact/clog) and how does the hint-bit optimization avoid re-reading it?
+
+---
+
+#### 3. What is VACUUM and what exactly does autovacuum do? Why is it not optional?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `vacuum`, `autovacuum`, `bloat`, `maintenance`
+
+VACUUM reclaims space occupied by **dead tuples** (rows whose xmax is committed and no longer visible to any snapshot) and makes that space reusable within the page. Regular VACUUM does **not** return space to the OS — it marks slots free for reuse; only VACUUM FULL rewrites the table and shrinks files (taking an ACCESS EXCLUSIVE lock, so avoid in production). VACUUM also updates the **visibility map** (enabling index-only scans), updates the **free space map**, and critically **freezes** old tuples to advance the relation's relfrozenxid and prevent XID wraparound. **Autovacuum** is a background daemon that triggers VACUUM/ANALYZE per table once dead tuples exceed `autovacuum_vacuum_scale_factor * reltuples + threshold`. It is not optional: without it you get unbounded bloat, stale planner statistics (bad plans), and eventually a forced wraparound shutdown. On high-write event tables you typically tune per-table scale factors aggressively.
+
+**Key points**
+- VACUUM reclaims dead tuples for reuse (not OS); VACUUM FULL rewrites + locks
+- Updates visibility map (enables index-only scan) and freezes tuples
+- Autovacuum triggers on dead-tuple ratio threshold
+- Skipping it → bloat, stale stats, wraparound shutdown
+
+
+```
+-- Aggressive autovacuum on a hot event table
+ALTER TABLE events SET (
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_cost_delay = 0
+);
+```
+
+**Follow-ups**
+- Why is VACUUM FULL dangerous in production and what's the safer alternative (pg_repack)?
+- What does the visibility map enable for index-only scans?
+
+---
+
+#### 4. What is table bloat, how do you measure it, and how do you fix it without downtime?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `bloat`, `pg_repack`, `vacuum`, `maintenance`
+
+**Bloat** is the dead space left by MVCC: dead tuples that VACUUM has marked reusable but that still occupy physical pages, plus index entries pointing at dead tuples. Heavy UPDATE/DELETE workloads or autovacuum that can't keep up produce tables and indexes much larger than their live data, hurting cache hit ratio and scan times. You measure it with `pgstattuple` (accurate but scans the table) or estimation queries against `pg_class`/`pg_statistic`, and watch `n_dead_tup` in `pg_stat_user_tables`. Fixes: tune autovacuum to run more often; for existing bloat, use **pg_repack** to rewrite the table/indexes online with only a brief lock (vs VACUUM FULL which holds ACCESS EXCLUSIVE for the whole rewrite). For indexes specifically, `REINDEX CONCURRENTLY` (PG12+) rebuilds without blocking writes. Long-running transactions are a common root cause because they hold back the xmin horizon, preventing VACUUM from removing dead tuples anywhere in the database.
+
+**Key points**
+- Bloat = dead space from MVCC not yet reused; hurts cache + scans
+- Measure: pgstattuple, n_dead_tup, estimation queries
+- Fix online: pg_repack, REINDEX CONCURRENTLY (PG12+)
+- Long-running txns hold xmin horizon → block VACUUM globally
+
+**Follow-ups**
+- Why does one idle-in-transaction connection cause bloat across unrelated tables?
+- How does fillfactor reduce update-induced bloat via HOT updates?
+
+---
+
+#### 5. Explain transaction-ID wraparound. Why can it shut down the database, and how do you prevent it?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `wraparound`, `xid`, `freeze`, `vacuum`, `internals`
+
+Transaction IDs (XIDs) are **32-bit** and wrap around at ~4 billion. Visibility is determined by comparing XIDs in modular arithmetic: any XID can be 'in the past' or 'in the future' relative to the current one, spanning ~2 billion each way. If a tuple's xmin gets older than ~2 billion transactions and is never **frozen**, it would suddenly appear to be in the *future* and become invisible — silent data loss. To prevent this, VACUUM **freezes** old tuples (marking them as permanently visible via a frozen flag) and advances `relfrozenxid`. Autovacuum forces an anti-wraparound VACUUM when a table approaches `autovacuum_freeze_max_age` (default 200M). If freezing falls so far behind that you near the 2-billion limit, PostgreSQL refuses new transactions and demands single-user-mode VACUUM — an outage. Prevention: keep autovacuum healthy, avoid long-running/idle-in-transaction sessions that pin the xmin horizon, monitor `age(datfrozenxid)`. PG14+ uses 64-bit internal counters in some structures but the visible XID is still 32-bit.
+
+**Key points**
+- XIDs are 32-bit, wrap at ~4B, compared in modular arithmetic
+- Unfrozen old tuples appear 'in the future' → invisible (data loss)
+- VACUUM freezes tuples + advances relfrozenxid to prevent it
+- Nearing the limit → DB refuses writes, single-user VACUUM outage
+
+
+```sql
+-- Monitor distance to wraparound
+SELECT datname, age(datfrozenxid) AS xid_age
+FROM pg_database ORDER BY xid_age DESC;
+```
+
+**Follow-ups**
+- What is autovacuum_freeze_max_age and how does it trigger anti-wraparound vacuums?
+- Why do long-running read transactions make freezing harder?
+
+---
+
+#### 6. What is the WAL and what guarantees does it provide for durability, replication, and recovery?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `wal`, `durability`, `replication`, `pitr`, `internals`
+
+The **Write-Ahead Log** is an append-only record of every change before it's applied to data pages — the foundation of the **D** in ACID. The rule: a change's WAL record must be flushed to durable storage **before** the dirty data page is written. On COMMIT, PostgreSQL fsyncs the WAL up to that transaction's record; the actual data pages are written lazily by checkpoints. This means a crash is recoverable by **replaying** WAL from the last checkpoint (redo), so committed data survives even though the heap pages weren't yet on disk. The WAL also feeds three other features: **streaming replication** (standbys replay the WAL stream), **PITR** (archive WAL segments + a base backup, then replay to any point in time / target LSN), and logical replication (decode WAL into row changes). Trade-offs: `synchronous_commit = off` makes COMMIT return before the WAL fsync — much faster but you can lose the last few transactions on crash; `full_page_writes` protects against torn pages at the cost of WAL volume after each checkpoint.
+
+**Key points**
+- WAL flushed before data pages → durability (the D in ACID)
+- COMMIT fsyncs WAL; data pages written lazily by checkpoints
+- Crash recovery = redo WAL from last checkpoint
+- Feeds streaming replication, PITR, and logical replication
+- synchronous_commit=off trades durability for throughput
+
+**Follow-ups**
+- What is an LSN and how is it used as a position in the WAL stream?
+- How does a checkpoint interact with WAL retention and recovery time?
+
+---
+
+#### 7. What is TOAST and when does it kick in? How does it affect performance?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `toast`, `storage`, `jsonb`, `performance`, `internals`
+
+**TOAST** (The Oversized-Attribute Storage Technique) handles values too big to fit in an 8 KB page. Because a tuple can't span pages, when a row exceeds ~2 KB PostgreSQL compresses and/or moves large variable-length column values (text, jsonb, bytea, arrays) into a separate **TOAST table**, leaving an 18-byte pointer in the main heap tuple. Each toastable column has a strategy: PLAIN (no toast), EXTENDED (compress then out-of-line, the default), EXTERNAL (out-of-line, no compression — good for substring access), MAIN (compress, keep inline if possible). Performance implications: queries that don't touch the large column are *faster* because the main heap is smaller and denser; but reading a large jsonb means an extra fetch + decompression. A subtle pitfall: updating any column rewrites the whole row, but TOAST entries are only rewritten if the toasted value changes — and frequent updates to a row with huge TOASTed columns can bloat the TOAST table, which has its own autovacuum.
+
+**Key points**
+- Triggers when a tuple exceeds ~2 KB (page can't be spanned)
+- Compresses/moves large varlena columns to a side TOAST table
+- Strategies: PLAIN/EXTENDED/EXTERNAL/MAIN
+- Untouched large columns speed up scans; reading them costs extra fetch+decompress
+
+**Follow-ups**
+- When would you set storage EXTERNAL to optimize substring/LIKE on large text?
+- Why can a heavily-updated jsonb column bloat the TOAST table separately?
+
+---
+
+## Indexes
+
+#### 8. Compare PostgreSQL's index types: B-Tree, Hash, GIN, GiST, and BRIN. When do you reach for each?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `indexes`, `btree`, `gin`, `gist`, `brin`, `hash`
+
+**B-Tree** is the default: equality and range (`<`, `<=`, `=`, `>=`, `>`, BETWEEN, sorted ORDER BY, prefix LIKE). Use it for almost everything on scalar columns. **Hash** supports only equality; historically unlogged/unsafe, now WAL-logged and crash-safe (PG10+), but B-Tree usually wins so it's rarely worth it. **GIN** (Generalized Inverted Index) is for composite values where you query *elements*: jsonb containment (`@>`), array membership, and full-text search (`tsvector`). Fast reads, slower/heavier writes — mitigated by `fastupdate` pending list. **GiST** is a framework for overlapping/geometric/nearest-neighbor data: ranges, geometry (PostGIS), KNN ordering, exclusion constraints. It's lossy and supports `&&` overlap operators. **BRIN** (Block Range Index) stores min/max per block range — tiny and cheap, ideal for huge append-only tables where the column is **naturally correlated with physical order** (e.g. an event `created_at` timestamp). BRIN is useless if the data isn't physically clustered by that column. The choice is driven by the operator class your query needs, not just the column type.
+
+**Key points**
+- B-Tree: equality + range + sort (the default)
+- Hash: equality only, rarely worth it over B-Tree
+- GIN: jsonb @>, arrays, full-text — heavy writes
+- GiST: geometry, ranges, KNN, exclusion constraints
+- BRIN: tiny index for huge append-only physically-ordered data
+
+
+```sql
+-- jsonb containment needs GIN
+CREATE INDEX idx_payload ON events USING GIN (payload jsonb_path_ops);
+
+-- huge append-only event log, ordered by time → BRIN
+CREATE INDEX idx_events_time ON events USING BRIN (created_at);
+```
+
+**Follow-ups**
+- Why does BRIN fail to help when rows are inserted out of timestamp order?
+- What is jsonb_path_ops and how does it trade flexibility for index size?
+
+---
+
+#### 9. Explain partial, covering (index-only scan), and functional/expression indexes. Give a real use case for each.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `indexes`, `partial`, `covering`, `index-only-scan`, `functional`
+
+A **partial index** indexes only rows matching a WHERE predicate — smaller, cheaper to maintain, and the planner uses it only when the query predicate implies the index predicate. Classic use: `WHERE status = 'pending'` on a job table where 99% of rows are 'done'. A **covering index** includes extra columns via `INCLUDE` so the query can be answered entirely from the index — an **index-only scan** — avoiding the heap fetch. It only works if the visibility map marks the pages all-visible (so VACUUM matters). Use it for hot read paths where you need a couple of columns. A **functional/expression index** indexes the result of an expression so a query can use it: `CREATE INDEX ON users (lower(email))` lets `WHERE lower(email) = $1` use the index — a plain index on `email` won't, because the expression differs. These three are how you make targeted indexes that match exactly how the query filters, rather than over-indexing whole columns.
+
+**Key points**
+- Partial: index subset matching a WHERE — tiny, used only when predicate implies
+- Covering (INCLUDE): index-only scan, no heap fetch — needs all-visible pages
+- Functional: index an expression so WHERE expr=$1 can use it
+- Match the index to the query's exact filter shape
+
+
+```sql
+-- Partial: only index unprocessed jobs
+CREATE INDEX idx_jobs_pending ON jobs (created_at)
+  WHERE status = 'pending';
+
+-- Covering: serve the lookup entirely from the index
+CREATE INDEX idx_orders_user ON orders (user_id) INCLUDE (total, status);
+
+-- Functional: case-insensitive email lookup
+CREATE INDEX idx_users_email_lower ON users (lower(email));
+```
+
+**Follow-ups**
+- Why might an index-only scan still hit the heap, and how does VACUUM affect it?
+- How does the planner prove a query predicate is implied by a partial index predicate?
+
+---
+
+#### 10. Explain the composite index column-order / left-prefix rule. Why does column order matter?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `indexes`, `composite`, `left-prefix`, `column-order`
+
+A composite (multicolumn) B-Tree index `(a, b, c)` is sorted lexicographically — first by `a`, then `b` within equal `a`, then `c`. The **left-prefix rule**: the index can be used efficiently for predicates that form a prefix of the column list. So `(a, b, c)` serves `a=`, `a= AND b=`, `a= AND b= AND c=`, and a range on the *last* used column. It does **not** serve a query that filters only on `b` or only on `c` without `a` — there's no contiguous range to seek. A key nuance: once you hit a **range** predicate (`>`, `<`, BETWEEN) on a column, columns to its right can no longer be used for seeking, only for filtering. So order columns: **equality predicates first, then the range/sort column last**. Also put the most selective equality column first when usage is uniform. For `WHERE a=1 AND b BETWEEN x AND y ORDER BY c`, the right index is `(a, b)` or `(a, b, c)` depending on whether c needs to be sorted — getting this wrong forces a sort or a seq scan.
+
+**Key points**
+- Composite index sorted lexicographically left-to-right
+- Usable only for a left-prefix of columns
+- First range predicate stops seeking on columns to its right
+- Order: equality columns first, range/sort column last
+
+
+```sql
+-- Good for: tenant_id=, tenant_id= AND created_at range/ORDER BY
+CREATE INDEX idx ON events (tenant_id, created_at);
+
+-- This query CANNOT efficiently use the above index
+-- (no tenant_id predicate → no left prefix)
+SELECT * FROM events WHERE created_at > now() - interval '1 day';
+```
+
+**Follow-ups**
+- When would you create a separate single-column index vs reordering the composite?
+- How does ORDER BY interact with the index ordering to avoid an explicit sort?
+
+---
+
+#### 11. When will the planner ignore an index you expect it to use? Name several causes.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `indexes`, `planner`, `selectivity`, `statistics`, `sargable`
+
+The planner is **cost-based**, so it ignores an index whenever a seq scan looks cheaper or the index can't satisfy the query. Common causes: (1) **Low selectivity** — if the predicate matches a large fraction of rows, a seq scan is genuinely faster than many random index lookups + heap fetches. (2) **Stale statistics** — ANALYZE hasn't run, so the planner's row estimates are wrong; fix with ANALYZE or autovacuum tuning. (3) **Type/collation mismatch or function wrapping** — `WHERE col = $1::text` vs a different type, or `WHERE lower(col)=...` without a matching expression index. (4) **Implicit casts** that prevent index use, e.g. comparing a `text` column to an integer literal. (5) **Functions that aren't sargable** — `WHERE date_trunc('day', ts) = ...` needs an expression index. (6) **LIKE '%foo%'** (leading wildcard) can't use a B-Tree. (7) **Small tables** where seq scan is trivially cheap. (8) `OR` conditions that the planner can't turn into a bitmap-or. (9) Wrong **random_page_cost** for SSDs (default 4.0 assumes spinning disk; lower to ~1.1 on SSD). Diagnose with EXPLAIN ANALYZE comparing estimated vs actual rows.
+
+**Key points**
+- Cost-based: seq scan wins when predicate is low-selectivity
+- Stale stats → bad estimates → wrong plan; run ANALYZE
+- Type/collation mismatch, implicit casts, non-sargable functions
+- Leading-wildcard LIKE, small tables, mis-tuned random_page_cost
+
+
+```
+-- Non-sargable: planner can't use an index on ts
+WHERE date_trunc('day', created_at) = DATE '2026-06-23'
+
+-- Sargable rewrite
+WHERE created_at >= DATE '2026-06-23'
+  AND created_at <  DATE '2026-06-24'
+```
+
+**Follow-ups**
+- How do you read estimated-vs-actual row counts to spot a stats problem?
+- Why lower random_page_cost on SSD and what does it change in plan choice?
+
+---
+
+## Query Optimization
+
+#### 12. How do you read EXPLAIN ANALYZE output? What's the first thing you look at?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `explain`, `query-optimization`, `planner`, `diagnostics`
+
+EXPLAIN ANALYZE actually runs the query and reports, per plan node, the **estimated** cost/rows and the **actual** time/rows/loops. Read it from the **innermost (most indented) nodes outward** — those execute first. The first thing I check is the gap between **estimated rows and actual rows**: a large divergence (e.g. estimate 10, actual 100,000) means the planner has bad statistics and likely chose a bad join/scan strategy (a nested loop that's now catastrophic, or a seq scan it thought was small). Then I look at: which node consumes the most **actual time** (use the per-loop time × loops); whether scans are **Seq Scan vs Index Scan vs Bitmap Heap Scan**; the **join methods** and their inputs; and any **Sort** or **Hash** that spills to disk (look for `Sort Method: external merge Disk:` instead of `quicksort Memory:`, indicating work_mem is too small). The total time at the top is wall-clock; `Planning Time` vs `Execution Time` are reported separately. I always add BUFFERS to see actual I/O.
+
+**Key points**
+- Reports estimated cost/rows vs actual time/rows/loops
+- Read innermost (most-indented) nodes first
+- First check: estimated-vs-actual row divergence (stats problem)
+- Watch for disk-spilling Sort/Hash (work_mem too small)
+
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+SELECT * FROM orders WHERE user_id = 42 ORDER BY created_at DESC LIMIT 20;
+```
+
+**Follow-ups**
+- What does 'loops=N' mean and how do you compute total time for that node?
+- What does 'Rows Removed by Filter' tell you about index effectiveness?
+
+---
+
+#### 13. Explain the three join strategies — nested loop, hash join, merge join — and when each is chosen.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `joins`, `nested-loop`, `hash-join`, `merge-join`, `planner`
+
+**Nested loop**: for each row of the outer relation, probe the inner. Cheap when the outer side is small and the inner has an index to probe (O(outer × index_lookup)). Catastrophic when row estimates are wrong and the 'small' outer is actually large — a classic source of queries that suddenly run 1000× slower after stats drift. **Hash join**: build an in-memory hash table on the smaller relation, then scan the larger and probe. Best for large, unsorted inputs joined on equality; cost is roughly linear but needs `work_mem` to hold the hash — if it doesn't fit it spills to disk in batches. Only works for equality joins. **Merge join**: sort both inputs on the join key (or use already-sorted index output), then merge in one pass. Good for large inputs already sorted by the join key, or supporting range/inequality merge conditions, but the sort can be expensive if inputs aren't pre-sorted. The planner picks based on estimated input sizes, available indexes/sort orders, and work_mem. When you see a slow nested loop with huge actual rows on the inner side, the real bug is usually a bad cardinality estimate upstream.
+
+**Key points**
+- Nested loop: small outer + indexed inner; explodes on bad estimates
+- Hash join: large unsorted equality joins; needs work_mem, spills to disk
+- Merge join: pre-sorted inputs, one-pass merge
+- Wrong cardinality estimate is the usual cause of a bad join plan
+
+**Follow-ups**
+- Why does a nested loop get exponentially worse than a hash join when estimates are off?
+- How does increasing work_mem change hash vs merge join choice?
+
+---
+
+#### 14. What is the N+1 query problem in a Go service, how do you detect it, and how do you fix it?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `n+1`, `go`, `query-optimization`, `orm`, `batching`
+
+**N+1** is when you run 1 query to fetch a list of N parent rows, then loop in Go issuing 1 query per parent to fetch its children — N+1 round trips. Each round trip has network + parse + plan overhead, so even with fast queries the latency is dominated by the count. It's especially insidious behind an ORM or a `for` loop over a slice that lazily loads associations. **Detect** it with `pg_stat_statements` (you'll see a query with a huge `calls` count and identical shape), application tracing (a span fan-out), or by logging query counts per request in middleware. **Fix** options: (1) a single `JOIN` to fetch parents+children together; (2) fetch children in one query with `WHERE parent_id = ANY($1)` passing the collected IDs and group in Go; (3) a lateral/aggregate (`json_agg`) to nest children server-side. In Go specifically, collect the parent IDs first, then issue one batched `ANY($1::int[])` query and build a `map[parentID][]child` to stitch the result. The trade-off with a big JOIN is row multiplication (cartesian fan-out) — for 1:many it's often cleaner to do the second batched query.
+
+**Key points**
+- 1 list query + N per-row queries = N+1 round trips
+- Round-trip overhead dominates even when each query is fast
+- Detect via pg_stat_statements high call count / tracing
+- Fix: JOIN, or batched WHERE id = ANY($1) + group in Go
+
+
+```go
+// Instead of querying per user, batch:
+rows, _ := db.Query(ctx,
+  `SELECT user_id, id, total FROM orders WHERE user_id = ANY($1)`,
+  userIDs)
+byUser := map[int64][]Order{}
+for rows.Next() {
+    var o Order; rows.Scan(&o.UserID, &o.ID, &o.Total)
+    byUser[o.UserID] = append(byUser[o.UserID], o)
+}
+```
+
+**Follow-ups**
+- When is a JOIN worse than two queries due to row fan-out / data duplication?
+- How does a DataLoader-style batching pattern apply outside GraphQL?
+
+---
+
+#### 15. How do pg_stat_statements, auto_explain, and EXPLAIN (ANALYZE, BUFFERS) fit into a query-tuning workflow?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `pg_stat_statements`, `auto_explain`, `buffers`, `tuning`
+
+These are complementary layers. **pg_stat_statements** is the always-on aggregate view: it normalizes queries (stripping literals) and tracks total/mean execution time, calls, rows, and shared-buffer hits/reads per query shape. It's where you start — sort by `total_exec_time` or `mean_exec_time` to find the queries actually costing you, not the ones that *feel* slow. **auto_explain** logs the actual plan (optionally with ANALYZE/BUFFERS) for any query exceeding a duration threshold — it catches the slow *individual* executions and intermittent bad plans you can't reproduce on demand, without you having to manually run EXPLAIN. **EXPLAIN (ANALYZE, BUFFERS)** is the manual deep-dive once you've identified a target: it runs the query and shows real timings plus the BUFFERS line (shared hit/read = cache vs disk I/O), which tells you whether the cost is CPU, cache misses, or disk. Workflow: pg_stat_statements to rank → auto_explain to capture real-world plans → EXPLAIN ANALYZE BUFFERS to investigate and validate a fix. BUFFERS is the key signal people skip — high `read` means you're going to disk, often a missing/unused index.
+
+**Key points**
+- pg_stat_statements: always-on, ranks query shapes by total/mean time
+- auto_explain: logs real plans over a threshold (catches intermittent bad plans)
+- EXPLAIN (ANALYZE, BUFFERS): manual deep-dive with real I/O numbers
+- BUFFERS shared read = disk I/O signal often skipped
+
+
+```sql
+-- Top offenders by total time
+SELECT query, calls, mean_exec_time, rows,
+       shared_blks_hit, shared_blks_read
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC LIMIT 10;
+```
+
+**Follow-ups**
+- What does a high shared_blks_read/shared_blks_hit ratio indicate?
+- Why is mean_exec_time sometimes misleading vs p99, and how would you get tail latency?
+
+---
+
+#### 16. Before PG12, CTEs were always materialized (an optimization fence). What changed, and why does it matter?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `cte`, `materialized`, `planner`, `pg12`, `query-optimization`
+
+Through PG11, a `WITH` CTE was an **optimization fence**: it was always evaluated and materialized into a temporary result, and the planner could not push predicates down into it or inline it into the outer query. People used this deliberately ('CTE as a fence') to force evaluation order, but it also caused surprise slowdowns — a filter applied outside the CTE couldn't be pushed inside, so you'd materialize a huge intermediate set. **PG12** changed the default: a CTE that is referenced **once** and is **not recursive** and has **no side effects** is now **inlined** like a subquery, letting the planner push predicates and choose indexes through it. CTEs referenced multiple times still materialize by default. You can force either behavior explicitly with `WITH x AS MATERIALIZED (...)` or `AS NOT MATERIALIZED (...)`. Why it matters: code written pre-12 that relied on the fence (for correctness of side-effecting CTEs or to avoid re-computation) may behave differently after an upgrade, and conversely you can now write readable CTEs without paying a materialization penalty — but be explicit with the keyword when the behavior is load-bearing.
+
+**Key points**
+- Pre-12: CTE always materialized = optimization fence (no predicate pushdown)
+- PG12: single-use, non-recursive, side-effect-free CTEs are inlined
+- Multiply-referenced CTEs still materialize by default
+- Control explicitly with MATERIALIZED / NOT MATERIALIZED
+
+
+```sql
+-- Force the old fence behavior when you need it
+WITH recent AS MATERIALIZED (
+  SELECT * FROM events WHERE created_at > now() - interval '1 hour'
+)
+SELECT * FROM recent WHERE type = 'click';
+```
+
+**Follow-ups**
+- When would you still want MATERIALIZED to avoid recomputing an expensive CTE?
+- How do you spot an unintended materialization in EXPLAIN output?
+
+---
+
+#### 17. Why is OFFSET pagination slow at scale, and how does keyset (cursor) pagination fix it?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `pagination`, `keyset`, `offset`, `query-optimization`, `go`
+
+`LIMIT 20 OFFSET 100000` still **scans and discards** the first 100,000 rows before returning 20 — cost grows linearly with the offset, so deep pages get progressively slower (O(offset)). It's also **inconsistent** under concurrent inserts/deletes: rows shift between pages, causing duplicates or skips. **Keyset (seek) pagination** instead remembers the last row's sort key and asks for rows *after* it: `WHERE (created_at, id) < ($last_ts, $last_id) ORDER BY created_at DESC, id DESC LIMIT 20`. With a matching composite index this is an **index seek** to the start position — O(log n) regardless of how deep you page, and stable under concurrent writes because you're anchored to a value, not a position. The trade-offs: you can only go next/prev (no random 'jump to page 500'), and you need a **unique, totally-ordered** tie-breaker (add `id` to break ties on `created_at`) so the row-value comparison is well-defined. For event-driven systems with infinite-scroll feeds and large tables, keyset is the correct default.
+
+**Key points**
+- OFFSET scans+discards N rows → O(offset), slow on deep pages
+- OFFSET is unstable under concurrent inserts/deletes
+- Keyset: WHERE (sortkey) < last → index seek, O(log n), stable
+- Needs a unique tie-breaker; no random page jumps
+
+
+```sql
+-- Keyset pagination (descending feed)
+SELECT id, created_at, payload
+FROM events
+WHERE (created_at, id) < ($1, $2)   -- last row of previous page
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+-- requires INDEX (created_at DESC, id DESC) or (created_at, id)
+```
+
+**Follow-ups**
+- How do you express a multi-column keyset comparison portably across drivers?
+- What do you do when the UI genuinely needs 'jump to page N'?
+
+---
+
+## Transactions & ACID
+
+#### 18. Define ACID precisely. For each letter, what mechanism in PostgreSQL provides it?
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `acid`, `transactions`, `fundamentals`
+
+**Atomicity** — a transaction is all-or-nothing; partial effects never persist. Provided by the WAL + transaction abort: on ROLLBACK or crash, uncommitted changes are undone/never applied. **Consistency** — a transaction moves the database from one valid state to another, respecting constraints, triggers, and invariants. Enforced by constraints (PK/FK/CHECK/unique), enforced at commit. Note this is the application-defined-correctness 'C', partly the app's responsibility. **Isolation** — concurrent transactions don't interfere; the result is as if they ran in some serial order (to the degree the isolation level promises). Provided by MVCC snapshots + locks, tunable via isolation levels. **Durability** — once committed, data survives crashes. Provided by the WAL being fsynced before COMMIT returns (subject to `synchronous_commit`). The subtle point seniors should make: 'Consistency' here is *not* the same as CAP's consistency, and the four are not equally absolute — durability and isolation are tunable, and the 'C' is largely the schema/app's job, not a magic guarantee.
+
+**Key points**
+- Atomicity: all-or-nothing via WAL + abort/rollback
+- Consistency: constraints/triggers; partly app's responsibility
+- Isolation: MVCC snapshots + locks, tunable by level
+- Durability: WAL fsync before COMMIT (tunable via synchronous_commit)
+
+**Follow-ups**
+- Why is ACID's C different from CAP's C?
+- Which of the four does synchronous_commit=off weaken?
+
+---
+
+#### 19. Which letter of ACID does asynchronous replication threaten, and why?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `acid`, `durability`, `replication`, `async`, `failover`
+
+It threatens **Durability** — specifically *durability beyond the single primary node*. On a single node, COMMIT is durable once the WAL is fsynced locally. But with **asynchronous** streaming replication, COMMIT returns to the client as soon as the primary's WAL is local; the standby may not have received those WAL records yet. If the primary's disk dies before the standby catches up, the failover promotes a standby that is **missing the last few committed transactions** — committed data is lost from the client's perspective even though COMMIT returned success. This is the durability gap, measured as **replication lag** (bytes/time of un-replicated WAL). **Synchronous** replication closes it by making COMMIT wait until at least one standby acknowledges the WAL (`synchronous_commit = on` + `synchronous_standby_names`), trading latency for stronger cross-node durability. The classic senior nuance: people often say replication threatens 'Consistency' (you can read stale data from a replica), but that's an *isolation/freshness* concern on the read path; the thing async replication actually breaks is durability of acknowledged commits across a failover.
+
+**Key points**
+- Async replication threatens Durability across failover
+- COMMIT returns before standby has the WAL → lag window
+- Primary dies in that window → committed txns lost on promoted standby
+- Sync replication waits for standby ack to close the gap (latency cost)
+
+**Follow-ups**
+- What does synchronous_commit = remote_apply guarantee vs remote_write?
+- How does quorum-based synchronous_standby_names balance latency and safety?
+
+---
+
+## Isolation Levels & Anomalies
+
+#### 20. List the standard isolation anomalies (dirty read, non-repeatable read, phantom, serialization anomaly) and which levels prevent each.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `isolation`, `anomalies`, `dirty-read`, `phantom`, `write-skew`
+
+**Dirty read**: reading another transaction's *uncommitted* changes. **Non-repeatable read**: re-reading the same row in one transaction returns different values because another committed in between. **Phantom read**: re-running a *range query* returns new rows that another transaction committed (the set changes, not just a row). **Serialization anomaly**: the result of concurrently committed transactions is inconsistent with any serial order, even though each row read individually was fine (e.g. write skew). The SQL-standard levels and what they forbid: READ UNCOMMITTED (allows all — but PostgreSQL treats it as READ COMMITTED, never permits dirty reads); READ COMMITTED (no dirty reads); REPEATABLE READ (no non-repeatable, and per-standard may allow phantoms); SERIALIZABLE (none). PostgreSQL is stricter than the standard: its REPEATABLE READ uses snapshot isolation and **also prevents phantoms**, but can still exhibit write-skew serialization anomalies — which is exactly what SERIALIZABLE (SSI) closes. So in PG: dirty reads never happen; READ COMMITTED still has non-repeatable/phantom; REPEATABLE READ has neither but allows write skew; SERIALIZABLE prevents everything.
+
+**Key points**
+- Dirty=uncommitted read; non-repeatable=row changed; phantom=set changed
+- Serialization anomaly=result not equivalent to any serial order (write skew)
+- PG never allows dirty reads (even READ UNCOMMITTED behaves as READ COMMITTED)
+- PG REPEATABLE READ prevents phantoms but allows write skew; SERIALIZABLE prevents all
+
+**Follow-ups**
+- Give a concrete write-skew example that REPEATABLE READ permits.
+- Why is PostgreSQL stricter than the SQL standard at REPEATABLE READ?
+
+---
+
+#### 21. What does PostgreSQL's READ COMMITTED *actually* do at the statement level? Why does it surprise people?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `isolation`, `read-committed`, `snapshot`, `lost-update`, `default`
+
+In READ COMMITTED (the default), **each statement takes a fresh snapshot** at the moment it starts — not at transaction start. So within one transaction, two SELECTs can see different committed data (non-repeatable read). The genuinely surprising part is how **UPDATE/DELETE with a WHERE clause** handle concurrency: if your UPDATE's WHERE matches a row that another transaction is concurrently updating, your statement **blocks** until that transaction commits or rolls back; if it committed, PostgreSQL **re-evaluates the WHERE against the *new* (updated) version of the row** (an EvalPlanQual 're-check'). This means you can read one value, but the UPDATE acts on a newer value — leading to lost-update-style bugs in read-modify-write patterns like `balance = balance - 10` computed in application code. The classic failure: `SELECT balance; ...; UPDATE SET balance = $computed` can lose a concurrent decrement, because the SELECT and UPDATE see different snapshots. Fixes: do the arithmetic in SQL (`SET balance = balance - 10`), use `SELECT ... FOR UPDATE` to lock the row first, or bump the isolation level. People expect a transaction to see one consistent snapshot; READ COMMITTED only promises per-statement consistency.
+
+**Key points**
+- READ COMMITTED takes a NEW snapshot per statement, not per transaction
+- Conflicting UPDATE blocks then re-evaluates WHERE on the updated row version
+- App-side read-modify-write can silently lose updates
+- Fix: arithmetic in SQL, FOR UPDATE, or higher isolation
+
+
+```sql
+-- Lost-update prone (two snapshots):
+-- tx1: SELECT balance INTO b;  b = b - 10;  UPDATE SET balance = b;
+
+-- Safe: single atomic statement
+UPDATE accounts SET balance = balance - 10 WHERE id = 42;
+```
+
+**Follow-ups**
+- What is EvalPlanQual and how does the re-check affect your WHERE clause?
+- Why does moving arithmetic into SQL avoid the lost update without locking?
+
+---
+
+#### 22. How does SERIALIZABLE (SSI) work in PostgreSQL, and what does it cost?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `isolation`, `serializable`, `ssi`, `write-skew`, `retry`
+
+PostgreSQL's SERIALIZABLE uses **Serializable Snapshot Isolation (SSI)** — it builds on the same MVCC snapshots as REPEATABLE READ but adds **monitoring for dangerous read-write dependency cycles** that could produce a non-serializable outcome (e.g. write skew). It tracks **predicate locks** (SIReadLocks) — logical locks on the data a transaction *read*, including ranges/index pages — not physical row locks that block others. Transactions run optimistically without blocking; at commit (or sometimes mid-flight) PostgreSQL detects a cycle of rw-dependencies forming a 'dangerous structure' and **aborts one transaction** with a serialization_failure (SQLSTATE 40001). The cost has three parts: (1) **memory/CPU** to track predicate locks, which can escalate from tuple → page → relation granularity under load, causing more false-positive conflicts; (2) the application **must retry** transactions that fail with 40001 — your code needs a retry loop, which is the real integration burden; (3) throughput suffers under high write contention because more transactions get aborted. The win: you reason about transactions as if they ran one-at-a-time, eliminating write skew without manual `SELECT FOR UPDATE` lock choreography. It's ideal for correctness-critical, moderate-contention workloads where the simplicity of serial reasoning outweighs the retry cost.
+
+**Key points**
+- SSI = snapshot isolation + detection of dangerous rw-dependency cycles
+- Uses predicate locks (SIReadLocks), non-blocking/optimistic
+- Aborts a transaction with serialization_failure (40001) on conflict
+- Cost: predicate-lock memory, false positives under escalation, mandatory retry loop
+
+
+```go
+// App must retry on 40001
+for attempt := 0; attempt < maxRetries; attempt++ {
+    err := runTx(ctx, db, func(tx pgx.Tx) error { /* ... */ })
+    var pgErr *pgconn.PgError
+    if errors.As(err, &pgErr) && pgErr.Code == "40001" {
+        continue // serialization failure, retry
+    }
+    return err
+}
+```
+
+**Follow-ups**
+- How does predicate-lock granularity escalation cause false serialization failures?
+- When would you prefer explicit FOR UPDATE locking over SERIALIZABLE?
+
+---
+
+## Locks & Concurrency
+
+#### 23. Compare row-level vs table-level locks. What's the difference between FOR UPDATE and FOR SHARE?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `locks`, `for-update`, `for-share`, `row-lock`, `table-lock`
+
+**Row-level locks** are acquired on individual tuples (stored partly in the tuple header + a lock manager) and let concurrent transactions touch *other* rows freely — they're what you want for fine-grained concurrency. **Table-level locks** (ACCESS SHARE up to ACCESS EXCLUSIVE) govern whole-table operations; e.g. a plain SELECT takes ACCESS SHARE, while ALTER TABLE / VACUUM FULL take ACCESS EXCLUSIVE and block everything. `SELECT ... FOR UPDATE` takes an **exclusive row lock**: it signals intent to modify, blocks other FOR UPDATE/FOR SHARE/UPDATE/DELETE on those rows until you commit, and is the standard pessimistic 'reserve this row so I can read-modify-write safely' tool. `SELECT ... FOR SHARE` takes a **shared row lock**: multiple transactions can hold it simultaneously (so they all guarantee the row won't change under them), but it blocks anyone wanting FOR UPDATE/UPDATE/DELETE. Use FOR SHARE when you need to read a row and ensure it isn't modified/deleted before you commit (e.g. checking a foreign-key parent exists), and FOR UPDATE when you intend to write. There are also weaker variants — FOR NO KEY UPDATE and FOR KEY SHARE — that PostgreSQL uses internally to let non-key updates coexist with FK checks.
+
+**Key points**
+- Row locks: fine-grained, other rows unaffected; table locks gate whole-table ops
+- FOR UPDATE: exclusive row lock — intent to modify, blocks other lockers
+- FOR SHARE: shared row lock — many readers, blocks writers
+- FOR NO KEY UPDATE / FOR KEY SHARE = weaker variants for FK coexistence
+
+**Follow-ups**
+- Why does an UPDATE to a non-key column take FOR NO KEY UPDATE rather than full exclusive?
+- What table-level lock does ALTER TABLE take and how do you minimize its blast radius?
+
+---
+
+#### 24. How does PostgreSQL detect deadlocks, and how do you prevent them in application code?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `deadlock`, `locks`, `lock-ordering`, `retry`, `concurrency`
+
+A **deadlock** happens when transaction A holds a lock B wants while B holds a lock A wants — a cycle in the wait-for graph. PostgreSQL doesn't prevent the cycle; it **detects** it: when a transaction has been waiting on a lock for `deadlock_timeout` (default 1s), the lock manager runs a **wait-for-graph cycle check**, and if it finds a cycle it **aborts one of the transactions** (the one chosen as victim) with a deadlock_detected error (SQLSTATE 40P01). The other proceeds. Note this is a 1-second-ish stall per occurrence even when resolved, so deadlocks aren't just correctness bugs, they're latency bugs. **Prevention** is the application's job: (1) acquire locks in a **consistent global order** — if every transaction locks rows/tables in the same order (e.g. always by ascending primary key), no cycle can form; (2) keep transactions short and acquire locks late; (3) avoid mixing access patterns that lock the same set in different orders; (4) for batch updates, sort the IDs before locking. When a deadlock does occur, the loser gets 40P01 and your code should **retry** the whole transaction. The senior point: lock ordering is the only robust *prevention*; detection+retry is the fallback.
+
+**Key points**
+- Deadlock = cycle in wait-for graph; PG detects after deadlock_timeout (~1s)
+- Detection aborts a victim with 40P01; the other proceeds
+- The 1s timeout makes deadlocks a latency problem too
+- Prevent by consistent global lock ordering; retry on 40P01
+
+
+```sql
+-- Lock rows in a deterministic order to avoid deadlocks
+SELECT * FROM accounts
+WHERE id = ANY($1)
+ORDER BY id           -- consistent ordering
+FOR UPDATE;
+```
+
+**Follow-ups**
+- Why does sorting IDs before a multi-row UPDATE prevent deadlocks?
+- How does deadlock_timeout being too low or too high affect the system?
+
+---
+
+#### 25. Optimistic vs pessimistic locking: when do you choose each? Show an optimistic version-column approach.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `optimistic-locking`, `pessimistic-locking`, `version-column`, `concurrency`
+
+**Pessimistic locking** (`SELECT ... FOR UPDATE`) grabs the lock up front, assuming conflict is likely; concurrent writers block and wait. It guarantees the read-modify-write is safe but serializes access to the row and holds the lock for the duration of the transaction, hurting throughput and risking lock waits/deadlocks. Use it when contention is **high** and conflicts are common (e.g. decrementing limited inventory), or when the work between read and write is short. **Optimistic locking** assumes conflict is **rare**: you read a row including a `version` (or `updated_at`) column, do your work without holding a lock, then UPDATE with `WHERE id = $1 AND version = $oldVersion` and bump the version. If 0 rows are affected, someone else changed it first — you detect the conflict and **retry** (refetch and reapply). No locks held during the think-time, so it scales well under low contention, but wastes work on retries under high contention and pushes conflict handling into the app. Rule of thumb: optimistic for low-contention / long think-time (web edit forms), pessimistic for hot rows where retries would thrash.
+
+**Key points**
+- Pessimistic (FOR UPDATE): lock up front, good for high contention/short critical section
+- Optimistic (version column): no lock, detect conflict via affected-rows, retry
+- Optimistic scales under low contention but wastes work on retries when high
+- Choose by contention level and length of read→write think-time
+
+
+```sql
+-- Optimistic concurrency with a version column
+UPDATE documents
+SET content = $1, version = version + 1
+WHERE id = $2 AND version = $3;
+-- if RowsAffected == 0 → conflict, refetch and retry
+```
+
+**Follow-ups**
+- How do you decide a retry budget for optimistic updates under bursty load?
+- Why can updated_at be a fragile version column compared to a monotonic integer?
+
+---
+
+#### 26. How do you build a reliable job queue in PostgreSQL using FOR UPDATE SKIP LOCKED?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `skip-locked`, `job-queue`, `for-update`, `concurrency`, `event-driven`
+
+A naive queue where many workers do `SELECT ... WHERE status='pending' FOR UPDATE LIMIT 1` makes every worker **block** on the same row the first worker locked — they serialize, killing concurrency. `SKIP LOCKED` fixes this: a worker locks the first *unlocked* matching row and **skips** rows already locked by other workers, so N workers grab N distinct jobs with no contention. The pattern: `SELECT id FROM jobs WHERE status='pending' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`, then mark it 'processing' (or DELETE on completion), all in one transaction so the lock is held until you commit — guaranteeing at-least-once delivery and that a crashed worker's job (uncommitted) becomes visible again on rollback. Key considerations: keep the transaction short (claim the row, commit quickly, do heavy work after, or use a 'processing' state + heartbeat/lease to recover stuck jobs); add a partial index `WHERE status='pending'` so the scan stays cheap as completed rows pile up; and beware that ORDER BY interacts with SKIP LOCKED (the order is best-effort, not strict, under concurrency). This pattern is reliable, transactional, and avoids a separate broker — great for moderate throughput event-driven systems; for very high throughput you'd move to a dedicated broker.
+
+**Key points**
+- Plain FOR UPDATE makes all workers block on the same row
+- SKIP LOCKED skips already-locked rows → N workers, N distinct jobs
+- Hold lock in one transaction = at-least-once + crash safety on rollback
+- Add partial index on pending; use processing-state/lease for stuck jobs
+
+
+```sql
+-- Claim one job without blocking other workers
+WITH job AS (
+  SELECT id FROM jobs
+  WHERE status = 'pending'
+  ORDER BY created_at
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1
+)
+UPDATE jobs j
+SET status = 'processing', locked_at = now()
+FROM job
+WHERE j.id = job.id
+RETURNING j.*;
+```
+
+**Follow-ups**
+- How do you recover jobs whose worker crashed mid-processing (lease/heartbeat)?
+- At what throughput would you migrate off Postgres to a dedicated queue, and why?
+
+---
+
+## Scaling: Partitioning, Replication, Sharding, Pooling
+
+#### 27. Explain declarative partitioning (range, list, hash). What are the benefits and the sharp edges?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `partitioning`, `range`, `hash`, `pruning`, `scaling`
+
+Partitioning splits one logical table into multiple physical **partitions** by a partition key. **Range** partitions by value ranges — the canonical use is time (`created_at` per month) for event tables, enabling cheap `DROP` of old partitions instead of mass DELETE. **List** partitions by discrete values (e.g. region, tenant_id). **Hash** spreads rows evenly across N partitions by a hash of the key when there's no natural range and you just want balanced sizes. Benefits: **partition pruning** (the planner skips partitions that can't match the query, scanning only relevant ones), smaller per-partition indexes that fit in cache, and fast bulk data lifecycle via partition DROP/ATTACH/DETACH. Sharp edges: (1) queries that **don't include the partition key** can't prune and scan *every* partition — worse than an unpartitioned table; (2) **unique/primary-key constraints must include the partition key**, which complicates global uniqueness; (3) cross-partition operations and foreign keys referencing partitioned tables have limits; (4) you must create future partitions ahead of time (or use pg_partman) or inserts fail. Partitioning is a single-node technique (it doesn't distribute across machines — that's sharding); it's about manageability and pruning, not horizontal scale-out.
+
+**Key points**
+- Range (time), List (discrete), Hash (even spread) partitioning
+- Benefits: pruning, cache-friendly small indexes, DROP-partition lifecycle
+- Pitfall: queries without partition key scan all partitions
+- Unique keys must include the partition key; partitioning is single-node
+
+
+```sql
+CREATE TABLE events (id bigint, created_at timestamptz, payload jsonb)
+  PARTITION BY RANGE (created_at);
+
+CREATE TABLE events_2026_06 PARTITION OF events
+  FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
+```
+
+**Follow-ups**
+- Why must a unique constraint on a partitioned table include the partition key?
+- How do you automate partition creation and avoid insert failures on new ranges?
+
+---
+
+#### 28. Synchronous vs asynchronous streaming replication — what's the trade-off, and how do you measure replication lag?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `replication`, `synchronous`, `asynchronous`, `lag`, `scaling`
+
+In **streaming replication**, the primary ships its WAL to standbys that continuously replay it. With **asynchronous** replication (the default), COMMIT returns as soon as the WAL is durable on the *primary*; standbys catch up afterward. This is fast (no extra round trip on the write path) but creates a **lag window** — if the primary fails, recently committed transactions not yet shipped are lost on failover, and reads from a replica can be stale. With **synchronous** replication, COMMIT waits until at least one standby (per `synchronous_standby_names`) acknowledges the WAL at the chosen level (`remote_write`, `on`/`remote_flush`, or `remote_apply`). This guarantees no committed transaction is lost on single-node failure but adds the round-trip latency of the slowest required standby to **every** commit, and if no sync standby is available, writes can **stall**. So the trade-off is durability/consistency vs write latency and availability. **Measure lag** on the standby with `pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn)` (bytes) or from the primary via `pg_stat_replication` (`sent_lsn`, `write_lsn`, `flush_lsn`, `replay_lsn` per standby, and `replay_lag` time). Watch byte lag for throughput problems and time lag for read-staleness SLOs.
+
+**Key points**
+- Async: fast commits, lag window → possible loss on failover + stale reads
+- Sync: waits for standby ack — no loss but per-commit latency + stall risk
+- Sync levels: remote_write < on/remote_flush < remote_apply
+- Measure lag via pg_stat_replication LSNs / replay_lag, or pg_wal_lsn_diff
+
+
+```sql
+-- On the primary: per-standby lag
+SELECT application_name, state,
+       pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes,
+       replay_lag
+FROM pg_stat_replication;
+```
+
+**Follow-ups**
+- Why can synchronous replication with a single standby halt writes, and how do you avoid it?
+- What's the difference between remote_write, remote_flush, and remote_apply guarantees?
+
+---
+
+#### 29. You route reads to replicas but hit 'read-after-write' inconsistency. Explain the problem and how to handle it.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `replication`, `read-after-write`, `lsn`, `consistency`, `scaling`
+
+With async replicas, a user who **writes to the primary** and immediately **reads from a replica** may not see their own write because of replication lag — the replica hasn't replayed that WAL yet. This breaks the intuitive 'read-your-writes' guarantee and surfaces as 'I saved it but it's gone / shows the old value.' Mitigations, roughly in order of cost: (1) **Route reads to the primary** for a short window after a write (sticky/'read-from-primary-after-write' per session) — simplest, but loads the primary. (2) **Causal / LSN-fencing**: after a write, capture the primary's commit LSN (`pg_current_wal_lsn()`), pass it along (e.g. in a cookie/token), and on the replica wait until `pg_last_wal_replay_lsn() >= that LSN` (or block via `pg_wal_replay_wait` in PG17+) before reading — gives true read-your-writes with bounded waiting. (3) **Synchronous replication** with `remote_apply` so the replica has applied the change before COMMIT returns — strongest but slowest. (4) Bound staleness with monitoring and route only *staleness-tolerant* queries (analytics, lists) to replicas while keeping read-after-write paths on the primary. The senior framing: read replicas give you read *scale* but break a consistency guarantee, so you must classify each read path by its tolerance for staleness.
+
+**Key points**
+- Async lag → replica may not have your just-committed write (no read-your-writes)
+- Sticky-to-primary after write: simplest, adds primary load
+- LSN fencing: capture commit LSN, wait for replica replay_lsn to catch up
+- Classify reads by staleness tolerance; keep RYW paths off replicas
+
+**Follow-ups**
+- How would you propagate the commit LSN across an API gateway / multiple services?
+- What does pg_wal_replay_wait (PG17) give you over manual LSN polling?
+
+---
+
+#### 30. When does read-replica scaling stop being enough and you need sharding? How do you choose a shard key?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `sharding`, `shard-key`, `scaling`, `cross-shard`, `multi-tenant`
+
+Read replicas scale **reads** but every replica still replays the *full write stream* of one primary — so they do nothing for **write throughput** or a working set that exceeds one machine's storage/memory. Once your write volume saturates a single primary's CPU/IO/WAL, or the dataset is too large to fit/back up/vacuum on one node, you must **shard**: horizontally partition data across independent primaries, each owning a subset. The **shard key** is the highest-leverage decision: it should (1) be present on the vast majority of queries so they hit a single shard (avoiding scatter-gather), (2) distribute load **evenly** to avoid hot shards, and (3) keep related data that's queried/transacted together on the same shard. For multi-tenant systems `tenant_id` is the natural key (a tenant's data lives together; queries are tenant-scoped). Hash-of-key spreads evenly; range allows pruning but risks hotspots. The pain points: **cross-shard queries/joins** require fan-out + merge in the app; **cross-shard transactions** lose single-node ACID (you need sagas/2PC); **resharding** to add capacity is a major operation (consistent hashing / pre-split into many logical shards helps); and **global uniqueness/foreign keys** across shards aren't enforced by the DB. So shard only when forced, and pick a key that makes 95%+ of queries single-shard.
+
+**Key points**
+- Replicas scale reads only; sharding needed for write throughput / dataset size
+- Shard key must be on most queries (single-shard), distribute evenly, co-locate related data
+- tenant_id is a common natural key for multi-tenant systems
+- Cross-shard joins/transactions and resharding are the real costs
+
+**Follow-ups**
+- How does pre-splitting into many logical shards ease future resharding?
+- How do you handle a transaction that must span two shards?
+
+---
+
+#### 31. Why do you need a connection pooler like PgBouncer, and what's the difference between session and transaction pooling?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `pgbouncer`, `connection-pooling`, `transaction-pooling`, `session-pooling`, `go`
+
+Each PostgreSQL connection is a **separate OS process** with its own memory (work_mem, caches) — they're expensive, and Postgres performs best with a connection count near its core count, not thousands. A Go service with `database/sql`/pgxpool already pools at the app level, but with many app instances (each holding dozens of connections) you can blow past `max_connections` and thrash the server. **PgBouncer** sits in front and multiplexes many client connections onto a small set of real server connections. **Session pooling**: a client gets a dedicated server connection for the lifetime of its client connection — safest (everything works) but barely better than no pooler for connection count. **Transaction pooling**: a server connection is assigned only for the duration of a **transaction**, then returned to the pool — this is the high-multiplexing mode that lets thousands of clients share a handful of server connections, ideal for short OLTP transactions. The catch: transaction pooling **breaks session-scoped state** — prepared statements (without protocol support), `SET`/session GUCs, advisory session locks, `LISTEN/NOTIFY`, and `WITH HOLD` cursors don't survive across transactions because you may get a different backend each time. So you must disable server-side prepared statement caching or use a compatible mode, and avoid relying on session state. Transaction pooling is the default choice for scalable Go backends.
+
+**Key points**
+- Each PG connection = a process; thousands thrash the server
+- PgBouncer multiplexes many clients onto few server connections
+- Session pooling: 1 server conn per client session (safe, low multiplexing)
+- Transaction pooling: server conn per transaction (high multiplexing, but breaks session state)
+
+**Follow-ups**
+- What breaks under transaction pooling and how do you configure pgx/database-sql around it?
+- How do you size PgBouncer's pool relative to Postgres max_connections and core count?
+
+---
+
+## Zero-Downtime Migrations & Analytics Offload
+
+#### 32. Describe the expand-contract (parallel-change) pattern for zero-downtime schema migrations.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `migrations`, `expand-contract`, `zero-downtime`, `rolling-deploy`
+
+**Expand-contract** decouples a schema change from the deploy so old and new code can run simultaneously during a rolling deploy. Three phases: **Expand** — make additive, backward-compatible schema changes that the *old* code can ignore: add a new nullable column / new table / new index (built CONCURRENTLY), add triggers to dual-write, etc. **Migrate/transition** — deploy code that writes to both old and new shapes (or reads new, falls back to old), and backfill existing rows in **batches** to avoid long locks and replication lag. **Contract** — once all instances run the new code and the backfill is complete and verified, remove the old column/table/code in a later deploy. The cardinal rule: **never make a breaking schema change in the same deploy as the code that needs it**, because during a rolling deploy both versions are live and a column rename or a NOT NULL that old code violates will crash one of them. Renames become add-new-column + dual-write + backfill + switch-reads + drop-old. This trades extra steps and temporary dual-write complexity for the ability to migrate a high-traffic event system without a maintenance window, and to roll back at any phase boundary.
+
+**Key points**
+- Expand (additive, backward-compatible) → migrate/backfill in batches → contract (remove old)
+- Old and new code run together during rolling deploy — both must work
+- Never ship a breaking schema change with the code that needs it
+- Renames → add column + dual-write + backfill + switch + drop
+
+**Follow-ups**
+- How do you backfill millions of rows without holding locks or spiking replication lag?
+- How does expand-contract give you safe rollback at each phase?
+
+---
+
+#### 33. Why is adding a NOT NULL column with a default historically dangerous, and which migrations take blocking locks you must avoid?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `migrations`, `not-null`, `access-exclusive`, `concurrently`, `lock-timeout`
+
+Before **PG11**, `ALTER TABLE ... ADD COLUMN c int NOT NULL DEFAULT 0` had to **rewrite the entire table** to populate the default in every existing row, holding an **ACCESS EXCLUSIVE** lock the whole time — on a large hot table that's a multi-minute outage where all reads and writes block. PG11+ optimized constant defaults to be **metadata-only** (the default is stored and applied virtually), so adding a column with a *constant* default is now fast — but a **volatile/non-constant default** (e.g. `DEFAULT now()` or a function) still rewrites. Other migrations that take ACCESS EXCLUSIVE and block traffic if done naively: `CREATE INDEX` (use `CREATE INDEX CONCURRENTLY` instead — non-blocking, slower, can't run in a transaction, may leave an invalid index on failure); adding a `NOT NULL` constraint to an existing column (full scan under lock — instead add a `CHECK (c IS NOT NULL) NOT VALID` then `VALIDATE CONSTRAINT` which takes a weaker lock); adding a foreign key (validate scan — same NOT VALID + VALIDATE trick); changing a column type that requires a rewrite; `VACUUM FULL`. Also beware that even a 'fast' DDL must **acquire** ACCESS EXCLUSIVE, so a long-running query can make it **queue and block everything behind it** — always set a short `lock_timeout` and retry. The senior point: know which ALTERs rewrite/scan and use the CONCURRENTLY / NOT VALID + VALIDATE escape hatches.
+
+**Key points**
+- Pre-PG11: NOT NULL DEFAULT rewrote whole table under ACCESS EXCLUSIVE
+- PG11+: constant default is metadata-only; volatile default still rewrites
+- CREATE INDEX CONCURRENTLY; NOT NULL/FK via CHECK ... NOT VALID then VALIDATE
+- Even fast DDL queues behind long queries — use lock_timeout + retry
+
+
+```sql
+-- Safe NOT NULL on an existing column (avoid full-table lock)
+ALTER TABLE events ADD CONSTRAINT events_payload_nn
+  CHECK (payload IS NOT NULL) NOT VALID;
+ALTER TABLE events VALIDATE CONSTRAINT events_payload_nn; -- weaker lock
+
+-- Non-blocking index
+CREATE INDEX CONCURRENTLY idx_events_type ON events (type);
+```
+
+**Follow-ups**
+- Why must CREATE INDEX CONCURRENTLY not run inside a transaction, and how do you handle a failed/invalid index?
+- Why does setting lock_timeout protect you from a DDL blocking the whole table?
+
+---
+
+#### 34. When should you offload analytics from PostgreSQL to a columnar store like ClickHouse?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `clickhouse`, `olap`, `columnar`, `analytics`, `cdc`
+
+PostgreSQL is a **row store** optimized for OLTP: point lookups, small range scans, and transactional read-modify-write on individual rows. Analytical queries — scanning billions of rows to aggregate a few columns (`SUM`, `COUNT`, `GROUP BY` over wide time ranges) — are the opposite access pattern, and a row store must read whole rows (and TOAST pointers) even to touch one column, wasting I/O. **ClickHouse** (and similar columnar/OLAP engines) store data **column-by-column**, so an aggregation reads only the needed columns, compresses them heavily (similar values adjacent), and uses vectorized execution — often 10–100× faster on big scans. You offload when: dashboards/analytics queries scan huge volumes and are dragging down your OLTP primary (competing for buffer cache, causing bloat from long-running scans, or just slow); the data is **append-mostly** event/log data; and you can tolerate ClickHouse's weaker guarantees — no full ACID transactions, eventual-consistency on some operations, and async/limited updates/deletes. Typical architecture: keep the source of truth and transactional writes in Postgres, **stream events** (CDC via logical replication / Debezium, or your event bus) into ClickHouse for analytics, and route reporting queries there. Don't reach for it prematurely — Postgres with partitioning, BRIN indexes, and materialized views handles a lot of analytics; offload when the OLTP/OLAP workloads genuinely conflict at scale.
+
+**Key points**
+- Postgres = row store (OLTP); columnar scans waste I/O reading whole rows
+- ClickHouse = columnar + compression + vectorized → 10–100× on big aggregations
+- Offload append-mostly event data when analytics drags down the OLTP primary
+- Trade-off: no full ACID/transactions, limited updates; stream via CDC/event bus
+
+**Follow-ups**
+- How would you stream Postgres changes into ClickHouse (logical replication / CDC)?
+- What can you do in Postgres first (partitioning, BRIN, matviews) before offloading?
+
+---
+
+## Database Design & Normalization
+
+#### 35. What is database normalization and what problem does it solve?
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `normalization`, `schema-design`, `data-integrity`
+
+Normalization is the process of structuring a relational schema to reduce redundancy and eliminate update/insert/delete anomalies, by decomposing tables so each fact is stored exactly once. The driver is data integrity: when a piece of data lives in one place, you can never have two rows that disagree. It's formalized as a progression of normal forms (1NF → BCNF), each tightening which functional dependencies are allowed. The trade-off is that a highly normalized schema spreads data across many tables, so reads need more joins — which is why real systems normalize for correctness, then selectively denormalize for read performance.
+
+**Key points**
+- Goal: remove redundancy and update anomalies; one fact, one place
+- Driven by functional dependencies between columns
+- Trade-off: fewer anomalies vs more joins on read
+
+**Follow-ups**
+- Show a schema with an update anomaly and normalize it.
+- When does the join cost of normalization become a real problem?
+
+---
+
+#### 36. Walk through 1NF, 2NF, and 3NF. What violation does each normal form remove?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `normalization`, `normal-forms`, `1nf`, `2nf`, `3nf`
+
+**1NF**: every column holds a single atomic value — no repeating groups or arrays standing in for multiple rows; each row is uniquely identifiable. **2NF**: in 1NF *and* every non-key column depends on the *whole* primary key, not part of it — this removes partial dependencies, which only arise with composite keys. **3NF**: in 2NF *and* no non-key column depends on another non-key column (no transitive dependencies); e.g. storing `zip` and also `city` derivable from `zip` violates 3NF. The mnemonic: every non-key attribute must depend on "the key, the whole key, and nothing but the key." Each step decomposes the offending table to push the dependency into its own table.
+
+**Key points**
+- 1NF: atomic values, no repeating groups
+- 2NF: no partial dependency on part of a composite key
+- 3NF: no transitive dependency (non-key → non-key)
+- 'The key, the whole key, and nothing but the key'
+
+**Follow-ups**
+- Give a concrete table that is in 2NF but not 3NF.
+- Why are 2NF violations only possible with composite keys?
+
+---
+
+#### 37. What is BCNF, and how does it differ from 3NF?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `normalization`, `bcnf`, `candidate-keys`
+
+Boyce–Codd Normal Form is a stricter 3NF: for every non-trivial functional dependency X → Y, X must be a superkey. 3NF allows one exception — a dependency where the right-hand side is a prime attribute (part of some candidate key) — and BCNF removes that exception. The practical difference shows up only with overlapping candidate keys; most 3NF schemas are already in BCNF. The catch: decomposing into BCNF can be non-dependency-preserving — you may not be able to enforce every functional dependency with a single-table constraint, so you'd need a trigger or application check. That's why teams sometimes stop at 3NF: BCNF buys marginal redundancy reduction at the cost of harder constraint enforcement.
+
+**Key points**
+- BCNF: every determinant must be a superkey
+- Differs from 3NF only with overlapping candidate keys
+- BCNF decomposition may not preserve dependencies — a real trade-off
+
+**Follow-ups**
+- Give an example that is in 3NF but not BCNF.
+- When would you deliberately stop at 3NF?
+
+---
+
+#### 38. What are functional dependencies, and why are they the foundation of normalization?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `normalization`, `functional-dependencies`, `keys`
+
+A functional dependency X → Y means: given a value of X, the value of Y is uniquely determined (e.g. `order_id → customer_id`). Normalization is entirely defined in terms of which functional dependencies are permitted relative to the candidate keys: 2NF/3NF/BCNF are all rules about how the left-hand side of each dependency must relate to a key. You discover dependencies from the business domain, not from sample data — sample data can suggest a dependency that isn't truly invariant. Getting them right matters because an undeclared dependency is exactly where redundancy and anomalies hide; the schema is only as correct as your understanding of these rules.
+
+**Key points**
+- X → Y: X determines Y
+- Normal forms are rules about FDs vs candidate keys
+- Derive FDs from domain rules, not from current data
+
+**Follow-ups**
+- How do partial and transitive dependencies map to 2NF/3NF?
+- Why is inferring FDs from sample data dangerous?
+
+---
+
+#### 39. What are insert, update, and delete anomalies, and how does normalization remove them?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `normalization`, `anomalies`, `data-integrity`
+
+They are the integrity failures of a denormalized table. **Update anomaly**: a fact stored in many rows (e.g. a supplier's address repeated per product) must be changed everywhere at once, or rows disagree. **Insert anomaly**: you can't record one fact without another — you can't add a supplier until they have at least one product, because there's nowhere else to put them. **Delete anomaly**: removing the last product silently erases the supplier's existence. Normalization fixes all three by giving each independent entity its own table, so each fact is stored once and can be inserted, updated, or deleted on its own. This is the concrete *why* behind normal forms — not theory, but avoiding silent data corruption.
+
+**Key points**
+- Update: redundant copies drift out of sync
+- Insert: can't store fact A without unrelated fact B
+- Delete: removing a row loses unrelated data
+- Decomposition gives each entity its own table
+
+**Follow-ups**
+- Which normal form specifically eliminates the update anomaly in your example?
+
+---
+
+#### 40. When and why would you deliberately denormalize? What are the trade-offs?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `denormalization`, `performance`, `trade-offs`
+
+You denormalize when join cost or query fan-out becomes the bottleneck on a read-heavy path and a normalized schema can't meet latency targets — e.g. duplicating a `customer_name` onto an `orders` row to avoid a join on a hot listing query, or precomputing aggregates. The benefit is fewer joins and faster reads; the cost is that you reintroduce the very redundancy normalization removed, so you now own keeping copies consistent (triggers, application writes, or async jobs) and you risk drift. The senior framing: normalize by default for write integrity, denormalize as a deliberate, measured optimization with a clear consistency mechanism — never because the schema was sloppy. Always ask whether a cache or materialized view solves it without polluting the source-of-truth tables.
+
+**Key points**
+- Denormalize for measured read-path performance, not by accident
+- Cost: redundancy returns; you must keep copies in sync
+- Prefer cache / materialized view before duplicating into base tables
+
+**Follow-ups**
+- How do you keep a denormalized copy consistent without drift?
+- Cache vs materialized view vs duplicated column — how do you choose?
+
+---
+
+#### 41. What PostgreSQL features let you denormalize safely without corrupting the source of truth?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `denormalization`, `materialized-views`, `generated-columns`, `triggers`
+
+Keep base tables normalized and derive the denormalized view: **materialized views** (precomputed joins/aggregates, refreshed on a schedule or `REFRESH ... CONCURRENTLY`) for reporting reads; **generated columns** (`GENERATED ALWAYS AS ... STORED`) for values computed from the same row; **triggers** to maintain a derived/duplicated column transactionally when the source changes; and **partial/expression indexes** to speed queries without duplicating data at all. The principle is single source of truth: the normalized tables stay authoritative, and the denormalized artifact is regenerable, so drift is impossible by construction. Reserve hand-maintained duplicated columns (updated in application code) for cases none of these cover, and document the invariant.
+
+**Key points**
+- Materialized views for precomputed read models
+- Generated columns for same-row derivations
+- Triggers for transactional duplicated columns
+- Keep normalized tables as the single source of truth
+
+
+```sql
+-- Materialized view as a denormalized read model
+CREATE MATERIALIZED VIEW order_summary AS
+SELECT o.id, o.created_at, c.name AS customer_name,
+       sum(i.qty * i.price) AS total
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+JOIN order_items i ON i.order_id = o.id
+GROUP BY o.id, o.created_at, c.name;
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY order_summary;
+```
+
+**Follow-ups**
+- What does REFRESH MATERIALIZED VIEW CONCURRENTLY require, and what's its cost?
+- When is a trigger-maintained column better than a materialized view?
+
+---
+
+#### 42. How do normalization choices differ between an OLTP service and an OLAP/reporting workload?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `oltp`, `olap`, `star-schema`, `data-warehouse`
+
+OLTP (your transactional microservice) favors a normalized schema (≈3NF): writes are frequent and must be consistent, rows are small and accessed by key, and integrity matters more than join count. OLAP/analytics favors denormalized, redundant models — star or snowflake schemas with wide fact tables and dimension tables — because queries scan and aggregate huge ranges and joins are the cost you optimize away; writes are bulk-loaded, so update anomalies are a non-issue. The senior move is to keep them separate: normalized OLTP as the source of truth, then feed a denormalized analytics store (a warehouse, ClickHouse, or materialized views) via ETL/CDC. Mixing heavy reporting queries into the OLTP database is a classic scaling mistake.
+
+**Key points**
+- OLTP: normalized (~3NF), key-access, write integrity
+- OLAP: denormalized star/snowflake, scan-and-aggregate
+- Separate them; sync via ETL/CDC, don't report off OLTP
+
+**Follow-ups**
+- What is a star schema, and what are fact vs dimension tables?
+- How would you stream OLTP changes into an analytics store?
+
+---
+
+#### 43. When is a JSONB column the right choice over fully normalized tables in PostgreSQL?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `jsonb`, `denormalization`, `schema-design`
+
+JSONB is a pragmatic denormalization for genuinely schemaless or sparse data: heterogeneous attributes that vary per row (product specs across categories), data you store and read as a whole document, or fast-evolving shapes you don't want to migrate constantly. You trade relational guarantees for flexibility — you lose per-field constraints and foreign keys, querying is more awkward, and you need GIN indexes for containment lookups. Use normalized tables when the data has stable structure, needs referential integrity, or is queried/joined by individual fields. A common hybrid: normalize the core, queryable columns and keep a JSONB column for the long tail of optional attributes. Avoid JSONB as a lazy substitute for designing a schema you actually understand.
+
+**Key points**
+- JSONB fits schemaless/sparse/document-shaped data
+- Lose FK/constraints/easy field queries; need GIN indexes
+- Hybrid: normalized core columns + JSONB for the optional tail
+
+**Follow-ups**
+- How do you index JSONB for containment queries?
+- What integrity guarantees do you give up by moving fields into JSONB?
+
+---

@@ -1,0 +1,607 @@
+{
+  "section": "Find the Bug & Code Review",
+  "slug": "find-the-bug-and-code-review",
+  "level": "senior",
+  "description": "Code-review-round exercises where a senior Go backend engineer must spot the bug in a realistic snippet, explain its production failure mode, and supply the correct fix.",
+  "topics": [
+    {
+      "topic": "Data Races",
+      "questions": [
+        {
+          "id": "bug-001",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "func countWords(docs []string) map[string]int {\n\tcounts := make(map[string]int)\n\tvar wg sync.WaitGroup\n\tfor _, doc := range docs {\n\t\twg.Add(1)\n\t\tgo func(d string) {\n\t\t\tdefer wg.Done()\n\t\t\tfor _, w := range strings.Fields(d) {\n\t\t\t\tcounts[w]++\n\t\t\t}\n\t\t}(doc)\n\t}\n\twg.Wait()\n\treturn counts\n}",
+          "answer": "**Bug: concurrent writes to a built-in map.** Go maps are not safe for concurrent access. Multiple goroutines run `counts[w]++` simultaneously, which is a read-modify-write on shared memory with no synchronization.\n\n**Failure mode:** The Go runtime has a built-in map-access race detector that is *always on* (not just under `-race`). When two goroutines touch the map concurrently it calls `throw(\"concurrent map writes\")`, which is a fatal panic that cannot be recovered — the whole process crashes. In production this looks like sporadic, unrecoverable crashes under load that disappear when traffic is low.\n\n**Fix — guard the map with a mutex** (or aggregate per-goroutine and merge):\n```go\nfunc countWords(docs []string) map[string]int {\n\tcounts := make(map[string]int)\n\tvar mu sync.Mutex\n\tvar wg sync.WaitGroup\n\tfor _, doc := range docs {\n\t\twg.Add(1)\n\t\tgo func(d string) {\n\t\t\tdefer wg.Done()\n\t\t\tlocal := make(map[string]int)\n\t\t\tfor _, w := range strings.Fields(d) {\n\t\t\t\tlocal[w]++\n\t\t\t}\n\t\t\tmu.Lock()\n\t\t\tfor w, n := range local {\n\t\t\t\tcounts[w] += n\n\t\t\t}\n\t\t\tmu.Unlock()\n\t\t}(doc)\n\t}\n\twg.Wait()\n\treturn counts\n}\n```\nThe per-goroutine `local` map keeps the locked critical section short. For pure counters `sync.Map` is a poor fit; a mutex-guarded map is idiomatic here.",
+          "key_points": [
+            "Bug: concurrent map writes — unrecoverable fatal `throw`, not a recoverable panic",
+            "Fix: mutex around the shared map, or per-goroutine maps merged under lock",
+            "Catch it with `go test -race`; the map-write check fires even without `-race`"
+          ],
+          "follow_ups": [
+            "How would you prevent this class of bug at scale (CI gating, sharded counters, atomics)?"
+          ],
+          "tags": ["data-race", "concurrent-map"]
+        },
+        {
+          "id": "bug-002",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "// Go 1.21 and earlier\nfunc fetchAll(urls []string) []*Result {\n\tresults := make([]*Result, len(urls))\n\tvar wg sync.WaitGroup\n\tfor i, url := range urls {\n\t\twg.Add(1)\n\t\tgo func() {\n\t\t\tdefer wg.Done()\n\t\t\tresults[i] = fetch(url)\n\t\t}()\n\t}\n\twg.Wait()\n\treturn results\n}",
+          "answer": "**Bug: the goroutine closure captures the loop variables `i` and `url` by reference.** In Go 1.21 and earlier there is a single `i`/`url` per loop, reused each iteration. By the time the goroutines run, the loop has usually finished and every goroutine reads the final value.\n\n**Failure mode:** Two distinct races. (1) All goroutines see the last `url` and likely write to the same `results[i]` slot — you fetch one URL N times and most slots stay nil. (2) The loop body mutates `i`/`url` while goroutines read them concurrently — a real data race flagged by `-race`. Symptoms: nil-pointer panics downstream, wrong/duplicated data, nondeterministic output.\n\n**Fix (pre-1.22): pass loop vars as arguments** (or shadow with `i, url := i, url`):\n```go\nfor i, url := range urls {\n\twg.Add(1)\n\tgo func(i int, url string) {\n\t\tdefer wg.Done()\n\t\tresults[i] = fetch(url)\n\t}(i, url)\n}\n```\nWriting to distinct `results[i]` indices from different goroutines is safe (no overlapping memory). **In Go 1.22+** each iteration gets a fresh `i`/`url`, so the per-iteration copy is automatic — but passing args or shadowing remains the portable, explicit habit.",
+          "key_points": [
+            "Bug: pre-1.22 loop-variable capture shares one variable across all goroutines",
+            "Fix: pass `i, url` as func args (or `i, url := i, url`); Go 1.22+ fixes it at the language level",
+            "Catch it with `-race` and the `loopclosure` vet/golangci-lint check"
+          ],
+          "follow_ups": [
+            "Why is writing to different indices of the same slice from many goroutines race-free?"
+          ],
+          "tags": ["data-race", "loop-variable", "closure"]
+        },
+        {
+          "id": "bug-003",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "type Metrics struct {\n\trequests int64\n}\n\nfunc (m *Metrics) Incr() {\n\tm.requests++\n}\n\nfunc (m *Metrics) Value() int64 {\n\treturn m.requests\n}\n\n// Incr() is called from many request-handling goroutines.",
+          "answer": "**Bug: an unsynchronized shared counter.** `m.requests++` is read-modify-write across goroutines with no atomicity. Concurrent increments lose updates, and a concurrent `Value()` read races with a write.\n\n**Failure mode:** Lost increments (your counter undercounts under load) and an actual data race that `-race` flags. On some architectures a torn read is possible. Symptoms: metrics that are mysteriously low, flaky tests, and a CI race report.\n\n**Fix — use `atomic`** (Go 1.19+ typed atomics are cleanest):\n```go\ntype Metrics struct {\n\trequests atomic.Int64\n}\n\nfunc (m *Metrics) Incr()        { m.requests.Add(1) }\nfunc (m *Metrics) Value() int64 { return m.requests.Load() }\n```\nOr with the older API: `atomic.AddInt64(&m.requests, 1)` and `atomic.LoadInt64(&m.requests)`. A mutex also works but is heavier for a single counter. Note `atomic.Int64` must not be copied after first use — keep `Metrics` passed by pointer.",
+          "key_points": [
+            "Bug: non-atomic increment/read of a shared counter loses updates and races",
+            "Fix: `atomic.Int64` (or `atomic.AddInt64`/`LoadInt64`), or a mutex",
+            "Catch it with `-race`; `go vet` copylocks warns if you copy the atomic"
+          ],
+          "follow_ups": [
+            "When would you shard the counter (e.g. per-CPU) instead of a single atomic?"
+          ],
+          "tags": ["data-race", "atomic", "counter"]
+        }
+      ]
+    },
+    {
+      "topic": "Goroutine Leaks",
+      "questions": [
+        {
+          "id": "bug-004",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func firstResponse(ctx context.Context, replicas []string) string {\n\tch := make(chan string)\n\tfor _, r := range replicas {\n\t\tgo func(r string) {\n\t\t\tch <- query(r) // send result\n\t\t}(r)\n\t}\n\treturn <-ch // take the first one\n}",
+          "answer": "**Bug: goroutine leak via an unbuffered channel with only one receiver.** We launch N goroutines but read exactly one value. The other N-1 goroutines block forever on `ch <- query(r)` because nobody will ever receive their result.\n\n**Failure mode:** Every call leaks `len(replicas)-1` goroutines. Under sustained traffic the goroutine count and memory grow without bound until OOM. This is a classic slow leak that passes all unit tests and only shows up as a creeping memory/goroutine graph in production.\n\n**Fix — give the channel enough buffer so every send completes** (and respect ctx):\n```go\nfunc firstResponse(ctx context.Context, replicas []string) (string, error) {\n\tch := make(chan string, len(replicas)) // buffered: every send succeeds\n\tfor _, r := range replicas {\n\t\tgo func(r string) { ch <- query(r) }(r)\n\t}\n\tselect {\n\tcase v := <-ch:\n\t\treturn v, nil\n\tcase <-ctx.Done():\n\t\treturn \"\", ctx.Err()\n\t}\n}\n```\nWith a buffer of `len(replicas)`, the losing goroutines push into the buffer and exit; the buffer is GC'd with the channel. Adding the `ctx.Done()` case prevents blocking forever if all replicas hang.",
+          "key_points": [
+            "Bug: N senders, 1 receiver, unbuffered channel → N-1 goroutines block forever",
+            "Fix: buffer the channel to len(senders) so every send completes and the goroutine exits",
+            "Catch it with `goleak` in tests, runtime.NumGoroutine() monitoring, or pprof goroutine dumps"
+          ],
+          "follow_ups": [
+            "How would you cancel the in-flight queries once you have the first answer?"
+          ],
+          "tags": ["goroutine-leak", "channel-buffer"]
+        },
+        {
+          "id": "bug-005",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func worker(jobs <-chan Job, results chan<- Result) {\n\tfor j := range jobs {\n\t\tresults <- process(j)\n\t}\n}\n\nfunc run(ctx context.Context, jobs <-chan Job) {\n\tresults := make(chan Result)\n\tfor i := 0; i < 8; i++ {\n\t\tgo worker(jobs, results)\n\t}\n\tfor {\n\t\tselect {\n\t\tcase r := <-results:\n\t\t\tsave(r)\n\t\tcase <-ctx.Done():\n\t\t\treturn // stop on cancel\n\t\t}\n\t}\n}",
+          "answer": "**Bug: workers don't observe `ctx`, and they leak when `run` returns on cancel.** When `ctx` is cancelled, `run` returns immediately — but the 8 workers are still alive. If `jobs` is still open they keep ranging over it, and the moment one finishes a job it blocks forever on `results <- ...` because the consumer (`run`) has exited.\n\n**Failure mode:** On every cancellation/timeout you leak up to 8 goroutines, each pinned holding a `Result`. Over many short-lived requests this accumulates into thousands of stuck goroutines and lost backpressure. The producer side may also block.\n\n**Fix — make workers select on `ctx.Done()` for their send**, and have `run` propagate cancellation:\n```go\nfunc worker(ctx context.Context, jobs <-chan Job, results chan<- Result) {\n\tfor {\n\t\tselect {\n\t\tcase j, ok := <-jobs:\n\t\t\tif !ok {\n\t\t\t\treturn\n\t\t\t}\n\t\t\tselect {\n\t\t\tcase results <- process(j):\n\t\t\tcase <-ctx.Done():\n\t\t\t\treturn\n\t\t\t}\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\t}\n\t}\n}\n```\nPass the same `ctx` to every worker. Now both the receive and the send have a cancellation escape hatch, so all goroutines drain when `ctx` is cancelled. Using `errgroup` with a derived context makes the lifecycle explicit.",
+          "key_points": [
+            "Bug: workers block on `results <-` after the consumer exits; no ctx awareness",
+            "Fix: wrap every channel send/receive in a `select` with `case <-ctx.Done()`",
+            "Catch it with `goleak.VerifyNone` in tests and goroutine-count alerts"
+          ],
+          "follow_ups": [
+            "How does `golang.org/x/sync/errgroup` simplify shutting down a worker pool?"
+          ],
+          "tags": ["goroutine-leak", "context", "worker-pool"]
+        },
+        {
+          "id": "bug-006",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func poll(ctx context.Context, fn func()) {\n\tticker := time.NewTicker(time.Second)\n\tfor {\n\t\tselect {\n\t\tcase <-ticker.C:\n\t\t\tfn()\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "answer": "**Bug: the `time.Ticker` is never stopped.** When `ctx` is cancelled the function returns but never calls `ticker.Stop()`.\n\n**Failure mode:** `time.NewTicker` registers an entry with the runtime timer heap and keeps firing on a background sender. Until Go 1.23, an un-stopped ticker leaks: the ticker (and anything its closure references) is never garbage-collected and the runtime keeps doing work for a ticker nobody reads. With many short-lived `poll` calls this is a steady resource and CPU leak. (Go 1.23 made unreferenced Tickers GC-eligible, but you still shouldn't rely on that and `Stop()` remains correct and portable.)\n\n**Fix — `defer ticker.Stop()`:**\n```go\nfunc poll(ctx context.Context, fn func()) {\n\tticker := time.NewTicker(time.Second)\n\tdefer ticker.Stop()\n\tfor {\n\t\tselect {\n\t\tcase <-ticker.C:\n\t\t\tfn()\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\t}\n\t}\n}\n```\nThe same rule applies to `time.NewTimer` (call `Stop()`), and avoid `time.Tick` for anything that should ever stop — it can never be reclaimed.",
+          "key_points": [
+            "Bug: ticker created but never `Stop()`-ed; leaks runtime timer + closure",
+            "Fix: `defer ticker.Stop()` right after `NewTicker`",
+            "Catch it with `golangci-lint` (e.g. the `staticcheck`/lostcancel-style checks) and pprof"
+          ],
+          "follow_ups": [
+            "Why is `time.Tick` dangerous in long-running services?"
+          ],
+          "tags": ["goroutine-leak", "ticker", "resource-leak"]
+        }
+      ]
+    },
+    {
+      "topic": "Deadlocks",
+      "questions": [
+        {
+          "id": "bug-007",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "type Account struct {\n\tmu      sync.Mutex\n\tbalance int\n}\n\nfunc (a *Account) Withdraw(n int) error {\n\ta.mu.Lock()\n\tdefer a.mu.Unlock()\n\tif a.Balance() < n {\n\t\treturn errors.New(\"insufficient funds\")\n\t}\n\ta.balance -= n\n\treturn nil\n}\n\nfunc (a *Account) Balance() int {\n\ta.mu.Lock()\n\tdefer a.mu.Unlock()\n\treturn a.balance\n}",
+          "answer": "**Bug: self-deadlock from re-locking a non-reentrant mutex.** `Withdraw` holds `a.mu`, then calls `a.Balance()`, which tries to `Lock()` the same mutex. `sync.Mutex` is **not reentrant**, so the second `Lock()` blocks forever — the goroutine deadlocks on itself.\n\n**Failure mode:** The first time any caller has sufficient-funds logic reach `a.Balance()` while holding the lock, that goroutine hangs permanently holding `a.mu`. Every subsequent `Withdraw`/`Balance` on the account also blocks. In a server this is a stuck request handler and a leaked, lock-holding goroutine — eventually the whole account (or pool) is wedged.\n\n**Fix — don't call a locking method while already holding the lock.** Read the field directly, or factor out an unlocked helper:\n```go\nfunc (a *Account) Withdraw(n int) error {\n\ta.mu.Lock()\n\tdefer a.mu.Unlock()\n\tif a.balance < n { // read the field directly; we already hold the lock\n\t\treturn errors.New(\"insufficient funds\")\n\t}\n\ta.balance -= n\n\treturn nil\n}\n```\nThe general rule: have a private `balanceLocked()` that assumes the lock is held, and a public `Balance()` that locks then calls it. Go intentionally has no recursive mutex.",
+          "key_points": [
+            "Bug: `sync.Mutex` is not reentrant; locking it twice in one goroutine deadlocks",
+            "Fix: read fields directly under the lock, or split into locked/unlocked helpers",
+            "Catch it with timeouts/`go test -timeout`, deadlock detection in tests, and code review"
+          ],
+          "follow_ups": [
+            "How would you detect lock-order inversion between two different mutexes?"
+          ],
+          "tags": ["deadlock", "mutex", "reentrancy"]
+        },
+        {
+          "id": "bug-008",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "func process(items []Item) {\n\tvar wg sync.WaitGroup\n\tgo func() {\n\t\tfor _, it := range items {\n\t\t\twg.Add(1)\n\t\t\tgo handle(it, &wg)\n\t\t}\n\t}()\n\twg.Wait()\n}\n\nfunc handle(it Item, wg *sync.WaitGroup) {\n\tdefer wg.Done()\n\t// ...\n}",
+          "answer": "**Bug: `wg.Wait()` can run before any `wg.Add(1)`.** The `Add` calls happen inside a separate goroutine that may not be scheduled before `wg.Wait()` executes. If `Wait()` sees the counter at 0, it returns immediately — `process` finishes while the work is still being launched.\n\n**Failure mode:** This is the textbook `WaitGroup` misuse. Two outcomes: (1) `Wait()` returns early and you proceed before the items are handled — silent data loss / premature shutdown; or (2) if `Wait()` already returned and then an `Add` runs concurrently, you can get `panic: sync: WaitGroup is reused before previous Wait has returned` / `negative WaitGroup counter`. The rule is: **`Add` must happen-before `Wait`, in the same goroutine that owns the group.**\n\n**Fix — call `Add` on the spawning goroutine, before launching workers:**\n```go\nfunc process(items []Item) {\n\tvar wg sync.WaitGroup\n\tfor _, it := range items {\n\t\twg.Add(1)\n\t\tgo handle(it, &wg)\n\t}\n\twg.Wait()\n}\n```\nIf the spawning genuinely must be async, `Add(len(items))` once up front, before the goroutine starts.",
+          "key_points": [
+            "Bug: `Add` runs in a child goroutine, so `Wait` can observe a zero counter and return early",
+            "Fix: `Add` before launching work, in the goroutine that calls `Wait`",
+            "Catch it with `-race` and `goleak`; the WaitGroup contract is also flagged by review"
+          ],
+          "follow_ups": [
+            "What runtime panics does `sync.WaitGroup` produce when its counter goes negative?"
+          ],
+          "tags": ["deadlock", "waitgroup", "race"]
+        },
+        {
+          "id": "bug-009",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func merge(a, b *Resource) {\n\ta.mu.Lock()\n\tb.mu.Lock()\n\ta.data = append(a.data, b.data...)\n\tb.mu.Unlock()\n\ta.mu.Unlock()\n}\n\n// Called concurrently as merge(x, y) and merge(y, x).",
+          "answer": "**Bug: lock-order inversion → deadlock.** `merge(x, y)` locks x then y; `merge(y, x)` locks y then x. If they run concurrently, goroutine 1 holds x and waits for y while goroutine 2 holds y and waits for x — a classic deadly embrace.\n\n**Failure mode:** Intermittent, load-dependent hangs. It works fine in tests (which rarely interleave the two orders at the wrong instant) and then wedges two request handlers in production, holding both resources' locks indefinitely. Hard to reproduce, painful to diagnose.\n\n**Fix — impose a global lock ordering** (e.g. by a stable unique id) so all callers acquire in the same order:\n```go\nfunc merge(a, b *Resource) {\n\tfirst, second := a, b\n\tif first.id > second.id {\n\t\tfirst, second = second, first\n\t}\n\tfirst.mu.Lock()\n\tdefer first.mu.Unlock()\n\tsecond.mu.Lock()\n\tdefer second.mu.Unlock()\n\ta.data = append(a.data, b.data...)\n}\n```\nAlways lock the lower-id resource first regardless of argument order, eliminating the cycle. (Guard against `a == b` if self-merge is possible.)",
+          "key_points": [
+            "Bug: two call sites acquire the same pair of locks in opposite order → deadlock",
+            "Fix: establish a total order (e.g. by id/address) and acquire locks in that order everywhere",
+            "Catch it with stress tests under `-race`, deadlock detectors, and lock-hierarchy review"
+          ],
+          "follow_ups": [
+            "Could you avoid two-lock acquisition entirely with a single coarser lock or a lock-free design?"
+          ],
+          "tags": ["deadlock", "lock-ordering", "mutex"]
+        }
+      ]
+    },
+    {
+      "topic": "Resource Leaks",
+      "questions": [
+        {
+          "id": "bug-010",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "func fetchJSON(url string, v any) error {\n\tresp, err := http.Get(url)\n\tif err != nil {\n\t\treturn err\n\t}\n\treturn json.NewDecoder(resp.Body).Decode(v)\n}",
+          "answer": "**Bug: `resp.Body` is never closed.** On the success path (and even on a non-2xx status, where `err` is nil but there is still a body) the body is left open.\n\n**Failure mode:** Each unclosed body holds a TCP connection that cannot be returned to the transport's idle pool. Under load you exhaust file descriptors and ephemeral ports, connection reuse stops working (every request opens a new socket), and you eventually hit `dial: too many open files`. This is one of the most common Go production leaks.\n\n**Fix — always `defer resp.Body.Close()` after the error check**, and ideally drain the body so the connection can be reused:\n```go\nfunc fetchJSON(url string, v any) error {\n\tresp, err := http.Get(url)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer resp.Body.Close()\n\tif resp.StatusCode != http.StatusOK {\n\t\tio.Copy(io.Discard, resp.Body) // drain so the conn can be reused\n\t\treturn fmt.Errorf(\"unexpected status %d\", resp.StatusCode)\n\t}\n\treturn json.NewDecoder(resp.Body).Decode(v)\n}\n```\nNote `Close` is correct even when `err != nil`? No — when `http.Get` returns an error, `resp` is nil, so you must close only after confirming `err == nil`, exactly as above.",
+          "key_points": [
+            "Bug: HTTP response body left open → connection/fd leak, no connection reuse",
+            "Fix: `defer resp.Body.Close()` after the err check; drain the body before closing",
+            "Catch it with `bodyclose` linter (golangci-lint), fd-count monitoring"
+          ],
+          "follow_ups": [
+            "Why does failing to fully read the body hurt connection reuse even if you close it?"
+          ],
+          "tags": ["resource-leak", "http", "body-close"]
+        },
+        {
+          "id": "bug-011",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func loadUsers(db *sql.DB) ([]User, error) {\n\trows, err := db.Query(\"SELECT id, name FROM users\")\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tvar users []User\n\tfor rows.Next() {\n\t\tvar u User\n\t\trows.Scan(&u.ID, &u.Name)\n\t\tusers = append(users, u)\n\t}\n\treturn users, nil\n}",
+          "answer": "**Three bugs.** (1) **`rows` is never closed** — a `*sql.Rows` holds a connection from the pool until `Close()` (or full iteration *plus* error). (2) **`rows.Scan` error is ignored** — a scan failure silently inserts a zero-value `User`. (3) **`rows.Err()` is never checked** — the `for rows.Next()` loop also terminates on an *error* mid-iteration (e.g. connection dropped), and without `rows.Err()` you return a truncated result set as if it were complete.\n\n**Failure mode:** The missing `Close` leaks a pooled connection per call (the connection is only released when the rows are GC'd/finalized, which is nondeterministic); under load the pool drains and every query blocks waiting for a connection. The unchecked `rows.Err()` means a partial read during a network blip looks like a successful, smaller result — silent data corruption.\n\n**Fix:**\n```go\nfunc loadUsers(ctx context.Context, db *sql.DB) ([]User, error) {\n\trows, err := db.QueryContext(ctx, \"SELECT id, name FROM users\")\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer rows.Close()\n\tvar users []User\n\tfor rows.Next() {\n\t\tvar u User\n\t\tif err := rows.Scan(&u.ID, &u.Name); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tusers = append(users, u)\n\t}\n\tif err := rows.Err(); err != nil { // iteration error\n\t\treturn nil, err\n\t}\n\treturn users, nil\n}\n```\nAlso switched to `QueryContext` so the query honours cancellation/timeout.",
+          "key_points": [
+            "Bugs: no `rows.Close()`, ignored `Scan` error, missing `rows.Err()` after the loop",
+            "Fix: `defer rows.Close()`, check `Scan` err, check `rows.Err()`, use `QueryContext`",
+            "Catch it with `rowserrcheck` + `sqlclosecheck` linters and `errcheck`"
+          ],
+          "follow_ups": [
+            "Why can ignoring `rows.Err()` cause silent data loss but never a panic?"
+          ],
+          "tags": ["resource-leak", "database", "sql-rows"]
+        },
+        {
+          "id": "bug-012",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func processFiles(paths []string) error {\n\tfor _, p := range paths {\n\t\tf, err := os.Open(p)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tdefer f.Close()\n\t\tif err := consume(f); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}",
+          "answer": "**Bug: `defer f.Close()` inside a loop.** `defer` runs at *function* return, not at the end of each iteration. So all opened files stay open for the entire duration of the loop.\n\n**Failure mode:** If `paths` is large (say, processing 50k files), you hold tens of thousands of file descriptors open simultaneously and hit the per-process fd limit (`EMFILE: too many open files`). The function may also pin a lot of OS resources far longer than needed. With one path it's fine; at scale it's an outage.\n\n**Fix — scope each resource to its own function so `defer` fires per iteration:**\n```go\nfunc processFiles(paths []string) error {\n\tfor _, p := range paths {\n\t\tif err := processOne(p); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}\n\nfunc processOne(p string) error {\n\tf, err := os.Open(p)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer f.Close() // runs when processOne returns — once per file\n\treturn consume(f)\n}\n```\nExtracting `processOne` gives each file its own deferred close. Alternatively close explicitly at the end of the loop body, but the helper-function pattern is cleaner and still handles early returns.",
+          "key_points": [
+            "Bug: `defer Close()` in a loop defers until the function returns, holding every fd open",
+            "Fix: move the open+defer into a per-iteration helper function",
+            "Catch it with review/`golangci-lint`; symptom is `too many open files` at scale"
+          ],
+          "follow_ups": [
+            "When is a loop-scoped `defer` actually acceptable?"
+          ],
+          "tags": ["resource-leak", "defer", "file-descriptor"]
+        },
+        {
+          "id": "bug-013",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "func callWithDeadline(parent context.Context) (*Response, error) {\n\tctx, _ := context.WithTimeout(parent, 2*time.Second)\n\treturn rpc(ctx)\n}",
+          "answer": "**Bug: the `cancel` function from `context.WithTimeout` is discarded with `_`.** Every `WithCancel`/`WithTimeout`/`WithDeadline` returns a `cancel` that *must* be called.\n\n**Failure mode:** Even though the timeout will eventually fire after 2s, the context registers itself on the parent's child list. If you never call `cancel`, that context (and its timer) lingers until the deadline elapses *and* isn't released early when the RPC returns sooner. With high request rates you accumulate pending timers and a growing chain of child contexts on a long-lived parent context — a memory and timer leak. `go vet`'s `lostcancel` analyzer flags this exact pattern.\n\n**Fix — capture and `defer cancel()`:**\n```go\nfunc callWithDeadline(parent context.Context) (*Response, error) {\n\tctx, cancel := context.WithTimeout(parent, 2*time.Second)\n\tdefer cancel()\n\treturn rpc(ctx)\n}\n```\nCalling `cancel()` on return immediately releases the timer and detaches from the parent, regardless of whether the RPC finished early, errored, or timed out. It is safe and idempotent to call even after the deadline fired.",
+          "key_points": [
+            "Bug: discarded `cancel` from `WithTimeout` leaks the context's timer and parent linkage",
+            "Fix: `ctx, cancel := ...; defer cancel()`",
+            "Catch it with `go vet` (lostcancel) and `golangci-lint`"
+          ],
+          "follow_ups": [
+            "Why is calling `cancel()` still required when the timeout will fire anyway?"
+          ],
+          "tags": ["resource-leak", "context", "lostcancel"]
+        }
+      ]
+    },
+    {
+      "topic": "Database",
+      "questions": [
+        {
+          "id": "bug-014",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func ordersWithItems(ctx context.Context, db *sql.DB, customerID int) ([]Order, error) {\n\torders, err := getOrders(ctx, db, customerID)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfor i := range orders {\n\t\titems, err := getItems(ctx, db, orders[i].ID) // one query per order\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\torders[i].Items = items\n\t}\n\treturn orders, nil\n}",
+          "answer": "**Bug: classic N+1 query.** One query fetches the orders, then the loop issues a separate `getItems` query for *every* order. For N orders you make N+1 round-trips to the database.\n\n**Failure mode:** Latency scales linearly with result size and is dominated by per-query round-trip overhead, not data volume. A customer with 500 orders triggers 501 queries; under concurrency this saturates the connection pool and the DB's query parser/planner. It passes tests (small fixtures) and tanks p99 latency in production for power users — the most common DB performance bug in code review.\n\n**Fix — fetch all items in a single query with `IN` (or a JOIN), then group in memory:**\n```go\nfunc ordersWithItems(ctx context.Context, db *sql.DB, customerID int) ([]Order, error) {\n\torders, err := getOrders(ctx, db, customerID)\n\tif err != nil || len(orders) == 0 {\n\t\treturn orders, err\n\t}\n\tids := make([]int, len(orders))\n\tfor i, o := range orders {\n\t\tids[i] = o.ID\n\t}\n\t// SELECT order_id, ... FROM items WHERE order_id = ANY($1)\n\titemsByOrder, err := getItemsForOrders(ctx, db, ids)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfor i := range orders {\n\t\torders[i].Items = itemsByOrder[orders[i].ID]\n\t}\n\treturn orders, nil\n}\n```\nTwo queries total regardless of N. Use `ANY($1)`/`pq.Array` (Postgres) or a join; batch in chunks if the id list can be huge.",
+          "key_points": [
+            "Bug: N+1 — a per-row query inside a loop, latency scales with row count",
+            "Fix: batch with a single `WHERE id = ANY(...)` query (or JOIN) and group in memory",
+            "Catch it with query-count assertions in integration tests and DB slow-query/APM dashboards"
+          ],
+          "follow_ups": [
+            "When is N+1 acceptable, and how big can the `IN` list get before you chunk it?"
+          ],
+          "tags": ["database", "n-plus-one", "performance"]
+        },
+        {
+          "id": "bug-015",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "func findUser(ctx context.Context, db *sql.DB, name string) (*User, error) {\n\tq := \"SELECT id, email FROM users WHERE name = '\" + name + \"'\"\n\trow := db.QueryRowContext(ctx, q)\n\tvar u User\n\tif err := row.Scan(&u.ID, &u.Email); err != nil {\n\t\treturn nil, err\n\t}\n\treturn &u, nil\n}",
+          "answer": "**Bug: SQL injection via string concatenation.** `name` is interpolated directly into the query. An attacker passing `name = \"' OR '1'='1\"` or `\"'; DROP TABLE users; --\"` alters the query semantics.\n\n**Failure mode:** Authentication bypass, full data exfiltration, or destructive statements — a critical, exploitable security vulnerability (OWASP A03). It will also break on legitimate input containing an apostrophe (`O'Brien`).\n\n**Fix — use a parameterized/prepared query** so the value is sent separately from the SQL text:\n```go\nfunc findUser(ctx context.Context, db *sql.DB, name string) (*User, error) {\n\tconst q = \"SELECT id, email FROM users WHERE name = $1\" // or ? for MySQL\n\tvar u User\n\tif err := db.QueryRowContext(ctx, q, name).Scan(&u.ID, &u.Email); err != nil {\n\t\treturn nil, err\n\t}\n\treturn &u, nil\n}\n```\nThe driver binds `name` as a parameter; it can never be parsed as SQL. Never build queries with `fmt.Sprintf`/`+` from untrusted input. For dynamic identifiers (table/column names, which can't be parameters) use a strict allow-list, not interpolation.",
+          "key_points": [
+            "Bug: user input concatenated into SQL → injection (critical security flaw)",
+            "Fix: parameterized query with placeholders ($1 / ?), never string concatenation",
+            "Catch it with `gosec` (G201/G202), `sqlvet`, and security review"
+          ],
+          "follow_ups": [
+            "How do you safely build queries with dynamic column or table names?"
+          ],
+          "tags": ["database", "sql-injection", "security"]
+        },
+        {
+          "id": "bug-016",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func transfer(ctx context.Context, db *sql.DB, from, to, amount int) error {\n\ttx, err := db.BeginTx(ctx, nil)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif _, err := tx.ExecContext(ctx, \"UPDATE accounts SET bal = bal - $1 WHERE id = $2\", amount, from); err != nil {\n\t\treturn err\n\t}\n\tif _, err := tx.ExecContext(ctx, \"UPDATE accounts SET bal = bal + $1 WHERE id = $2\", amount, to); err != nil {\n\t\treturn err\n\t}\n\treturn tx.Commit()\n}",
+          "answer": "**Bug: error paths return without rolling back the transaction.** If either `ExecContext` fails, the function returns the error but never calls `tx.Rollback()`. The transaction is left open.\n\n**Failure mode:** Each failed transfer leaks a pooled connection that stays inside an open transaction. The connection isn't returned to the pool, and on the DB side it holds locks and bloats (in Postgres, an idle-in-transaction connection blocks vacuum and can pin row locks). Under load you exhaust the pool *and* the DB's connection slots; replication and lock contention degrade. Classic partially-applied-money risk too if any rollback is missed.\n\n**Fix — a single deferred rollback that is a no-op after commit:**\n```go\nfunc transfer(ctx context.Context, db *sql.DB, from, to, amount int) (err error) {\n\ttx, err := db.BeginTx(ctx, nil)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer func() {\n\t\tif err != nil {\n\t\t\ttx.Rollback() // safe no-op if already committed\n\t\t}\n\t}()\n\tif _, err = tx.ExecContext(ctx, \"UPDATE accounts SET bal = bal - $1 WHERE id = $2\", amount, from); err != nil {\n\t\treturn err\n\t}\n\tif _, err = tx.ExecContext(ctx, \"UPDATE accounts SET bal = bal + $1 WHERE id = $2\", amount, to); err != nil {\n\t\treturn err\n\t}\n\treturn tx.Commit()\n}\n```\nThe named return `err` lets the deferred func decide. `tx.Rollback()` after a successful `Commit` returns `sql.ErrTxDone` and is harmless. (A real transfer should also guard against negative balances with a `CHECK`/`WHERE bal >= amount`.)",
+          "key_points": [
+            "Bug: early returns on Exec failure leave the tx open — no `Rollback`",
+            "Fix: `defer` a rollback gated on a named-return `err`; commit makes rollback a no-op",
+            "Catch it with `sqlclosecheck`, integration tests that force mid-tx failure, idle-in-transaction monitoring"
+          ],
+          "follow_ups": [
+            "Why is calling `Rollback` after a successful `Commit` safe, and what does it return?"
+          ],
+          "tags": ["database", "transaction", "rollback"]
+        }
+      ]
+    },
+    {
+      "topic": "Error Handling",
+      "questions": [
+        {
+          "id": "bug-017",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "func saveConfig(path string, c Config) {\n\tdata, _ := json.Marshal(c)\n\tos.WriteFile(path, data, 0644)\n}",
+          "answer": "**Bug: both errors are swallowed.** `json.Marshal`'s error is discarded with `_`, and `os.WriteFile`'s return value (its error) is ignored entirely.\n\n**Failure mode:** If marshaling fails (e.g. a field with an unsupported type, or a `MarshalJSON` that errors) you write `nil`/empty data and never know. If `WriteFile` fails (disk full, permission denied, read-only filesystem) the caller believes the config was persisted. This is silent data loss — the failure surfaces much later as a corrupt or stale config that nobody can explain.\n\n**Fix — propagate both errors:**\n```go\nfunc saveConfig(path string, c Config) error {\n\tdata, err := json.Marshal(c)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"marshal config: %w\", err)\n\t}\n\tif err := os.WriteFile(path, data, 0644); err != nil {\n\t\treturn fmt.Errorf(\"write config %s: %w\", path, err)\n\t}\n\treturn nil\n}\n```\nFunctions that can fail must return an `error`. For atomic durability, write to a temp file and `os.Rename` it into place, and consider `f.Sync()` before close.",
+          "key_points": [
+            "Bug: ignored errors from `Marshal` and `WriteFile` → silent data loss",
+            "Fix: return errors wrapped with `%w` and context; never `_` an error you depend on",
+            "Catch it with `errcheck` / `golangci-lint` (errcheck is on by default in many setups)"
+          ],
+          "follow_ups": [
+            "How would you make the write atomic so a crash mid-write can't corrupt the file?"
+          ],
+          "tags": ["error-handling", "swallowed-error", "errcheck"]
+        },
+        {
+          "id": "bug-018",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "var ErrNotFound = errors.New(\"not found\")\n\nfunc getName(id int) (string, error) {\n\tu, err := repo.Find(id)\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"get name: %v\", err)\n\t}\n\treturn u.Name, nil\n}\n\n// Caller:\nname, err := getName(id)\nif errors.Is(err, repo.ErrNotFound) {\n\t// handle 404\n}",
+          "answer": "**Bug: `%v` instead of `%w` breaks the error chain.** `fmt.Errorf(\"...: %v\", err)` formats the underlying error into a *new* opaque string and discards the wrapped error. The caller's `errors.Is(err, repo.ErrNotFound)` can never match because there is no chain to unwrap.\n\n**Failure mode:** The 404 branch never fires. A missing record gets handled as a generic 500, retries hammer the backend, and sentinel/`errors.As` type checks silently fail everywhere up the stack. This is subtle because the error *message* still looks correct in logs — only programmatic matching is broken.\n\n**Fix — wrap with `%w`** so `errors.Is`/`errors.As` can traverse the chain:\n```go\nfunc getName(id int) (string, error) {\n\tu, err := repo.Find(id)\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"get name: %w\", err)\n\t}\n\treturn u.Name, nil\n}\n```\nUse `%w` when callers need to inspect the cause; use `%v` deliberately when you want to *seal* the error and hide the underlying type as an implementation detail. Don't double-wrap the same error with two `%w` verbs unless you intend a multi-error (Go 1.20+).",
+          "key_points": [
+            "Bug: `%v` flattens the wrapped error to a string, breaking `errors.Is`/`errors.As`",
+            "Fix: use `%w` to preserve the unwrap chain for sentinel/type matching",
+            "Catch it with `errorlint` (golangci-lint), which flags non-wrapping of errors"
+          ],
+          "follow_ups": [
+            "When is using `%v` (deliberately not wrapping) the correct choice?"
+          ],
+          "tags": ["error-handling", "error-wrapping", "errorlint"]
+        },
+        {
+          "id": "bug-019",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func parsePort(s string) int {\n\tn, err := strconv.Atoi(s)\n\tif n < 1 || n > 65535 {\n\t\treturn 8080 // default\n\t}\n\tif err != nil {\n\t\treturn 8080\n\t}\n\treturn n\n}",
+          "answer": "**Bug: the value `n` is used before the error `err` is checked.** `strconv.Atoi` returns `(0, err)` on failure. The code reads `n` in the range check *before* validating `err`. The error check below is dead-ordered.\n\n**Failure mode:** For invalid input like `\"abc\"`, `Atoi` returns `n=0, err!=nil`. The first `if n < 1` catches it and returns 8080 — by luck the result is fine here. But this pattern is a landmine: change the default boundary, or use a function whose zero value is in-range, and you'll silently accept a garbage parse. The general anti-pattern is **trusting a return value before checking the error that governs it** — partial/zero results get treated as valid data.\n\n**Fix — check `err` first, always:**\n```go\nfunc parsePort(s string) int {\n\tn, err := strconv.Atoi(s)\n\tif err != nil {\n\t\treturn 8080\n\t}\n\tif n < 1 || n > 65535 {\n\t\treturn 8080\n\t}\n\treturn n\n}\n```\nThe invariant: on a non-nil error, treat all other returns as undefined and do not read them. Even better, return `(int, error)` so the caller decides on the default rather than silently masking misconfiguration.",
+          "key_points": [
+            "Bug: uses the parsed value before checking the error governing it",
+            "Fix: check `err` immediately and return/handle before touching other returns",
+            "Catch it with code review and `nilness`/`staticcheck`; tests with invalid input expose it"
+          ],
+          "follow_ups": [
+            "Why is silently defaulting on a config parse error often worse than failing loudly?"
+          ],
+          "tags": ["error-handling", "value-before-error", "ordering"]
+        },
+        {
+          "id": "bug-020",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func readAll(r io.Reader) ([]byte, error) {\n\tbuf := make([]byte, 0, 1024)\n\ttmp := make([]byte, 256)\n\tfor {\n\t\tn, err := r.Read(tmp)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tbuf = append(buf, tmp[:n]...)\n\t}\n\treturn buf, nil\n}",
+          "answer": "**Bug: `io.EOF` is treated as a fatal error, discarding the data already read.** A correct reader returns `io.EOF` (often *with* the final non-zero `n`) to signal end of stream. Here, the moment EOF arrives we `return nil, err`, throwing away everything in `buf` — including the last chunk where `n > 0` is returned alongside EOF.\n\n**Failure mode:** Every successful read of a finite stream returns `(nil, io.EOF)` — i.e. it *never* returns data, and the caller sees an error on every normal read. Also, by checking `err` before consuming `tmp[:n]`, the last partial chunk is silently dropped even if you handled EOF afterward. Classic `io.Reader` contract violation.\n\n**Fix — consume `tmp[:n]` first, then handle EOF as the normal terminator:**\n```go\nfunc readAll(r io.Reader) ([]byte, error) {\n\tbuf := make([]byte, 0, 1024)\n\ttmp := make([]byte, 256)\n\tfor {\n\t\tn, err := r.Read(tmp)\n\t\tbuf = append(buf, tmp[:n]...) // process bytes BEFORE inspecting err\n\t\tif err == io.EOF {\n\t\t\treturn buf, nil\n\t\t}\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n}\n```\nIn practice just use `io.ReadAll`, which encapsulates this contract correctly.",
+          "key_points": [
+            "Bug: returns on `io.EOF` and checks err before consuming `n` bytes → drops data, errors on every read",
+            "Fix: process `tmp[:n]` first; treat `io.EOF` as normal end-of-stream",
+            "Catch it with tests over short readers; prefer `io.ReadAll`"
+          ],
+          "follow_ups": [
+            "Why can a Reader return both `n > 0` and `io.EOF` in the same call?"
+          ],
+          "tags": ["error-handling", "io-reader", "eof"]
+        }
+      ]
+    },
+    {
+      "topic": "Slices & Maps",
+      "questions": [
+        {
+          "id": "bug-021",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "warmup",
+          "code": "type Cache struct {\n\tdata map[string][]byte\n}\n\nfunc NewCache() *Cache {\n\treturn &Cache{}\n}\n\nfunc (c *Cache) Set(k string, v []byte) {\n\tc.data[k] = v\n}",
+          "answer": "**Bug: writing to a nil map.** `NewCache` returns `&Cache{}`, so `data` is its zero value — a `nil` map. Reading a nil map is fine (returns zero values), but **writing to a nil map panics** with `assignment to entry in nil map`.\n\n**Failure mode:** The very first `Set` call panics and crashes the goroutine/process. If this is a lazily-used cache, it may pass startup and blow up only when the first write happens under real traffic. A common variant: a struct gets a map field added later, but a constructor or a `json.Unmarshal` path leaves it nil.\n\n**Fix — initialize the map in the constructor:**\n```go\nfunc NewCache() *Cache {\n\treturn &Cache{data: make(map[string][]byte)}\n}\n```\nIf the struct can be created without the constructor, initialize lazily inside `Set` (`if c.data == nil { c.data = make(...) }`) under a lock, or document that the constructor is mandatory. Always initialize maps before writing.",
+          "key_points": [
+            "Bug: nil map write panics (`assignment to entry in nil map`); reads don't",
+            "Fix: `make` the map in the constructor (or lazily before first write)",
+            "Catch it with a unit test that calls `Set`; `nilness` analyzer can sometimes flag it"
+          ],
+          "follow_ups": [
+            "Why does reading a nil map succeed but writing panics?"
+          ],
+          "tags": ["map", "nil-map", "panic"]
+        },
+        {
+          "id": "bug-022",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func appendID(base []int, ids ...int) [][]int {\n\tvar out [][]int\n\tfor _, id := range ids {\n\t\trow := append(base, id)\n\t\tout = append(out, row)\n\t}\n\treturn out\n}\n\n// base := []int{1, 2}  // cap may be > len\n// appendID(base, 10, 20, 30)",
+          "answer": "**Bug: `append` aliasing — `row := append(base, id)` mutates a shared backing array.** If `base` has spare capacity (`cap(base) > len(base)`), each `append` writes `id` into the *same* underlying array slot and returns a slice pointing at it. Every `row` then shares that backing array.\n\n**Failure mode:** Instead of `[[1,2,10],[1,2,20],[1,2,30]]` you get rows that all alias the same memory; the last write wins, so you might see `[[1,2,30],[1,2,30],[1,2,30]]`. It's nondeterministic on `cap(base)` — works when `base` was created exactly full, breaks when it has slack (e.g. it came from a larger pool or a prior `append`). One of the nastiest Go aliasing bugs because it's data-dependent and invisible in small tests.\n\n**Fix — never append to a slice you don't own; copy first**, or use the 3-index slice to force a fresh array:\n```go\nfunc appendID(base []int, ids ...int) [][]int {\n\tout := make([][]int, 0, len(ids))\n\tfor _, id := range ids {\n\t\trow := make([]int, len(base), len(base)+1)\n\t\tcopy(row, base)\n\t\trow = append(row, id)\n\t\tout = append(out, row)\n\t}\n\treturn out\n}\n```\nAlternatively `base[:len(base):len(base)]` (full slice expression) caps capacity so the next `append` is forced to allocate. Go 1.21's `slices.Clone(base)` is the idiomatic copy.",
+          "key_points": [
+            "Bug: appending to a shared slice with spare cap makes all results alias one array",
+            "Fix: clone the base (`slices.Clone`/`copy`) or use `base[:n:n]` to force reallocation",
+            "Catch it with property tests across varying `cap`, careful review; no linter reliably finds it"
+          ],
+          "follow_ups": [
+            "How does the three-index slice expression `s[low:high:max]` prevent this?"
+          ],
+          "tags": ["slice", "append-aliasing", "backing-array"]
+        },
+        {
+          "id": "bug-023",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "// Reads a 10 MB file, returns just the small header bytes.\nfunc readHeader(path string) ([]byte, error) {\n\tall, err := os.ReadFile(path)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn all[:64], nil // first 64 bytes\n}",
+          "answer": "**Bug: returning a sub-slice that retains the entire backing array.** `all[:64]` shares the same backing array as `all`. As long as the returned slice is reachable, the whole 10 MB array cannot be garbage-collected — only 64 bytes are logically used, but 10 MB stays pinned.\n\n**Failure mode:** A memory leak proportional to how many such headers you keep around. If you cache thousands of headers, you're holding gigabytes of file contents you'll never read. The leak is invisible in code (the slice *looks* tiny) and only shows as unexplained heap growth in pprof, where the retained bytes trace back to `os.ReadFile`.\n\n**Fix — copy the bytes you need into a fresh, right-sized slice** so the large array can be collected:\n```go\nfunc readHeader(path string) ([]byte, error) {\n\tall, err := os.ReadFile(path)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif len(all) < 64 {\n\t\treturn nil, fmt.Errorf(\"file too short: %d bytes\", len(all))\n\t}\n\thdr := make([]byte, 64)\n\tcopy(hdr, all[:64]) // or: hdr := bytes.Clone(all[:64])\n\treturn hdr, nil\n}\n```\nAlso note `all[:64]` panics if the file is shorter than 64 bytes — added a length guard. The same retention trap applies to slicing strings/large slices you store long-term.",
+          "key_points": [
+            "Bug: sub-slice keeps the full backing array alive → large hidden memory retention",
+            "Fix: `copy`/`bytes.Clone` the needed bytes into a new slice; also guard the length",
+            "Catch it with heap profiling (pprof inuse_space) tracing retention to the source slice"
+          ],
+          "follow_ups": [
+            "How would pprof reveal that 64 returned bytes are pinning 10 MB?"
+          ],
+          "tags": ["slice", "memory-leak", "backing-array"]
+        }
+      ]
+    },
+    {
+      "topic": "Concurrency Control",
+      "questions": [
+        {
+          "id": "bug-024",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func handler(w http.ResponseWriter, r *http.Request) {\n\tids := parseIDs(r)\n\tfor _, id := range ids {\n\t\tgo enrich(id) // fire off enrichment in the background\n\t}\n\tw.WriteHeader(http.StatusAccepted)\n}",
+          "answer": "**Bug: unbounded goroutine spawn per request.** Each request launches `len(ids)` goroutines with no limit, no lifetime management, and no link to the request's context.\n\n**Failure mode:** A single request with a large/attacker-controlled `ids` (say 1,000,000 entries) spawns a million goroutines instantly. Across concurrent requests this is a goroutine explosion: scheduler thrash, memory blowup (each goroutine ≈ 2KB+ stack), and downstream services hammered with unbounded concurrency. It's a built-in DoS amplifier. The goroutines also outlive the request and ignore cancellation, so even after the client disconnects the work continues.\n\n**Fix — bound concurrency with a worker pool or a semaphore**, and propagate context:\n```go\nfunc handler(w http.ResponseWriter, r *http.Request) {\n\tids := parseIDs(r)\n\tif len(ids) > maxBatch {\n\t\thttp.Error(w, \"too many ids\", http.StatusBadRequest)\n\t\treturn\n\t}\n\tsem := make(chan struct{}, 16) // at most 16 concurrent\n\tvar wg sync.WaitGroup\n\tfor _, id := range ids {\n\t\twg.Add(1)\n\t\tsem <- struct{}{}\n\t\tgo func(id int) {\n\t\t\tdefer wg.Done()\n\t\t\tdefer func() { <-sem }()\n\t\t\tenrich(r.Context(), id)\n\t\t}(id)\n\t}\n\twg.Wait() // or hand off to a managed background queue\n\tw.WriteHeader(http.StatusAccepted)\n}\n```\nUse `golang.org/x/sync/errgroup` with `SetLimit`, or a persistent worker pool / job queue for true fire-and-forget. Always cap fan-out derived from request input and validate the batch size.",
+          "key_points": [
+            "Bug: unbounded per-request goroutines driven by untrusted input → DoS/OOM, ignores cancellation",
+            "Fix: bound with a semaphore/worker pool (e.g. errgroup `SetLimit`), validate batch size, pass ctx",
+            "Catch it with load testing, goroutine-count alerts, and review of input-driven fan-out"
+          ],
+          "follow_ups": [
+            "For true fire-and-forget, why is a persistent queue better than spawning goroutines?"
+          ],
+          "tags": ["concurrency", "goroutine-explosion", "rate-limiting"]
+        },
+        {
+          "id": "bug-025",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "type Pool struct {\n\twg  sync.WaitGroup\n\tmu  sync.Mutex\n\tn   int\n}\n\nfunc (p Pool) Run(tasks []func()) {\n\tfor _, t := range tasks {\n\t\tp.wg.Add(1)\n\t\tgo func(t func()) {\n\t\t\tdefer p.wg.Done()\n\t\t\tt()\n\t\t}(t)\n\t}\n\tp.wg.Wait()\n}",
+          "answer": "**Bug: the `Pool` receiver is by value, so `sync.WaitGroup` (and `sync.Mutex`) are copied.** `func (p Pool) Run` copies the whole struct, including the `WaitGroup`. `Add`/`Done`/`Wait` then operate on a *copy*, not a shared instance.\n\n**Failure mode:** `sync` types must not be copied after first use — copying duplicates internal state (counter, semaphore, waiter list). The behavior is undefined: you can get a spurious `panic: sync: WaitGroup is reused before previous Wait has returned`, a `Wait` that never observes the `Done`s (deadlock/hang), or silent wrong synchronization. `go vet`'s `copylocks` analyzer flags this at compile-of-tests time.\n\n**Fix — use a pointer receiver** so all calls share one struct (and never copy a struct containing a lock):\n```go\nfunc (p *Pool) Run(tasks []func()) {\n\tfor _, t := range tasks {\n\t\tp.wg.Add(1)\n\t\tgo func(t func()) {\n\t\t\tdefer p.wg.Done()\n\t\t\tt()\n\t\t}(t)\n\t}\n\tp.wg.Wait()\n}\n```\nMore generally, any type embedding a `sync.Mutex`/`WaitGroup` should always be passed by pointer; `go vet` will warn on every value copy.",
+          "key_points": [
+            "Bug: value receiver copies the embedded `WaitGroup`/`Mutex` — sync state is duplicated",
+            "Fix: pointer receiver; never copy a struct containing a sync primitive",
+            "Catch it with `go vet` (copylocks) — it flags this statically"
+          ],
+          "follow_ups": [
+            "What other standard-library types must never be copied after first use?"
+          ],
+          "tags": ["concurrency", "copylocks", "waitgroup"]
+        },
+        {
+          "id": "bug-026",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func broadcast(subs []chan int, v int) {\n\tdone := make(chan struct{})\n\tfor _, s := range subs {\n\t\tgo func() {\n\t\t\ts <- v\n\t\t\tclose(done)\n\t\t}()\n\t}\n\t<-done\n}",
+          "answer": "**Two bugs.** (1) **Loop-variable capture:** the closure captures `s` (pre-1.22), so every goroutine sends to whichever `s` the loop variable points at last — not each subscriber. (2) **Double-close of `done`:** each goroutine calls `close(done)`; the second `close` panics with `close of closed channel`. And `<-done` only waits for *one* goroutine, not all of them.\n\n**Failure mode:** Guaranteed `panic: close of closed channel` as soon as there are ≥2 subscribers, crashing the process. Even ignoring that, messages go to the wrong subscriber and `broadcast` returns before the sends complete. `close` of an already-closed (or nil) channel is a runtime panic, never recoverable cleanly here.\n\n**Fix — pass the channel as an argument and use a `WaitGroup` instead of closing a shared channel repeatedly:**\n```go\nfunc broadcast(subs []chan int, v int) {\n\tvar wg sync.WaitGroup\n\tfor _, s := range subs {\n\t\twg.Add(1)\n\t\tgo func(s chan int) {\n\t\t\tdefer wg.Done()\n\t\t\ts <- v\n\t\t}(s)\n\t}\n\twg.Wait()\n}\n```\nNow each goroutine targets its own subscriber, and `Wait` blocks for all of them. A channel must be closed exactly once, by a single owner — typically the sender, never N goroutines.",
+          "key_points": [
+            "Bugs: pre-1.22 loop-var capture + double `close(done)` panic + waiting on only one goroutine",
+            "Fix: pass `s` as an arg; use a `WaitGroup`; close a channel exactly once from one owner",
+            "Catch it with `-race`, `loopclosure` vet check; the double-close panics deterministically"
+          ],
+          "follow_ups": [
+            "Who should own closing a channel, and how do you coordinate close with multiple senders?"
+          ],
+          "tags": ["concurrency", "double-close", "loop-variable"]
+        }
+      ]
+    },
+    {
+      "topic": "HTTP & Server",
+      "questions": [
+        {
+          "id": "bug-027",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "var client = &http.Client{}\n\nfunc callUpstream(url string) (*http.Response, error) {\n\treturn client.Get(url)\n}",
+          "answer": "**Bug: an `http.Client` with no timeout.** The zero-value `http.Client` has `Timeout: 0`, meaning *no timeout at all*. A slow or hung upstream will block the calling goroutine indefinitely.\n\n**Failure mode:** When the upstream stalls (network partition, overloaded dependency, half-open connection), every request to it hangs forever. Goroutines pile up, the connection pool and your own server's worker capacity get exhausted, and a single slow dependency cascades into a full outage of *your* service. This is the canonical cause of \"the whole service fell over when dependency X got slow.\"\n\n**Fix — always set a timeout** (and ideally use per-request context deadlines):\n```go\nvar client = &http.Client{\n\tTimeout: 5 * time.Second, // covers dial + TLS + request + response body read\n}\n\nfunc callUpstream(ctx context.Context, url string) (*http.Response, error) {\n\treq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn client.Do(req)\n}\n```\n`Client.Timeout` is an overall cap; for finer control set `Transport` dial/TLS/response-header timeouts and pass a `context` deadline per call. Note `Timeout` includes reading the body, so streaming endpoints need context-based deadlines instead.",
+          "key_points": [
+            "Bug: default `http.Client` has no timeout → unbounded blocking on a hung upstream",
+            "Fix: set `Client.Timeout` and/or use `NewRequestWithContext` with a deadline",
+            "Catch it with chaos/latency testing, review checklist for every outbound client"
+          ],
+          "follow_ups": [
+            "Why might `Client.Timeout` be wrong for a streaming/long-poll endpoint?"
+          ],
+          "tags": ["http", "timeout", "client"]
+        },
+        {
+          "id": "bug-028",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/\", handle)\n\tlog.Fatal(http.ListenAndServe(\":8080\", mux))\n}",
+          "answer": "**Bug: using `http.ListenAndServe` with the default server settings — no timeouts and no graceful shutdown.** The implicit `http.Server` has `ReadTimeout`, `WriteTimeout`, and `IdleTimeout` all zero (unbounded), and `log.Fatal` calls `os.Exit`, so there is no graceful shutdown.\n\n**Failure mode:** (1) **Slowloris-style resource exhaustion:** a client that sends headers one byte at a time, or never finishes the request, ties up a connection forever; with no `ReadHeaderTimeout`/`ReadTimeout` an attacker exhausts your connection capacity cheaply. (2) **No graceful shutdown:** on deploy/SIGTERM the process exits immediately, killing in-flight requests and returning 502s to users mid-request.\n\n**Fix — construct an `http.Server` with explicit timeouts and a shutdown path:**\n```go\nfunc main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/\", handle)\n\tsrv := &http.Server{\n\t\tAddr:              \":8080\",\n\t\tHandler:           mux,\n\t\tReadHeaderTimeout: 5 * time.Second,\n\t\tReadTimeout:       15 * time.Second,\n\t\tWriteTimeout:      15 * time.Second,\n\t\tIdleTimeout:       60 * time.Second,\n\t}\n\tgo func() {\n\t\tif err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {\n\t\t\tlog.Fatal(err)\n\t\t}\n\t}()\n\tstop := make(chan os.Signal, 1)\n\tsignal.Notify(stop, os.Interrupt, syscall.SIGTERM)\n\t<-stop\n\tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)\n\tdefer cancel()\n\tsrv.Shutdown(ctx) // drain in-flight requests\n}\n```\nAt minimum set `ReadHeaderTimeout` (the cheapest defense against Slowloris) and wire `srv.Shutdown` to SIGTERM so deploys drain cleanly.",
+          "key_points": [
+            "Bug: default server has no read/write/idle timeouts (Slowloris risk) and no graceful shutdown",
+            "Fix: explicit `http.Server` timeouts + `signal.Notify` + `srv.Shutdown(ctx)`",
+            "Catch it with `gosec` (G112 ReadHeaderTimeout), security review, deploy/drain testing"
+          ],
+          "follow_ups": [
+            "Which single timeout is the cheapest, highest-value defense against Slowloris?"
+          ],
+          "tags": ["http", "server-timeout", "graceful-shutdown"]
+        },
+        {
+          "id": "bug-029",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func postWithRetry(url string, body io.Reader) (*http.Response, error) {\n\tvar resp *http.Response\n\tvar err error\n\tfor i := 0; i < 3; i++ {\n\t\tresp, err = http.Post(url, \"application/json\", body)\n\t\tif err == nil && resp.StatusCode < 500 {\n\t\t\treturn resp, nil\n\t\t}\n\t}\n\treturn resp, err\n}",
+          "answer": "**Bug: the request `body` (an `io.Reader`) is consumed on the first attempt and cannot be re-read on retries.** After the first `http.Post`, the reader is at EOF, so retries send an *empty* body.\n\n**Failure mode:** The first attempt sends the real payload; if it fails with a 5xx, the retry POSTs nothing (or a partial body), so you write empty/garbage records or get spurious 400s. Worse, retrying a non-idempotent POST can duplicate side effects. There's also a leak: each failed `resp` body is never closed, so failed attempts leak connections.\n\n**Fix — buffer the body so it can be replayed**, close bodies between attempts, and add backoff:\n```go\nfunc postWithRetry(ctx context.Context, url string, body []byte) (*http.Response, error) {\n\tvar lastErr error\n\tfor i := 0; i < 3; i++ {\n\t\treq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treq.Header.Set(\"Content-Type\", \"application/json\")\n\t\tresp, err := http.DefaultClient.Do(req)\n\t\tif err == nil && resp.StatusCode < 500 {\n\t\t\treturn resp, nil\n\t\t}\n\t\tif resp != nil {\n\t\t\tio.Copy(io.Discard, resp.Body)\n\t\t\tresp.Body.Close() // drain + close failed attempt\n\t\t}\n\t\tlastErr = err\n\t\ttime.Sleep(time.Duration(i+1) * 100 * time.Millisecond) // backoff\n\t}\n\treturn nil, lastErr\n}\n```\nTake `[]byte` (or a `func() io.Reader`) so each attempt gets a fresh `bytes.NewReader`. Only retry idempotent operations or use an idempotency key.",
+          "key_points": [
+            "Bug: a one-shot `io.Reader` body is exhausted after the first try; retries send empty bodies; failed resp bodies leak",
+            "Fix: buffer the body (`[]byte` → fresh `bytes.NewReader` per attempt), close each failed response, add backoff",
+            "Catch it with integration tests that force a 5xx then assert the retry payload; `bodyclose` linter for the leak"
+          ],
+          "follow_ups": [
+            "Why must you also guard against retrying non-idempotent POSTs even after fixing the body?"
+          ],
+          "tags": ["http", "request-body", "retry"]
+        }
+      ]
+    },
+    {
+      "topic": "Channels & Select",
+      "questions": [
+        {
+          "id": "bug-030",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func consume(ctx context.Context, in <-chan Event) {\n\tfor {\n\t\tselect {\n\t\tcase e := <-in:\n\t\t\thandle(e)\n\t\tcase <-time.After(time.Second):\n\t\t\tflush()\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\t}\n\t}\n}",
+          "answer": "**Bug: `time.After` allocates a brand-new timer on every loop iteration.** Each pass through the `select` evaluates *all* case expressions, so `time.After(time.Second)` creates a fresh `*time.Timer` every time around the loop — even when an event arrives and the timer case isn't selected.\n\n**Failure mode:** Under a high event rate this loop spins thousands of times per second, each allocating a 1-second timer that is never fired or stopped early. Until the timer expires, the runtime keeps it on the timer heap; you accumulate up to ~(events/sec) live timers, burning CPU on timer management and heap pressure. It also subtly resets the flush interval on every event, so `flush` may rarely run. A well-known Go performance footgun.\n\n**Fix — create one reusable `time.Timer` (or `Ticker`) outside the loop and reset it:**\n```go\nfunc consume(ctx context.Context, in <-chan Event) {\n\tt := time.NewTimer(time.Second)\n\tdefer t.Stop()\n\tfor {\n\t\tselect {\n\t\tcase e := <-in:\n\t\t\thandle(e)\n\t\tcase <-t.C:\n\t\t\tflush()\n\t\t\tt.Reset(time.Second)\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\t}\n\t}\n}\n```\nIf the flush should happen at a fixed cadence regardless of events, a `time.NewTicker` is even simpler. (Mind the `Reset` drain caveat on pre-1.23 timers if the channel may already hold a value.)",
+          "key_points": [
+            "Bug: `time.After` in a loop allocates a new timer each iteration → CPU/alloc churn, leaked pending timers",
+            "Fix: hoist a single `time.NewTimer`/`NewTicker` out of the loop and `Reset` it",
+            "Catch it with CPU/alloc profiling (pprof), benchmarks under load; `staticcheck` may flag time.After-in-loop"
+          ],
+          "follow_ups": [
+            "When is `time.After` perfectly fine, and when must you switch to a reusable timer?"
+          ],
+          "tags": ["channel", "time-after", "timer-leak"]
+        },
+        {
+          "id": "bug-031",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func loop(ctx context.Context, in <-chan Task) {\n\tfor {\n\t\tselect {\n\t\tcase t := <-in:\n\t\t\tprocess(t)\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\tdefault:\n\t\t\t// nothing to do right now\n\t\t}\n\t}\n}",
+          "answer": "**Bug: a busy-loop caused by the `default` case.** With a `default`, the `select` never blocks: when `in` is empty and `ctx` isn't done, it falls through to `default` and immediately loops again. The goroutine spins as fast as the CPU allows.\n\n**Failure mode:** One such goroutine pegs a full CPU core at 100% doing nothing useful. Several of them starve the scheduler, spike cloud CPU bills, and can cause latency for real work. It still *functions* correctly, so it passes tests — you only notice via a flat-out CPU graph in production.\n\n**Fix — remove the `default` so the `select` blocks until a case is ready:**\n```go\nfunc loop(ctx context.Context, in <-chan Task) {\n\tfor {\n\t\tselect {\n\t\tcase t := <-in:\n\t\t\tprocess(t)\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\t}\n\t}\n}\n```\nA blocking `select` parks the goroutine until a task arrives or the context is cancelled — zero CPU while idle. Only use `default` when you genuinely want a non-blocking poll *and* you throttle the loop (e.g. with a timer); a bare `default` in a tight loop is almost always a bug.",
+          "key_points": [
+            "Bug: `default` makes `select` non-blocking → 100% CPU busy-loop when idle",
+            "Fix: drop `default`; a blocking `select` parks the goroutine until a case is ready",
+            "Catch it with CPU profiling/`top` (one core pinned), review of any `select`+`default` in a loop"
+          ],
+          "follow_ups": [
+            "When is a non-blocking `select` with `default` actually the right tool?"
+          ],
+          "tags": ["channel", "busy-loop", "select-default"]
+        }
+      ]
+    },
+    {
+      "topic": "Defer Pitfalls",
+      "questions": [
+        {
+          "id": "bug-032",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "medium",
+          "code": "func count(ctx context.Context, db *sql.DB, q string) (int, error) {\n\trows, err := db.QueryContext(ctx, q)\n\tdefer rows.Close()\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\tvar n int\n\tfor rows.Next() {\n\t\tn++\n\t}\n\treturn n, rows.Err()\n}",
+          "answer": "**Bug: `defer rows.Close()` is placed *before* the error check, so it dereferences `rows` when the query failed.** When `QueryContext` returns an error, `rows` is `nil`. The deferred `rows.Close()` then runs on a nil `*sql.Rows` and panics with a nil-pointer dereference.\n\n**Failure mode:** Any time the query errors (bad SQL, dead connection, context deadline), instead of returning the error cleanly the function panics. If the panic isn't recovered it crashes the request/goroutine; even with a recover middleware you've turned a normal error path into a 500 with a stack trace. The bug hides because the happy path works perfectly in tests.\n\n**Fix — check `err` *before* deferring `Close`:**\n```go\nfunc count(ctx context.Context, db *sql.DB, q string) (int, error) {\n\trows, err := db.QueryContext(ctx, q)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\tdefer rows.Close()\n\tvar n int\n\tfor rows.Next() {\n\t\tn++\n\t}\n\treturn n, rows.Err()\n}\n```\nThe ordering rule for any `X, err := open()` pattern: handle the error first, and only `defer X.Close()` once you know `X` is non-nil/valid. The same applies to `os.Open`, `net.Dial`, etc.",
+          "key_points": [
+            "Bug: `defer rows.Close()` before the err check → nil-pointer panic on query failure",
+            "Fix: check `err` and return first; defer `Close()` only after `rows` is known valid",
+            "Catch it with a test that forces a query error; `nilness`/staticcheck can flag nil deref"
+          ],
+          "follow_ups": [
+            "Which other `(X, err)` constructors have this same defer-ordering trap?"
+          ],
+          "tags": ["defer", "nil-deref", "database"]
+        },
+        {
+          "id": "bug-033",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func processStream(ch <-chan Batch) error {\n\tfor batch := range ch {\n\t\tmu.Lock()\n\t\tdefer mu.Unlock()\n\t\tif err := write(batch); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}",
+          "answer": "**Bug: `defer mu.Unlock()` inside a long-lived `for range` loop.** `defer` runs at function return, not at end of iteration. So `mu.Lock()` is called on *every* batch, but the matching `Unlock`s only run when `processStream` finally returns.\n\n**Failure mode:** On the second iteration the same goroutine calls `mu.Lock()` again while still holding the lock from the first iteration (the first `Unlock` is deferred, not yet run). Since `sync.Mutex` isn't reentrant, the goroutine **deadlocks on itself at the second batch** — and it holds the lock forever, wedging every other goroutine that needs `mu`. Even if it somehow didn't self-deadlock, you'd hold the lock across the entire stream (no concurrency) and stack up N deferred unlocks until return.\n\n**Fix — scope the lock to each iteration**, e.g. via an inline function or explicit unlock:\n```go\nfunc processStream(ch <-chan Batch) error {\n\tfor batch := range ch {\n\t\terr := func() error {\n\t\t\tmu.Lock()\n\t\t\tdefer mu.Unlock() // runs at end of THIS closure, i.e. per batch\n\t\t\treturn write(batch)\n\t\t}()\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}\n```\nThe closure gives each iteration its own deferred unlock that fires immediately, and still releases the lock correctly if `write` panics. Alternatively, lock/unlock explicitly without `defer` inside the loop body.",
+          "key_points": [
+            "Bug: deferred `Unlock` in a loop never runs until return → second `Lock` self-deadlocks (non-reentrant mutex)",
+            "Fix: wrap the locked section in a per-iteration closure (or lock/unlock explicitly each iteration)",
+            "Catch it with `-timeout` tests that send ≥2 batches; the loop hangs deterministically"
+          ],
+          "follow_ups": [
+            "Why does the closure form still correctly unlock if `write` panics?"
+          ],
+          "tags": ["defer", "mutex", "loop"]
+        },
+        {
+          "id": "bug-034",
+          "question": "Review this code. What's wrong, and how do you fix it?",
+          "difficulty": "hard",
+          "code": "func writeReport(path string, rows []Row) error {\n\tf, err := os.Create(path)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer f.Close()\n\tw := bufio.NewWriter(f)\n\tfor _, r := range rows {\n\t\tfmt.Fprintln(w, r.String())\n\t}\n\tw.Flush()\n\treturn nil\n}",
+          "answer": "**Two related bugs around `defer f.Close()` and buffered writes.** (1) **The `Close` error is ignored.** For a written file, `Close` can fail (delayed write-back, ENOSPC, NFS errors) and is exactly where a failed flush-to-disk surfaces; swallowing it means you report success on a corrupt/truncated file. (2) **`w.Flush()`'s error is also ignored**, so a mid-write failure (disk full) is lost. Order matters too: the buffered writer must be flushed *before* `Close`, and you want the flush error if it occurs.\n\n**Failure mode:** A disk-full or I/O error during write produces a truncated report, but `writeReport` returns `nil`. Downstream systems trust the file; the data is silently corrupt. This bites in production under disk pressure and is invisible in tests with small inputs on a healthy disk.\n\n**Fix — check `Flush` and surface `Close`'s error via a named return:**\n```go\nfunc writeReport(path string, rows []Row) (err error) {\n\tf, err := os.Create(path)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer func() {\n\t\tif cerr := f.Close(); cerr != nil && err == nil {\n\t\t\terr = cerr // don't clobber an earlier error\n\t\t}\n\t}()\n\tw := bufio.NewWriter(f)\n\tfor _, r := range rows {\n\t\tif _, err = fmt.Fprintln(w, r.String()); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\tif err = w.Flush(); err != nil {\n\t\treturn err\n\t}\n\treturn nil // deferred Close still runs and may set err\n}\n```\nFlush before the deferred `Close`, and capture `Close`'s error into the named return without overwriting an earlier failure. For stronger durability, `f.Sync()` before close and write-temp-then-rename.",
+          "key_points": [
+            "Bug: ignored `Close` and `Flush` errors on a written file → silent truncation/corruption reported as success",
+            "Fix: check `Flush`; capture `Close` error via named return (without clobbering an earlier err); flush before close",
+            "Catch it with `errcheck` (flags ignored `Close`/`Flush`), disk-full fault injection tests"
+          ],
+          "follow_ups": [
+            "Why is checking the error of `Close` specifically important for files opened for writing but not for reading?"
+          ],
+          "tags": ["defer", "close-error", "buffered-write"]
+        }
+      ]
+    }
+  ]
+}

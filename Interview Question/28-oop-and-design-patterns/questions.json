@@ -1,0 +1,719 @@
+{
+  "section": "OOP & Design Patterns (GoF)",
+  "slug": "oop-and-design-patterns",
+  "level": "senior",
+  "description": "How a senior Go backend engineer expresses OOP principles, SOLID, and the GoF pattern catalog idiomatically through composition and interfaces, and recognizes which patterns Go makes trivial or unnecessary.",
+  "topics": [
+    {
+      "topic": "OOP Principles in Go",
+      "questions": [
+        {
+          "id": "oop-001",
+          "question": "How does Go express the four classical OOP pillars (encapsulation, abstraction, polymorphism, inheritance)? Which one is deliberately absent and why?",
+          "difficulty": "warmup",
+          "answer": "Go covers three of the four with different mechanisms than class-based languages. **Encapsulation** is at the package boundary, not the type: identifiers starting with an uppercase letter are exported, lowercase are package-private. There is no `private`/`protected` per-field modifier — the unit of encapsulation is the package. **Abstraction** comes from interfaces, which are satisfied implicitly (structural typing) — a type never declares it implements an interface. **Polymorphism** is achieved through interface values: any concrete type satisfying the interface is substitutable. **Inheritance is deliberately absent.** Go has no class hierarchy and no `extends`. Instead it offers struct embedding (composition with method promotion). The designers omitted inheritance because it couples subclasses to base-class implementation details (fragile base class), creates deep brittle hierarchies, and conflates 'is-a' with code reuse. Go forces you to reuse via composition and to polymorph via interfaces, keeping the two concerns separate.",
+          "key_points": [
+            "Encapsulation = package-level (exported/unexported), not per-field modifiers",
+            "Abstraction + polymorphism = implicit interface satisfaction (structural typing)",
+            "No inheritance; struct embedding gives composition + method promotion instead",
+            "Inheritance omitted to avoid tight base-subclass coupling and brittle hierarchies"
+          ],
+          "follow_ups": [
+            "How would you hide a field from other packages in the same module?",
+            "Why is implicit interface satisfaction a double-edged sword for refactoring?"
+          ],
+          "tags": ["oop", "encapsulation", "polymorphism", "inheritance"]
+        },
+        {
+          "id": "oop-002",
+          "question": "Explain how encapsulation actually works in Go. How do you enforce invariants on a type when there are no per-field access modifiers?",
+          "difficulty": "medium",
+          "answer": "Encapsulation in Go is enforced at the package boundary. Make the struct's fields unexported (lowercase) and expose behavior through exported methods and a constructor. Code outside the package can only touch the type through that API, so invariants live in the methods. Within the same package everything is visible, so the package is your trust boundary — keep packages cohesive. A common pattern: unexported struct + exported constructor `New...` that validates and returns the value (often by pointer). For stronger hiding you can return an interface from the constructor so callers cannot even name the concrete type. The trade-off: package-level encapsulation is coarser than per-class private, so a sprawling package leaks internals to itself. Senior teams keep packages small and intentional precisely so encapsulation means something.",
+          "key_points": [
+            "Lowercase fields are unexported = invisible outside the package",
+            "Enforce invariants in exported methods + a validating constructor",
+            "Return an interface to fully hide the concrete type",
+            "Encapsulation strength depends on keeping packages small and cohesive"
+          ],
+          "code": "package account\n\ntype Account struct {\n\tbalance int64 // unexported: only this package mutates it\n}\n\nfunc New(initial int64) (*Account, error) {\n\tif initial < 0 {\n\t\treturn nil, fmt.Errorf(\"negative initial balance\")\n\t}\n\treturn &Account{balance: initial}, nil\n}\n\nfunc (a *Account) Withdraw(amount int64) error {\n\tif amount > a.balance { // invariant lives in the method\n\t\treturn fmt.Errorf(\"insufficient funds\")\n\t}\n\ta.balance -= amount\n\treturn nil\n}\n\nfunc (a *Account) Balance() int64 { return a.balance }",
+          "follow_ups": [
+            "When would you return an interface from New() instead of *Account?",
+            "How does internal/ package directory enforcement complement this?"
+          ],
+          "tags": ["encapsulation", "package-design", "invariants"]
+        },
+        {
+          "id": "oop-003",
+          "question": "What is method promotion with struct embedding, and how does it differ from inheritance?",
+          "difficulty": "medium",
+          "answer": "When you embed a type (anonymous field), its exported methods and fields are *promoted* to the outer struct — you can call them as if they belonged to the outer type. This looks like inheritance but is fundamentally composition. Key differences: (1) **No subtype relationship** — `Outer` is NOT a subtype of the embedded `Inner`; you cannot pass `*Outer` where `*Inner` is required. Substitutability comes only from satisfying a shared interface. (2) **No dynamic dispatch back into the parent.** If `Inner` has a method that calls another `Inner` method, embedding `Inner` in `Outer` and 'overriding' that method on `Outer` does NOT cause `Inner`'s code to call `Outer`'s version. There is no virtual-method table linking them — Inner's methods only ever see Inner's receiver. This kills the fragile base class problem: a base class cannot accidentally invoke an overridden subclass method. (3) Promotion is purely a name-resolution convenience; the embedded value is a real, addressable field.",
+          "key_points": [
+            "Embedding promotes the embedded type's methods/fields to the outer type",
+            "Outer is NOT a subtype of Inner — no implicit substitutability",
+            "No virtual dispatch from embedded methods back into the outer type",
+            "Avoids the fragile base class problem inherent in inheritance"
+          ],
+          "code": "type Logger struct{}\n\nfunc (Logger) Log(msg string) { fmt.Println(\"log:\", msg) }\n\ntype Server struct {\n\tLogger // embedded\n\tAddr string\n}\n\nfunc main() {\n\ts := Server{Addr: \":8080\"}\n\ts.Log(\"started\") // promoted method, called directly on Server\n\t// var l Logger = s  // COMPILE ERROR: Server is not a Logger (no inheritance)\n}",
+          "follow_ups": [
+            "Show why overriding an embedded method does NOT achieve polymorphism through the base.",
+            "What happens when two embedded types have the same method name?"
+          ],
+          "tags": ["embedding", "composition", "method-promotion"]
+        },
+        {
+          "id": "oop-004",
+          "question": "Walk through the fragile base class problem and explain how Go's composition model avoids it.",
+          "difficulty": "hard",
+          "answer": "The fragile base class problem: in inheritance, a base class method may call another of its own methods that a subclass has overridden. Innocuous changes to how the base internally calls itself can silently change subclass behavior, and subclasses can break the base by overriding a method the base relies on. Behavior is split across the hierarchy and the coupling is implicit. Go sidesteps this because embedding has **no virtual dispatch**: an embedded type's methods always operate on the embedded receiver, never re-dispatching to outer 'overrides'. If `Outer` defines a method with the same name, it *shadows* the promoted one for callers of `Outer`, but the embedded type's own methods still call its own version. So the embedded type's internal call graph is frozen and self-contained — the outer type cannot reach in and change it, and the embedded type cannot reach out. When you genuinely need the parent to call back into a customized step (Template Method), you must do it explicitly by passing an interface — making the dependency visible and intentional rather than magic.",
+          "key_points": [
+            "Inheritance: base methods call overridden subclass methods via vtable — implicit, fragile",
+            "Go embedding has no virtual dispatch; embedded methods bind to embedded receiver",
+            "Outer methods shadow for external callers but don't rewire the embedded call graph",
+            "Template-Method-style callbacks must be passed explicitly via interface in Go"
+          ],
+          "code": "type Base struct{}\n\nfunc (Base) templateStep() string { return \"base step\" }\nfunc (b Base) Run() string       { return \"running: \" + b.templateStep() }\n\ntype Derived struct{ Base }\n\nfunc (Derived) templateStep() string { return \"derived step\" }\n\nfunc main() {\n\td := Derived{}\n\t// Prints \"running: base step\" — NOT \"derived step\".\n\t// Base.Run binds to Base.templateStep; no re-dispatch into Derived.\n\tfmt.Println(d.Run())\n}",
+          "follow_ups": [
+            "How would you make Run() actually call Derived's step idiomatically?",
+            "Why is this surprising to engineers coming from Java/C++?"
+          ],
+          "tags": ["fragile-base-class", "composition", "embedding", "dispatch"]
+        },
+        {
+          "id": "oop-005",
+          "question": "What happens when two embedded types declare a method with the same name, or when an embedded method collides with an outer method?",
+          "difficulty": "medium",
+          "answer": "Go resolves promotion by depth. A method/field at a shallower depth wins. (1) **Outer vs embedded:** a method defined directly on the outer type is at depth 0 and shadows any same-named promoted method (depth 1+). The promoted one is still reachable explicitly via the embedded field name: `o.Inner.Method()`. (2) **Two embedded types at the same depth with the same method name:** this is an *ambiguous selector*. It is NOT a compile error by itself — the program compiles fine — but any attempt to call `o.Method()` without qualifying it fails to compile with 'ambiguous selector'. You must disambiguate: `o.A.Method()` or `o.B.Method()`. Critically, if both embedded types contribute the same method needed to satisfy an interface, the outer type does NOT satisfy that interface (the method set is ambiguous) — you must add an explicit method on the outer type to resolve it. This is a common gotcha when composing mixins.",
+          "key_points": [
+            "Shallower depth wins; outer-type method shadows promoted ones",
+            "Same-depth collision = ambiguous selector, only errors when called unqualified",
+            "Disambiguate via the embedded field name: o.A.Method()",
+            "Ambiguity means the outer type may NOT satisfy an interface — add an explicit method"
+          ],
+          "follow_ups": [
+            "How do you make the outer type satisfy an interface despite an embedding collision?",
+            "Does the same depth rule apply to fields as well as methods?"
+          ],
+          "tags": ["embedding", "method-promotion", "ambiguity"]
+        },
+        {
+          "id": "oop-006",
+          "question": "Go is sometimes called 'object-oriented without objects'. Defend or critique that statement at a senior level.",
+          "difficulty": "hard",
+          "answer": "It's a fair characterization with caveats. Go has the OOP *capabilities that matter*: data + behavior bundled (types with methods), data hiding (package encapsulation), and polymorphism (interfaces). What it lacks are the class-centric mechanisms: classes, inheritance hierarchies, constructors as language features, virtual methods, and method overloading. So Go is object-oriented in the Alan-Kay 'late-binding via messages' sense (interface dispatch is dynamic) but not in the Java/C++ 'taxonomy of classes' sense. The senior take: OOP's enduring value is *encapsulation and polymorphism for decoupling*, not inheritance taxonomies. Go keeps the valuable parts and discards the parts (deep hierarchies, implementation inheritance) that experience showed cause coupling and rigidity. The trade-off is you sometimes write more boilerplate (no `super`, manual delegation, no generics-free covariance) and lose some expressiveness, but you gain composability and explicitness. Calling it 'OOP without objects' is rhetorical — it has objects (values with methods), just not classes.",
+          "key_points": [
+            "Has encapsulation + polymorphism + data/behavior bundling — the load-bearing OOP parts",
+            "Lacks classes, inheritance, constructors-as-syntax, overloading, virtual methods",
+            "OOP in the message/late-binding sense, not the class-taxonomy sense",
+            "Keeps decoupling value, drops inheritance's coupling cost"
+          ],
+          "follow_ups": [
+            "Is interface dispatch in Go statically or dynamically bound?",
+            "What does Go lose by not having method overloading?"
+          ],
+          "tags": ["oop", "design-philosophy"]
+        }
+      ]
+    },
+    {
+      "topic": "SOLID in Go",
+      "questions": [
+        {
+          "id": "oop-007",
+          "question": "Apply the Single Responsibility Principle in Go. How does package and type granularity express it?",
+          "difficulty": "medium",
+          "answer": "SRP says a unit should have one reason to change. In Go it applies at two levels: the package and the type. A package should be cohesive around one concern (`net/http`, not `utils`). A type should not mix, say, HTTP request parsing, business logic, and database access. The Go-idiomatic smell of an SRP violation is a struct with many unrelated fields and a grab-bag of methods, or a 'manager'/'helper'/'util' package. The fix is to split by responsibility and wire dependencies through interfaces injected at construction. SRP pairs naturally with Go's accept-interfaces-return-structs: a `UserService` depends on a small `UserStore` interface for persistence and an `EmailSender` for notifications, so a change to email logic doesn't touch the service. The reason-to-change test is the discriminator: if marketing changes the email template and the persistence team changes the DB, those should not live in the same type.",
+          "key_points": [
+            "SRP applies to both packages and types in Go",
+            "Anti-pattern: 'utils'/'manager' packages and god structs",
+            "Split by reason-to-change; inject collaborators via small interfaces",
+            "Pairs with accept-interfaces-return-structs"
+          ],
+          "follow_ups": [
+            "Why is a package named 'utils' an SRP smell?",
+            "How granular is too granular for packages?"
+          ],
+          "tags": ["solid", "srp", "package-design"]
+        },
+        {
+          "id": "oop-008",
+          "question": "How is the Open/Closed Principle realized in Go without inheritance? Give a concrete example.",
+          "difficulty": "medium",
+          "answer": "OCP: open for extension, closed for modification. Without inheritance, Go achieves it through **interfaces and composition**, not subclassing. You define behavior as an interface; new behavior is added by writing a new type that satisfies it, with no edit to the consuming code. Function values are a lightweight variant — a sort that takes a `less func(i,j int) bool` is open to new orderings without modification. The classic OCP failure in Go is a `switch` on a type tag or enum that you must edit every time a new case appears; the OCP-compliant version replaces the switch with polymorphic dispatch through an interface. The pragmatic caveat (and Go's style): don't pre-abstract for hypothetical extension. Apply OCP where the extension axis is real and recurring (e.g., pluggable storage backends, payment providers); a premature interface to satisfy OCP is just speculative generality.",
+          "key_points": [
+            "Extension via new interface-satisfying types, not subclasses",
+            "Function values give lightweight OCP (e.g. comparator funcs)",
+            "Type-switch on an enum is the canonical OCP violation",
+            "Apply only where the extension axis is real — avoid speculative interfaces"
+          ],
+          "code": "type Shape interface{ Area() float64 }\n\ntype Circle struct{ R float64 }\nfunc (c Circle) Area() float64 { return math.Pi * c.R * c.R }\n\ntype Rect struct{ W, H float64 }\nfunc (r Rect) Area() float64 { return r.W * r.H }\n\n// TotalArea never changes when a new Shape is added — it's closed.\nfunc TotalArea(shapes []Shape) float64 {\n\tvar sum float64\n\tfor _, s := range shapes {\n\t\tsum += s.Area()\n\t}\n\treturn sum\n}",
+          "follow_ups": [
+            "When is a type-switch acceptable despite violating OCP?",
+            "How do you avoid speculative interfaces in the name of OCP?"
+          ],
+          "tags": ["solid", "ocp", "interfaces"]
+        },
+        {
+          "id": "oop-009",
+          "question": "What does the Liskov Substitution Principle mean for Go interfaces, given there's no subclassing? Give an LSP violation example.",
+          "difficulty": "hard",
+          "answer": "LSP normally constrains subtypes; in Go, the 'subtype' relation is 'satisfies the interface'. LSP becomes: any type implementing an interface must honor the interface's *behavioral contract* — preconditions, postconditions, error semantics, panics, and side effects — not just its method signatures. The compiler checks signatures; it cannot check semantics, so LSP violations are runtime/contract bugs. Classic Go examples: (1) An `io.Writer` implementation that silently drops data or returns `n < len(p)` with `nil` error — it satisfies the signature but breaks the documented contract that a short write must return an error. (2) A `ReadCloser` whose `Close()` is required twice or panics on double close when the contract says idempotent. (3) A 'read-only' implementation of a mutating interface that panics — the canonical Square/Rectangle problem reincarnated. The senior fix: keep interfaces small (fewer contract clauses to honor), and document and test the behavioral contract (often with a shared conformance test suite that every implementation must pass).",
+          "key_points": [
+            "In Go, LSP = honoring an interface's behavioral contract, not just signatures",
+            "Compiler checks signatures only; semantic violations are runtime bugs",
+            "Examples: short write with nil error, non-idempotent Close, panic on a 'supported' method",
+            "Mitigate with small interfaces + shared conformance test suites"
+          ],
+          "code": "// LSP violation: signature fits io.Writer, contract broken.\ntype LossyWriter struct{ limit int }\n\nfunc (w *LossyWriter) Write(p []byte) (int, error) {\n\tif len(p) > w.limit {\n\t\t// Contract says: a short write MUST return a non-nil error.\n\t\treturn w.limit, nil // BUG: violates io.Writer's contract -> LSP break\n\t}\n\treturn len(p), nil\n}",
+          "follow_ups": [
+            "How would you write a conformance test that all io.Writer impls must pass?",
+            "Why does keeping interfaces small reduce LSP risk?"
+          ],
+          "tags": ["solid", "lsp", "interfaces", "contracts"]
+        },
+        {
+          "id": "oop-010",
+          "question": "Why does the Interface Segregation Principle fit Go especially well? Contrast with how Java often violates it.",
+          "difficulty": "medium",
+          "answer": "ISP says clients shouldn't depend on methods they don't use. Go's whole interface culture *is* ISP: idiomatic interfaces are tiny — `io.Reader`, `io.Writer`, `fmt.Stringer` are one method each — and composed when needed (`io.ReadWriteCloser`). Because satisfaction is implicit, a small interface can be defined *by the consumer* exactly for what it needs, and any existing type satisfies it automatically. Java tends toward fat interfaces declared up front (`UnsupportedOperationException` for methods an implementer can't support is the smell), because `implements` is explicit and adding a method breaks all implementers. In Go you avoid fat interfaces because (a) the standard library models the style and (b) you typically define the interface at the point of use, sized to the single function consuming it. The senior heuristic: 'the bigger the interface, the weaker the abstraction' (Rob Pike). Prefer one-to-three method interfaces; if a function only calls `Read`, ask for `io.Reader`, not `*os.File`.",
+          "key_points": [
+            "Idiomatic Go interfaces are tiny — ISP is the default, not an effort",
+            "Implicit satisfaction lets consumers define minimal interfaces ad hoc",
+            "Java fat interfaces leak via UnsupportedOperationException",
+            "'The bigger the interface, the weaker the abstraction'"
+          ],
+          "code": "// Consumer defines exactly what it needs, not *os.File.\nfunc Count(r io.Reader) (int, error) {\n\tbuf := make([]byte, 32*1024)\n\ttotal := 0\n\tfor {\n\t\tn, err := r.Read(buf)\n\t\ttotal += n\n\t\tif err == io.EOF {\n\t\t\treturn total, nil\n\t\t}\n\t\tif err != nil {\n\t\t\treturn total, err\n\t\t}\n\t}\n}",
+          "follow_ups": [
+            "Where should an interface be declared — with the implementer or the consumer?",
+            "How do you compose small interfaces into a larger contract?"
+          ],
+          "tags": ["solid", "isp", "interfaces", "small-interfaces"]
+        },
+        {
+          "id": "oop-011",
+          "question": "Explain the Dependency Inversion Principle in Go. Who should own the interface — the high-level or low-level module?",
+          "difficulty": "hard",
+          "answer": "DIP: high-level policy should not depend on low-level details; both depend on abstractions. In Go this is realized by having the high-level package *define and own* the interface it needs, and the low-level concrete type (e.g., a Postgres adapter) implicitly satisfies it. This is the key Go inversion: the interface lives with the *consumer*, not the implementer. So a `service` package declares `type Store interface { Save(User) error }`, and the `postgres` package provides a `*postgres.Client` that happens to satisfy it — `postgres` imports nothing from `service`, and `service` imports nothing from `postgres`; wiring happens in `main`. This breaks the import cycle and lets you swap implementations or use a fake in tests. Compared to languages where the interface ships with the implementation, Go's structural typing makes consumer-owned interfaces frictionless because no `implements` declaration ties the adapter to the abstraction. The anti-pattern is putting interfaces in a shared `interfaces` or `models` package that everything imports — that re-couples everyone to a central definition.",
+          "key_points": [
+            "High-level module owns/defines the interface; low-level type satisfies it implicitly",
+            "Interface lives with the consumer, not the implementer (the Go inversion)",
+            "Concrete adapter package imports nothing from the policy package — wiring in main",
+            "Anti-pattern: a central 'interfaces' package everyone imports"
+          ],
+          "code": "// package service (high-level policy) owns the abstraction\npackage service\n\ntype Store interface {\n\tSave(u User) error\n}\n\ntype UserService struct{ store Store }\n\nfunc New(s Store) *UserService { return &UserService{store: s} }\nfunc (svc *UserService) Register(u User) error { return svc.store.Save(u) }\n\n// package postgres (low-level detail) satisfies it implicitly, imports no service\n// type Client struct{...}; func (c *Client) Save(u service.User) error {...}\n// main wires: service.New(pgClient)",
+          "follow_ups": [
+            "Why is a shared 'interfaces' package an anti-pattern?",
+            "How does consumer-owned interface design help mocking in tests?"
+          ],
+          "tags": ["solid", "dip", "dependency-injection", "interfaces"]
+        }
+      ]
+    },
+    {
+      "topic": "Creational Patterns in Go",
+      "questions": [
+        {
+          "id": "oop-012",
+          "question": "How do you implement Singleton in Go, and why is it often considered an anti-pattern?",
+          "difficulty": "medium",
+          "answer": "The idiomatic Singleton is a package-level variable initialized lazily with `sync.Once` (thread-safe, no double-checked locking needed) or eagerly in an `init()`/var declaration. No class machinery is required — the package itself is the namespace. It's frequently an anti-pattern because: (1) it's global mutable state, which hides dependencies (functions secretly reach for the global instead of receiving it), making code hard to reason about; (2) it destroys testability — tests can't substitute a fake and can't run in parallel because they share the singleton; (3) lazy `Once`-based init can mask initialization-order and error-handling problems (you can't easily return an error from a `Once.Do`). The senior alternative is to construct the dependency once in `main` and inject it explicitly (DI). Legitimate uses are narrow: truly process-global, stateless or read-mostly resources (a metrics registry, the default logger) where a single instance is a genuine domain constraint, not a convenience.",
+          "key_points": [
+            "Idiomatic singleton = package var + sync.Once for lazy thread-safe init",
+            "Anti-pattern: global mutable state hides dependencies, kills testability/parallelism",
+            "Once.Do can't cleanly surface init errors",
+            "Prefer constructing once in main and injecting; reserve singletons for true process globals"
+          ],
+          "code": "package config\n\nimport \"sync\"\n\ntype Config struct{ DSN string }\n\nvar (\n\tonce     sync.Once\n\tinstance *Config\n)\n\nfunc Get() *Config {\n\tonce.Do(func() {\n\t\tinstance = &Config{DSN: loadDSN()}\n\t})\n\treturn instance\n}",
+          "follow_ups": [
+            "How would you make a Once-based singleton return an init error?",
+            "How does a singleton break t.Parallel() tests?"
+          ],
+          "tags": ["creational", "singleton", "sync.Once", "anti-pattern"]
+        },
+        {
+          "id": "oop-013",
+          "question": "Contrast Factory Method and simple factory functions in Go. When do you actually need them?",
+          "difficulty": "medium",
+          "answer": "Go has no constructors, so a plain function like `NewThing(...) (*Thing, error)` is the universal 'simple factory' and the default for almost everything — it validates inputs, sets defaults, and returns the value (often with an error). You need a true *Factory Method* (a function or interface method that returns an interface, choosing the concrete type at runtime) only when the caller shouldn't know the concrete type: e.g., `OpenDriver(name string) (Driver, error)` returning different implementations based on a config string, or `database/sql`'s driver registration where `sql.Open(\"postgres\", ...)` dispatches to a registered factory. The GoF 'Factory Method as a subclass-overridden method' form is largely irrelevant in Go (no subclassing). So in practice: use a constructor function by default; introduce a registry-of-factories or a `func(...) Iface` only when you genuinely select among implementations dynamically. Don't build an `AbstractFactory` ceremony around what is just a `switch` returning one of three structs.",
+          "key_points": [
+            "Plain New...() function = the idiomatic constructor/simple factory",
+            "True factory method: returns an interface, picks concrete type at runtime",
+            "GoF subclass-overridden factory method doesn't apply (no inheritance)",
+            "Registry-of-factories (e.g. sql.Register) is the realistic Go form"
+          ],
+          "code": "type Notifier interface{ Send(msg string) error }\n\n// Factory method: selects concrete type, returns interface.\nfunc NewNotifier(kind string) (Notifier, error) {\n\tswitch kind {\n\tcase \"email\":\n\t\treturn &emailNotifier{}, nil\n\tcase \"sms\":\n\t\treturn &smsNotifier{}, nil\n\tdefault:\n\t\treturn nil, fmt.Errorf(\"unknown notifier %q\", kind)\n\t}\n}",
+          "follow_ups": [
+            "How does database/sql's driver registry implement a factory?",
+            "When does a factory function returning an interface become interface pollution?"
+          ],
+          "tags": ["creational", "factory", "constructors"]
+        },
+        {
+          "id": "oop-014",
+          "question": "When is the Abstract Factory pattern justified in Go, and how would you structure it idiomatically?",
+          "difficulty": "hard",
+          "answer": "Abstract Factory creates *families* of related objects that must be used together (e.g., a cloud-provider factory yielding compatible BlobStore + Queue + Secrets clients for AWS vs GCP). It's justified in Go only when there's a real consistency constraint across the products — you must not mix an AWS queue with a GCP blob store. Idiomatically you model the factory as an interface with methods returning each product interface, and one concrete factory per family. You wire the chosen family once in `main`. It's frequently over-engineering: if products aren't actually coupled, you don't need a factory grouping them — inject each dependency separately. The Go-flavored realization often drops the explicit factory interface in favor of a constructor that returns a struct of related clients, or a per-provider package that exposes `New(...)` for each product. Reserve the full Abstract Factory interface for plugin-style systems with multiple swappable, internally-consistent backends.",
+          "key_points": [
+            "Use only when products form a consistent family that must not be mixed",
+            "Factory interface with one method per product; one concrete factory per family",
+            "Often over-engineered — if products aren't coupled, inject them separately",
+            "Go alternative: provider package exposing per-product constructors, wired in main"
+          ],
+          "code": "type Storage interface{ Put(key string, b []byte) error }\ntype Queue interface{ Push(msg []byte) error }\n\ntype CloudFactory interface {\n\tNewStorage() Storage\n\tNewQueue() Queue\n}\n\ntype awsFactory struct{ region string }\n\nfunc (f awsFactory) NewStorage() Storage { return &s3Store{f.region} }\nfunc (f awsFactory) NewQueue() Queue     { return &sqsQueue{f.region} }",
+          "follow_ups": [
+            "How is Abstract Factory different from just calling several constructors?",
+            "When would you collapse it into a single struct of clients?"
+          ],
+          "tags": ["creational", "abstract-factory", "over-engineering"]
+        },
+        {
+          "id": "oop-015",
+          "question": "Compare the Builder pattern with functional options in Go. Which do you reach for and why?",
+          "difficulty": "hard",
+          "answer": "Both solve the 'too many constructor parameters / optional config' problem that Go can't address with overloading or default args. **Functional options** (`func(*T)` closures passed as variadic) are the dominant Go idiom: `NewServer(addr, WithTimeout(5s), WithTLS(cfg))`. Pros: backward-compatible API evolution (add an option without breaking callers), self-documenting at the call site, allows validation in each option, defaults handled before applying options. Cons: a little allocation/closure overhead, indirection. **Builder** (a struct accumulating state with chained `WithX` methods then a `Build() (T, error)`) is preferable when: construction is genuinely multi-step or stateful, you want to validate the whole thing atomically in `Build`, you need to construct the same object many times from a reusable template, or the result is immutable and you want a fluent staged API. The senior call: default to functional options for libraries and configurable services; use a builder for complex, multi-stage, or repeatedly-instantiated objects (e.g., query builders, request builders). Avoid builders that are just setters on a mutable struct with no validation — that's ceremony.",
+          "key_points": [
+            "Both compensate for no overloading/default params in Go",
+            "Functional options: variadic func(*T); great for evolvable, optional config APIs",
+            "Builder: better for multi-step, stateful, atomically-validated, or reusable construction",
+            "Default to options; use builder when construction is genuinely staged/complex"
+          ],
+          "code": "type Server struct {\n\taddr    string\n\ttimeout time.Duration\n\ttls     *tls.Config\n}\n\ntype Option func(*Server)\n\nfunc WithTimeout(d time.Duration) Option { return func(s *Server) { s.timeout = d } }\nfunc WithTLS(c *tls.Config) Option       { return func(s *Server) { s.tls = c } }\n\nfunc NewServer(addr string, opts ...Option) *Server {\n\ts := &Server{addr: addr, timeout: 30 * time.Second} // defaults\n\tfor _, opt := range opts {\n\t\topt(s)\n\t}\n\treturn s\n}",
+          "follow_ups": [
+            "How do functional options enable backward-compatible API growth?",
+            "How do you return an error from a functional option cleanly?"
+          ],
+          "tags": ["creational", "builder", "functional-options"]
+        },
+        {
+          "id": "oop-016",
+          "question": "Is the Prototype pattern useful in Go? How do you correctly clone a value, and what's the deep-copy trap?",
+          "difficulty": "medium",
+          "answer": "Prototype (create new objects by cloning an existing instance) is rarely a named pattern in Go because copying a struct value is built into the language: `b := a` copies it. The pattern matters only when (a) you want polymorphic cloning behind an interface (`Clone() T`) for objects whose concrete type the caller doesn't know, or (b) constructing fresh is expensive and a template-plus-copy is cheaper. The critical trap is **shallow vs deep copy**: assigning a struct copies pointers, slices, and maps by reference header — the clone shares the underlying backing arrays/maps with the original, so mutating one corrupts the other. A correct `Clone()` must deep-copy reference-typed fields (allocate a new slice and copy elements, new map and copy entries, recursively clone pointed-to structs). For complex graphs people sometimes serialize/deserialize, but that's slow and loses unexported fields. Reach for an explicit `Clone()` method only when shared-state bugs are a real risk and copying must be polymorphic; otherwise plain value copy with a deliberate deep-copy helper is enough.",
+          "key_points": [
+            "Plain struct assignment already copies — Prototype rarely needed as a named pattern",
+            "Use a Clone() interface method for polymorphic cloning of unknown concrete types",
+            "Trap: struct copy is shallow — slices/maps/pointers are shared",
+            "Correct Clone deep-copies reference fields; serialization clone is slow and drops unexported fields"
+          ],
+          "code": "type Doc struct {\n\tTitle string\n\tTags  []string\n}\n\nfunc (d Doc) Clone() Doc {\n\tcp := d                       // copies Title; Tags header is shared!\n\tcp.Tags = make([]string, len(d.Tags))\n\tcopy(cp.Tags, d.Tags)         // deep-copy the slice so they don't alias\n\treturn cp\n}",
+          "follow_ups": [
+            "Why is gob/JSON round-trip cloning often a bad idea?",
+            "How do unexported fields complicate generic deep copy?"
+          ],
+          "tags": ["creational", "prototype", "deep-copy", "value-semantics"]
+        }
+      ]
+    },
+    {
+      "topic": "Structural Patterns in Go",
+      "questions": [
+        {
+          "id": "oop-017",
+          "question": "Why is the Adapter pattern almost trivial in Go? Show the difference between an object adapter and the implicit-satisfaction case.",
+          "difficulty": "medium",
+          "answer": "Adapter makes one interface usable where another is expected. Go's implicit interface satisfaction collapses much of this: if an existing concrete type already has the right method set, it satisfies the target interface *with zero adapter code* — no `implements`, no wrapper. You only write an explicit adapter when the method names or signatures actually differ. Two forms: (1) a small wrapper struct holding the adaptee and translating calls; (2) a *function adapter* using a func type with a method, like `http.HandlerFunc`, which adapts a plain function into the `http.Handler` interface. The senior point: don't write adapter structs to 'be safe' — first check whether the type already satisfies the interface. When you do need one, keep it a thin, stateless translation layer. The function-adapter trick (`type HandlerFunc func(...); func (f HandlerFunc) ServeHTTP(...) { f(...) }`) is a uniquely idiomatic Go realization worth knowing.",
+          "key_points": [
+            "Implicit satisfaction = no adapter needed if method set already matches",
+            "Write an adapter only when names/signatures genuinely differ",
+            "Function-adapter (http.HandlerFunc) adapts a func to an interface idiomatically",
+            "Keep adapters thin, stateless translation layers"
+          ],
+          "code": "// Function adapter: turn a plain func into an interface implementation.\ntype Handler interface{ Handle(req string) string }\n\ntype HandlerFunc func(string) string\n\nfunc (f HandlerFunc) Handle(req string) string { return f(req) } // adapts func -> Handler\n\nfunc main() {\n\tvar h Handler = HandlerFunc(func(r string) string { return \"ok:\" + r })\n\tfmt.Println(h.Handle(\"ping\"))\n}",
+          "follow_ups": [
+            "Why does http.HandlerFunc exist if you can just pass a func?",
+            "When does a 'safety' adapter struct become needless indirection?"
+          ],
+          "tags": ["structural", "adapter", "implicit-interfaces", "trivial-in-go"]
+        },
+        {
+          "id": "oop-018",
+          "question": "How is the Decorator pattern expressed in Go? Connect it to HTTP middleware.",
+          "difficulty": "medium",
+          "answer": "Decorator wraps an object to add behavior while preserving its interface. In Go you implement it by writing a type (or function) that takes the interface, holds it, and calls through while adding behavior before/after. The single most common realization is **middleware**: a `func(http.Handler) http.Handler` (or `func(next Handler) Handler`) that wraps the next handler to add logging, auth, metrics, recovery, etc. Because the wrapper satisfies the same interface, decorators compose by nesting, and you can chain them. The same idea applies to `io.Reader`/`io.Writer` — `gzip.NewWriter`, `bufio.NewReader`, `cipher.StreamWriter` are all decorators over an underlying writer/reader. Function-typed decorators (`func(T) T`) are the lightweight form; struct decorators (embedding the wrapped interface) are used when the decorator carries state. The senior nuance: decorator chains should preserve the contract (don't break short-write/EOF semantics — LSP) and order matters (recovery outermost, logging, then auth).",
+          "key_points": [
+            "Wrap the interface, call through, add behavior — same interface preserved",
+            "HTTP middleware func(http.Handler) http.Handler is the canonical decorator",
+            "io.Reader/Writer chains (gzip, bufio, cipher) are decorators",
+            "Order matters; decorators must preserve the wrapped contract (LSP)"
+          ],
+          "code": "func Logging(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tstart := time.Now()\n\t\tnext.ServeHTTP(w, r) // call through\n\t\tlog.Printf(\"%s %s %s\", r.Method, r.URL.Path, time.Since(start))\n\t})\n}\n\n// Compose: handler = Logging(Auth(Recover(mux)))",
+          "follow_ups": [
+            "Why is middleware ordering significant?",
+            "How do io.Writer decorators preserve the Write contract?"
+          ],
+          "tags": ["structural", "decorator", "middleware", "io"]
+        },
+        {
+          "id": "oop-019",
+          "question": "Differentiate Facade, Proxy, and Adapter in Go terms. Give a one-line use for each.",
+          "difficulty": "medium",
+          "answer": "All three wrap something, but for different reasons. **Adapter** changes an interface to match what a client expects (signature/name translation); same level of capability, different shape. Use: make a third-party SDK satisfy your `Store` interface. **Facade** provides a *simpler, higher-level* interface over a complex subsystem of several types — it hides orchestration. Use: a `payments.Client.Checkout()` that internally coordinates inventory, charging, and receipt services so callers don't touch all three. In Go a facade is usually just an exported struct/package whose methods sequence calls to internal collaborators. **Proxy** keeps the *same* interface as the real object but controls access to it — adding lazy init, caching, access control, remoting, or rate limiting transparently. Use: a caching proxy in front of a slow store, or a gRPC client stub standing in for a remote service. Mnemonic: Adapter = different interface, Facade = simpler interface over many things, Proxy = same interface, controlled access.",
+          "key_points": [
+            "Adapter: same capability, different interface shape (translation)",
+            "Facade: simpler high-level API over a complex multi-type subsystem",
+            "Proxy: identical interface, adds access control/caching/laziness/remoting",
+            "Mnemonic: different vs simpler vs same interface"
+          ],
+          "code": "// Proxy: same interface, adds caching.\ntype Store interface{ Get(id string) ([]byte, error) }\n\ntype cachingProxy struct {\n\treal  Store\n\tcache map[string][]byte\n}\n\nfunc (p *cachingProxy) Get(id string) ([]byte, error) {\n\tif v, ok := p.cache[id]; ok {\n\t\treturn v, nil\n\t}\n\tv, err := p.real.Get(id)\n\tif err == nil {\n\t\tp.cache[id] = v\n\t}\n\treturn v, err\n}",
+          "follow_ups": [
+            "When does a Facade become a god object?",
+            "How is a gRPC generated client a Proxy?"
+          ],
+          "tags": ["structural", "facade", "proxy", "adapter"]
+        },
+        {
+          "id": "oop-020",
+          "question": "How do you implement Composite in Go? Where does it show up in real backend code?",
+          "difficulty": "medium",
+          "answer": "Composite lets clients treat individual objects and compositions of objects uniformly through a common interface. In Go: define a single interface (e.g., `Node`), have leaf types and a container type both satisfy it, and the container holds a `[]Node` and implements the interface by delegating/aggregating over its children. The tree is recursive; the client calls one method without caring whether it hit a leaf or a branch. Real backend appearances: filesystem trees, JSON/config trees, expression/AST evaluation, permission hierarchies, and — very commonly — *composite validators or middleware* where a `MultiValidator` is itself a `Validator` made of child validators, and a composite `http.Handler`/router that contains sub-routers. Go-specific notes: you don't need an abstract base for shared child-management code (no inheritance) — either duplicate the tiny bit of slice handling or embed a small helper struct. Watch out for unbounded recursion on deep/cyclic structures.",
+          "key_points": [
+            "One interface; leaf and container both satisfy it; container holds []Node",
+            "Container aggregates over children — clients treat leaf and tree uniformly",
+            "Real uses: AST/config trees, composite validators, nested routers/handlers",
+            "No abstract base needed; guard against deep/cyclic recursion"
+          ],
+          "code": "type Validator interface{ Validate(v string) error }\n\ntype lenValidator struct{ min int }\nfunc (l lenValidator) Validate(v string) error {\n\tif len(v) < l.min { return fmt.Errorf(\"too short\") }\n\treturn nil\n}\n\ntype MultiValidator []Validator // composite is itself a Validator\nfunc (m MultiValidator) Validate(v string) error {\n\tfor _, c := range m {\n\t\tif err := c.Validate(v); err != nil { return err }\n\t}\n\treturn nil\n}",
+          "follow_ups": [
+            "How do you prevent infinite recursion in a cyclic composite?",
+            "Why might errors.Join pair well with a composite validator?"
+          ],
+          "tags": ["structural", "composite", "trees", "validators"]
+        },
+        {
+          "id": "oop-021",
+          "question": "Explain the Bridge pattern and a realistic Go use. How is it distinct from Strategy or plain composition?",
+          "difficulty": "hard",
+          "answer": "Bridge decouples an abstraction from its implementation so the two can vary independently — it splits one hierarchy that would otherwise explode combinatorially into two: an *abstraction* side and an *implementor* side, connected by composition. In Go you express it as: an abstraction struct holding an implementor interface, where you can add new abstraction variants and new implementor variants without an N×M class blowup. Realistic use: a `Notification` abstraction (Alert, Reminder — high-level, with their own logic) bridged to a `MessageSender` implementor (Email, SMS, Push). You can add a `Reminder` or a `Slack` sender independently. How it differs: **Strategy** swaps a single algorithm at runtime and is about *behavior selection*; Bridge is about *structuring two independent dimensions of variation* and is a compile-time architectural split (though it uses the same composition mechanic). The distinction is intent, not mechanics — both hold an interface. In Go, since composition + interfaces are the default, 'Bridge' often just looks like ordinary dependency injection; calling it Bridge is mostly about recognizing the two-axis variation, and naming it is rarely worth the ceremony unless that two-axis growth is real.",
+          "key_points": [
+            "Splits one exploding hierarchy into abstraction + implementor, joined by composition",
+            "Abstraction holds an implementor interface; both sides vary independently",
+            "Differs from Strategy by intent: structural two-axis variation vs runtime algorithm swap",
+            "In Go it often reduces to ordinary DI; name it only when two-axis growth is real"
+          ],
+          "code": "type Sender interface{ Send(to, body string) error } // implementor axis\n\ntype Notification struct{ sender Sender } // abstraction axis holds implementor\n\nfunc (n Notification) Alert(to, msg string) error {\n\treturn n.sender.Send(to, \"ALERT: \"+msg)\n}\nfunc (n Notification) Reminder(to, msg string) error {\n\treturn n.sender.Send(to, \"Reminder: \"+msg)\n}\n// New Sender (Slack) and new method on Notification grow independently.",
+          "follow_ups": [
+            "When does Bridge collapse into ordinary dependency injection?",
+            "How does Bridge prevent a class/type explosion?"
+          ],
+          "tags": ["structural", "bridge", "composition", "strategy-contrast"]
+        },
+        {
+          "id": "oop-022",
+          "question": "How is the Flyweight pattern realized in Go? Discuss sync.Pool and string/struct interning.",
+          "difficulty": "hard",
+          "answer": "Flyweight shares intrinsic state across many objects to cut memory, separating shared immutable state from per-instance extrinsic state. Go realizations: (1) **Interning** — deduplicating equal immutable values so all references point to one copy. For strings/labels (e.g., metric label sets, parsed tokens) you keep a `map[string]string` cache and return the canonical instance, saving memory when the same value recurs millions of times. (2) **sync.Pool** — this is *not* classic flyweight (it's object reuse, not shared-immutable-state), but it's the Go answer to the related problem of reducing allocation/GC pressure by recycling transient objects (e.g., `bytes.Buffer`s, encoder scratch buffers). Caveat: `sync.Pool` items can be GC'd at any time, must be reset before reuse, and must not be retained after `Put`. The senior framing: true flyweight in Go = interning of immutable shared state behind a lookup; `sync.Pool` solves a different problem (allocation churn) and shouldn't be conflated, but both are 'sharing to save memory'. Don't intern unless profiling shows the duplication actually matters — the map/locking can cost more than it saves.",
+          "key_points": [
+            "Flyweight = share intrinsic immutable state across many instances",
+            "Interning: canonicalize equal immutable values via a lookup map to dedupe memory",
+            "sync.Pool = object reuse to cut alloc/GC pressure — related but not classic flyweight",
+            "Pool items may be GC'd anytime, must be reset, never retained after Put; profile before interning"
+          ],
+          "code": "var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}\n\nfunc render(data []byte) string {\n\tbuf := bufPool.Get().(*bytes.Buffer)\n\tbuf.Reset()                 // must reset reused object\n\tdefer bufPool.Put(buf)      // don't retain after Put\n\tbuf.Write(data)\n\treturn buf.String()\n}",
+          "follow_ups": [
+            "Why is sync.Pool not a true flyweight?",
+            "What goes wrong if you keep a pointer to a pooled object after Put?"
+          ],
+          "tags": ["structural", "flyweight", "sync.Pool", "interning", "memory"]
+        }
+      ]
+    },
+    {
+      "topic": "Behavioral Patterns in Go",
+      "questions": [
+        {
+          "id": "oop-023",
+          "question": "How do you implement Strategy in Go? When is a func value better than an interface, and vice versa?",
+          "difficulty": "medium",
+          "answer": "Strategy = a family of interchangeable algorithms selected at runtime. Go gives you two clean encodings. **Func value:** pass a `func` (e.g., `less func(a, b int) bool`, or `sort.Slice`'s comparator). Best when the strategy is a single operation, stateless, and you want minimal ceremony — no type, no interface declaration. **Interface:** define a one-method (or few-method) interface and concrete strategy types. Best when the strategy carries configuration/state, needs multiple related methods, or benefits from a name and explicit type for documentation and mockability. Practically: reach for a func value first (it's the lightest), and promote to an interface when the strategy grows state or more than one method, or when you want named implementations a caller can discover. Go's first-class functions make the func form so natural that Strategy is one of the patterns people stop *thinking of* as a pattern — `http.HandlerFunc`, `sort.Slice`, and option funcs are all Strategy in disguise.",
+          "key_points": [
+            "Two encodings: func value (lightest) or interface (stateful/multi-method)",
+            "Func value when stateless single operation; interface when it carries config/state",
+            "Promote func -> interface as the strategy grows methods or needs a name",
+            "First-class functions make Strategy nearly invisible in idiomatic Go"
+          ],
+          "code": "// Strategy as a func value.\ntype PricingStrategy func(base float64) float64\n\nfunc regular(b float64) float64 { return b }\nfunc blackFriday(b float64) float64 { return b * 0.7 }\n\nfunc finalPrice(base float64, strat PricingStrategy) float64 { return strat(base) }\n\n// finalPrice(100, blackFriday) -> 70",
+          "follow_ups": [
+            "How does sort.Slice embody Strategy?",
+            "At what point would you convert a func strategy into an interface?"
+          ],
+          "tags": ["behavioral", "strategy", "func-values", "interfaces"]
+        },
+        {
+          "id": "oop-024",
+          "question": "How do you implement Observer in Go using channels vs callback registration? Trade-offs?",
+          "difficulty": "hard",
+          "answer": "Observer = subjects notify subscribers of events. Two idiomatic Go encodings. **Callback registration:** the subject keeps a slice of observer interfaces (or funcs) and iterates calling `Notify(event)`. Simple, synchronous, easy to reason about; but a slow/blocking observer stalls the subject, and you must guard the slice with a mutex if registration races with notification. **Channels:** each subscriber gets a channel; the subject sends events to all channels (fan-out). This decouples timing and integrates with goroutines/`select`, but introduces hard questions: buffered vs unbuffered (backpressure vs blocking), what to do when a subscriber is slow (drop, block, or grow), how to unsubscribe without leaking goroutines or panicking on a closed channel, and lifecycle/`context` cancellation. Trade-offs: callbacks for simple in-process synchronous notifications; channels for concurrent, decoupled, streaming events. Senior pitfalls: goroutine leaks from never-closed subscriber channels, sending on a closed channel, and unbounded buffering. For cross-process or durable observation, you'd move to a real pub/sub broker rather than rolling either.",
+          "key_points": [
+            "Callback registration: slice of observers, synchronous, mutex-guarded, simple",
+            "Channels: fan-out, concurrent/decoupled, but raise buffering/backpressure/lifecycle issues",
+            "Pitfalls: goroutine leaks, send-on-closed-channel, unbounded buffers",
+            "Callbacks for simple sync events; channels for concurrent streams; broker for cross-process"
+          ],
+          "code": "type EventBus struct {\n\tmu   sync.RWMutex\n\tsubs []chan string\n}\n\nfunc (b *EventBus) Subscribe() <-chan string {\n\tch := make(chan string, 8) // buffered: bounded backpressure\n\tb.mu.Lock()\n\tb.subs = append(b.subs, ch)\n\tb.mu.Unlock()\n\treturn ch\n}\n\nfunc (b *EventBus) Publish(ev string) {\n\tb.mu.RLock()\n\tdefer b.mu.RUnlock()\n\tfor _, ch := range b.subs {\n\t\tselect {\n\t\tcase ch <- ev: // non-blocking\n\t\tdefault: // drop if subscriber is slow — avoids stalling publisher\n\t\t}\n\t}\n}",
+          "follow_ups": [
+            "How do you implement Unsubscribe without leaking goroutines?",
+            "When should you reach for NATS/Kafka instead of an in-process bus?"
+          ],
+          "tags": ["behavioral", "observer", "channels", "pub-sub", "concurrency"]
+        },
+        {
+          "id": "oop-025",
+          "question": "How would you implement Command in Go, and where is it genuinely useful in backend systems?",
+          "difficulty": "medium",
+          "answer": "Command encapsulates a request as an object: parameters bound, plus an `Execute()` (and optionally `Undo()`). In Go the simplest command is a closure (`func() error`) capturing its arguments; the richer form is a `Command` interface with `Execute(ctx) error` (and `Undo`) implemented by structs that carry state. Genuine backend uses: (1) **Job/task queues** — enqueue command objects and run them on workers, with retry; (2) **Undo/redo and transactional sagas** — pair `Execute`/`Compensate` so a failed multi-step workflow can roll back (each saga step is a command with a compensating command); (3) **CQRS write side** — a command represents an intent (`CreateOrder`) handled by a command handler, separate from queries; (4) **macro/batch operations** — a composite of commands run as one. The Go-idiomatic minimal form (closures or `func(ctx) error`) is preferred unless you need serialization, undo, queuing metadata, or introspection, in which case the struct-with-interface form earns its keep.",
+          "key_points": [
+            "Closure func() error is the minimal command; interface+struct for richer needs",
+            "Backend uses: job queues, saga compensations, CQRS commands, batch/macros",
+            "Add Undo/Compensate to support rollback and undo/redo",
+            "Prefer closures unless you need serialization/queuing metadata/introspection"
+          ],
+          "code": "type Command interface {\n\tExecute(ctx context.Context) error\n\tCompensate(ctx context.Context) error // for saga rollback\n}\n\ntype ChargeCard struct{ amount int64; cardID string }\nfunc (c ChargeCard) Execute(ctx context.Context) error    { /* charge */ return nil }\nfunc (c ChargeCard) Compensate(ctx context.Context) error { /* refund */ return nil }",
+          "follow_ups": [
+            "How does Command underpin a saga's compensation logic?",
+            "When is a plain func(ctx) error enough vs a Command interface?"
+          ],
+          "tags": ["behavioral", "command", "saga", "cqrs", "job-queue"]
+        },
+        {
+          "id": "oop-026",
+          "question": "Implement a State machine in Go. Compare the interface-per-state approach with a transition table.",
+          "difficulty": "hard",
+          "answer": "State lets an object change behavior when its internal state changes, ideally without sprawling conditionals. Two Go approaches. **Interface per state:** define a `State` interface with the events as methods (`Next(event) State`), one struct per state, each returning the next state. Pros: each state's logic is isolated and open for extension; no giant switch. Cons: more types, and shared context must be threaded through. **Transition table:** a `map[stateKey]map[eventKey]stateKey` (or a `map[transition]handler`) driving a single engine. Pros: the whole machine is declarative and inspectable in one place, easy to validate/visualize, trivial to add transitions as data. Cons: behavior tied to transitions is harder to attach than with the interface form. Senior guidance: use the **table** when the machine is mostly about *which transitions are legal* and is data-driven (order/payment lifecycles); use the **interface-per-state** form when each state has substantial distinct *behavior*. Both beat a pile of boolean flags or nested `if`s — the real anti-pattern is implicit state spread across many flags.",
+          "key_points": [
+            "Interface-per-state: one struct per state with event methods returning next state",
+            "Transition table: declarative map driving one engine; easy to validate/visualize",
+            "Table for legality-of-transition machines; interface form for behavior-heavy states",
+            "Both beat boolean-flag soup — implicit state is the anti-pattern"
+          ],
+          "code": "type State string\ntype Event string\n\nvar transitions = map[State]map[Event]State{\n\t\"pending\":   {\"pay\": \"paid\", \"cancel\": \"canceled\"},\n\t\"paid\":      {\"ship\": \"shipped\", \"refund\": \"refunded\"},\n\t\"shipped\":   {\"deliver\": \"delivered\"},\n}\n\nfunc Next(s State, e Event) (State, error) {\n\tif next, ok := transitions[s][e]; ok {\n\t\treturn next, nil\n\t}\n\treturn s, fmt.Errorf(\"illegal transition %s --%s-->\", s, e)\n}",
+          "follow_ups": [
+            "How would you persist and resume a state machine across restarts?",
+            "When does the interface-per-state form pay off over the table?"
+          ],
+          "tags": ["behavioral", "state", "fsm", "transition-table"]
+        },
+        {
+          "id": "oop-027",
+          "question": "How do you replace Template Method (which relies on inheritance) in idiomatic Go?",
+          "difficulty": "hard",
+          "answer": "Template Method defines an algorithm's skeleton in a base class, deferring specific steps to subclass overrides. Go has no subclass override, so the classic form is unavailable — and that's good, because Template Method is exactly the fragile-base-class pattern. Idiomatic replacements: (1) **Inject the varying steps as an interface or func values.** The skeleton becomes a function/method that takes a `Steps` interface (or several `func`s) and calls them at the right points — the variation is explicit and the skeleton can't be silently broken by a subclass. (2) **Higher-order functions** — pass the customizable step(s) as closures (`process(data, transform func(x) y)`). (3) **Embedding for shared code + interface for the hook** — embed a helper providing the fixed steps, but require the hook via a passed interface, not a promoted method (remember embedded methods don't re-dispatch). The senior point: convert 'override these protected methods' into 'pass me these dependencies', turning implicit inheritance coupling into visible composition.",
+          "key_points": [
+            "Classic Template Method needs subclass override — unavailable and undesirable in Go",
+            "Inject varying steps via an interface or func values; skeleton calls them explicitly",
+            "Higher-order functions pass the customizable step as a closure",
+            "Embedding can't provide the hook (no re-dispatch) — pass it in instead"
+          ],
+          "code": "// Skeleton takes the variable steps as funcs — explicit, no inheritance.\nfunc ETL(rows []Row, transform func(Row) Row, load func([]Row) error) error {\n\tout := make([]Row, 0, len(rows))\n\tfor _, r := range rows {\n\t\tout = append(out, transform(r)) // the 'overridable' step\n\t}\n\treturn load(out)\n}",
+          "follow_ups": [
+            "Why is Template Method essentially the fragile base class problem?",
+            "How do you supply multiple hooks without a parameter explosion?"
+          ],
+          "tags": ["behavioral", "template-method", "composition", "higher-order-functions"]
+        },
+        {
+          "id": "oop-028",
+          "question": "Why is the explicit Iterator pattern rare in Go? Discuss range, channels, closures, and range-over-func (Go 1.23 iterators).",
+          "difficulty": "hard",
+          "answer": "Iterator gives sequential access without exposing the underlying representation. Go made the GoF heavyweight iterator object largely unnecessary because `for ... range` is built into the language for slices, maps, strings, and channels. Pre-1.23 options for custom sequences: (1) **channels** — produce values on a channel and `range` it; clean syntax but costs a goroutine and risks leaks if the consumer stops early without cancellation; (2) **closures** — a `Next() (T, bool)` function or a stateful closure; explicit and leak-free but verbose; (3) returning a slice — fine for small/finite data, wasteful for large/lazy. **Go 1.23 range-over-func** changed this: you can now write a function of type `func(yield func(T) bool)` (or two-value) and `range` directly over it, giving lazy, pull-style iteration with no goroutine, native `break`/early-termination support (yield returns false), and composability — this is now the idiomatic custom iterator (`iter.Seq[T]`/`iter.Seq2[K,V]`). Senior takeaway: prefer range-over-func for custom lazy sequences on modern Go; reserve channels for genuinely concurrent producers; avoid materializing huge slices.",
+          "key_points": [
+            "for...range makes the GoF iterator object unnecessary for built-in containers",
+            "Channels: clean but goroutine cost and leak risk on early stop",
+            "Closures: Next()-style, leak-free but verbose",
+            "Go 1.23 range-over-func (iter.Seq) is the idiomatic lazy custom iterator — no goroutine, supports break"
+          ],
+          "code": "// Go 1.23 range-over-func iterator: lazy, no goroutine, break-aware.\nfunc Evens(max int) func(yield func(int) bool) {\n\treturn func(yield func(int) bool) {\n\t\tfor i := 0; i <= max; i += 2 {\n\t\t\tif !yield(i) { // consumer broke out\n\t\t\t\treturn\n\t\t\t}\n\t\t}\n\t}\n}\n\n// for v := range Evens(10) { ... }",
+          "follow_ups": [
+            "What goroutine leak risk does a channel-based iterator carry?",
+            "How does yield returning false implement break semantics?"
+          ],
+          "tags": ["behavioral", "iterator", "range-over-func", "channels", "go1.23"]
+        },
+        {
+          "id": "oop-029",
+          "question": "Chain of Responsibility in Go: how does it map to middleware, and how is it different from a simple loop?",
+          "difficulty": "medium",
+          "answer": "Chain of Responsibility passes a request along a chain of handlers until one handles it (or all decline). In Go the dominant realization is the **middleware chain**: each handler decides whether to handle, transform, short-circuit, or pass to `next`. HTTP middleware (`func(next Handler) Handler`) is exactly this — auth middleware can reject early (short-circuit), logging passes through, etc. The distinction from a simple loop: in a loop you'd iterate handlers and call each; CoR gives each handler control over whether and when the *next* link runs (before/after wrapping, conditional pass-through, early return), which a flat loop can't express as naturally. So CoR ≈ a composed pipeline where links wrap each other, vs a loop ≈ a flat dispatch. Other CoR uses: validation pipelines, request preprocessors, event handler chains, and error-recovery handlers. Senior nuance: keep links single-purpose, make the 'who terminates the chain' contract explicit, and beware deep chains hurting traceability — name and order links deliberately (recovery outermost).",
+          "key_points": [
+            "Middleware (func(next Handler) Handler) is the canonical CoR in Go",
+            "Each link controls whether/when next runs: wrap, short-circuit, conditional pass",
+            "Differs from a flat loop, which can't express before/after wrapping or early-out naturally",
+            "Keep links single-purpose; make termination explicit; order deliberately"
+          ],
+          "code": "type Handler func(req *Request) error\ntype Middleware func(next Handler) Handler\n\nfunc Auth(next Handler) Handler {\n\treturn func(req *Request) error {\n\t\tif !req.Authed {\n\t\t\treturn fmt.Errorf(\"unauthorized\") // short-circuit the chain\n\t\t}\n\t\treturn next(req) // pass along\n\t}\n}\n\nfunc Chain(h Handler, mws ...Middleware) Handler {\n\tfor i := len(mws) - 1; i >= 0; i-- {\n\t\th = mws[i](h)\n\t}\n\treturn h\n}",
+          "follow_ups": [
+            "Why apply middleware in reverse order during composition?",
+            "How does CoR differ from the Decorator pattern mechanically?"
+          ],
+          "tags": ["behavioral", "chain-of-responsibility", "middleware", "pipeline"]
+        },
+        {
+          "id": "oop-030",
+          "question": "When would you use the Mediator pattern in a Go backend, and what's the risk?",
+          "difficulty": "medium",
+          "answer": "Mediator centralizes communication between many components so they don't reference each other directly — they talk through a hub. In Go backends it shows up as an in-process **event bus / dispatcher**, a coordinator orchestrating several services (instead of each service calling the others), or a hub managing connected clients (a WebSocket chat hub mediating between connections is the textbook case). You'd reach for it when you have an N×N web of components whose direct coupling has become unmanageable; the mediator turns N×N into N×1. The risk is that the mediator becomes a **god object** — all logic and knowledge migrate into the hub, which grows into an untestable bottleneck and a single point of change. Mitigation: keep the mediator thin (routing/coordination only, not business logic), and don't introduce one prematurely — two or three components talking directly is fine. In distributed contexts the mediator generalizes to a message broker, but in-process you're trading direct coupling for centralization, so use it only when the coupling pain is real.",
+          "key_points": [
+            "Centralizes N×N component communication into N×1 through a hub",
+            "Go forms: in-process event bus/dispatcher, orchestrator, WebSocket hub",
+            "Risk: mediator becomes a god object / bottleneck / single point of change",
+            "Keep it thin (routing only); don't introduce prematurely"
+          ],
+          "follow_ups": [
+            "How do you keep a mediator from accumulating business logic?",
+            "How does Mediator differ from Observer in coupling direction?"
+          ],
+          "tags": ["behavioral", "mediator", "event-bus", "god-object"]
+        },
+        {
+          "id": "oop-031",
+          "question": "Why is the Visitor pattern awkward in Go, and how do generics change the picture?",
+          "difficulty": "staff",
+          "answer": "Visitor lets you add operations to a fixed set of types without modifying them, via double dispatch: each element has `Accept(v Visitor)` and calls back `v.VisitConcrete(self)`. It's awkward in Go because: (1) Go has no method overloading, so the visitor interface needs a distinctly named method per concrete type (`VisitCircle`, `VisitSquare`), and (2) there's no inheritance to share `Accept` boilerplate, so every element type must hand-write `Accept`. Adding a new element type forces editing the visitor interface and every visitor implementation — verbose and rigid. Many Go codebases instead use a **type switch** over an interface (`switch n := node.(type)`), which is simpler and centralizes the operation, at the cost of being non-exhaustive (the compiler won't tell you a case is missing) and open to forgetting a type. Generics help only partially: they don't give you double dispatch or method overloading, but a generic `Walk[T]` or generic visitor function can reduce some boilerplate for homogeneous traversals. The pragmatic senior call: prefer a type switch for AST-style operations in Go and accept the non-exhaustiveness (mitigate with a `default` panic and tests); reserve full Visitor for when you truly need multiple operations over a stable, closed type set and want each operation grouped.",
+          "key_points": [
+            "Visitor needs double dispatch; Go lacks overloading so methods are named per type",
+            "No inheritance means every element hand-writes Accept — verbose, rigid to extend",
+            "Type switch is the common Go alternative: simpler but non-exhaustive (no compiler check)",
+            "Generics don't provide double dispatch; they only trim some traversal boilerplate"
+          ],
+          "code": "// Idiomatic Go alternative to Visitor: a type switch over a closed interface.\nfunc Eval(n Node) float64 {\n\tswitch n := n.(type) {\n\tcase Num:\n\t\treturn n.Val\n\tcase Add:\n\t\treturn Eval(n.L) + Eval(n.R)\n\tcase Mul:\n\t\treturn Eval(n.L) * Eval(n.R)\n\tdefault:\n\t\tpanic(fmt.Sprintf(\"unhandled node %T\", n)) // guard for non-exhaustiveness\n\t}\n}",
+          "follow_ups": [
+            "How do you make a type-switch visitor 'fail loud' on a missing case?",
+            "Could a sealed-interface convention plus a linter approximate exhaustiveness?"
+          ],
+          "tags": ["behavioral", "visitor", "type-switch", "generics", "double-dispatch"]
+        },
+        {
+          "id": "oop-032",
+          "question": "How do you implement Memento in Go for snapshot/restore, and what are the pitfalls?",
+          "difficulty": "medium",
+          "answer": "Memento captures and externalizes an object's internal state so it can be restored later, without violating encapsulation. In Go you provide a `Snapshot()` method returning an opaque state value (often an unexported-field struct or an exported `Memento` type the caller treats as a token) and a `Restore(m Memento)` method. The originator owns serialization of its own state, so encapsulation holds — callers can hold the memento but not inspect/mutate the originals. Backend uses: undo/redo, transaction rollback to a checkpoint, optimistic-concurrency 'before' images, and editor/document history. Pitfalls: (1) **shallow snapshots** — if the state contains slices/maps/pointers, you must deep-copy when snapshotting *and* when restoring, or the memento aliases live state and 'restore' won't isolate it; (2) **memory** — keeping many full snapshots is expensive; consider diffs/command-based undo instead for large state; (3) **staleness** — restoring an old memento into an object that's structurally changed. Often in Go the lighter Command-with-Undo approach is preferable to full state snapshots unless state is small or restore must be exact.",
+          "key_points": [
+            "Snapshot() returns an opaque state token; Restore() reinstates it — originator owns serialization",
+            "Encapsulation preserved: caller holds the memento but can't inspect internals",
+            "Deep-copy reference fields on both snapshot and restore or you alias live state",
+            "Many full snapshots are costly — prefer command/diff-based undo for large state"
+          ],
+          "code": "type Editor struct{ content []string }\n\ntype Memento struct{ snapshot []string } // opaque to callers\n\nfunc (e *Editor) Save() Memento {\n\tcp := make([]string, len(e.content)) // deep copy: don't alias live slice\n\tcopy(cp, e.content)\n\treturn Memento{snapshot: cp}\n}\n\nfunc (e *Editor) Restore(m Memento) {\n\tcp := make([]string, len(m.snapshot))\n\tcopy(cp, m.snapshot)\n\te.content = cp\n}",
+          "follow_ups": [
+            "When is command-based undo preferable to full mementos?",
+            "How do you bound memory when keeping a long undo history?"
+          ],
+          "tags": ["behavioral", "memento", "undo", "deep-copy"]
+        }
+      ]
+    },
+    {
+      "topic": "Patterns Go Makes Trivial & Over-Engineering",
+      "questions": [
+        {
+          "id": "oop-033",
+          "question": "Which GoF patterns does Go make unnecessary or trivial, and exactly which language feature dissolves each?",
+          "difficulty": "hard",
+          "answer": "Several GoF patterns exist mainly to work around limitations Go doesn't have: (1) **Iterator** — dissolved by built-in `for...range` and, from Go 1.23, range-over-func; you rarely build an iterator object. (2) **Strategy** — first-class functions make a strategy just a `func` value; no strategy hierarchy needed. (3) **Decorator** — interfaces + closures (`func(Handler) Handler` middleware, `io` wrappers) make decoration trivial. (4) **Adapter** — implicit interface satisfaction means an existing type often satisfies the target interface with zero adapter code; you only adapt when signatures truly differ. (5) **Singleton** — a package-level var (with `sync.Once`) is the whole 'pattern'; the package is the namespace, no class needed. (6) **Command** — a closure (`func() error`) is a command. (7) **Template Method** — replaced by passing func/interface hooks. The unifying reason: GoF patterns are largely *language-feature workarounds*; features Go has natively (first-class funcs, implicit interfaces, packages, closures, range) absorb the pattern. The senior framing (Rob Pike / Peter Norvig): many patterns are 'invisible' or 'just code' in a language with the right primitives.",
+          "key_points": [
+            "Iterator -> for...range / range-over-func",
+            "Strategy/Command -> first-class functions and closures",
+            "Decorator -> interfaces + middleware/io wrappers",
+            "Adapter -> implicit interface satisfaction; Singleton -> package var + sync.Once"
+          ],
+          "follow_ups": [
+            "Why are many GoF patterns described as 'language-feature workarounds'?",
+            "Which patterns remain genuinely useful in Go despite this?"
+          ],
+          "tags": ["patterns", "go-idiom", "trivial-patterns"]
+        },
+        {
+          "id": "oop-034",
+          "question": "How do you recognize when a pattern has become over-engineering? What's the cost of premature abstraction in Go?",
+          "difficulty": "hard",
+          "answer": "Signs a pattern has become over-engineering: an interface with exactly one implementation and no test fake that needs it; a factory that only ever returns one concrete type; layers of indirection where the reader must jump through three files to see what a request does; a `Manager`/`Service`/`Handler` ecosystem wrapping a few lines of logic; pattern names appearing in type names (`StrategyFactoryImpl`) to justify their existence. The cost of premature abstraction in Go specifically: (1) interfaces defined before there are two implementations guess the wrong seams and become wrong abstractions you now must refactor across packages; (2) indirection defeats Go's strengths — readability, grep-ability, and 'see the call' directness; (3) interfaces hurt inlining/devirtualization and add allocation; (4) speculative generality adds cognitive load and test surface for flexibility you never use. The Go cultural answer is to write the concrete code first, let duplication or a real second implementation reveal the seam, and *then* extract the interface ('a little copying is better than a little dependency'). Patterns are vocabulary for communicating a structure you arrived at, not a checklist to apply up front.",
+          "key_points": [
+            "Smells: single-impl interface, single-type factory, deep indirection, pattern names in types",
+            "Premature interfaces pick wrong seams and become wrong abstractions",
+            "Indirection hurts readability, grep-ability, inlining; adds alloc and test surface",
+            "Write concrete first; extract the seam when a real second case appears"
+          ],
+          "follow_ups": [
+            "How does 'a little copying is better than a little dependency' apply here?",
+            "Why is a single-implementation interface usually a smell in Go?"
+          ],
+          "tags": ["patterns", "over-engineering", "premature-abstraction", "yagni"]
+        },
+        {
+          "id": "oop-035",
+          "question": "What does 'patterns are vocabulary, not goals' mean for how a senior engineer uses them in code review?",
+          "difficulty": "medium",
+          "answer": "It means design patterns are a shared *language* for naming structures that emerge from solving real problems — they're descriptive labels, not prescriptive targets. A senior uses them in review to *communicate* ('this is effectively a decorator chain; the order is wrong') and to *recognize* recurring shapes, not to mandate ('add a factory here because it's a pattern'). Practically: never approve or request a pattern for its own sake; ask what problem it solves and whether a simpler concrete solution would do. Reject 'patternitis' — code where the abstraction exists to display knowledge rather than reduce real complexity or duplication. Conversely, naming a pattern can speed review and onboarding when the structure genuinely matches, because it imports a well-understood contract and trade-offs. The mature stance: arrive at structure by responding to forces (change axes, duplication, testing needs), and reach for a pattern's *name* afterward to describe and discuss it. The goal is working, maintainable software; patterns are one of several tools and a communication aid, not a scorecard.",
+          "key_points": [
+            "Patterns are descriptive vocabulary for emergent structures, not prescriptive goals",
+            "Use them to communicate and recognize, not to mandate in review",
+            "Reject patternitis: abstraction that displays knowledge vs reduces real complexity",
+            "Arrive at structure via forces (change/duplication/testing), then name it"
+          ],
+          "follow_ups": [
+            "How do you push back on a 'we should add a factory here' review comment?",
+            "When does naming a pattern genuinely speed up a review?"
+          ],
+          "tags": ["patterns", "code-review", "communication", "design-philosophy"]
+        }
+      ]
+    },
+    {
+      "topic": "Dependency Injection & Interface Design",
+      "questions": [
+        {
+          "id": "oop-036",
+          "question": "How is Dependency Injection done idiomatically in Go? Compare manual constructor injection with wire and fx.",
+          "difficulty": "hard",
+          "answer": "The default and preferred Go DI is **manual constructor injection**: each component takes its dependencies (as interfaces) as constructor params, and `main` (the composition root) builds the object graph explicitly. No framework, no reflection, fully type-checked, trivially testable (pass a fake). It scales further than people expect; many large Go services use nothing else. When the wiring graph gets large and tedious, two tools help. **google/wire** is *compile-time* DI: you declare provider functions and wire generates the boilerplate constructor code via `go generate`. It's just code generation — zero runtime reflection, errors at compile time, and you can read the generated graph. **uber-go/fx** is *runtime* DI built on dig (reflection): you register providers and fx resolves/constructs the graph, and it adds lifecycle hooks (start/stop), which suits large apps with many long-lived components. Trade-off: wire keeps Go's compile-time guarantees and transparency; fx buys lifecycle management and less boilerplate at the cost of runtime reflection and harder-to-trace failures. Senior guidance: start with manual injection; adopt wire if boilerplate hurts and you want to keep compile-time safety; consider fx only for large apps that benefit from its lifecycle/module system.",
+          "key_points": [
+            "Default: manual constructor injection with interfaces; main is the composition root",
+            "wire = compile-time codegen DI, no reflection, errors at build time, transparent",
+            "fx = runtime reflection DI with lifecycle (start/stop) hooks, for large apps",
+            "Start manual; wire to cut boilerplate safely; fx for big lifecycle-heavy graphs"
+          ],
+          "code": "// Manual constructor injection — the Go default.\ntype Store interface{ Get(id string) (User, error) }\ntype Mailer interface{ Send(to, body string) error }\n\ntype UserService struct {\n\tstore  Store\n\tmailer Mailer\n}\n\nfunc NewUserService(s Store, m Mailer) *UserService {\n\treturn &UserService{store: s, mailer: m}\n}\n\n// main wires concrete impls: NewUserService(pg, ses)",
+          "follow_ups": [
+            "Why does wire keep Go's compile-time guarantees while fx doesn't?",
+            "What makes fx's lifecycle hooks valuable in large services?"
+          ],
+          "tags": ["dependency-injection", "wire", "fx", "constructor-injection"]
+        },
+        {
+          "id": "oop-037",
+          "question": "Explain 'accept interfaces, return structs'. Why is it idiomatic and where does it not apply?",
+          "difficulty": "hard",
+          "answer": "The guideline: functions/constructors should *accept* interface parameters (so callers can pass any implementation, including fakes) but *return* concrete struct types (so callers get the full, discoverable API and you can add methods without breaking them). Why idiomatic: (1) accepting interfaces maximizes the caller's flexibility and decouples you from concretes; the interface should be the *minimal* set of methods you actually use, often defined by the consumer. (2) Returning a concrete struct gives callers all methods/fields, supports method autocompletion and documentation, and lets you grow the type's API additively — returning an interface hides capability and pins you to that exact method set. It also avoids premature interface definitions. Where it doesn't apply / exceptions: (a) when you genuinely need to return *one of several* implementations chosen at runtime (factory) — return an interface; (b) when returning a concrete type would leak internals you want hidden, return an interface deliberately; (c) the `error` interface is of course returned (it's the standard). Also note: returning interfaces can hurt because callers can't type-assert to richer behavior, and a `nil` concrete pointer boxed in an interface is the classic non-nil-interface bug.",
+          "key_points": [
+            "Accept interfaces: caller flexibility, decoupling, easy fakes; interface should be minimal",
+            "Return structs: full discoverable API, additive growth, no hidden capability",
+            "Exceptions: factories returning one-of-many impls; deliberate hiding; error interface",
+            "Returning interfaces risks losing richer behavior and the nil-interface trap"
+          ],
+          "code": "// Accept a minimal interface, return a concrete struct.\ntype Reader interface{ Read(p []byte) (int, error) }\n\ntype Parser struct{ /* fields, methods can grow additively */ }\n\nfunc NewParser(r Reader) *Parser { // accepts interface\n\treturn &Parser{ /* ... */ } // returns concrete *Parser\n}",
+          "follow_ups": [
+            "How does returning a concrete struct enable additive API growth?",
+            "Explain the nil-interface trap when returning an interface holding a nil pointer."
+          ],
+          "tags": ["interface-design", "accept-interfaces-return-structs", "idiom"]
+        },
+        {
+          "id": "oop-038",
+          "question": "What is interface pollution, and how do you decide where and when to define an interface in Go?",
+          "difficulty": "hard",
+          "answer": "Interface pollution is defining interfaces with no real need — typically a 'header interface' mirroring every method of a single concrete type, declared next to the implementer 'for testing' or 'for flexibility', when there's exactly one implementation and no second use. It adds indirection, defeats grep-ability, forces every method through a contract, blocks additive growth, and provides no abstraction value. Go's rule of thumb (codified in the proverb 'don't design with interfaces, discover them'): (1) **Define interfaces at the point of consumption, not at the implementation.** The package that *uses* a dependency declares the minimal interface for what it calls; the provider just satisfies it implicitly. (2) **Wait for a real need:** a second implementation, a genuine test seam you can't otherwise reach, or a published abstraction boundary. (3) **Keep them small** — one to three methods. (4) **Don't pre-export interfaces from library packages** speculatively; return concrete types and let consumers define the interface they need. The mocking-only justification is the weakest one and the usual source of pollution — prefer interfaces sized to the consumer over mirror interfaces sized to the implementation.",
+          "key_points": [
+            "Pollution = needless/mirror interfaces, often one-impl, declared at the implementer",
+            "Discover interfaces, don't design them up front",
+            "Define minimal interfaces at the consumer, not next to the concrete type",
+            "Justify by real need (2nd impl, true test seam, boundary); 'for mocking' alone is weak"
+          ],
+          "code": "// Pollution: mirror interface next to the only implementation.\ntype UserStore interface { // BAD if there's one impl and no real consumer need\n\tCreate(u User) error\n\tGet(id string) (User, error)\n\tUpdate(u User) error\n\tDelete(id string) error\n}\n\n// Better: consumer defines exactly what it uses.\n// in service pkg:\ntype userGetter interface{ Get(id string) (User, error) }\nfunc Greet(g userGetter, id string) (string, error) { /* ... */ return \"\", nil }",
+          "follow_ups": [
+            "Why is 'I need it for mocking' often a weak reason to add an interface?",
+            "How does defining interfaces at the consumer keep them small?"
+          ],
+          "tags": ["interface-design", "interface-pollution", "small-interfaces", "anti-pattern"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,720 @@
+# Cloud — AWS / GCP
+
+> Senior-level AWS (with GCP equivalents) interview questions for a Go backend engineer covering compute, storage, databases, networking, messaging, IAM, observability, cost, and end-to-end multi-AZ design.
+
+**33 questions** across **10 topics** · Level: senior
+
+## Topics
+
+- [Cloud Fundamentals](#cloud-fundamentals) (4)
+- [Compute](#compute) (4)
+- [Storage](#storage) (3)
+- [Databases](#databases) (6)
+- [Networking](#networking) (4)
+- [Auto-scaling](#auto-scaling) (2)
+- [Messaging](#messaging) (3)
+- [IAM, Secrets & Config](#iam-secrets-config) (3)
+- [Observability & Cost](#observability-cost) (2)
+- [End-to-End Design & GCP](#end-to-end-design-gcp) (2)
+
+---
+
+## Cloud Fundamentals
+
+#### 1. Explain the difference between a Region and an Availability Zone, and why it matters for a Go service's deployment topology.
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `fundamentals`, `region`, `availability-zone`, `ha`
+
+A **Region** is a separate geographic area (e.g. `us-east-1`) with its own isolated set of data centers; Regions are far apart and have independent failure domains, so cross-region traffic incurs real latency (tens of ms) and egress cost. An **Availability Zone (AZ)** is one or more discrete data centers within a Region, with independent power, cooling, and networking, but connected to sibling AZs by low-latency (<2ms), high-bandwidth links. The mechanism: AZs let you run synchronous replication and active-active deployments cheaply within a Region while still surviving a single data-center failure. The trade-off: spreading instances across AZs gives fault isolation but adds inter-AZ data-transfer charges and a small latency tax. A resilient Go service runs identical stateless replicas in at least two (ideally three) AZs behind a load balancer; Region choice is driven by user proximity, data-residency law, and service availability.
+
+**Key points**
+- Region = isolated geography; AZ = isolated DC within a Region
+- Inter-AZ latency is single-digit ms; cross-region is tens of ms + egress cost
+- AZs are the unit of intra-region fault isolation
+- Spread stateless replicas across >=2 AZs behind an LB
+
+**Follow-ups**
+- How many AZs do you target and why three over two?
+- When would you go multi-region instead of multi-AZ?
+
+---
+
+#### 2. Walk through the AWS Shared Responsibility Model. For an EC2-hosted Go API vs a Lambda + S3 setup, where does the line move?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `fundamentals`, `security`, `shared-responsibility`, `iam`
+
+The model splits security into **AWS's responsibility (security *of* the cloud)** and **yours (security *in* the cloud)**. AWS always owns the physical facilities, hardware, hypervisor, and the managed-service runtime. You own your data, IAM configuration, and network controls. The boundary slides with the service abstraction. On **EC2** (IaaS), you also own the guest OS: patching the kernel, configuring the firewall/security groups, hardening the Go runtime, and managing TLS. On **Lambda + S3** (PaaS/SaaS-ish), AWS patches the OS and runtime, so you drop OS responsibility but still own function code, IAM execution roles, S3 bucket policies/encryption, and data classification. The practical implication: the more managed the service, the smaller your attack surface and ops burden, but you still always own identity, data, and configuration — the most common breach vectors (public S3 buckets, over-broad IAM) are squarely on you regardless of compute model.
+
+**Key points**
+- AWS = security *of* the cloud; you = security *in* the cloud
+- Boundary moves up the stack as the service gets more managed
+- EC2: you own guest OS patching + firewall; Lambda: AWS owns runtime
+- You ALWAYS own IAM, data, and network/bucket configuration
+
+**Follow-ups**
+- Who patches a vulnerability in the Lambda Go runtime vs your dependency?
+- Name the most common customer-side misconfigurations.
+
+---
+
+#### 3. Distinguish IaaS, PaaS, and SaaS with concrete AWS services, and explain the trade-off axis you weigh when choosing.
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `fundamentals`, `iaas`, `paas`, `saas`
+
+**IaaS** gives you raw virtualized infrastructure — compute, storage, network — and you manage everything above the hypervisor: EC2, EBS, VPC. **PaaS** gives you a managed platform to run code without managing servers/OS: Lambda, Fargate, App Runner, Elastic Beanstalk, RDS. **SaaS** is a fully managed application you consume via API: S3, DynamoDB, SQS, Cognito. The axis is **control vs operational burden**. IaaS maximizes flexibility (custom kernels, special networking, predictable cost at scale) at the cost of patching, scaling, and undifferentiated heavy lifting. SaaS/PaaS minimizes ops and speeds delivery but constrains you to the provider's knobs and can cost more per unit at high, steady volume. For a Go team, the senior judgment call is: default to managed (PaaS/SaaS) to spend engineering effort on product, and drop to IaaS only when a hard constraint — latency, cost at scale, compliance, or a feature the managed tier lacks — forces it.
+
+**Key points**
+- IaaS=EC2/EBS/VPC, PaaS=Lambda/Fargate/RDS, SaaS=S3/DynamoDB/SQS
+- Axis: control & flexibility vs operational burden & speed
+- Managed costs more per unit but saves engineering time
+- Default managed; drop to IaaS only when a hard constraint forces it
+
+**Follow-ups**
+- Is RDS IaaS or PaaS? Defend your answer.
+- Give a case where IaaS is the correct economic choice.
+
+---
+
+#### 4. How do you design a Go service to survive a full AZ failure with no data loss and minimal downtime?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `ha`, `az-failure`, `static-stability`, `fault-injection`
+
+Make compute **stateless and AZ-redundant**: run replicas in >=2 AZs in an Auto Scaling Group spanning those AZs, fronted by an ALB whose target group health checks evict the dead AZ's targets automatically. Push all state out of the instances. For the datastore, use a **Multi-AZ** primary (RDS Multi-AZ does synchronous standby replication; DynamoDB and S3 are inherently multi-AZ) so failover is automatic and RPO is zero. Size each AZ for `N/(AZ-1)` capacity (static stability) so the surviving AZs can absorb the failed AZ's load *without* needing a scale-up event during the incident — scaling latency is itself a risk during failover. Keep sessions in ElastiCache or DynamoDB, not memory. Ensure subnets, NAT, and the ALB exist in every AZ. Test it: use AWS Fault Injection Simulator to actually kill an AZ and verify health-check eviction, DB failover time, and that connection pools in the Go service reconnect (set sane `SetConnMaxLifetime` so stale connections to the old primary are recycled).
+
+**Key points**
+- Stateless replicas in >=2 AZs in an AZ-spanning ASG behind an ALB
+- Multi-AZ datastore (RDS sync standby / DynamoDB) for zero-RPO failover
+- Static stability: pre-provision surviving AZs to absorb failed-AZ load
+- Recycle DB connections (SetConnMaxLifetime) so pools survive failover
+- Prove it with Fault Injection Simulator, don't assume it
+
+**Follow-ups**
+- Why is static stability better than scaling out during the failure?
+- What in a Go sql.DB pool breaks during RDS failover and how do you fix it?
+
+---
+
+## Compute
+
+#### 5. Compare EC2 pricing models — On-Demand, Reserved/Savings Plans, and Spot — and how you'd mix them for a Go workload.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `ec2`, `spot`, `savings-plans`, `cost`
+
+**On-Demand** is pay-per-second with no commitment — maximum flexibility, highest price; use it for unpredictable or short-lived load. **Reserved Instances / Savings Plans** trade a 1- or 3-year commitment for up to ~72% discount; Savings Plans are more flexible (commit to $/hour of compute, not a specific instance family), so they're usually preferred. Use them for your steady-state baseline. **Spot** uses spare capacity at up to ~90% off but AWS can reclaim it with a 2-minute warning — use it for fault-tolerant, interruptible work. The senior pattern: cover your predictable floor with a Savings Plan, run baseline traffic On-Demand for SLA-critical paths, and burst stateless/async Go workers on Spot, handling the interruption notice gracefully (drain in-flight requests, requeue jobs). For containers, run an EKS/ECS capacity provider that blends On-Demand and Spot with a target percentage so the orchestrator reschedules pods off reclaimed Spot nodes automatically.
+
+**Key points**
+- On-Demand = flexible/expensive; Savings Plan = committed/cheap baseline; Spot = cheapest/interruptible
+- Prefer Savings Plans over RIs for family flexibility
+- Cover floor with commitment, burst stateless work on Spot
+- Handle the 2-minute Spot interruption notice: drain/requeue
+
+
+```go
+// Handle Spot interruption notice via IMDS in a Go worker
+func watchSpotInterruption(ctx context.Context, drain func()) {
+    t := time.NewTicker(5 * time.Second)
+    defer t.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-t.C:
+            // 404 = no interruption scheduled; 200 = drain now
+            resp, err := http.Get("http://169.254.169.254/latest/meta-data/spot/instance-action")
+            if err == nil && resp.StatusCode == 200 {
+                resp.Body.Close()
+                drain() // stop accepting work, finish in-flight, requeue
+                return
+            }
+            if resp != nil { resp.Body.Close() }
+        }
+    }
+}
+```
+
+**Follow-ups**
+- How does a Savings Plan differ from a Reserved Instance?
+- How do you make a stateful service Spot-safe?
+
+---
+
+#### 6. ECS vs EKS vs Fargate — when do you pick each for running Go containers?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `ecs`, `eks`, `fargate`, `containers`
+
+These are two orthogonal choices: an **orchestrator** (ECS or EKS) and a **launch type** (EC2 or Fargate). **ECS** is AWS's proprietary orchestrator — simple, deeply integrated, low cognitive overhead; great when you're all-in on AWS and don't need Kubernetes' ecosystem. **EKS** is managed Kubernetes — pick it when you need K8s portability, a rich operator/Helm ecosystem, multi-cloud strategy, or your team already knows K8s; the cost is real operational complexity. **Fargate** is the serverless launch type for either: no EC2 nodes to patch or scale, you pay per vCPU/GB-second of the task. Use Fargate for spiky or low-ops workloads and when you don't want to manage a node fleet; use EC2 launch type when you need GPUs, specific instance types, daemonsets, tighter bin-packing for cost, or per-second-billing-sensitive steady load where EC2 is cheaper. For a typical Go HTTP service the pragmatic default is **ECS on Fargate** — minimal ops; reach for EKS when Kubernetes itself is a requirement.
+
+**Key points**
+- ECS vs EKS = orchestrator; EC2 vs Fargate = launch type (orthogonal)
+- ECS: simple + AWS-native; EKS: portable K8s ecosystem, more ops
+- Fargate: no node management, pay per task; EC2: GPUs/bin-packing/cheaper steady
+- Default for a Go API: ECS on Fargate
+
+**Follow-ups**
+- Why might EC2 launch type be cheaper than Fargate at steady load?
+- What does EKS give you that ECS cannot?
+
+---
+
+#### 7. Explain Lambda cold starts, their causes, and how Go's runtime characteristics and provisioned concurrency address them.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `lambda`, `cold-start`, `provisioned-concurrency`, `go`
+
+A **cold start** is the latency added when Lambda must create a new execution environment for a request: it provisions a micro-VM (Firecracker), downloads your deployment package, initializes the runtime, and runs your handler's init code before serving. It happens on the first request, after scale-out, and after idle reaping. The init phase dominates. Go is well-suited here: it ships a single statically-linked binary on the `provided.al2`/custom runtime with no interpreter/JVM warm-up, so Go cold starts are among the lowest (often low tens of ms vs hundreds for JVM). To cut them further: keep the binary small, do expensive setup (SDK clients, DB pools) **once in `init()`/package scope outside the handler** so it's reused across warm invocations, and avoid heavy reflection at startup. For latency-critical paths use **Provisioned Concurrency** to keep N environments pre-initialized (eliminating cold starts at a cost), or **SnapStart** (not yet for Go's custom runtime). The trade-off: provisioned concurrency costs money 24/7, so reserve it for user-facing endpoints with strict p99 SLAs.
+
+**Key points**
+- Cold start = env provision + package download + runtime init + handler init
+- Go's static binary + no VM warm-up = very low cold starts
+- Initialize clients/pools once outside the handler for warm reuse
+- Provisioned Concurrency removes cold starts but costs 24/7
+
+
+```go
+// Init clients ONCE outside the handler so warm invocations reuse them
+var ddb *dynamodb.Client
+
+func init() {
+    cfg, _ := config.LoadDefaultConfig(context.Background())
+    ddb = dynamodb.NewFromConfig(cfg) // reused across warm invocations
+}
+
+func handler(ctx context.Context, e events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+    // ddb already initialized; no per-request client construction
+    _ = ddb
+    return events.APIGatewayProxyResponse{StatusCode: 200}, nil
+}
+```
+
+**Follow-ups**
+- Why initialize the DB pool in init() and not the handler?
+- When is provisioned concurrency NOT worth it?
+
+---
+
+#### 8. When does serverless (Lambda) fit a Go service, and what are its hard limits and anti-patterns?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `lambda`, `serverless`, `limits`, `go`
+
+Lambda fits **event-driven, spiky, or low-baseline** workloads: API endpoints with bursty or unpredictable traffic, S3/SQS/EventBridge-triggered processors, cron jobs, and glue code — where you want zero idle cost and automatic scaling. It fits poorly for **steady high-throughput** services (a constantly-busy Go API is cheaper on Fargate/EC2), **long-running** work (15-minute max execution), **low-latency-at-p99** paths sensitive to cold starts, and anything needing **persistent connections** (WebSockets, long-lived DB pools — Lambda's per-environment isolation can exhaust DB connections, so you need RDS Proxy or DynamoDB). Hard limits to know: 15-min timeout, 10 GB memory (CPU scales with memory), 6 MB synchronous payload / 256 KB async, 512 MB–10 GB `/tmp`, and account-level concurrency caps that can throttle you. Anti-patterns: chaining Lambdas synchronously (use Step Functions), putting a Lambda in front of a relational DB without connection pooling, and treating it like a general server when it's bursty enough that a container is cheaper and simpler.
+
+**Key points**
+- Fits: event-driven, spiky, low-baseline, glue/cron work
+- Misfits: steady high-throughput, >15min, p99-sensitive, persistent connections
+- Limits: 15min, 10GB mem, 6MB sync payload, concurrency caps
+- Anti-pattern: Lambda + RDS without RDS Proxy (connection exhaustion)
+
+**Follow-ups**
+- How does Lambda concurrency interact with an RDS connection limit?
+- At what traffic level does Fargate beat Lambda on cost?
+
+---
+
+## Storage
+
+#### 9. Describe S3's consistency model and storage classes, and how you'd choose a class for different access patterns.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `s3`, `consistency`, `storage-classes`, `cost`
+
+Since 2020, S3 provides **strong read-after-write consistency** for all operations — a successful PUT (new object or overwrite) and a subsequent GET/LIST return the latest data, with no eventual-consistency window to engineer around. **Storage classes** trade retrieval latency/cost against storage cost: **Standard** for hot, frequently accessed data; **Intelligent-Tiering** auto-moves objects between tiers based on access (best default when access is unpredictable); **Standard-IA / One Zone-IA** for infrequent access with cheaper storage but per-GB retrieval fees (One Zone-IA sacrifices multi-AZ durability for ~20% less cost — only for reproducible data); **Glacier Instant/Flexible/Deep Archive** for archival, from ms to 12-hour retrieval, cheapest storage. Choose by access frequency and retrieval-latency tolerance: hot serving = Standard; logs/backups read rarely = Standard-IA; compliance archives = Glacier Deep Archive; 'I'm not sure' = Intelligent-Tiering and let S3 optimize. Combine with lifecycle policies to transition objects automatically as they age.
+
+**Key points**
+- Strong read-after-write consistency since 2020 — no eventual window
+- Standard=hot; Intelligent-Tiering=unknown pattern; IA=infrequent+retrieval fee
+- One Zone-IA trades multi-AZ durability for cost (reproducible data only)
+- Glacier tiers for archival; choose by retrieval-latency tolerance
+
+**Follow-ups**
+- What changed about S3 consistency in 2020 and why did it matter?
+- When is One Zone-IA dangerous to use?
+
+---
+
+#### 10. Explain presigned URLs and multipart uploads. Show how a Go service generates a presigned PUT.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `s3`, `presigned-url`, `multipart`, `go`
+
+A **presigned URL** lets a client upload/download an S3 object directly, using time-limited credentials derived from the signer's IAM permissions — the client never sees your keys and your backend never proxies the bytes. This offloads large transfers from your Go service (no memory/bandwidth cost) while keeping access control. You scope it tightly: short expiry, specific bucket/key/method, and optionally enforced content-type/size via conditions. **Multipart upload** splits a large object (>100 MB recommended, required >5 GB) into parts uploaded in parallel and independently retried, then completed with a single call — it improves throughput, resilience to network blips, and lets you resume. The trade-off: presigned URLs can't easily enforce a max size server-side (use S3 POST policies for that), and abandoned multipart uploads keep billing storage until aborted, so add a lifecycle rule to clean up incomplete uploads.
+
+**Key points**
+- Presigned URL = time-limited, scoped, client-direct S3 access; backend never proxies bytes
+- Inherits the signer's IAM permissions; use short expiry + tight scope
+- Multipart: parallel parts, independent retry/resume, required >5GB
+- Add lifecycle rule to abort incomplete multipart uploads (they cost money)
+
+
+```go
+// Generate a presigned PUT URL valid for 15 minutes
+pc := s3.NewPresignClient(s3.NewFromConfig(cfg))
+req, err := pc.PresignPutObject(ctx, &s3.PutObjectInput{
+    Bucket:      aws.String("uploads"),
+    Key:         aws.String("user/123/avatar.png"),
+    ContentType: aws.String("image/png"),
+}, s3.WithPresignExpires(15*time.Minute))
+if err != nil { return err }
+fmt.Println(req.URL) // client does an HTTP PUT to this URL directly
+```
+
+**Follow-ups**
+- How do you enforce a maximum upload size with presigned access?
+- How do incomplete multipart uploads create silent cost?
+
+---
+
+#### 11. Compare EBS, EFS, and instance store. When is each correct?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `ebs`, `efs`, `instance-store`, `storage`
+
+**EBS** is network-attached block storage for a single EC2 instance (one writer; Multi-Attach exists for clustered FS). It persists independently of the instance, supports snapshots to S3, and comes in tiers (gp3 general-purpose, io2 high-IOPS, st1/sc1 throughput-HDD). Use it for a database's data volume or any single-instance persistent disk. **EFS** is a managed NFS filesystem mountable by **many** instances/containers concurrently across AZs — elastic, pay-per-use, higher latency than EBS. Use it for shared state: CMS uploads, shared config, Lambda/container shared volumes. **Instance store** is physically-attached NVMe local to the host — extremely fast and low-latency, but **ephemeral**: data is lost on stop/terminate/hardware failure. Use it only for caches, scratch, or replicated-elsewhere data (e.g. a node in a distributed system that can rebuild from peers). The decision axis: single-writer durable = EBS; multi-writer shared = EFS; fast-but-disposable = instance store.
+
+**Key points**
+- EBS: single-instance, persistent, snapshottable block storage (DB volumes)
+- EFS: shared NFS, multi-AZ multi-writer, elastic, higher latency
+- Instance store: local NVMe, fastest, EPHEMERAL — lost on stop/terminate
+- Axis: single-writer durable / multi-writer shared / fast disposable
+
+**Follow-ups**
+- Which survives an instance stop, and which doesn't?
+- Why not run a primary database on instance store?
+
+---
+
+## Databases
+
+#### 12. RDS vs Aurora — architectural differences, and when Aurora's design pays off.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `rds`, `aurora`, `replication`, `ha`
+
+**RDS** runs a standard engine (PostgreSQL/MySQL) on EC2 with EBS storage; Multi-AZ uses synchronous block-level replication to a standby, and read replicas use the engine's native async replication. **Aurora** keeps the Postgres/MySQL-compatible query layer but replaces storage with a custom **distributed, log-structured storage layer** that spreads 6 copies across 3 AZs and only ships redo-log records (not pages) to storage. This decoupling yields: faster crash recovery, up to 15 low-lag read replicas sharing the same storage volume (replicas don't re-do writes, so lag is typically <100ms), faster failover (replicas promote without copying data), and storage that auto-grows to 128 TB. Aurora pays off when you need high read fan-out, fast failover, large datasets, or Serverless v2 autoscaling. The trade-offs: Aurora costs more at low scale, is AWS-proprietary (lock-in), and for a small steady workload plain RDS is cheaper and simpler. Choose Aurora for read-heavy, HA-critical, or growth-uncertain workloads; RDS for modest, cost-sensitive, or portability-sensitive ones.
+
+**Key points**
+- RDS = engine on EBS; Aurora = same engine, custom 6-way/3-AZ log-structured storage
+- Aurora ships redo log not pages; replicas share storage → low lag, fast promote
+- Up to 15 read replicas, 128TB autogrow, faster failover, Serverless v2
+- Aurora: read-heavy/HA/growth; RDS: cheaper, simpler, portable at modest scale
+
+**Follow-ups**
+- Why is Aurora replica lag lower than RDS read-replica lag?
+- What's the lock-in cost of Aurora and how would you mitigate it?
+
+---
+
+#### 13. What problem does RDS Proxy solve, and why does it matter specifically for a Go service or Lambda?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `rds-proxy`, `connection-pooling`, `lambda`, `go`
+
+RDS Proxy is a managed connection pooler that sits between your application and RDS/Aurora. The problem: relational databases cap concurrent connections (each costs memory), and connection setup (TCP + TLS + auth) is expensive. A Go service under `database/sql` already pools, but two scenarios break: (1) **many instances/containers** each holding a pool can collectively exceed the DB's `max_connections`; (2) **Lambda**, where each concurrent execution environment opens its own connections with no shared pool, so a traffic spike of 1000 concurrent invocations tries to open 1000 connections and exhausts the DB. RDS Proxy multiplexes thousands of client connections onto a small pool of database connections, handles failover faster (it holds connections during a failover and reroutes), and integrates with Secrets Manager/IAM auth. Trade-off: it adds a small latency hop and cost, and multiplexing means session-pinning state (temp tables, session variables, some prepared statements) can pin a connection and reduce sharing. For Lambda + RDS it's near-mandatory; for a fixed fleet of Go services, tune your pool first and add Proxy when connection count or failover speed becomes the bottleneck.
+
+**Key points**
+- Managed pooler multiplexing many client conns onto few DB connections
+- Solves Lambda connection storms and many-replica connection exhaustion
+- Faster failover: holds and reroutes connections; IAM/Secrets integration
+- Cost: latency hop + session-pinning reduces multiplexing benefit
+
+
+```
+// Even with RDS Proxy, bound the Go-side pool sanely
+db.SetMaxOpenConns(20)
+db.SetMaxIdleConns(10)
+db.SetConnMaxLifetime(5 * time.Minute) // recycle so failover doesn't strand conns
+db.SetConnMaxIdleTime(2 * time.Minute)
+```
+
+**Follow-ups**
+- Why does Lambda specifically cause connection storms?
+- What is session pinning and how does it hurt RDS Proxy?
+
+---
+
+#### 14. DynamoDB: explain partition key design, hot partitions, and how you avoid them.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `dynamodb`, `partition-key`, `hot-partition`, `sharding`
+
+DynamoDB hashes the **partition key** to map an item to a physical partition; throughput and storage are spread across partitions. A **hot partition** occurs when access concentrates on one key value, so its partition's share of provisioned throughput is exhausted while others sit idle — causing throttling even though aggregate capacity is fine. Causes: low-cardinality keys (e.g. `status`), monotonically increasing keys (timestamps/sequential IDs all hitting the newest partition), or a single popular entity (a celebrity user). Fixes: choose a **high-cardinality, uniformly accessed** partition key (e.g. `userID` not `country`); **write-shard** hot keys by appending a suffix (`celebrity#3` of N shards) and scatter-gather on read; for time-series, prefix or compose the key so writes spread; use **adaptive capacity** (automatic, isolates hot keys somewhat) but don't rely on it as the primary defense. On-demand mode also smooths bursts. The senior framing: in DynamoDB you design the key around your access pattern and read/write distribution *first* — get the partition key wrong and no amount of capacity saves you.
+
+**Key points**
+- Partition key is hashed to a physical partition; capacity splits across them
+- Hot partition = skewed access exhausts one partition while others idle → throttling
+- Causes: low cardinality, monotonic keys, single popular entity
+- Fixes: high-cardinality keys, write-sharding suffixes, time-series key composition
+
+**Follow-ups**
+- How do you shard a celebrity's write-heavy key and read it back?
+- Does adaptive capacity fully solve hot partitions? Why not rely on it?
+
+---
+
+#### 15. Explain DynamoDB single-table design, and the trade-off between GSI and LSI.
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `dynamodb`, `single-table`, `gsi`, `lsi`
+
+**Single-table design** stores multiple entity types in one table, using overloaded generic keys (`PK`/`SK`) and composite sort keys so related items share a partition and can be fetched in **one query** — exploiting that DynamoDB has no joins and per-request access is the unit of cost. You model the access patterns first, then design keys to satisfy each with a single Query. It minimizes round trips and cost but is rigid: new access patterns may force GSIs or migrations, and it's harder to reason about than a relational schema. **GSI (Global Secondary Index)** has its own partition+sort key, is replicated asynchronously (eventually consistent only), has its own provisioned throughput, and can be added anytime — use it for alternate query dimensions. **LSI (Local Secondary Index)** shares the base table's partition key with an alternate sort key, must be created at table creation, supports strongly consistent reads, and shares the table's throughput, but adds the 10 GB per-partition-key collection-size limit. Practically: prefer GSIs (flexible, addable, no size limit); reach for an LSI only when you need strong consistency on an alternate sort within the same partition key.
+
+**Key points**
+- Single-table: overloaded PK/SK + composite keys → one Query, no joins
+- Design access patterns first; rigid against new patterns
+- GSI: own keys+throughput, eventually consistent, add anytime, no size cap
+- LSI: shares PK, strong consistency, create-time only, 10GB collection cap
+
+**Follow-ups**
+- When is an LSI's strong consistency worth its constraints?
+- What's the cost of getting your access patterns wrong in single-table design?
+
+---
+
+#### 16. Eventually consistent vs strongly consistent reads in DynamoDB — cost, performance, and when each is correct.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `dynamodb`, `consistency`, `rcu`, `trade-offs`
+
+DynamoDB writes to multiple AZ replicas; a write acks after a majority. An **eventually consistent read** (the default) may hit a replica that hasn't yet received the latest write, so it can return slightly stale data — but it costs **half** an RCU and has lower latency. A **strongly consistent read** routes to the leader replica to guarantee the latest committed write, costing a full RCU, with slightly higher latency, and it's **not available on GSIs** and can't be served if the leader is unreachable (reduced availability during partitions). Choose eventually consistent for the vast majority of reads — feeds, listings, dashboards — where a few-hundred-ms staleness is invisible and you want cheaper, faster, more available reads. Choose strongly consistent only when read-your-write correctness is required: reading a balance immediately after a debit, a uniqueness check, or a state-machine transition that must see its own prior write. The senior instinct is to default to eventual and reserve strong reads for the narrow set of operations where staleness causes a correctness bug.
+
+**Key points**
+- Eventually consistent (default): may be stale, half the RCU, faster, more available
+- Strongly consistent: latest write, full RCU, higher latency, not on GSIs
+- Default eventual; use strong only for read-your-write correctness
+- Strong reads reduce availability under partition (need the leader)
+
+**Follow-ups**
+- Why can't a GSI serve a strongly consistent read?
+- Give a concrete bug caused by using eventual consistency wrongly.
+
+---
+
+#### 17. When do you add ElastiCache, and how do Redis and Memcached differ for a Go service?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `elasticache`, `redis`, `memcached`, `caching`
+
+Add ElastiCache when read load on your primary datastore is the bottleneck or you need sub-millisecond access to hot data: caching DB query results, session storage, rate-limit counters, leaderboards, or pub/sub. **Memcached** is a simple, multi-threaded, in-memory key-value cache — pure caching, easy horizontal sharding, no persistence, no replication, no rich data types. Use it when you want a plain, large, multi-threaded cache and nothing else. **Redis** is single-threaded-per-shard but feature-rich: replication and Multi-AZ failover, persistence (RDB/AOF), rich types (sorted sets, hashes, streams), Lua scripting, pub/sub, and Cluster mode for sharding. Use Redis for anything beyond plain caching — leaderboards (sorted sets), distributed locks, rate limiting, queues, or when you need the cache to survive a node failure. For a Go service the default is Redis (via `go-redis`) because the failover, data structures, and atomic operations are usually worth it; pick Memcached only when you specifically want a dumb, multi-threaded cache and Redis's features are dead weight. Always design for cache misses, set TTLs, and guard against stampedes.
+
+**Key points**
+- Add caching when read load/latency on the primary store is the bottleneck
+- Memcached: simple, multi-threaded, no persistence/replication/rich types
+- Redis: replication+failover, persistence, sorted sets/locks/streams, Cluster mode
+- Default Redis for a Go service; design for misses, TTLs, stampede protection
+
+**Follow-ups**
+- How would you prevent a cache stampede on a hot key in Go?
+- Which gives you Multi-AZ failover, and why does that matter?
+
+---
+
+## Networking
+
+#### 18. Explain VPC subnet design (public vs private) and how a Go service in a private subnet reaches the internet.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `vpc`, `subnets`, `nat-gateway`, `networking`
+
+A **VPC** is your isolated virtual network; you carve it into **subnets**, each pinned to one AZ. A **public subnet** has a route to an **Internet Gateway (IGW)**, so resources with public IPs are directly reachable from and can reach the internet. A **private subnet** has no IGW route, so its instances aren't internet-reachable — the secure default for application servers and databases. A Go service in a private subnet still needs outbound internet (to call APIs, pull packages, reach AWS endpoints): it routes egress through a **NAT Gateway** that lives in a public subnet, which translates the private instance's traffic to a public IP for outbound-only connections (no unsolicited inbound). The standard layout: public subnets per AZ hold the ALB and NAT Gateways; private subnets per AZ hold the Go app tier; isolated private subnets hold the database. For AWS-service traffic (S3, DynamoDB, etc.), prefer **VPC endpoints** to keep traffic on the AWS backbone, avoid NAT data-processing charges, and reduce exposure. Spread subnets across AZs and put a NAT Gateway per AZ for HA.
+
+**Key points**
+- VPC isolated network; subnets are per-AZ
+- Public subnet routes to IGW; private subnet has no IGW route
+- Private instances egress via NAT Gateway (outbound-only) in a public subnet
+- Use VPC endpoints for AWS services to skip NAT cost and stay on backbone
+
+**Follow-ups**
+- Why put the database in an isolated subnet with no NAT route at all?
+- How does a VPC endpoint reduce cost vs a NAT Gateway for S3 access?
+
+---
+
+#### 19. Security groups vs NACLs — how do they differ and how do you use them together?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `security-groups`, `nacl`, `firewall`, `networking`
+
+Both are firewalls but operate at different layers and semantics. A **Security Group (SG)** is **stateful** and attached to an ENI/instance: you write allow-only rules, and return traffic for an allowed connection is automatically permitted (you don't write the reverse rule). SGs can reference other SGs as sources, which is the idiomatic way to express tiers (e.g. 'app SG may reach DB SG on 5432'). A **NACL** is **stateless** and attached to a subnet: it evaluates numbered rules in order, supports explicit **deny**, and because it's stateless you must allow both inbound and the corresponding outbound ephemeral-port return traffic. Use SGs as your primary, fine-grained instance-level control (default-deny inbound, allow only what's needed, reference SGs not CIDRs). Use NACLs as a coarse subnet-level guardrail — e.g. block a malicious IP range, or enforce that a database subnet never talks to the internet — since SGs can't express explicit deny. In practice SGs do most of the work; NACLs add a broad, stateless backstop.
+
+**Key points**
+- SG: stateful, instance/ENI-level, allow-only, can reference other SGs
+- NACL: stateless, subnet-level, ordered rules, supports explicit deny
+- Stateless means NACLs need both directions incl. ephemeral return ports
+- SGs = primary fine-grained control; NACLs = coarse subnet backstop / deny
+
+**Follow-ups**
+- Why must a NACL allow ephemeral ports outbound but an SG doesn't?
+- When do you actually need a NACL's explicit deny?
+
+---
+
+#### 20. ALB vs NLB — how do you choose, and how do target groups and health checks fit in?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `alb`, `nlb`, `target-groups`, `health-checks`
+
+An **ALB (Application Load Balancer)** operates at **Layer 7 (HTTP/HTTPS)**: it understands paths, hosts, and headers, so it does content-based routing, TLS termination, WebSocket/gRPC support, and integrates with WAF/Cognito. Use it for HTTP APIs and microservice routing — the default for a Go web service. An **NLB (Network Load Balancer)** operates at **Layer 4 (TCP/UDP)**: ultra-low latency, millions of connections/sec, preserves the client source IP, supports static/Elastic IPs, and handles non-HTTP or extreme-throughput traffic. Use it for TCP services, when you need static IPs/PrivateLink, or when raw performance/source-IP preservation matters. Both route to **target groups** — a set of registered targets (instances, IPs, or Lambda) — and each target group runs **health checks**: periodic probes (e.g. `GET /healthz`) that mark targets healthy/unhealthy so the LB only sends traffic to passing targets and supports rolling deploys and AZ failover. Tune the health-check path to reflect real readiness (DB reachable, dependencies up) but keep it cheap so it doesn't amplify load; mismatched thresholds cause flapping or slow failure detection.
+
+**Key points**
+- ALB = L7 HTTP: path/host routing, TLS, WAF, gRPC/WebSocket (default for Go APIs)
+- NLB = L4 TCP/UDP: ultra-low latency, source-IP preserve, static IPs, PrivateLink
+- Target groups register targets; health checks gate traffic per target
+- Tune health-check path to reflect readiness but keep it cheap
+
+**Follow-ups**
+- When do you need source-IP preservation, and which LB gives it?
+- What does a good /healthz check for a Go service actually verify?
+
+---
+
+#### 21. Explain the roles of Route 53, CloudFront, and API Gateway in front of a Go backend.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `route53`, `cloudfront`, `api-gateway`, `cdn`
+
+**Route 53** is managed DNS plus health-checked routing: it resolves your domain and supports routing policies — latency-based (send users to the nearest Region), weighted (canary/traffic split), failover (active-passive DR), and geolocation. It's the entry point and a DR/HA lever. **CloudFront** is the CDN: it caches static and cacheable dynamic content at edge POPs close to users, terminates TLS at the edge, absorbs traffic spikes, integrates AWS Shield/WAF for DDoS, and can run Lambda@Edge/CloudFront Functions for edge logic — cutting latency and origin load. **API Gateway** is a managed API front door for HTTP/REST/WebSocket APIs: it handles auth (IAM, Cognito, JWT, Lambda authorizers), throttling/rate limiting, request validation, usage plans/API keys, and maps requests to Lambda or backend integrations. The typical stack: Route 53 resolves the domain → CloudFront caches/edge-terminates → API Gateway (for serverless) or ALB (for containers) → your Go service. For a containerized Go API you often skip API Gateway and use CloudFront → ALB; you add API Gateway primarily when fronting Lambda or when you want its managed auth/throttling/usage-plan features.
+
+**Key points**
+- Route 53: DNS + latency/weighted/failover/geo routing (entry + DR lever)
+- CloudFront: CDN edge caching, TLS termination, Shield/WAF, edge functions
+- API Gateway: managed API front door — auth, throttling, validation, usage plans
+- Containers often use CloudFront→ALB; add API Gateway mainly for Lambda
+
+**Follow-ups**
+- When would you skip API Gateway for a Go service?
+- How do you use Route 53 failover routing for cross-region DR?
+
+---
+
+## Auto-scaling
+
+#### 22. Target tracking vs step scaling in an Auto Scaling Group — and what metric should scale a Go API?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `asg`, `target-tracking`, `step-scaling`, `metrics`
+
+**Target tracking** keeps a chosen metric near a target value (like a thermostat): you say 'keep average CPU at 60%' and ASG computes the capacity changes automatically — simplest and the right default for most services. **Step scaling** defines explicit capacity adjustments per alarm threshold band (e.g. +1 at 70%, +3 at 90%), giving fine control for non-linear or bursty load but requiring you to hand-tune the steps. For a **Go API**, CPU is often a poor scaling signal because well-written Go is concurrent and I/O-bound — it can serve high throughput at modest CPU, so CPU lags real saturation. Better signals: **requests-per-target** (ALB `RequestCountPerTarget`) which scales directly with traffic, or **p99 latency / a custom application metric** (queue depth, in-flight requests) published to CloudWatch that reflects actual saturation. The senior answer: pick the metric that *leads* user-visible degradation. Use target tracking on request-count-per-target as the default, fall back to latency-based custom metrics when the work per request is uneven, and reserve step scaling for spiky workloads needing aggressive multi-step reactions.
+
+**Key points**
+- Target tracking = thermostat to a target value (default, simplest)
+- Step scaling = explicit per-band adjustments for bursty/non-linear load
+- CPU is often a poor Go signal (concurrent, I/O-bound)
+- Prefer RequestCountPerTarget or p99 latency / custom saturation metric
+
+**Follow-ups**
+- Why is CPU misleading for a Go API specifically?
+- What custom metric would you publish and how?
+
+---
+
+#### 23. Scaling latency is a real risk during a traffic spike — explain the delays and how you mitigate them.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `scaling-latency`, `warm-pools`, `load-shedding`, `asg`
+
+Auto-scaling is not instantaneous; several delays stack up. The **metric/alarm delay**: CloudWatch aggregates over a period (often 60s+) and an alarm needs N datapoints, so the signal lags real load by a minute or more. The **launch delay**: a new EC2 instance must boot, the OS and your Go binary start, dependencies warm up, the DB pool fills, and the LB health check must pass before traffic arrives — often 1–3 minutes. During this window the existing fleet absorbs the spike, possibly degrading. Mitigations: (1) **scale on a leading indicator** (request count or latency) rather than a lagging one; (2) **provision headroom / static stability** so you're not running at the edge; (3) **fast boot** — minimal AMI or pre-baked container images, fast-starting Go binaries (which Go does well), and warm pools to keep pre-initialized instances ready; (4) **predictive scaling** for known diurnal patterns; (5) at the request layer, **load shedding / queueing** (SQS buffer, rate limiting) so spikes degrade gracefully instead of overwhelming. The principle: you can't out-scale a sudden spike reactively, so you combine headroom, fast boot, and buffering.
+
+**Key points**
+- Delays stack: metric aggregation + alarm datapoints + boot + health check pass
+- Reactive scaling can't catch a sudden spike (1–3 min lag)
+- Mitigate: leading-indicator metrics, headroom/static stability, warm pools
+- Buffer at request layer (SQS, rate limiting) so spikes degrade gracefully
+
+**Follow-ups**
+- What's a warm pool and when is it worth the cost?
+- How does queueing protect you when scaling can't keep up?
+
+---
+
+## Messaging
+
+#### 24. SQS standard vs FIFO, and explain visibility timeout and DLQs with a Go consumer in mind.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `sqs`, `fifo`, `visibility-timeout`, `dlq`
+
+**Standard SQS** offers nearly unlimited throughput, **at-least-once** delivery, and **best-effort ordering** — fast and cheap but you must make consumers **idempotent** because duplicates happen. **FIFO** guarantees strict ordering within a `MessageGroupId` and **exactly-once processing** (via deduplication windows), at lower throughput (300 msg/s, 3000 with batching). Choose FIFO only when ordering or dedup is a hard requirement (e.g. financial transactions per account); otherwise prefer Standard with idempotent handlers. **Visibility timeout**: when a consumer receives a message, SQS hides it for the timeout window; if the consumer deletes it before the window expires, it's gone, but if processing crashes or runs long, the message reappears and another consumer retries. You must set the timeout above your worst-case processing time (or extend it via `ChangeMessageVisibility` for long jobs) — too short causes duplicate processing; too long delays retries on real failures. A **DLQ (Dead-Letter Queue)** captures messages that exceed `maxReceiveCount` redeliveries, isolating poison messages so they don't block the queue and giving you a place to inspect/replay them. The Go pattern: long-poll, process idempotently, delete on success, let failures redrive, and alarm on DLQ depth.
+
+**Key points**
+- Standard: high throughput, at-least-once, best-effort order → need idempotent consumers
+- FIFO: strict per-group order + exactly-once, lower throughput (300/s, 3000 batched)
+- Visibility timeout hides a message during processing; set above worst-case time or extend it
+- DLQ captures poison messages after maxReceiveCount; alarm on DLQ depth
+
+
+```go
+// Long-poll, process idempotently, delete on success; failures redrive
+out, _ := q.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+    QueueUrl: url, MaxNumberOfMessages: 10, WaitTimeSeconds: 20,
+})
+for _, m := range out.Messages {
+    if err := processIdempotent(ctx, m); err != nil {
+        continue // leave it; visibility timeout expires → redelivery → eventually DLQ
+    }
+    q.DeleteMessage(ctx, &sqs.DeleteMessageInput{QueueUrl: url, ReceiptHandle: m.ReceiptHandle})
+}
+```
+
+**Follow-ups**
+- Why is idempotency mandatory with standard SQS?
+- How do you handle a job that takes longer than the visibility timeout?
+
+---
+
+#### 25. SNS, EventBridge, and SQS — how do they compose, and when do you choose EventBridge?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `sns`, `eventbridge`, `sqs`, `fan-out`
+
+These are complementary. **SQS** is a point-to-point queue: one producer, decoupled consumers pull and process — buffering and load-leveling. **SNS** is pub/sub fan-out: a message published to a topic is pushed to many subscribers (SQS queues, Lambda, HTTP, email). The classic **fan-out pattern** is SNS → multiple SQS queues, so each downstream service gets its own durable, independently-retryable copy with a DLQ. **EventBridge** is an event bus with **content-based routing**: rules match on the event payload's structure (not just a topic) and route to many targets, plus it has a schema registry, SaaS partner-event integrations, archive/replay, and scheduled events. Choose SNS for simple, high-throughput, low-latency fan-out where routing is topic-based. Choose EventBridge when you need rich filtering on event content, many event types on one bus, integration with third-party SaaS events, or replay/archival — i.e. event-driven architectures where decoupling and routing logic matter more than raw throughput/latency. SNS is cheaper and faster; EventBridge is richer and more declarative.
+
+**Key points**
+- SQS = point-to-point queue (buffer/load-level); SNS = pub/sub fan-out
+- Canonical fan-out: SNS → multiple SQS queues, each with its own DLQ
+- EventBridge = event bus with content-based routing, schema registry, replay, SaaS events
+- SNS for fast topic fan-out; EventBridge for rich routing & event-driven architectures
+
+**Follow-ups**
+- Why fan out SNS into SQS instead of subscribing Lambdas directly?
+- What does EventBridge content filtering give you that SNS can't?
+
+---
+
+#### 26. Kinesis vs MSK (managed Kafka) vs SQS for streaming — when do you reach for each?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `kinesis`, `msk`, `kafka`, `streaming`
+
+All move data between producers and consumers, but the semantics differ. **SQS** is a queue: messages are consumed and deleted, no replay, no ordering guarantee (Standard), no notion of multiple independent consumer groups reading the same stream — use it for decoupled task processing. **Kinesis Data Streams** and **Kafka (MSK)** are **append-only logs**: records are retained for a window, **partitioned/sharded** for ordered parallel consumption, and **multiple consumers can independently read the same data at their own offset** (replayability) — use them for event streaming, analytics, change-data-capture, and high-throughput fan-out to many readers. Between the two: **Kinesis** is fully serverless-ish, AWS-native, simple, scales by shards (each ~1MB/s in, 2MB/s out), retention up to 365 days, integrates tightly with Lambda/Firehose — pick it when you want low ops and are all-in on AWS. **MSK** is managed Apache Kafka — pick it when you need Kafka's ecosystem (Connect, Streams, exactly-once semantics, compaction), higher/ more flexible throughput, very high partition counts, or portability/existing Kafka tooling, accepting more operational complexity even though it's managed. Rule of thumb: task queue → SQS; AWS-native event stream with minimal ops → Kinesis; Kafka ecosystem/portability/scale → MSK.
+
+**Key points**
+- SQS: queue, consume-and-delete, no replay, decoupled task processing
+- Kinesis/Kafka: append-only partitioned log, replay, independent consumer groups
+- Kinesis: AWS-native, shard-based, low ops, tight Lambda/Firehose integration
+- MSK: managed Kafka — ecosystem, exactly-once, compaction, portability, more complexity
+
+**Follow-ups**
+- What does an append-log give you that a queue fundamentally cannot?
+- How do Kinesis shards map to consumer parallelism?
+
+---
+
+## IAM, Secrets & Config
+
+#### 27. Distinguish IAM users, roles, and policies, and explain least privilege in practice.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `iam`, `roles`, `policies`, `least-privilege`
+
+A **policy** is a JSON document granting/denying actions on resources (with optional conditions); it's attached to identities, not standalone authority. An **IAM user** is a long-lived identity with permanent credentials (access keys/password) — meant for humans or rare legacy cases. A **role** is an identity with **no permanent credentials**; it's *assumed* by a trusted principal (an EC2 instance, Lambda, ECS task, federated user, or another account) and yields **temporary, auto-rotating** credentials via STS. The senior principle is to use roles everywhere and avoid long-lived user keys, because temporary credentials limit blast radius and can't leak permanently. **Least privilege** means each principal gets only the actions and resources it actually needs — start from deny, grant narrowly, scope to specific ARNs and conditions (source IP, MFA, `aws:RequestTag`), and tighten over time using IAM Access Analyzer and CloudTrail to find unused permissions. Trade-off: tight policies are more work to maintain and can break on new features, but the security and audit payoff is large; favor managed permission boundaries and policy-as-code (e.g. Terraform) so grants are reviewed and version-controlled.
+
+**Key points**
+- Policy = JSON permissions doc; user = permanent creds; role = assumed, temporary STS creds
+- Prefer roles everywhere; avoid long-lived user access keys
+- Least privilege: deny by default, scope to specific ARNs/conditions, tighten over time
+- Use Access Analyzer + CloudTrail to prune unused permissions; policy-as-code
+
+**Follow-ups**
+- Why are temporary role credentials safer than user access keys?
+- How do you discover and remove over-broad permissions?
+
+---
+
+#### 28. How should a Go service authenticate to AWS — instance roles, IRSA, assume-role — and never static keys. Walk through it.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `iam`, `irsa`, `assume-role`, `go`
+
+The AWS SDK for Go uses a **credential provider chain**, and the goal is to feed it **temporary, auto-rotating** credentials with zero static keys in code or env. On **EC2**, attach an **instance profile (role)**; the SDK fetches temporary creds from the Instance Metadata Service (use IMDSv2). On **ECS/Fargate**, the **task role** provides per-task creds via the container credentials endpoint — better than instance roles because each task gets its own scoped identity. On **EKS**, use **IRSA (IAM Roles for Service Accounts)**: the pod's Kubernetes service account is mapped to an IAM role via an OIDC provider, so the SDK exchanges a projected service-account token for AWS creds (`AssumeRoleWithWebIdentity`) — pod-level least privilege without node-wide roles. **Assume-role** is the cross-account/elevation primitive: a base identity calls STS `AssumeRole` to get temporary creds for a role in another account or with different permissions, enabling least-privilege boundaries and central account separation. In all cases the SDK rotates creds automatically. Static long-lived keys are a last resort (local dev, legacy CI) and must live in Secrets Manager / OIDC, never in source. The Go code is just `config.LoadDefaultConfig(ctx)` — it resolves the right provider automatically.
+
+**Key points**
+- SDK credential chain; goal = temporary auto-rotating creds, no static keys
+- EC2: instance profile via IMDSv2; ECS/Fargate: per-task role (better scoping)
+- EKS: IRSA maps K8s service account → IAM role via OIDC for pod-level least privilege
+- Assume-role (STS) = cross-account/elevation; LoadDefaultConfig resolves it all
+
+
+```go
+// No keys in code — the chain finds instance/task/IRSA/assume-role creds
+cfg, err := config.LoadDefaultConfig(ctx)
+if err != nil { return err }
+client := s3.NewFromConfig(cfg) // creds resolved & auto-rotated by the SDK
+```
+
+**Follow-ups**
+- Why is an ECS task role better than an EC2 instance role for multi-tenant nodes?
+- How does IRSA give pod-level least privilege on EKS?
+
+---
+
+#### 29. Secrets Manager vs Parameter Store, and where does KMS fit?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `secrets-manager`, `parameter-store`, `kms`, `config`
+
+Both store config/secrets, but with different features and cost. **SSM Parameter Store** stores plaintext or KMS-encrypted (`SecureString`) parameters in a hierarchy; standard tier is **free**, simple, and great for config and low-churn secrets. **Secrets Manager** is purpose-built for secrets: it adds **automatic rotation** (built-in Lambda rotators for RDS/Aurora/Redshift, or custom), cross-region replication, fine-grained resource policies, and versioning with staging labels — at a per-secret monthly cost plus API charges. Choose Secrets Manager when you need automatic credential rotation (database passwords, API keys) or its richer features; choose Parameter Store for general config and secrets you rotate rarely, to save money. **KMS** underpins both: it's the managed key service that encrypts the secret material. Encryption is envelope encryption — KMS holds the customer master key (CMK) and the service encrypts data keys with it, so access to the secret requires both the secret's resource policy *and* `kms:Decrypt` on its key. This gives you a second authorization layer and a full CloudTrail audit of every decrypt. In a Go service you fetch via the SDK at startup and cache, never bake secrets into images or env.
+
+**Key points**
+- Parameter Store: free standard tier, config + SecureString, simple
+- Secrets Manager: automatic rotation, replication, resource policies — costs per secret
+- Pick Secrets Manager for rotation; Parameter Store for general config/rare-rotation
+- KMS encrypts both (envelope encryption); access needs the key's kms:Decrypt + CloudTrail audit
+
+**Follow-ups**
+- When is the cost of Secrets Manager justified over Parameter Store?
+- Why does requiring kms:Decrypt add a meaningful second authorization layer?
+
+---
+
+## Observability & Cost
+
+#### 30. How do you instrument a Go service with CloudWatch and X-Ray, and what do metrics/logs/alarms/traces each give you?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `cloudwatch`, `x-ray`, `observability`, `go`
+
+The three telemetry pillars map onto AWS services. **CloudWatch Metrics** are numeric time-series (latency, request count, error rate, custom business metrics) — aggregate health and the basis for alarms and scaling; emit custom metrics via the SDK or, cheaper at high volume, the **Embedded Metric Format (EMF)** in structured logs so CloudWatch extracts metrics from log lines. **CloudWatch Logs** capture structured (JSON) application logs; ship them via the awslogs/Fluent Bit driver and query with **Logs Insights**. **CloudWatch Alarms** watch a metric against a threshold and trigger actions (SNS notify, auto-scaling, runbooks) — alarm on symptoms users feel (p99 latency, error rate, queue depth), not just CPU, to avoid alert fatigue. **X-Ray** gives **distributed tracing**: it stitches a single request's path across services, showing where latency accrues and which dependency failed — essential in a microservice mesh where logs alone can't reconstruct causality. Instrument the Go service with the X-Ray SDK or, better, **OpenTelemetry exporting to X-Ray/CloudWatch** for vendor-neutral instrumentation. The senior framing: metrics tell you *something is wrong*, traces tell you *where*, logs tell you *why* — you need all three, plus alarms wired to SLO-based thresholds.
+
+**Key points**
+- Metrics = aggregate health + alarm/scaling basis; use EMF for cheap high-volume custom metrics
+- Logs = structured JSON, queried via Logs Insights
+- Alarms = threshold → action; alarm on user-felt symptoms (p99, error rate), not CPU
+- X-Ray = distributed tracing for cross-service latency/failure; prefer OpenTelemetry
+
+**Follow-ups**
+- Why alarm on p99 latency rather than CPU?
+- What does EMF save you versus PutMetricData at high cardinality?
+
+---
+
+#### 31. Walk through cost optimization for an AWS-hosted Go platform — what levers do you pull and in what order?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `cost`, `right-sizing`, `savings-plans`, `egress`
+
+Optimize by impact, measuring first with Cost Explorer and tagging by team/service. (1) **Right-sizing**: most savings come from over-provisioned compute and storage — match instance/task size and gp3 EBS IOPS to actual utilization (use Compute Optimizer); a concurrent Go service often needs less than you'd guess. (2) **Commitment discounts**: cover steady baseline compute with **Savings Plans** (up to ~72% off) and reserved capacity for RDS/ElastiCache — the single biggest lever for predictable load. (3) **Spot** for fault-tolerant/stateless and async Go workers (up to ~90% off). (4) **Storage lifecycle**: S3 lifecycle policies to transition cold objects to IA/Glacier and expire stale data; delete orphaned EBS snapshots and incomplete multipart uploads. (5) **Data-transfer awareness**: cross-AZ and especially **internet egress** is a silent, large cost — use VPC endpoints to avoid NAT charges for S3/DynamoDB, CloudFront to cut origin egress, and keep chatty services in the same AZ where safe. (6) **Serverless idle elimination**: move spiky/low-baseline work to Lambda/Fargate so you stop paying for idle. (7) **Kill waste**: untagged/idle resources, oversized logs (CloudWatch retention), over-provisioned DynamoDB (use on-demand or autoscaling). The principle: measure, attribute cost to owners, then attack the biggest line items — usually compute commitment and egress.
+
+**Key points**
+- Measure first (Cost Explorer + tagging); right-size compute/storage with Compute Optimizer
+- Savings Plans for baseline, reserved for RDS/cache, Spot for stateless/async
+- S3 lifecycle to IA/Glacier; delete orphan snapshots & incomplete multipart uploads
+- Egress is the silent cost: VPC endpoints (skip NAT), CloudFront, AZ-locality
+
+**Follow-ups**
+- Why is data egress often the surprise on a cloud bill?
+- How do VPC endpoints reduce both cost and risk?
+
+---
+
+## End-to-End Design & GCP
+
+#### 32. Design a highly available, multi-AZ Go microservice on AWS end-to-end — from DNS to data.
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `system-design`, `ha`, `multi-az`, `end-to-end`
+
+**Edge & DNS**: Route 53 resolves the domain (with health-checked failover routing for DR) → CloudFront caches static/cacheable responses, terminates TLS at the edge, and fronts WAF/Shield for DDoS. **Network**: one VPC, public subnets per AZ (ALB + NAT Gateways), private app subnets per AZ, isolated DB subnets per AZ. **Ingress**: an internet-facing ALB spanning >=3 AZs routes HTTPS to a target group with `/healthz` checks. **Compute**: the stateless Go service runs as **ECS Fargate tasks** (or EKS pods) across >=3 AZs, behind the ALB, with a task role (least-privilege IAM, no static keys), auto-scaling on `RequestCountPerTarget` or p99 latency with headroom for AZ loss (static stability). **State**: **Aurora Multi-AZ** (or DynamoDB, inherently multi-AZ) for primary data, with read replicas for read fan-out and **RDS Proxy** for connection pooling; **ElastiCache Redis** (Multi-AZ) for sessions/hot data; **S3** for objects via presigned URLs. **Async**: SQS (with DLQ) decouples spiky/background work to Fargate workers; SNS/EventBridge for fan-out. **Secrets/config**: Secrets Manager (rotated DB creds) + Parameter Store, encrypted by KMS. **Observability**: CloudWatch metrics/logs/alarms on SLO symptoms, X-Ray/OpenTelemetry tracing. **CI/CD**: IaC (Terraform), immutable images, rolling/blue-green deploys. **Resilience**: timeouts, retries with jitter, circuit breakers in the Go code; test AZ failure with Fault Injection Simulator. The whole stack survives one AZ loss with zero data loss and no manual intervention.
+
+**Key points**
+- Route 53 → CloudFront(+WAF) → multi-AZ ALB → Fargate/EKS across >=3 AZs (stateless, task role)
+- Aurora Multi-AZ / DynamoDB + RDS Proxy + Multi-AZ Redis + S3 for state
+- SQS/DLQ + SNS/EventBridge for async; Secrets Manager + KMS for config
+- Auto-scale on request-count/latency with static-stability headroom; CloudWatch+X-Ray; test with FIS
+
+**Follow-ups**
+- Where in this design is the single point of failure, and how do you remove it?
+- How would you extend this to multi-region active-active?
+
+---
+
+#### 33. Map the AWS services in your design to their GCP equivalents and note where the models differ.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `gcp`, `cloud-run`, `spanner`, `pub-sub`
+
+**Compute**: EC2 → Compute Engine; ECS/EKS → **GKE** (GCP's Kubernetes is first-class and arguably more mature, since K8s originated at Google); Fargate → **GKE Autopilot** or **Cloud Run** (Cloud Run is the cleanest fit for a stateless containerized Go service — fully managed, scale-to-zero, request-based billing, simpler than Fargate); Lambda → **Cloud Functions** / Cloud Run. **Storage**: S3 → **Cloud Storage** (similar classes Standard/Nearline/Coldline/Archive); EBS → Persistent Disk; EFS → Filestore. **Databases**: RDS → **Cloud SQL**; Aurora's distributed-storage niche → partly Cloud SQL, but the true differentiator is **Spanner** — globally-distributed, horizontally-scalable, strongly-consistent relational (TrueTime), which AWS has no direct equal to (Aurora isn't globally synchronous); DynamoDB → **Firestore / Bigtable** (Bigtable for wide-column high-throughput, Firestore for document). **Messaging**: SQS/SNS/EventBridge → **Pub/Sub** (a single unified service combining queueing and pub/sub); Kinesis → Pub/Sub + Dataflow. **Networking**: ALB/NLB → Cloud Load Balancing (global anycast LB, a notable architectural difference — GCP LBs are global by default, AWS ALBs are regional); Route 53 → Cloud DNS; CloudFront → Cloud CDN. **IAM**: similar role-based model; GKE uses **Workload Identity** (analogous to IRSA). **Secrets/obs**: Secrets Manager → Secret Manager; CloudWatch/X-Ray → Cloud Monitoring/Logging/Trace (the Operations suite). The biggest conceptual gaps: GCP's global load balancing and Spanner's global strong consistency are genuinely different primitives, not 1:1 renames.
+
+**Key points**
+- Compute: EKS→GKE, Fargate→Cloud Run/Autopilot, Lambda→Cloud Functions/Run
+- Data: RDS→Cloud SQL, DynamoDB→Firestore/Bigtable, and Spanner = global strong-consistent (no AWS 1:1)
+- Messaging: SQS+SNS+EventBridge → unified Pub/Sub; Kinesis→Pub/Sub+Dataflow
+- Networking: GCP load balancing is global by default vs AWS regional ALBs
+
+**Follow-ups**
+- Why is Spanner not equivalent to Aurora?
+- How does GCP's global LB change a multi-region design vs AWS?
+
+---

@@ -1,0 +1,828 @@
+# Security
+
+> Production-grade application security for senior Go backend engineers: authentication, authorization, token lifecycle, OAuth2/OIDC, TLS/mTLS, OWASP defenses, secrets management, and compliance.
+
+**34 questions** across **13 topics** · Level: senior
+
+## Topics
+
+- [Authentication vs Authorization](#authentication-vs-authorization) (2)
+- [JWT Fundamentals](#jwt-fundamentals) (3)
+- [Token Revocation & Lifecycle](#token-revocation-lifecycle) (3)
+- [OAuth2 & OIDC](#oauth2-oidc) (4)
+- [Sessions, Cookies & CSRF](#sessions-cookies-csrf) (3)
+- [HMAC & Webhook Security](#hmac-webhook-security) (2)
+- [TLS & mTLS](#tls-mtls) (2)
+- [OWASP Top 10 & Access Control](#owasp-top-10-access-control) (2)
+- [Injection: SQL & Command](#injection-sql-command) (2)
+- [XSS, Input Validation & Mass Assignment](#xss-input-validation-mass-assignment) (3)
+- [Password & Credential Storage](#password-credential-storage) (2)
+- [Secrets Management & Encryption](#secrets-management-encryption) (2)
+- [Rate Limiting, Hardening & Compliance](#rate-limiting-hardening-compliance) (4)
+
+---
+
+## Authentication vs Authorization
+
+#### 1. What is the difference between authentication and authorization, and why does conflating them cause security bugs?
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `authn`, `authz`, `access-control`
+
+**Authentication** answers *"who are you?"* — it verifies identity (credentials, a token, a client certificate). **Authorization** answers *"are you allowed to do this?"* — it checks whether the authenticated principal has permission for a specific action on a specific resource. The two are sequential: you authenticate first, then authorize each request. Conflating them produces classic bugs: a service trusts that *any* valid token means the caller may access *any* record, leading to **broken access control / IDOR**. A user with a perfectly valid JWT (authenticated) can fetch `/orders/12345` belonging to someone else because the handler never re-checks ownership (authorization). The defense is to treat authentication as a gate at the edge and authorization as a per-resource decision in the handler, never assuming identity implies permission.
+
+**Key points**
+- AuthN = identity verification; AuthZ = permission checking
+- AuthN happens once per request edge; AuthZ happens per resource/action
+- A valid token never implies access to a specific object
+- Missing object-level AuthZ is the root of IDOR/BOLA
+
+**Follow-ups**
+- Where should authorization live: middleware, handler, or data layer?
+- How do you enforce authorization consistently across 50 microservices?
+
+---
+
+#### 2. How do you model authorization for a multi-tenant e-commerce backend, and what are the trade-offs between RBAC, ABAC, and ReBAC?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `authz`, `rbac`, `abac`, `rebac`, `multi-tenant`
+
+**RBAC** assigns permissions to roles (admin, seller, customer) and roles to users — simple, auditable, but coarse; it struggles with "seller can edit *their own* products." **ABAC** evaluates policies over attributes (user.tenant == resource.tenant && resource.status == 'draft') — flexible and good for ownership/context, but policies sprawl and become hard to reason about. **ReBAC** (Google Zanzibar / OpenFGA style) models authorization as a graph of relationships (user → owner-of → store → contains → product) — excellent for hierarchical, shareable resources but operationally heavier. In practice a multi-tenant store combines them: RBAC for coarse role gates, plus mandatory **tenant scoping** on every query (ABAC-style) so cross-tenant access is structurally impossible. The non-negotiable rule: object-level checks must run server-side on every read and write, never inferred from a role alone.
+
+**Key points**
+- RBAC: roles→permissions, simple but coarse
+- ABAC: attribute/policy-based, handles ownership and context
+- ReBAC/Zanzibar: relationship graph, great for hierarchies & sharing
+- Always enforce tenant scoping in the data layer, not just middleware
+
+
+```go
+// Tenant scoping: never trust the client-supplied tenant
+func (r *OrderRepo) GetOrder(ctx context.Context, orderID string) (*Order, error) {
+    tenantID := auth.TenantFromContext(ctx) // from validated token, not request body
+    var o Order
+    err := r.db.QueryRowContext(ctx,
+        `SELECT id, total FROM orders WHERE id = $1 AND tenant_id = $2`,
+        orderID, tenantID,
+    ).Scan(&o.ID, &o.Total)
+    if errors.Is(err, sql.ErrNoRows) {
+        return nil, ErrNotFound // same response as "not yours" to avoid leaking existence
+    }
+    return &o, err
+}
+```
+
+**Follow-ups**
+- How do you prevent a 404-vs-403 oracle from leaking resource existence?
+- How would you centralize policy with OpenFGA or OPA?
+
+---
+
+## JWT Fundamentals
+
+#### 3. Walk through the structure of a JWT and what each part guarantees.
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `jwt`, `tokens`
+
+A JWT is three Base64URL-encoded parts joined by dots: `header.payload.signature`. The **header** declares the type and signing algorithm (e.g. `{"alg":"RS256","typ":"JWT"}`). The **payload** holds claims — registered (`iss`, `sub`, `aud`, `exp`, `iat`, `nbf`, `jti`) and custom (roles, tenant). The **signature** is computed over `base64url(header) + "." + base64url(payload)` using the algorithm and key from the header. The signature guarantees **integrity and authenticity** — it proves the token was issued by the holder of the signing key and wasn't tampered with. It does **not** provide confidentiality: the payload is merely encoded, not encrypted, so anyone can read it. The critical consequence: never put secrets (passwords, PII, card data) in a JWT payload, and never trust an unverified token's claims.
+
+**Key points**
+- Three parts: header.payload.signature, all Base64URL
+- Signature = integrity + authenticity, NOT confidentiality
+- Payload is readable by anyone — encode != encrypt
+- Registered claims: iss, sub, aud, exp, iat, nbf, jti
+
+**Follow-ups**
+- When would you use a JWE (encrypted JWT) instead?
+- What does the jti claim enable?
+
+---
+
+#### 4. Compare HS256 and RS256. When would you choose one over the other?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `jwt`, `hs256`, `rs256`, `crypto`
+
+**HS256** is HMAC with SHA-256 — a *symmetric* MAC. The same secret signs and verifies, so every party that can verify can also forge tokens. It's fast and simple, ideal when a **single trusted service** both issues and validates (monolith, or one auth service that shares no key). **RS256** is RSA with SHA-256 — *asymmetric*. The auth server signs with a private key; any number of resource servers verify with the public key. They can verify but cannot mint tokens, which is essential in distributed systems and third-party integrations (the public key is published via JWKS). The trade-off: RS256 is slower and keys are larger, but it eliminates secret-sharing across services. Rule of thumb: HS256 for a single boundary, RS256 (or ES256 for smaller keys/faster verify) for multi-service or external verifiers.
+
+**Key points**
+- HS256: symmetric HMAC — verifier can also forge
+- RS256: asymmetric — private signs, public verifies via JWKS
+- Distributed/3rd-party verifiers → RS256 (or ES256)
+- Single issuer+verifier → HS256 is fine and faster
+
+
+```go
+// RS256 verification with key from JWKS, alg pinned
+token, err := jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
+    if t.Method.Alg() != "RS256" { // pin algorithm explicitly
+        return nil, fmt.Errorf("unexpected alg: %s", t.Method.Alg())
+    }
+    kid, _ := t.Header["kid"].(string)
+    return jwks.PublicKey(kid) // resolve by key id, supports rotation
+}, jwt.WithExpirationRequired(), jwt.WithAudience("api.shop"), jwt.WithIssuer("https://auth.shop"))
+```
+
+**Follow-ups**
+- How does a key-confusion attack abuse a server that accepts both HS256 and RS256?
+- Why is ES256 often preferred over RS256 today?
+
+---
+
+#### 5. What are the most dangerous JWT pitfalls and how do you defend against each?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `jwt`, `alg-none`, `key-confusion`, `owasp`
+
+**(1) `alg:none`** — an attacker sets the header algorithm to `none`, strips the signature, and some libraries accept it as valid. Defense: never trust the header's `alg`; pin allowed algorithms server-side. **(2) Algorithm confusion (RS256→HS256)** — attacker takes the public RSA key, signs an HS256 token with it as the HMAC secret; a naive verifier uses the public key as a shared secret and accepts it. Defense: pin the expected algorithm, never derive verification mode from the token. **(3) Missing `exp`** — tokens live forever. Defense: require and validate `exp` (and `nbf`/`iat`). **(4) Weak HMAC secret** — brute-forceable offline. Defense: use a high-entropy secret (≥256 bits). **(5) Sensitive data in payload** — it's readable. Defense: keep only identifiers/claims, never secrets. **(6) Not validating `aud`/`iss`** — a token minted for service A is replayed at service B. Defense: validate audience and issuer.
+
+**Key points**
+- Pin algorithms; never trust header.alg (alg:none, RS256→HS256 confusion)
+- Require and validate exp/nbf/iat
+- Use ≥256-bit HMAC secrets
+- No secrets/PII in payload (it's only encoded)
+- Always validate aud and iss
+
+
+```go
+// Vulnerable: trusts whatever alg the token declares
+jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
+    return secretOrPubKey, nil // BUG: same key returned for HMAC and RSA paths
+})
+
+// Safe: explicit allowlist of methods
+jwt.Parse(raw, keyFunc, jwt.WithValidMethods([]string{"RS256"}))
+```
+
+**Follow-ups**
+- How does pinning aud stop token replay across microservices?
+- Why is leeway for clock skew sometimes a security trade-off?
+
+---
+
+## Token Revocation & Lifecycle
+
+#### 6. JWTs are stateless and self-validating. How do you revoke one before it expires?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `jwt`, `revocation`, `denylist`, `refresh-tokens`
+
+Statelessness is the problem: a valid signature plus a future `exp` is accepted without a DB lookup, so you can't simply "delete" a token. Practical strategies: **(1) Short TTL + refresh** — issue access tokens with 5–15 min lifetimes; revocation is effectively waiting one TTL. The refresh token (long-lived, server-tracked) is what you actually revoke. **(2) Denylist** — store revoked `jti`s in Redis with TTL == token's remaining life; verify against it on each request. Reintroduces state but only for revoked tokens. **(3) Token versioning** — store a per-user `token_version` integer; embed it as a claim; bump it on logout/password-change to invalidate *all* existing tokens in one write. **(4) Sessions in a fast store** — abandon pure-stateless and look up a session each request. The standard production answer is short-TTL access tokens + revocable refresh tokens, optionally with a denylist for emergency revocation.
+
+**Key points**
+- Can't revoke a stateless token directly — manage the refresh side
+- Short access TTL bounds the revocation window
+- Denylist revoked jti in Redis with matching TTL
+- token_version claim invalidates all of a user's tokens at once
+
+
+```go
+// token_version check: bump in DB to kill all of a user's access tokens
+claims := tok.Claims.(jwt.MapClaims)
+userVer := userStore.TokenVersion(claims["sub"].(string))
+if int(claims["ver"].(float64)) != userVer {
+    return ErrTokenRevoked
+}
+```
+
+**Follow-ups**
+- What's the latency/cost trade-off of a per-request denylist check?
+- How do you propagate revocation across regions/edge caches?
+
+---
+
+#### 7. Explain the roles of access vs refresh tokens and where each should be stored in a browser app.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `tokens`, `access-token`, `refresh-token`, `storage`, `xss`
+
+The **access token** is short-lived (minutes), sent on every API call, and carries authorization claims. The **refresh token** is long-lived (days/weeks), sent only to the token endpoint to obtain new access tokens, and is the revocable, server-tracked credential. Splitting them limits blast radius: a leaked access token expires quickly; the powerful refresh token travels rarely. **Storage** is the contentious part. `localStorage` is readable by any JavaScript, so any XSS steals the token outright — avoid it for sensitive tokens. An **httpOnly, Secure, SameSite cookie** is invisible to JS (XSS can't read it) but is sent automatically, which reintroduces CSRF risk (mitigated by SameSite=Lax/Strict + anti-CSRF token). A common pattern: refresh token in an httpOnly cookie scoped to `/auth/refresh`, access token held in memory only (lost on reload, re-fetched via refresh). Never persist the refresh token in localStorage.
+
+**Key points**
+- Access: short-lived, sent everywhere; Refresh: long-lived, sent rarely, revocable
+- localStorage is XSS-readable — avoid for tokens
+- httpOnly+Secure+SameSite cookie hides token from JS but invites CSRF
+- Best practice: refresh in httpOnly cookie, access in memory
+
+**Follow-ups**
+- How do SameSite cookie modes interact with refresh-token CSRF?
+- What changes for a mobile/native client with no cookie jar?
+
+---
+
+#### 8. What is refresh token rotation, and how does it enable theft detection?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `refresh-token`, `rotation`, `theft-detection`
+
+**Rotation** means every time a refresh token is used, the server issues a *new* refresh token and invalidates the old one (one-time-use). This shrinks the useful lifetime of any single refresh token to a single use. The security win is **theft detection via reuse**: each refresh token belongs to a token *family* (a chain). If a previously-used (already-rotated) token is presented again, that's an anomaly — either the legitimate client and an attacker both hold a copy. The server can't tell which is which, so it **revokes the entire family**, forcing both to re-authenticate. This converts silent, long-lived token theft into a detectable event. Implementation: store each refresh token (hashed) with a `family_id` and `used` flag; on reuse of a consumed token, invalidate all tokens sharing that `family_id`. Pair with short access TTLs so the attacker's window is minimal.
+
+**Key points**
+- Rotation = one-time-use refresh tokens, new one issued each refresh
+- Reuse of a rotated token signals theft (legit client + attacker both have it)
+- On reuse, revoke the whole token family
+- Store hashed tokens with family_id and used flag
+
+
+```go
+// On refresh: detect reuse, revoke family
+rt := store.Lookup(hash(presented))
+if rt == nil { return ErrInvalid }
+if rt.Used { // already rotated -> reuse detected
+    store.RevokeFamily(rt.FamilyID)
+    return ErrTokenReuseRevoked
+}
+rt.Used = true; store.Save(rt)
+newRT := store.Issue(rt.UserID, rt.FamilyID) // same family, fresh token
+```
+
+**Follow-ups**
+- How do you handle race conditions when a client retries a refresh?
+- Should hashing the refresh token use bcrypt or HMAC/SHA-256, and why?
+
+---
+
+## OAuth2 & OIDC
+
+#### 9. Describe the OAuth2 authorization code flow with PKCE and what PKCE protects against.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `oauth2`, `pkce`, `authorization-code`
+
+In the **authorization code** flow the client redirects the user to the authorization server, the user authenticates and consents, and the server redirects back with a short-lived **authorization code**. The client then exchanges that code at the token endpoint for tokens — over a back channel, so tokens never appear in the browser URL/history. **PKCE** (Proof Key for Code Exchange) hardens this for public clients (SPAs, mobile) that can't keep a secret. The client generates a random `code_verifier`, sends `code_challenge = SHA256(verifier)` with the authorization request, then sends the raw `verifier` during the token exchange. The server checks the hash matches. This defeats **authorization code interception**: even if an attacker steals the code (e.g. via a malicious app registering the same redirect URI, or a logged URL), they can't redeem it without the verifier, which never left the client. PKCE is now recommended for *all* clients, including confidential ones.
+
+**Key points**
+- Code returned via redirect; tokens exchanged on a back channel
+- PKCE: code_challenge=SHA256(verifier) on auth request, verifier on exchange
+- Defeats authorization-code interception for public clients
+- Recommended for all clients, not just SPAs/mobile
+
+**Follow-ups**
+- Why is the state parameter still needed alongside PKCE?
+- What's the difference between plain and S256 challenge methods?
+
+---
+
+#### 10. When do you use the client credentials grant, and why was the implicit grant deprecated?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `oauth2`, `client-credentials`, `implicit`, `deprecated`
+
+**Client credentials** is the machine-to-machine grant: no user is involved. A confidential client (a backend service) authenticates with its own client ID/secret (or mTLS) and receives an access token representing *itself*, used for service-to-service APIs, cron jobs, and daemons. There's no user identity, so no refresh token and no ID token. The **implicit grant** returned the access token directly in the redirect URI fragment (`#access_token=...`) to avoid a back-channel exchange in browsers that lacked CORS. It's deprecated because the token is exposed in the URL — leaking via browser history, referer headers, and logs — with no client authentication and no clean way to deliver a refresh token. Modern guidance (OAuth 2.1) replaces it entirely with **authorization code + PKCE**, which keeps tokens off the front channel. Treat any new use of implicit as a red flag.
+
+**Key points**
+- Client credentials = M2M, no user, no refresh/ID token
+- Implicit returned tokens in the URL fragment — leaky
+- No client auth, token exposed in history/referer/logs
+- OAuth 2.1: use auth code + PKCE instead of implicit
+
+**Follow-ups**
+- How do you authenticate the client in client-credentials securely (secret vs private_key_jwt vs mTLS)?
+- What scopes/audience should an M2M token carry?
+
+---
+
+#### 11. What is the difference between OAuth2 and OIDC, and what does the ID token add?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `oidc`, `oauth2`, `id-token`, `authentication`
+
+**OAuth2 is an authorization framework** — it issues access tokens that grant a client *delegated access* to resources. It deliberately says nothing about *who the user is*; the access token is opaque to the client and meant for the resource server. People misused OAuth2 for login by inferring identity from API calls, which is fragile and insecure. **OIDC (OpenID Connect)** is an identity layer *on top of* OAuth2 that standardizes authentication. It adds the **ID token** — a JWT with verified claims about the user (`sub`, `email`, `name`, `iss`, `aud`, `exp`, `nonce`) intended *for the client* to establish a login session. It also defines the `/userinfo` endpoint and discovery (`.well-known/openid-configuration`). Rule: use the **access token** to call APIs, use the **ID token** to know who logged in. Never use an access token as proof of identity, and always validate the ID token's signature, `aud`, `iss`, and `nonce`.
+
+**Key points**
+- OAuth2 = authorization (access tokens for APIs)
+- OIDC = authentication layer on OAuth2
+- ID token (JWT) carries verified user identity for the client
+- Validate ID token sig, aud, iss, nonce; don't use access token for identity
+
+**Follow-ups**
+- What's the purpose of the nonce in the ID token?
+- Why should the client never call /userinfo with an ID token?
+
+---
+
+#### 12. How does a tool like Keycloak fit into an OAuth2/OIDC architecture, and what does centralizing it buy you?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `keycloak`, `oidc`, `iam`, `sso`
+
+Keycloak is an **identity and access management (IAM) server** — a self-hosted OAuth2/OIDC authorization server plus user federation. It centralizes authentication so your services never handle passwords: they redirect to Keycloak, which authenticates the user (local DB, LDAP/AD, or social/federated IdPs), issues OIDC ID tokens and OAuth2 access tokens signed with its keys, and publishes a JWKS endpoint for verification. Your Go services become **resource servers**: they fetch Keycloak's public keys, validate incoming JWTs (signature, `iss`, `aud`, `exp`), and read realm/client roles from the token to authorize. Centralizing buys you single sign-on, consistent MFA/password policy, token rotation and key management in one place, fine-grained roles/groups, and the ability to revoke sessions globally. The trade-off is operational: Keycloak becomes a critical, high-availability dependency, so you cache JWKS, plan key rotation, and run it redundantly.
+
+**Key points**
+- Keycloak = self-hosted OAuth2/OIDC IAM + user federation
+- Services become resource servers validating JWTs against its JWKS
+- Centralizes SSO, MFA, roles, key/token management
+- Becomes a critical HA dependency — cache JWKS, plan rotation
+
+**Follow-ups**
+- How do you map Keycloak realm/client roles to your authorization model?
+- How do you handle Keycloak key rotation without an outage?
+
+---
+
+## Sessions, Cookies & CSRF
+
+#### 13. Contrast session-based and token-based authentication. What are the trade-offs?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `sessions`, `tokens`, `authentication`
+
+**Session-based** auth stores state server-side: on login the server creates a session record and sends an opaque session ID in a cookie. Each request the server looks up the session. It's trivially revocable (delete the session), the cookie carries no data, and it's well understood — but it needs shared/sticky session storage to scale horizontally and is cookie-bound (CSRF-prone). **Token-based** (JWT) auth is stateless: the token itself carries claims and is self-validating, so any service with the key can authorize without a central store — great for microservices and APIs. The cost is revocation (covered earlier), token bloat, and the storage/XSS questions. Pragmatic guidance: for a classic server-rendered web app, sessions are simpler and safer; for distributed APIs and SPAs/mobile consuming many services, tokens win. Many systems use a hybrid: stateless access tokens for APIs, server-tracked refresh tokens for revocation.
+
+**Key points**
+- Sessions: server-side state, opaque cookie, easy revocation, needs shared store
+- Tokens: stateless, self-validating, scale across services, hard to revoke
+- Sessions are cookie-bound → CSRF; tokens-in-header → mostly CSRF-immune
+- Hybrid: stateless access + revocable refresh is common
+
+**Follow-ups**
+- How do you scale server-side sessions across many instances?
+- Why are tokens sent in the Authorization header largely immune to CSRF?
+
+---
+
+#### 14. Explain CSRF, and why an API that authenticates via a bearer token in the Authorization header is mostly immune.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `csrf`, `cookies`, `bearer-token`
+
+**CSRF** (Cross-Site Request Forgery) abuses the browser's habit of *automatically attaching cookies* to any request to a domain, regardless of which site initiated it. If you're logged in to `bank.com` (session cookie) and visit `evil.com`, a hidden form or image can fire a state-changing request to `bank.com`; the browser attaches your cookie and the server can't tell it wasn't you. The attack relies entirely on **ambient/automatic credentials**. A bearer token in the `Authorization` header is **not** sent automatically — JavaScript must explicitly add it, and cross-origin JS can't read your token (it's in memory or a different origin's storage) thanks to the same-origin policy and CORS. So a forged cross-site request simply arrives with no `Authorization` header and is rejected. The caveat: this immunity disappears if you store the token in a cookie that's auto-sent — then you're back to CSRF and need defenses.
+
+**Key points**
+- CSRF exploits auto-attached cookies on cross-site requests
+- Requires ambient credentials (cookies), not explicit headers
+- Authorization: Bearer is added by JS, not auto-sent → immune
+- Putting the token in an auto-sent cookie reintroduces CSRF
+
+**Follow-ups**
+- Does CORS prevent CSRF? Why or why not?
+- How does a login CSRF differ from a classic CSRF?
+
+---
+
+#### 15. What are the main CSRF defenses, and how do SameSite cookies and anti-CSRF tokens compare?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `csrf`, `samesite`, `csrf-token`, `cookies`
+
+**SameSite cookies** instruct the browser when to send a cookie cross-site. `SameSite=Strict` never sends it on cross-site requests (safest, but breaks inbound links to authenticated pages). `SameSite=Lax` (a sensible default) sends it on top-level GET navigations but not on cross-site POST/embedded requests, blocking most CSRF. `SameSite=None` (requires `Secure`) sends it everywhere — needed for legitimate cross-site contexts but offers no CSRF protection alone. **Anti-CSRF tokens** are an explicit defense: the server issues an unpredictable token (synchronizer token, or the double-submit-cookie pattern) that must accompany state-changing requests in a header or form field; cross-site attackers can't read or guess it. Best practice is defense-in-depth: set `SameSite=Lax` (or Strict) **and** require an anti-CSRF token for cookie-authenticated state changes, plus validate `Origin`/`Referer`. For header-token APIs you typically need none of this.
+
+**Key points**
+- SameSite Strict/Lax/None controls cross-site cookie sending
+- Lax is a good default; None offers no CSRF protection
+- Anti-CSRF tokens: synchronizer or double-submit, unguessable per request
+- Defense-in-depth: SameSite + CSRF token + Origin check
+
+
+```
+http.SetCookie(w, &http.Cookie{
+    Name: "session", Value: id,
+    HttpOnly: true, Secure: true,
+    SameSite: http.SameSiteLaxMode, // blocks most cross-site POST CSRF
+    Path: "/",
+})
+```
+
+**Follow-ups**
+- How does the double-submit cookie pattern work and when does it fail?
+- Why isn't SameSite alone sufficient for older browsers?
+
+---
+
+## HMAC & Webhook Security
+
+#### 16. How do you securely verify an incoming webhook, and why is HMAC the standard mechanism?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `hmac`, `webhook`, `signature`, `constant-time`
+
+A webhook is an unauthenticated inbound POST from a third party (Stripe, GitHub), so you must verify it really came from the claimed sender and wasn't altered. The standard is an **HMAC signature**: the sender computes `HMAC-SHA256(shared_secret, raw_request_body)` (often including a timestamp) and sends it in a header (e.g. `X-Signature`). You recompute the HMAC over the **raw bytes** you received and compare. HMAC is preferred because it's a keyed MAC — only holders of the shared secret can produce a valid signature, giving both **authenticity** and **integrity** with cheap symmetric crypto. Two critical implementation details: compute over the *exact raw body* (re-serializing JSON changes bytes and breaks the signature), and compare using a **constant-time** function (`hmac.Equal`) to avoid timing side channels. Some providers sign with RSA/ECDSA instead, in which case you verify with their public key.
+
+**Key points**
+- HMAC-SHA256 over raw body proves authenticity + integrity
+- Only the shared-secret holder can sign
+- Verify over exact raw bytes — never re-serialized JSON
+- Use constant-time comparison (hmac.Equal)
+
+
+```go
+func verifyWebhook(body []byte, sigHeader, secret string) bool {
+    mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write(body)
+    expected := mac.Sum(nil)
+    got, err := hex.DecodeString(sigHeader)
+    if err != nil { return false }
+    return hmac.Equal(expected, got) // constant-time
+}
+```
+
+**Follow-ups**
+- Why must you read the raw body before any JSON middleware consumes it?
+- What goes wrong if you use bytes.Equal instead of hmac.Equal?
+
+---
+
+#### 17. A valid signed webhook can still be captured and re-sent. How do you prevent replay attacks?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `webhook`, `replay`, `nonce`, `timestamp`, `idempotency`
+
+A correct HMAC only proves the message is authentic and unmodified — it says nothing about *freshness*, so an attacker who captures a valid signed request can replay it (e.g. re-trigger a 'payment succeeded' event). Two complementary defenses: **(1) Signed timestamps** — include a timestamp in the signed payload and reject requests whose timestamp is outside a tight window (e.g. ±5 minutes). Because the timestamp is part of the HMAC input, an attacker can't move it forward without invalidating the signature. This bounds the replay window but doesn't stop replays *within* it. **(2) Nonces / idempotency keys** — record each unique event ID (or nonce) you've processed and reject duplicates. This makes processing exactly-once even within the time window. In practice you combine them: validate the signature, reject stale timestamps, then deduplicate by event ID stored in a fast store with a TTL slightly longer than the timestamp window. Idempotent handlers are the safety net against any replay that slips through.
+
+**Key points**
+- HMAC proves authenticity, not freshness — replays are still valid
+- Sign a timestamp and reject outside a tight window (±5 min)
+- Track nonces/event IDs to reject duplicates (idempotency)
+- Combine: signature + timestamp window + dedup store with TTL
+
+**Follow-ups**
+- Why include the timestamp inside the signed payload rather than a separate header?
+- How long should the dedup store TTL be relative to the timestamp tolerance?
+
+---
+
+## TLS & mTLS
+
+#### 18. Walk through what a TLS handshake establishes and the role of the certificate chain of trust.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `tls`, `handshake`, `certificates`, `chain-of-trust`
+
+A TLS handshake authenticates the server and negotiates an encrypted, integrity-protected channel. Simplified (TLS 1.3): client and server agree on a cipher suite, exchange ephemeral Diffie-Hellman key shares to derive a shared session key (giving **forward secrecy** — past traffic stays safe even if the server's long-term key later leaks), and the server presents its **certificate**. The certificate binds the server's public key to its domain and is signed by a Certificate Authority. The client verifies the **chain of trust**: the leaf cert is signed by an intermediate CA, which is signed (transitively) by a **root CA** in the client's trust store. The client checks each signature up the chain, the validity dates, that the hostname matches the cert's SAN, and revocation status (OCSP/CRL). Only if the chain anchors in a trusted root and all checks pass does the handshake complete. This is what prevents an attacker from presenting a forged certificate for your domain.
+
+**Key points**
+- Handshake authenticates server + derives a shared session key
+- Ephemeral DH gives forward secrecy
+- Cert binds public key to domain, signed by a CA
+- Chain of trust: leaf → intermediate → trusted root; verify sigs, dates, SAN, revocation
+
+**Follow-ups**
+- What does forward secrecy protect against and how does TLS 1.3 ensure it?
+- How does certificate pinning change the trust model and its risks?
+
+---
+
+#### 19. What is mTLS, why use it for service-to-service traffic, and how do you handle certificate rotation?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `mtls`, `service-to-service`, `zero-trust`, `cert-rotation`
+
+In normal TLS only the server proves its identity. **Mutual TLS (mTLS)** adds client authentication: the client also presents a certificate, and the server validates it against a trusted CA. For internal service-to-service traffic this gives strong, cryptographic identity for *both* peers — service A knows it's really talking to B, and B knows the caller is A — without bearer tokens that can be stolen and replayed. It underpins zero-trust networking (no implicit trust from being 'inside' the network) and is the basis of service meshes (Istio/Linkerd). The operational challenge is **certificate rotation**: internal certs should be short-lived (hours/days) to limit exposure, which makes manual rotation infeasible. You automate issuance and renewal with a workload identity system — SPIFFE/SPIRE, Vault PKI, or a mesh's built-in CA — that mints short-lived certs and rotates them transparently. Key practices: short TTLs, automated renewal before expiry, graceful reload without dropping connections, and keeping a current trust bundle so rotating the CA doesn't cause an outage.
+
+**Key points**
+- mTLS = both client and server present and validate certs
+- Strong mutual identity for service-to-service, basis of zero-trust/mesh
+- Replaces stealable bearer tokens for internal auth
+- Rotate short-lived certs automatically (SPIFFE/SPIRE, Vault PKI, mesh CA)
+
+**Follow-ups**
+- How does SPIFFE/SPIRE issue and rotate workload identities?
+- How do you rotate the issuing CA without breaking in-flight connections?
+
+---
+
+## OWASP Top 10 & Access Control
+
+#### 20. Name several OWASP Top 10 categories relevant to a Go backend and give a concrete example of each.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `owasp`, `access-control`, `injection`, `ssrf`
+
+**A01 Broken Access Control** — e.g. IDOR/BOLA: `/users/{id}/card` returns any user's card because ownership isn't checked. **A02 Cryptographic Failures** — storing passwords as unsalted SHA-1, or PII unencrypted at rest. **A03 Injection** — SQL/NoSQL/command injection from concatenating user input into queries. **A04 Insecure Design** — flaws baked into the design, like no rate limiting on password reset. **A05 Security Misconfiguration** — debug endpoints exposed, default credentials, permissive CORS (`Access-Control-Allow-Origin: *` with credentials), verbose error stack traces leaking internals. **A07 Identification & Authentication Failures** — no brute-force protection, weak session management. **A08 Software & Data Integrity Failures** — unsigned updates, deserializing untrusted data, compromised dependencies. **A09 Logging & Monitoring Failures** — no audit trail to detect/respond to breaches. **A10 SSRF** — a service fetches a user-supplied URL, letting attackers reach internal metadata endpoints. Broken access control and injection are consistently the highest-impact for backends.
+
+**Key points**
+- A01 Broken Access Control (IDOR/BOLA) — top backend risk
+- A03 Injection — SQL/command from concatenated input
+- A05 Misconfiguration — exposed debug, permissive CORS, verbose errors
+- A08 Integrity, A09 Logging, A10 SSRF round out backend concerns
+
+**Follow-ups**
+- How would you systematically test for BOLA in an API with hundreds of endpoints?
+- What internal targets make SSRF dangerous in cloud environments?
+
+---
+
+#### 21. Explain IDOR/BOLA and the correct defense. Why is obscuring the ID not enough?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `idor`, `bola`, `access-control`, `owasp`
+
+**IDOR** (Insecure Direct Object Reference) — also called **BOLA** (Broken Object Level Authorization) in API contexts — is when an endpoint exposes a reference to an object (an ID) and authorizes based only on *authentication*, not on whether *this user owns this object*. Authenticated user A requests `/orders/1002` (B's order) and gets it because the handler trusts the ID. The correct defense is a **server-side object-level authorization check on every access**: scope the query to the caller's identity (`WHERE id=$1 AND owner_id=$2`) or explicitly verify ownership/permission before returning data. Crucially, **using random UUIDs instead of sequential IDs is not a fix** — that's security through obscurity. The IDs still appear in URLs, logs, referer headers, and shared links, and any leaked or guessed ID grants access. Unpredictable IDs reduce *enumeration* but do nothing once an attacker holds a valid reference. The authorization check is mandatory; non-sequential IDs are only a minor, complementary hardening.
+
+**Key points**
+- IDOR/BOLA = authorizing by authentication, not object ownership
+- Fix: server-side ownership/permission check on every object access
+- Scope queries to the caller (WHERE owner_id = current_user)
+- Random UUIDs are obscurity, not a fix — IDs leak
+
+**Follow-ups**
+- How do you avoid leaking existence via 403 vs 404 responses?
+- Where should the ownership check live to be consistent across endpoints?
+
+---
+
+## Injection: SQL & Command
+
+#### 22. How do parameterized queries prevent SQL injection, and why is escaping/sanitizing input not a reliable defense?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `sql-injection`, `parameterized-queries`, `injection`, `owasp`
+
+SQL injection happens when user input is concatenated into a query string, so the input can change the query's *structure* (`' OR '1'='1`, `'; DROP TABLE users;--`). **Parameterized queries / prepared statements** fix this at the root: the SQL text with placeholders (`$1`, `?`) is sent to and parsed by the database *separately* from the parameter values. The query plan is fixed before any data arrives, so parameters are always treated as **data, never as code** — there is no string for the attacker's input to break out of. **Manual escaping is unreliable** because it tries to enumerate and neutralize every dangerous character across every context, encoding, and DB dialect; you miss edge cases (multibyte/charset tricks, quoting in unexpected contexts, numeric/identifier positions where quotes don't even apply). Escaping is a blacklist that's only as good as its completeness. Always parameterize. For things that *can't* be parameterized (table/column names, `ORDER BY`), use a strict allowlist of permitted values, never raw input.
+
+**Key points**
+- Injection alters query structure via concatenated input
+- Parameterized queries separate SQL text (parsed first) from data
+- Parameters are always data, never executable — no breakout
+- Escaping is an incomplete blacklist; allowlist identifiers that can't be parameterized
+
+
+```go
+// Vulnerable: string concatenation
+q := "SELECT * FROM users WHERE email = '" + email + "'" // INJECTION
+
+// Safe: parameterized
+row := db.QueryRowContext(ctx,
+    "SELECT id, name FROM users WHERE email = $1", email)
+
+// Dynamic ORDER BY can't be parameterized -> allowlist
+var allowed = map[string]string{"name": "name", "date": "created_at"}
+col, ok := allowed[sortKey]
+if !ok { return ErrBadSort }
+```
+
+**Follow-ups**
+- Does an ORM make you immune, and how can you still get injection through one?
+- How would you handle a dynamic IN-clause with a variable number of values?
+
+---
+
+#### 23. Beyond SQL, what other injection classes should a Go backend defend against, and how?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `command-injection`, `nosql-injection`, `path-traversal`, `injection`
+
+**OS command injection** — building shell commands from input (`exec.Command("sh", "-c", "convert "+name)`). Defense: never invoke a shell; call binaries directly with `exec.Command(prog, args...)` so arguments aren't reparsed, and allowlist values. **NoSQL injection** — passing user-controlled structures into Mongo/etc. where operators (`$gt`, `$ne`) sneak in. Defense: validate types, bind to concrete structs, don't pass raw maps from request bodies into queries. **LDAP injection** — filters built from input; use proper escaping/parameterized filter APIs. **Header/log injection (CRLF)** — input containing `\r\n` splits responses or forges log lines; sanitize/encode before writing to headers or logs. **Template injection** — user input executed by a template engine; in Go, `html/template` auto-contextually escapes, but never build templates *from* user input. **Path traversal** — `../` in file paths; clean and confine paths to a base dir. The unifying principle: keep untrusted data as *data*, use structured/typed APIs over string-building, and validate at trust boundaries.
+
+**Key points**
+- Command injection: avoid shell, use exec.Command with arg list
+- NoSQL injection: bind to structs, validate types, no raw maps
+- Log/header CRLF injection: sanitize input before writing
+- Path traversal: clean and confine to a base directory
+- Principle: structured/typed APIs over string concatenation
+
+
+```
+// Vulnerable: shell reparses the string
+exec.Command("sh", "-c", "ping "+host).Run() // INJECTION
+
+// Safe: direct exec, args not reparsed by a shell
+exec.Command("ping", "-c", "1", host).Run()
+```
+
+**Follow-ups**
+- Why does passing args as a slice to exec.Command avoid injection?
+- How does filepath.Clean alone fail to stop traversal, and what else is needed?
+
+---
+
+## XSS, Input Validation & Mass Assignment
+
+#### 24. Explain the XSS types and why context-aware output encoding plus CSP is the right defense.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `xss`, `output-encoding`, `csp`, `owasp`
+
+**XSS** injects attacker-controlled script into a page so it runs in victims' browsers, stealing tokens/cookies or acting as the user. **Stored** XSS persists the payload server-side (e.g. a malicious comment) and serves it to everyone. **Reflected** XSS bounces input straight back in a response (search term echoed unescaped). **DOM-based** XSS happens entirely client-side when JS writes untrusted data into the DOM (`innerHTML`). The primary defense is **context-aware output encoding**: escape data according to where it lands — HTML body, attribute, JavaScript, URL, and CSS each need different encoding. Go's `html/template` does this automatically and contextually, which is why you should render with it rather than concatenating HTML. **Input validation** complements but doesn't replace encoding (you can't reject all valid-but-dangerous input). **CSP** (Content-Security-Policy) is defense-in-depth: a restrictive policy (`default-src 'self'`, no inline scripts, nonce/hash for allowed scripts) means even if a payload is injected, the browser refuses to execute it. Combine: encode on output, validate on input, and ship a strict CSP.
+
+**Key points**
+- Stored, reflected, DOM-based XSS
+- Primary defense: context-aware output encoding (HTML/attr/JS/URL/CSS)
+- Go html/template auto-escapes contextually — use it
+- CSP is defense-in-depth: blocks execution even if injected
+- Input validation complements, never replaces, output encoding
+
+**Follow-ups**
+- Why does encoding depend on context, and what breaks if you HTML-escape inside a <script> block?
+- How do nonces/hashes let you keep CSP strict with needed inline scripts?
+
+---
+
+#### 25. What is mass assignment (over-posting), and how do you prevent it in a Go API?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `mass-assignment`, `input-validation`, `access-control`, `dto`
+
+**Mass assignment** is when an API binds a request body directly onto a domain/database model, letting a client set fields they shouldn't — e.g. a user updates their profile and also sends `"is_admin": true` or `"account_balance": 999999`, and the handler blindly persists it. It's a form of broken access control caused by trusting the *shape* of input. The fix is to **never bind untrusted input straight onto your persistence model**. Use an explicit **DTO / allowlist struct** containing only the fields a client may set, validate it, then map those fields onto the model server-side. Sensitive fields (roles, ownership, balances, timestamps) are set by business logic, not copied from the request. In Go this means defining a narrow request struct with only client-settable JSON tags, decoding into *that*, and assigning fields individually — not decoding the request directly into the GORM/sqlx entity. Optionally use `DisallowUnknownFields` to reject unexpected keys.
+
+**Key points**
+- Mass assignment: binding request body onto the full model lets clients set privileged fields
+- It's broken access control via input shape
+- Fix: explicit DTO/allowlist struct of client-settable fields only
+- Set sensitive fields server-side; never copy from the request
+
+
+```go
+// Vulnerable: client could send is_admin / balance
+json.NewDecoder(r.Body).Decode(&user) // binds onto full DB model
+
+// Safe: narrow DTO, explicit mapping
+type UpdateProfile struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+dec := json.NewDecoder(r.Body)
+dec.DisallowUnknownFields()
+var in UpdateProfile
+if err := dec.Decode(&in); err != nil { return err }
+user.Name, user.Email = in.Name, in.Email // privileged fields untouched
+```
+
+**Follow-ups**
+- How does DisallowUnknownFields help, and when can it cause problems?
+- How do you handle partial updates (PATCH) without losing the allowlist?
+
+---
+
+#### 26. Where should input validation happen, and what does 'validate at trust boundaries' mean in practice?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `input-validation`, `trust-boundary`, `allowlist`
+
+A **trust boundary** is any point where data crosses from a less-trusted to a more-trusted zone — the HTTP edge (client → API), a message-queue consumer (external producers), inter-service calls from systems you don't fully control, and reads of externally-influenced data. The principle 'validate at trust boundaries' means **untrusted input must be validated as it enters trusted code**, not deep inside business logic where assumptions are already baked in. Validate **structure and type** (is it the right shape? decode into typed structs), **syntax/format** (email pattern, UUID, length/range bounds), and **semantic/business rules** (quantity > 0, currency is supported) — ideally with an allowlist of what's permitted rather than a blacklist of what's forbidden. Reject early and return clear errors. Critically, validation is **not** a substitute for the context-specific defenses downstream: you still parameterize SQL and encode output, because the same data is dangerous in different ways in different sinks. Validation reduces attack surface and enforces invariants; encoding/parameterization neutralizes context-specific injection.
+
+**Key points**
+- Trust boundary: untrusted → trusted transition (HTTP edge, queues, external services)
+- Validate structure, syntax, and semantics on entry
+- Prefer allowlists over blacklists; reject early
+- Validation complements, not replaces, parameterization/encoding at sinks
+
+**Follow-ups**
+- Why is allowlist validation more robust than blacklisting?
+- How do you keep validation rules in sync across multiple entry points?
+
+---
+
+## Password & Credential Storage
+
+#### 27. How should passwords be stored, and why are bcrypt/argon2/scrypt required instead of SHA-256?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `passwords`, `bcrypt`, `argon2`, `salt`, `crypto`
+
+Never store passwords reversibly or with fast general-purpose hashes. **MD5/SHA-1/SHA-256 are built to be fast**, which is exactly wrong for passwords: an attacker with a leaked database runs billions of guesses per second on a GPU. Password hashing needs to be **deliberately slow and memory-hard**. **bcrypt** has a tunable cost factor (work doubles per increment) and a built-in salt; solid default. **scrypt** and **argon2** add **memory-hardness**, making GPU/ASIC parallelization expensive; **Argon2id** is the current recommendation (resists both side-channel and GPU attacks). Each password needs a **unique random salt** (these algorithms generate and store it in the hash output) so identical passwords hash differently and precomputed **rainbow tables** are useless. Tune parameters so a single hash takes ~100–250ms on your hardware, and raise the cost over time as hardware improves. Verification uses the algorithm's own compare, which is constant-time. Store only the algorithm's encoded hash string; never the plaintext, never a fast-hash digest.
+
+**Key points**
+- Fast hashes (MD5/SHA-1/SHA-256) are wrong — attackers do billions/sec
+- Use slow, memory-hard: bcrypt, scrypt, Argon2id (preferred)
+- Unique random salt per password defeats rainbow tables
+- Tune cost to ~100–250ms; raise over time
+
+
+```go
+// bcrypt: salt is generated and embedded automatically
+hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+// store hash (string)
+
+// verify (constant-time inside)
+err = bcrypt.CompareHashAndPassword(hash, []byte(attempt))
+if err != nil { /* wrong password */ }
+```
+
+**Follow-ups**
+- What Argon2id parameters (memory, iterations, parallelism) would you choose?
+- How do you upgrade existing bcrypt hashes to a higher cost transparently?
+
+---
+
+#### 28. What is peppering, and why must password and token comparisons be timing-safe?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `pepper`, `timing-attack`, `constant-time`, `passwords`
+
+**Peppering** adds a secret value to the password before hashing, but unlike the salt it is **not stored alongside the hash** — it lives in application config/secret manager or an HSM, separate from the database. The point is defense against a **database-only breach**: with a stolen DB but no pepper, the attacker can't validate guesses offline because every candidate is missing the secret. Implement it as an HMAC of the password with the pepper key (so you can rotate the key) before passing to bcrypt/argon2, or use a KMS to keep the pepper unextractable. **Timing-safe comparison** matters because naive string/byte comparison short-circuits on the first differing byte, leaking how many leading bytes matched via response time — an attacker can recover a secret (token, HMAC, API key) byte-by-byte. Always compare secrets with a **constant-time** function (`subtle.ConstantTimeCompare`, `hmac.Equal`); bcrypt/argon2's own verify functions already do this internally. The rule: equality checks on any secret value must run in time independent of the input.
+
+**Key points**
+- Pepper: secret added before hashing, stored separately (not in DB)
+- Protects against DB-only breach; keep in secret manager/HSM, rotatable via HMAC
+- Timing-safe compare: naive compares leak match length via timing
+- Use subtle.ConstantTimeCompare / hmac.Equal for secrets
+
+
+```go
+// Pepper via HMAC before bcrypt (pepper from secret manager, rotatable)
+mac := hmac.New(sha256.New, pepperKey)
+mac.Write([]byte(password))
+peppered := mac.Sum(nil)
+hash, _ := bcrypt.GenerateFromPassword(peppered, bcrypt.DefaultCost)
+
+// Timing-safe token compare
+if subtle.ConstantTimeCompare(expected, provided) != 1 { return ErrUnauthorized }
+```
+
+**Follow-ups**
+- How do you rotate a pepper without forcing every user to reset their password?
+- Why is bcrypt's 72-byte input limit relevant when you HMAC first?
+
+---
+
+## Secrets Management & Encryption
+
+#### 29. How should secrets be managed in production, and what's wrong with config files, env vars in images, or hardcoding?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `secrets`, `vault`, `kms`, `rotation`
+
+Secrets (DB passwords, API keys, signing keys) must never live in source code, container images, or committed config — they leak via Git history, image layers, registry access, and CI logs, and they can't be rotated without a rebuild. The production approach is a dedicated **secrets manager**: HashiCorp **Vault**, cloud **KMS** + **Secrets Manager** (AWS/GCP/Azure). These provide: centralized storage with encryption at rest, **fine-grained access control and audit logging** (who read which secret when), and **rotation** (ideally dynamic, short-lived credentials issued on demand — e.g. Vault generating per-instance DB creds that expire). Applications fetch secrets at runtime via an authenticated identity (IAM role, Kubernetes service account, SPIFFE), not from baked-in config. Even env vars are a step up from hardcoding but still leak via process listings, crash dumps, and child processes, so prefer injecting from the secret store at startup or mounting via a CSI driver. The goals: no secret in any artifact, least-privilege access, full audit trail, and automated rotation so a leaked secret has a short useful life.
+
+**Key points**
+- Never in code/images/committed config — leaks via history, layers, CI logs
+- Use Vault / KMS + Secrets Manager: encrypted, access-controlled, audited
+- Prefer dynamic, short-lived credentials and automated rotation
+- Fetch at runtime via workload identity, not baked-in env/config
+
+**Follow-ups**
+- How do dynamic database credentials from Vault work and what do they buy you?
+- How do you avoid secrets ending up in logs or crash dumps?
+
+---
+
+#### 30. Explain encryption at rest vs in transit, and what they do and don't protect against.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `encryption`, `at-rest`, `in-transit`, `kms`
+
+**Encryption in transit** (TLS) protects data moving over the network from eavesdropping and tampering by anyone on the path — it defends against man-in-the-middle and passive sniffing. It does nothing once data lands on the server. **Encryption at rest** protects stored data — disks, database files, backups, object storage — so that someone who obtains the *physical media, a stolen backup, or a snapshot* can't read it. Typically implemented with envelope encryption: a KMS holds a master key that encrypts per-resource **data encryption keys (DEKs)**, so you rotate the master without re-encrypting everything. The crucial limitation: encryption at rest does **not** protect against an attacker with valid application access — the app decrypts data to use it, so SQL injection, a compromised service account, or a stolen credential still reads plaintext. At-rest encryption defends against *physical/storage* compromise; it is not a substitute for access control, parameterized queries, or application-layer field encryption for the most sensitive fields (which limits exposure even from app-level compromise). Use both, plus access control.
+
+**Key points**
+- In transit (TLS): protects network path from MITM/sniffing
+- At rest: protects stolen disks/backups/snapshots, via envelope encryption (KMS + DEKs)
+- At rest does NOT protect against valid app access (injection, stolen creds)
+- Field-level encryption limits exposure for the most sensitive data
+
+**Follow-ups**
+- How does envelope encryption let you rotate keys without re-encrypting all data?
+- When is application-layer (field-level) encryption worth the complexity?
+
+---
+
+## Rate Limiting, Hardening & Compliance
+
+#### 31. How do you implement rate limiting and brute-force protection for authentication endpoints?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `rate-limiting`, `brute-force`, `auth`, `credential-stuffing`
+
+Login, password-reset, OTP, and token endpoints are prime brute-force targets and must be throttled separately and more strictly than general traffic. Use a **token-bucket or sliding-window** limiter backed by a shared store (Redis) so limits hold across all instances — an in-memory limiter is useless behind a load balancer. Key on multiple dimensions: per-IP (blunt; defeated by botnets but cheap), per-account (caps guesses against one user), and ideally per-IP+account combos. Layer specific defenses: **exponential backoff / temporary account lockout** after N failed logins (with care not to enable a lockout-based DoS — prefer escalating delays + CAPTCHA over hard lockouts), **CAPTCHA** after a threshold, and **constant-time responses** so timing doesn't reveal whether a username exists. Add monitoring/alerting on spikes in 401s and reuse the same denylist for known-bad IPs. For credential stuffing specifically, check submitted passwords against breached-password lists and require MFA. Return `429 Too Many Requests` with a `Retry-After` header. The aim: make online guessing economically infeasible without locking out legitimate users.
+
+**Key points**
+- Throttle auth endpoints separately and strictly; Redis-backed (shared) limiter
+- Key per-IP and per-account; token-bucket/sliding-window
+- Escalating backoff + CAPTCHA over hard lockouts (avoid lockout DoS)
+- Constant-time responses, breached-password checks, MFA; return 429 + Retry-After
+
+**Follow-ups**
+- How can account lockout itself become a denial-of-service, and how do you avoid it?
+- How do you rate-limit fairly behind a CDN/proxy where the client IP is in X-Forwarded-For?
+
+---
+
+#### 32. Which HTTP security headers do you set, and what does each mitigate?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `security-headers`, `hsts`, `csp`, `clickjacking`
+
+Security headers are cheap defense-in-depth set on every response. **Strict-Transport-Security (HSTS)** — `max-age=31536000; includeSubDomains; preload` forces HTTPS and prevents protocol-downgrade/SSL-strip attacks. **Content-Security-Policy** — restricts where scripts/styles/connections may load from; the strongest XSS mitigation (`default-src 'self'`, nonce-based scripts, no `unsafe-inline`). **X-Content-Type-Options: nosniff** — stops MIME-sniffing that can turn an uploaded file into executable script. **X-Frame-Options: DENY** (or CSP `frame-ancestors 'none'`) — prevents **clickjacking** by disallowing framing. **Referrer-Policy: no-referrer / strict-origin-when-cross-origin** — limits leaking URLs (which may contain tokens/IDs) to third parties. **Permissions-Policy** — disables unneeded browser features (camera, geolocation). For APIs, also lock down **CORS** explicitly (no wildcard origin with credentials) and avoid leaking server/version banners. Set these centrally in middleware so they apply uniformly, and prefer CSP `frame-ancestors` and `report-uri`/`report-to` to monitor violations.
+
+**Key points**
+- HSTS: force HTTPS, block downgrade/SSL-strip
+- CSP: strongest XSS mitigation (frame-ancestors covers clickjacking too)
+- X-Content-Type-Options: nosniff stops MIME sniffing
+- X-Frame-Options / frame-ancestors: anti-clickjacking; Referrer-Policy limits URL leakage
+- Set in central middleware; lock CORS, hide server banners
+
+
+```go
+func securityHeaders(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        h := w.Header()
+        h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+        h.Set("X-Content-Type-Options", "nosniff")
+        h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+**Follow-ups**
+- How do you roll out a strict CSP without breaking the app (report-only mode)?
+- Why is HSTS preload a one-way door you should think carefully about?
+
+---
+
+#### 33. What does the principle of least privilege mean across an application stack, and give concrete examples.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `least-privilege`, `iam`, `hardening`, `defense-in-depth`
+
+**Least privilege** means every component — user, service, process, credential — gets the minimum permissions needed to do its job, and no more, so a compromise has the smallest possible blast radius. Concretely across the stack: the **database user** the app connects with has only `SELECT/INSERT/UPDATE` on the tables it touches, not `DROP`/`SUPERUSER` — so SQL injection can't drop tables or read other schemas. **Cloud IAM roles** are scoped to specific resources/actions (this service reads *this* bucket, not `s3:*`). **Containers** run as a non-root user, read-only root filesystem, with dropped Linux capabilities. **Service-to-service** tokens carry narrow scopes/audiences so a stolen token for service A can't call service B. **Secrets** are readable only by the workloads that need them (per-service policies in Vault). **Network**: default-deny security groups/NetworkPolicies, opening only required ports. The discipline is to *start from zero and grant deliberately*, audit for unused permissions, and prefer short-lived, narrowly-scoped credentials. Least privilege turns a single compromise from a breach into a contained incident.
+
+**Key points**
+- Minimum permissions per principal → smallest blast radius
+- DB user limited to needed DML on needed tables, no DROP/superuser
+- Scoped IAM roles, non-root read-only containers, dropped capabilities
+- Narrow token scopes/audiences; default-deny networking; start from zero
+
+**Follow-ups**
+- How do you audit and prune over-granted IAM permissions over time?
+- How does separating read/write DB users limit injection impact?
+
+---
+
+#### 34. For an e-commerce backend, what do PCI-DSS and GDPR require, and how does that shape your architecture?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `pci-dss`, `gdpr`, `compliance`, `e-commerce`, `tokenization`
+
+**PCI-DSS** governs cardholder data. The dominant strategy is to **stay out of scope**: never store PANs yourself — use a payment provider (Stripe, Adyen) so card data goes directly from the client to the processor (tokenization, hosted fields/iframes), and you only ever hold an opaque token. If you must touch card data, requirements include strong encryption in transit and at rest, strict network segmentation, no storage of CVV, restricted/audited access, regular scanning, and key management — which is why almost everyone outsources it. **GDPR** governs personal data of EU residents and is broader: lawful basis for processing, **data minimization** (collect only what you need), purpose limitation, the rights to access/rectify/erasure ("right to be forgotten" — design deletion that actually propagates, including backups policy), breach notification within 72 hours, encryption/pseudonymization of PII, and data-processing agreements with sub-processors. Architecturally this pushes you toward: tokenized payments (scope reduction), a clear data inventory and classification, encryption + access control + audit logging on PII, soft-delete/erasure workflows, consent tracking, and region-aware data residency. Compliance is not bolt-on — it shapes the data model, storage, logging, and vendor choices from day one.
+
+**Key points**
+- PCI-DSS: minimize scope by tokenizing with a provider; never store PAN/CVV yourself
+- If in scope: encryption, segmentation, restricted/audited access, key mgmt, scanning
+- GDPR: lawful basis, data minimization, access/erasure rights, 72h breach notice
+- Architecture: tokenized payments, data inventory, PII encryption+audit, erasure workflows, data residency
+
+**Follow-ups**
+- How do you implement GDPR erasure when data lives in backups and analytics warehouses?
+- What is SAQ-A and how does using Stripe Elements get you there?
+
+---

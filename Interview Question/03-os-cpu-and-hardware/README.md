@@ -1,0 +1,830 @@
+# OS, CPU & Hardware Fundamentals
+
+> Senior-level operating system, CPU, and hardware fundamentals viewed through the lens of the Go runtime: scheduling, virtual memory, caches, concurrency primitives, I/O models, and Linux performance debugging.
+
+**32 questions** across **7 topics** · Level: senior
+
+## Topics
+
+- [Processes, Threads & Goroutines](#processes-threads-goroutines) (3)
+- [OS Scheduler vs Go Scheduler](#os-scheduler-vs-go-scheduler) (3)
+- [Virtual Memory & Paging](#virtual-memory-paging) (5)
+- [CPU Caches & Data Locality](#cpu-caches-data-locality) (4)
+- [Memory Model, Barriers & CPU Internals](#memory-model-barriers-cpu-internals) (4)
+- [I/O Models & the Netpoller](#io-models-the-netpoller) (4)
+- [Linux Performance Debugging](#linux-performance-debugging) (9)
+
+---
+
+## Processes, Threads & Goroutines
+
+#### 1. What is the difference between a process, an OS thread, and a goroutine, and why are goroutines cheaper?
+
+*Difficulty:* 🟢 warm-up  ·  *Tags:* `processes`, `threads`, `goroutines`, `scheduling`
+
+A **process** owns an isolated virtual address space, file descriptor table, and other kernel resources; switching between processes is expensive because the kernel must swap page tables (TLB flush). A **thread** is a kernel-scheduled execution context sharing the process address space; it still costs a kernel-mode context switch (~1-2 microseconds) and a fixed stack (often 1-8 MB reserved). A **goroutine** is a user-space coroutine multiplexed by the Go runtime onto a small pool of OS threads (M:N scheduling). Goroutines start with a tiny ~2 KB growable stack and are switched in user space at well-defined points (function calls, channel ops, syscalls) without entering the kernel. So you can run millions of goroutines where you could only run thousands of threads. The trade-off: goroutines are cooperatively scheduled relative to the runtime, so a tight CPU loop with no preemption point could once starve others (fixed by async preemption in Go 1.14).
+
+**Key points**
+- Process = isolated address space; thread = shared address space, kernel-scheduled; goroutine = user-space, runtime-scheduled
+- Goroutine stacks start ~2 KB and grow/shrink; thread stacks are large and fixed
+- Context switch: process > thread (kernel) >> goroutine (user space)
+- Go uses M:N scheduling so millions of goroutines map onto a few OS threads
+
+**Follow-ups**
+- What is a goroutine stack growth and how does the runtime implement it?
+- How did Go 1.14 async preemption change the starvation story?
+
+---
+
+#### 2. Why is an OS context switch expensive, and how does Go avoid most of that cost?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `context-switch`, `scheduler`, `tlb`, `cache`
+
+A kernel context switch involves entering kernel mode, saving the full register set of the outgoing thread, updating scheduler bookkeeping, possibly switching address spaces (CR3 write, which flushes much of the TLB), and restoring the incoming thread. Direct cost is ~1-2 microseconds, but the *indirect* cost dominates: cold caches and TLB misses after the switch can cost far more as the new thread re-warms L1/L2 and page translations. Go avoids most of this by scheduling goroutines in user space: a goroutine switch is essentially saving/restoring a handful of registers and the stack pointer, no kernel transition, no TLB flush, and the same OS thread keeps its warm cache. The runtime only pays a real OS context switch when it parks/unparks an M (e.g., a blocking syscall, or when there is no work and the thread sleeps). This is why a Go server handling 100k connections does far fewer kernel switches than a thread-per-connection design.
+
+**Key points**
+- Direct cost: register save/restore, scheduler bookkeeping, CR3 write on address-space switch
+- Indirect cost: TLB flush plus cold L1/L2 caches dominate
+- Goroutine switch is user-space register save/restore, no kernel entry, no TLB flush
+- Go pays a real OS switch only when parking/unparking an M
+
+**Follow-ups**
+- What triggers the runtime to create or wake an M?
+- How does cache pollution after a switch show up in perf counters?
+
+---
+
+#### 3. Explain user mode vs kernel mode and the cost of a syscall. How does the Go netpoller reduce syscalls?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `syscall`, `kernel-mode`, `netpoller`, `epoll`
+
+CPUs run in privilege rings: user mode (ring 3) cannot touch hardware or privileged instructions, kernel mode (ring 0) can. A syscall transitions from user to kernel via a trap (the `syscall`/`sysenter` instruction), which saves state, switches stacks, runs the handler, then returns. The transition alone is ~100-300 ns even before doing useful work, and it can pollute caches/branch predictors. Naively, a network server might do one `read`/`write` syscall per connection per event, plus a blocking call that parks an OS thread. The Go **netpoller** instead registers all sockets with one epoll (Linux) / kqueue (BSD) / IOCP (Windows) instance. When a goroutine does a blocking `conn.Read`, the runtime sets the fd non-blocking, attempts the read, and if it would block, parks the *goroutine* (not the thread) and the netpoller batches readiness notifications via a single `epoll_wait`. One syscall services thousands of ready connections, and the M stays free to run other goroutines. This is what lets Go solve C10K with synchronous-looking code.
+
+**Key points**
+- Syscall = trap from ring 3 to ring 0; ~100-300 ns overhead plus cache/branch pollution
+- Netpoller centralizes all fds in one epoll/kqueue/IOCP instance
+- Blocking I/O parks the goroutine, not the OS thread; one epoll_wait services many fds
+- Enables synchronous-looking code with event-loop efficiency
+
+
+```go
+// Under the hood, conn.Read on a TCP socket does roughly:
+//   fd set to O_NONBLOCK once at creation
+//   n, err := read(fd, buf)
+//   if err == EAGAIN {
+//       runtime.netpollblock(fd, 'r')  // park goroutine, register with epoll
+//       // ... runtime.netpoll() later does one epoll_wait for all fds
+//   }
+conn, _ := listener.Accept()
+buf := make([]byte, 4096)
+n, err := conn.Read(buf) // looks blocking, is actually netpoller-driven
+```
+
+**Follow-ups**
+- What happens to GOMAXPROCS when a goroutine does a true blocking syscall like a file read?
+- Why are regular file reads NOT handled by the netpoller on Linux?
+
+---
+
+## OS Scheduler vs Go Scheduler
+
+#### 4. Contrast the Linux CFS scheduler with the Go scheduler. What problems does each solve?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `cfs`, `go-scheduler`, `work-stealing`, `gomaxprocs`
+
+Linux **CFS** (Completely Fair Scheduler) schedules OS threads to give each runnable thread a fair share of CPU time, tracked via per-thread virtual runtime in a red-black tree; it is preemptive (timer-driven), priority/nice-aware, and must handle arbitrary, untrusted workloads with isolation. The Go scheduler is a **cooperative-ish, work-stealing M:N scheduler** layered *above* the OS. It maps G (goroutines) onto P (logical processors, count = GOMAXPROCS) onto M (OS threads). Each P has a local run queue; idle Ps steal from busy ones, falling back to a global queue and the netpoller. Go's scheduler optimizes for cheap switching and locality within one process, not OS-wide fairness. The two interact: CFS schedules the Ms, Go schedules Gs onto Ms. A subtlety: if GOMAXPROCS exceeds available cores, CFS time-slices the Ms and you get extra context switches; in containers, CFS quota throttling can stall all Ms even though GOMAXPROCS thinks it has more parallelism (the classic over-GOMAXPROCS-in-Kubernetes problem).
+
+**Key points**
+- CFS: OS-wide fairness via vruntime in a red-black tree, preemptive, priority-aware, isolates untrusted work
+- Go scheduler: in-process M:N work-stealing, optimizes cheap switches and locality
+- G -> P (GOMAXPROCS) -> M (OS thread) mapping; per-P local run queues plus global queue
+- Interaction risk: CFS quota throttling in containers stalls all Ms; set GOMAXPROCS to the CPU limit
+
+**Follow-ups**
+- How does automaxprocs fix the container CPU-quota mismatch?
+- What is the global run queue and when is it consulted?
+
+---
+
+#### 5. What exactly is GOMAXPROCS, and how does it relate to the number of M threads the runtime creates?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `gomaxprocs`, `m-threads`, `blocking-syscall`, `go-runtime`
+
+**GOMAXPROCS** is the number of **P** structures, i.e., the maximum number of goroutines executing Go code *simultaneously*. It is NOT a cap on OS threads. The runtime creates more **M** threads than GOMAXPROCS as needed: whenever a goroutine enters a **blocking syscall**, the runtime detaches its P from the now-blocked M (handoff) and either wakes a parked M or spawns a new one to keep the P busy running other goroutines. So a program with GOMAXPROCS=4 can have dozens of M threads if many goroutines are simultaneously blocked in syscalls (e.g., blocking file I/O, cgo calls). When the blocked syscall returns, that M tries to reacquire a P; if none is free, the goroutine goes to a run queue and the M parks. The thread count is bounded by `runtime/debug.SetMaxThreads` (default 10000); hitting it crashes the process. Key takeaway: GOMAXPROCS controls *parallelism of Go execution*, blocking syscalls control *thread count*.
+
+**Key points**
+- GOMAXPROCS = number of Ps = max goroutines running Go code in parallel, not a thread cap
+- Blocking syscall triggers P handoff: P detaches, another M runs it
+- Thread count can far exceed GOMAXPROCS when many goroutines block in syscalls or cgo
+- Hard limit via SetMaxThreads (default 10000); exceeding it is fatal
+
+
+```
+// Set GOMAXPROCS to match container CPU quota (avoid CFS throttling):
+import _ "go.uber.org/automaxprocs" // auto-detects cgroup CPU limit
+
+// Or manually:
+import "runtime"
+runtime.GOMAXPROCS(4)
+
+// Observe thread blowup from blocking syscalls:
+import "runtime/debug"
+debug.SetMaxThreads(10000) // default; cgo/blocking I/O storms can approach it
+```
+
+**Follow-ups**
+- Why can heavy cgo usage cause thread explosion?
+- What is sysmon and how does it relate to retaking Ps from long-running syscalls?
+
+---
+
+#### 6. How does Go preempt a goroutine stuck in a tight CPU loop, and why did this need fixing in Go 1.14?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `preemption`, `sysmon`, `gc`, `go-runtime`
+
+Before Go 1.14, preemption was **cooperative**: the runtime could only switch goroutines at safe points, primarily function-call prologues where the stack-growth check lived. A goroutine running a tight loop with no function calls (e.g., `for { x++ }`) never hit a safe point, so it could monopolize its P indefinitely, delaying GC stop-the-world (which must pause all goroutines) and starving other goroutines. Go 1.14 introduced **asynchronous preemption**: `sysmon` (a runtime monitor thread not bound to a P) detects a goroutine running longer than ~10 ms and sends a signal (SIGURG on Unix). The signal handler checks the interrupted PC against safe-point metadata and, if the registers/stack are in a preemptible state, redirects the goroutine to the scheduler. This made GC pauses bounded and fixed latency cliffs in CPU-bound code. The trade-off is added complexity and rare interaction bugs with code sensitive to signals; also non-cooperative preemption requires precise stack maps at arbitrary instruction boundaries.
+
+**Key points**
+- Pre-1.14: cooperative preemption only at function-call safe points; tight loops never yielded
+- Consequence: delayed STW GC, starved goroutines, latency spikes
+- Go 1.14 async preemption: sysmon flags >10 ms goroutines, sends SIGURG, handler reroutes to scheduler
+- Requires precise stack/register maps at arbitrary PCs; small signal-interaction risks
+
+**Follow-ups**
+- How does this interact with stop-the-world GC phases?
+- Why is SIGURG chosen rather than a custom signal?
+
+---
+
+## Virtual Memory & Paging
+
+#### 7. Walk through virtual-to-physical address translation: page tables, TLB, and what a TLB miss costs.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `virtual-memory`, `page-table`, `tlb`, `huge-pages`
+
+Each process sees a virtual address space; the MMU translates virtual to physical addresses using a multi-level **page table** (4 levels on x86-64, walking 9 bits of the address per level for 4 KB pages). Walking the page table on every access would be ruinous, so the CPU caches recent translations in the **TLB** (Translation Lookaside Buffer), a small highly-associative cache (tens to ~1500 entries split L1/L2). A **TLB hit** resolves translation in ~1 cycle. A **TLB miss** triggers a hardware page-table walk costing ~10-100+ cycles (multiple memory accesses, some possibly cache misses themselves). Programs with poor locality or huge working sets thrash the TLB. For Go, this matters because the GC scans the heap and large maps/slices with random access patterns cause TLB pressure; **huge pages** (2 MB) reduce TLB misses by covering more memory per entry, and Go can use transparent huge pages for its heap arenas. After a context switch to another address space, the TLB is largely flushed (mitigated by PCID tagging on modern CPUs).
+
+**Key points**
+- 4-level page table on x86-64; MMU walks it on a TLB miss
+- TLB hit ~1 cycle; TLB miss = hardware page walk, ~10-100+ cycles
+- Poor locality / huge working sets thrash the TLB
+- Huge pages (2 MB) and PCID reduce TLB misses and cross-switch flushing
+
+**Follow-ups**
+- How do transparent huge pages interact with the Go heap?
+- What is PCID and how does it avoid full TLB flushes on context switch?
+
+---
+
+#### 8. Distinguish minor and major page faults. Which does a freshly started Go program hit most?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `page-fault`, `demand-paging`, `rss`, `go-heap`
+
+A **page fault** occurs when a virtual page accessed has no valid mapping in the page table. A **minor (soft) fault** is resolved without disk I/O: the page is already in physical RAM (e.g., shared library already loaded, or a copy-on-write page, or a zero-fill demand page the kernel maps from the zero page), so the kernel just fixes the page-table entry. A **major (hard) fault** requires fetching the page from disk/swap or a memory-mapped file, costing milliseconds. A freshly started Go program hits mostly **minor faults**: its heap arenas are reserved via `mmap` but not backed by physical pages until first touch, so each first write to new heap memory triggers a demand-zero minor fault. This is why RSS grows lazily as the program warms up, and why a benchmark's first iteration is slower. Major faults in a healthy server are a red flag, usually meaning swapping under memory pressure. Track them via `/proc/<pid>/stat` (min_flt/maj_flt) or `ps -o min_flt,maj_flt`.
+
+**Key points**
+- Minor fault: page already in RAM (COW, demand-zero, shared lib), no disk I/O; ~microseconds
+- Major fault: fetch from disk/swap/mmap file; ~milliseconds, far costlier
+- Fresh Go program: mostly minor faults as mmap'd heap arenas get first-touched (demand-zero)
+- Major faults in a server usually mean swapping = memory pressure
+
+**Follow-ups**
+- Why does Go RSS grow gradually rather than all at once at startup?
+- How would you confirm swapping is causing latency, not GC?
+
+---
+
+#### 9. Explain mmap and how Go uses it for heap arenas. What is the role of madvise here?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `mmap`, `arenas`, `madvise`, `rss`
+
+`mmap` maps a region of virtual address space, optionally backed by a file or anonymous (zero-filled) memory; pages are populated lazily on first touch. The Go runtime **reserves** large chunks of address space with `mmap` (PROT_NONE initially or MAP_NORESERVE) and carves them into 64 MB **arenas**, then commits pages as the heap grows. Crucially, Go does not `munmap` freed memory immediately; it returns physical pages to the OS via **`madvise(MADV_FREE)`** (or MADV_DONTNEED). MADV_FREE marks pages as reclaimable lazily: the OS keeps them mapped but can drop them under pressure, and RSS may not shrink until the kernel actually reclaims them, which confuses people watching RSS after a load spike. MADV_DONTNEED frees eagerly (lower RSS, but the next touch re-faults). Go chose MADV_FREE by default for speed on Linux 4.5+, with `GODEBUG=madvdontneed=1` to force eager release. Understanding this explains why a Go service's RSS stays high after GC even when the heap is mostly free.
+
+**Key points**
+- mmap reserves virtual address space; pages populated lazily on first touch
+- Go reserves arenas (64 MB) and commits pages as the heap grows, avoiding per-alloc syscalls
+- Freed memory returned via madvise(MADV_FREE) lazily, not munmap
+- MADV_FREE keeps RSS high until kernel reclaims; GODEBUG=madvdontneed=1 forces eager MADV_DONTNEED
+
+
+```
+// Force eager return of freed memory to the OS (lower RSS, more re-faults):
+//   GODEBUG=madvdontneed=1 ./server
+
+// Nudge the runtime to scavenge unused pages back:
+import "runtime/debug"
+debug.FreeOSMemory() // forces a GC + returns as much memory as possible to the OS
+```
+
+**Follow-ups**
+- Why might RSS not drop after a big allocation spike even though heap usage fell?
+- When would you prefer madvdontneed=1 in production?
+
+---
+
+#### 10. How does the Linux OOM killer interact with container memory limits and a Go process?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `oom-killer`, `cgroups`, `gomemlimit`, `containers`
+
+When the system or a cgroup runs out of memory, the kernel **OOM killer** picks a victim by `oom_score` (roughly proportional to RSS, adjustable via `oom_score_adj`) and SIGKILLs it. In containers, each container runs in a memory cgroup with a hard limit; exceeding it triggers a **cgroup OOM** that kills processes in *that* cgroup (your Go process), independent of host free memory. The danger for Go: the runtime sizes GC pacing against the live heap and `GOGC`, not against the cgroup limit, so a workload that briefly allocates near the limit can get SIGKILLed mid-request, with no panic, no defer, no graceful shutdown, just exit code 137 (128+9). Mitigations: set **`GOMEMLIMIT`** (Go 1.19+) to a soft limit slightly below the cgroup limit so the GC runs harder to stay under it; size requests/limits with headroom for off-heap memory (mmap'd files, cgo, goroutine stacks); and alert on container memory working set. GOMEMLIMIT plus a sensible GOGC is the modern way to make Go cgroup-aware.
+
+**Key points**
+- OOM killer SIGKILLs by oom_score; cgroup OOM kills within the container's memory cgroup
+- Go GC paces on heap + GOGC, not the cgroup limit, so it can blow past the limit
+- SIGKILL = no graceful shutdown, exit 137; looks like a mysterious crash
+- Fix: set GOMEMLIMIT (1.19+) below the cgroup limit; leave headroom for off-heap memory
+
+
+```
+// Make the Go GC respect a memory ceiling (Go 1.19+):
+//   GOMEMLIMIT=900MiB GOGC=100 ./server   # if container limit is 1Gi
+
+import "runtime/debug"
+debug.SetMemoryLimit(900 << 20) // 900 MiB soft limit; GC works harder near it
+```
+
+**Follow-ups**
+- Why is GOMEMLIMIT a soft limit and what happens if you also lower GOGC?
+- How do goroutine stacks and cgo allocations escape the heap accounting?
+
+---
+
+#### 11. What is swap, and why is it often disabled for latency-sensitive Go services?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `swap`, `vm-swappiness`, `gc`, `latency`
+
+**Swap** is disk-backed virtual memory: when RAM is scarce, the kernel evicts least-recently-used anonymous pages to a swap device, freeing RAM at the cost of future **major page faults** (milliseconds) when those pages are touched again. For a latency-sensitive Go service this is catastrophic: the GC periodically scans the entire live heap, so if any heap pages are swapped out, a GC cycle drags them all back via major faults, producing huge tail-latency spikes and stop-the-world stalls measured in seconds. The unpredictability is worse than the average cost. Operators therefore often disable swap (or set `vm.swappiness=0/1`) on nodes running latency-sensitive workloads, and Kubernetes historically disabled swap entirely on nodes (kubelet refused to start with swap on, until recent opt-in alpha support). The trade-off: without swap, memory pressure leads to OOM kills instead of slow degradation, so you must size memory and GOMEMLIMIT correctly. Throughput-oriented batch jobs may actually benefit from some swap.
+
+**Key points**
+- Swap trades RAM for disk-backed pages; reload is a major fault (~ms)
+- GC heap scans pull swapped pages back, causing multi-second STW spikes
+- Latency services disable swap or set vm.swappiness low; K8s historically forbade swap
+- No swap means OOM kills replace slow degradation; size memory/GOMEMLIMIT carefully
+
+**Follow-ups**
+- Why does swapping interact especially badly with garbage collection?
+- What does vm.swappiness control and what value would you pick?
+
+---
+
+## CPU Caches & Data Locality
+
+#### 12. Describe the CPU cache hierarchy with approximate latencies. Why do these numbers matter for Go code?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `cache-hierarchy`, `latency`, `memory-bound`, `locality`
+
+Rough modern latencies (order-of-magnitude, cycles vary by CPU): **L1** ~1 ns (~4 cycles, 32-64 KB per core), **L2** ~3-4 ns (~12 cycles, 256 KB-1 MB per core), **L3** ~10-20 ns (~40 cycles, several MB shared), **main RAM** ~60-100 ns. For perspective, a main-memory access is ~100x slower than L1, and a cross-NUMA-node access is slower still. Disk and network are millions of times slower (SSD ~100 us, network round trip ~0.5 ms LAN). These numbers matter because a Go program's throughput on data-heavy work is often **memory-bound, not CPU-bound**: if your access pattern misses cache constantly, the CPU stalls waiting on RAM regardless of clock speed. This drives design choices like preferring slices of structs over slices of pointers (better locality), avoiding pointer-chasing data structures, and batching work to fit hot data in cache. The famous "Latency Numbers Every Programmer Should Know" table is the mental model; internalize the ratios, not exact figures.
+
+**Key points**
+- L1 ~1 ns, L2 ~3-4 ns, L3 ~10-20 ns, RAM ~60-100 ns; RAM ~100x slower than L1
+- SSD ~100 us, LAN round trip ~0.5 ms: orders of magnitude beyond cache
+- Data-heavy Go code is often memory-bound; cache misses stall the CPU
+- Favor contiguous, pointer-light layouts to stay in cache
+
+**Follow-ups**
+- Why is a []Struct usually faster to iterate than a []*Struct?
+- How would you measure cache-miss rate for a hot Go function?
+
+---
+
+#### 13. What is a cache line, what is false sharing, and how do you fix it in Go?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `cache-line`, `false-sharing`, `padding`, `concurrency`
+
+Caches move data in fixed **cache lines**, 64 bytes on x86-64 and most ARM. **False sharing** happens when two cores write to *different* variables that happen to live on the *same* cache line: the cache-coherence protocol forces the line to ping-pong between cores' caches (invalidations on every write), so independent variables behave as if contended, killing scalability. Classic case in Go: per-goroutine counters packed in a slice/struct, or fields in a hot struct touched by different goroutines. The fix is **padding** so each hot variable owns its own cache line. Go provides no built-in alignment attribute, so you pad manually (e.g., add a `[64]byte` or `_ [7]uint64` filler) or align to 64 bytes. The runtime itself does this; you can see it in standard-library patterns. Verify the fix with a benchmark scaling cores and watch for super-linear contention disappearing; perf's `cache-misses`/`LLC-store-misses` counters also reveal it.
+
+**Key points**
+- Cache line = 64 bytes; coherence operates at line granularity
+- False sharing: distinct variables on one line ping-pong between cores, serializing writes
+- Fix: pad each hot variable to its own 64-byte line
+- Go lacks alignment attributes; pad manually and verify with a scaling benchmark
+
+
+```go
+// Per-core counters padded to avoid false sharing:
+const cacheLine = 64
+
+type paddedCounter struct {
+    v uint64
+    _ [cacheLine - 8]byte // pad to a full cache line
+}
+
+type Counters struct {
+    shard [16]paddedCounter // each core writes its own shard, no ping-pong
+}
+
+func (c *Counters) Inc(core int) {
+    atomic.AddUint64(&c.shard[core].v, 1)
+}
+```
+
+**Follow-ups**
+- How would you detect false sharing without changing code first?
+- Why does sharding plus padding scale better than a single atomic counter?
+
+---
+
+#### 14. Explain cache coherence and the MESI protocol at a high level. How does it relate to atomic operations in Go?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `mesi`, `cache-coherence`, `atomic`, `lock-prefix`
+
+In a multicore CPU, each core has private L1/L2 caches, so the hardware needs a **coherence protocol** to keep them consistent. **MESI** tags each cache line as **Modified** (this core has the only, dirty copy), **Exclusive** (only copy, clean), **Shared** (clean, possibly in other caches), or **Invalid** (stale). A write requires the line in M/E state, so a core writing a Shared line must broadcast an invalidation and gain exclusive ownership, an off-core, slow operation. This is the hardware reason writes to shared, contended data are expensive and why false sharing hurts. Go's `sync/atomic` operations compile to instructions with the **`LOCK` prefix** (e.g., `LOCK XADD`, `LOCK CMPXCHG`) that force atomicity and the necessary coherence traffic plus a memory fence. So an `atomic.AddUint64` on a hot, shared variable is not free, it serializes through coherence; this is why sharded/per-CPU counters outperform a single global atomic under contention. MESI also underlies why a mutex's cache-line bouncing limits its scalability under heavy contention.
+
+**Key points**
+- MESI states: Modified, Exclusive, Shared, Invalid keep per-core caches coherent
+- Writing a Shared line requires invalidating other copies = slow coherence traffic
+- Go sync/atomic compiles to LOCK-prefixed instructions: atomic + coherence + fence
+- Contended atomics serialize through coherence; shard hot counters to scale
+
+**Follow-ups**
+- Why does a mutex under heavy contention stop scaling?
+- What is the difference between LOCK XADD and a plain XADD?
+
+---
+
+#### 15. Why is iterating a Go slice usually much faster than iterating a map of the same data?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `data-locality`, `slice`, `map`, `prefetch`
+
+It comes down to **data locality** and prefetching. A slice (`[]T`) stores elements **contiguously** in memory, so iterating it streams sequential cache lines; the hardware prefetcher recognizes the linear pattern and pulls the next lines before you need them, keeping the CPU fed. Each cache line (64 B) holds several elements, so misses are amortized. A Go **map** is a hash table of buckets; iteration visits buckets in an effectively random order, and for maps of pointers or large values you pointer-chase into scattered heap locations. Each lookup/iteration step tends to miss cache and TLB, stalling on ~100 ns RAM accesses, and the prefetcher cannot predict the pattern. The result is often a 5-50x difference for large datasets despite both being O(n) iteration. The senior takeaway: choose data structures for access pattern, not just asymptotic complexity. If you need both keyed lookup and fast iteration, keep a slice for iteration and a map of indices for lookup.
+
+**Key points**
+- Slices are contiguous: sequential cache lines, hardware prefetching, amortized misses
+- Maps are bucketed/hashed: random-order access, pointer chasing, cache+TLB misses
+- Both are O(n) to iterate but constants differ 5-50x due to locality
+- For lookup + fast iteration, pair a slice with a map of indices
+
+**Follow-ups**
+- When is a map still the right choice despite worse iteration locality?
+- How does storing []*T instead of []T hurt this locality advantage?
+
+---
+
+## Memory Model, Barriers & CPU Internals
+
+#### 16. What are memory barriers/fences, and how does the Go memory model relate to them?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `memory-model`, `barriers`, `happens-before`, `atomic`
+
+Modern CPUs and compilers **reorder** memory operations for performance (store buffers, out-of-order execution, compiler scheduling). A **memory barrier/fence** is an instruction that constrains this reordering, e.g., a store barrier ensures prior stores are visible before later ones. Without barriers, one core may observe another core's writes in a different order than program order, breaking naive lock-free code. The **Go memory model** specifies the *happens-before* relationships that guarantee one goroutine sees another's writes: a send on a channel happens-before the corresponding receive completes; an unlock happens-before a subsequent lock; `sync/atomic` operations establish ordering; and a goroutine's start/exit. Go does NOT give you raw fence intrinsics; instead, the synchronization primitives (channels, sync.Mutex, sync/atomic) emit the right barriers internally. The senior rule: **data shared between goroutines must be protected by a synchronization primitive**; if you communicate only via channels or atomics, the memory model guarantees visibility. Unsynchronized access is a data race with undefined behavior, even if it seems to work.
+
+**Key points**
+- CPUs/compilers reorder memory ops; barriers constrain reordering and enforce visibility
+- Go memory model defines happens-before via channels, mutexes, atomics, goroutine start/exit
+- No raw fence intrinsics in Go; primitives emit barriers internally
+- Unsynchronized shared access = data race = undefined behavior, regardless of apparent correctness
+
+
+```
+// Visibility is guaranteed only through synchronization:
+var ready atomic.Bool
+var data int
+
+// goroutine A
+data = 42         // ordinary write
+ready.Store(true) // atomic release: data write happens-before this
+
+// goroutine B
+if ready.Load() { // atomic acquire
+    use(data)     // guaranteed to see 42; without atomics this is a race
+}
+```
+
+**Follow-ups**
+- What does the race detector actually detect, and what does it miss?
+- Why can a double-checked-locking pattern be broken without atomics?
+
+---
+
+#### 17. Explain CPU pipelining and branch prediction. What does a branch misprediction cost, and how can it affect Go code?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `pipelining`, `branch-prediction`, `misprediction`, `performance`
+
+A CPU **pipeline** overlaps instruction stages (fetch, decode, execute, memory, write-back) so multiple instructions are in flight, raising throughput. **Branch prediction** lets the pipeline keep fetching past a conditional branch by guessing the outcome before it is resolved; modern predictors are ~95-99% accurate using history tables. A **misprediction** forces a **pipeline flush**: all speculatively executed instructions are discarded and the pipeline refills, costing ~15-20+ cycles (deeper pipelines cost more). In hot Go loops with **unpredictable branches** (e.g., data-dependent `if` on random data), mispredictions dominate. A classic effect: processing a **sorted** slice can be far faster than an unsorted one if the loop branches on element value, because sorted data makes the branch predictable. Mitigations include branchless code, sorting data beforehand, or restructuring to avoid data-dependent branches in the hot path. This is also why micro-benchmarks on random vs sorted inputs can differ surprisingly; senior engineers account for it when interpreting benchmark results.
+
+**Key points**
+- Pipelining overlaps instruction stages for throughput; prediction keeps it fed past branches
+- Predictors are ~95-99% accurate; a misprediction flushes the pipeline (~15-20+ cycles)
+- Unpredictable, data-dependent branches in hot loops cost the most
+- Sorting data or going branchless can dramatically speed up branch-heavy loops
+
+**Follow-ups**
+- Why does iterating sorted data sometimes beat unsorted for the same algorithm?
+- How would perf's branch-misses counter help you diagnose this?
+
+---
+
+#### 18. How are atomic operations and CAS implemented in hardware, and what does the x86 LOCK prefix do?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `atomic`, `cas`, `lock-prefix`, `lock-free`
+
+An **atomic** read-modify-write (increment, swap, compare-and-swap) must appear indivisible to all cores. On x86-64 this is achieved with the **`LOCK` prefix** on instructions like `XADD`, `XCHG`, and `CMPXCHG`. Originally LOCK asserted a bus lock; modern CPUs implement it via **cache locking**: the core gains exclusive (M-state) ownership of the affected cache line through the coherence protocol and holds it for the duration of the operation, so no other core can interleave. **CAS** (`LOCK CMPXCHG`) atomically compares a memory location to an expected value and, if equal, writes a new value, returning success/failure; it is the foundation of lock-free algorithms and of `sync/atomic.CompareAndSwap*`. The cost: a LOCKed op includes a full memory barrier and forces coherence traffic, so it is tens of cycles even uncontended and far worse contended (the line ping-pongs). ARM uses a different model (LL/SC: `LDXR`/`STXR` load-exclusive/store-exclusive in a retry loop). Go's runtime and `sync` package build mutexes, once, and lock-free structures on these primitives.
+
+**Key points**
+- Atomic RMW must be indivisible across cores
+- x86 LOCK prefix on XADD/XCHG/CMPXCHG: cache locking via exclusive line ownership + full barrier
+- CAS (LOCK CMPXCHG) underpins lock-free code and sync/atomic.CompareAndSwap
+- ARM uses LL/SC (LDXR/STXR) retry loops; all are costly, worse under contention
+
+
+```go
+// Lock-free counter via CAS loop (sync/atomic does this efficiently):
+func incIfBelow(p *int64, cap int64) bool {
+    for {
+        old := atomic.LoadInt64(p)
+        if old >= cap {
+            return false
+        }
+        if atomic.CompareAndSwapInt64(p, old, old+1) { // LOCK CMPXCHG
+            return true
+        }
+        // CAS failed: another goroutine won; retry
+    }
+}
+```
+
+**Follow-ups**
+- Why can a CAS loop livelock or waste CPU under heavy contention?
+- What is the ABA problem and does Go's atomic.Pointer help?
+
+---
+
+#### 19. What are SIMD, hyperthreading/SMT, and NUMA, and when does each matter for a Go service?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `simd`, `smt`, `numa`, `go-runtime`
+
+**SIMD** (Single Instruction, Multiple Data; SSE/AVX/NEON) processes multiple data elements per instruction, great for bulk numeric work, encoding, and crypto. The Go compiler auto-vectorizes very little, so the standard library uses hand-written SIMD assembly for hot paths (e.g., crypto, `bytes`/`strings` scanning); application code rarely writes SIMD directly (you would drop to assembly or cgo). **Hyperthreading/SMT** runs two logical threads per physical core sharing execution units; it helps when threads stall on memory (one runs while the other waits) but two compute-bound threads contend for the same units, so SMT can hurt CPU-bound latency-sensitive workloads, and GOMAXPROCS counting logical cores may oversubscribe. **NUMA** (Non-Uniform Memory Access) means multi-socket machines have memory local to each socket; accessing a remote node's memory is slower (~1.5-2x latency) and shares interconnect bandwidth. The Go runtime is **not NUMA-aware**, so on large multi-socket boxes you may pin processes per socket (numactl/taskset) or run one process per NUMA node to keep memory access local. For most single-socket cloud instances NUMA is moot.
+
+**Key points**
+- SIMD: data-parallel instructions; Go barely auto-vectorizes, stdlib uses hand-written asm
+- SMT/hyperthreading: 2 logical threads/core; helps memory-stalled, can hurt compute-bound latency
+- NUMA: remote-node memory ~1.5-2x slower; Go runtime is not NUMA-aware
+- On big multi-socket boxes, pin per socket (numactl) and mind GOMAXPROCS vs logical cores
+
+**Follow-ups**
+- Why might you set GOMAXPROCS to physical (not logical) core count?
+- How would you run a Go service NUMA-locally on a 2-socket server?
+
+---
+
+## I/O Models & the Netpoller
+
+#### 20. Compare blocking, non-blocking, I/O multiplexing, signal-driven, and asynchronous I/O. Which does Go use?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `io-models`, `epoll`, `io-uring`, `netpoller`
+
+The five classic Unix I/O models: (1) **Blocking**: the thread sleeps in the kernel until data is ready, simplest but one thread per connection. (2) **Non-blocking**: the call returns EAGAIN immediately if not ready, requiring busy polling, wasteful. (3) **I/O multiplexing** (`select`/`poll`/`epoll`/`kqueue`): one thread waits on many fds, woken when any is ready, then does non-blocking reads, the foundation of scalable servers. (4) **Signal-driven** (SIGIO): the kernel signals readiness, rarely used. (5) **Asynchronous I/O** (POSIX AIO, Linux **io_uring**): you submit an operation and the kernel performs the *entire* I/O and notifies on completion (completion-based, not readiness-based). Go uses **I/O multiplexing under the hood via the netpoller** (epoll on Linux, kqueue on BSD/macOS, IOCP on Windows), but exposes a **synchronous blocking API** to the programmer: `conn.Read` looks blocking but the runtime parks the goroutine and drives readiness through epoll. So you get readiness-based multiplexing efficiency with straight-line code. Go does not yet use io_uring by default, though experiments exist.
+
+**Key points**
+- Blocking (1 thread/conn), non-blocking (busy poll), multiplexing (epoll/kqueue), signal-driven, async (io_uring)
+- Multiplexing/readiness vs async/completion are the two scalable models
+- Go internally uses epoll/kqueue/IOCP via the netpoller; exposes a synchronous API
+- Goroutine parks on EAGAIN; runtime drives readiness, giving event-loop efficiency with simple code
+
+**Follow-ups**
+- What is the difference between readiness-based (epoll) and completion-based (io_uring/IOCP) models?
+- Why might io_uring eventually benefit the Go runtime?
+
+---
+
+#### 21. Explain epoll level-triggered vs edge-triggered. Which does the Go netpoller use and why?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `epoll`, `edge-triggered`, `level-triggered`, `netpoller`
+
+**Level-triggered (LT)** epoll reports an fd as ready *as long as* there is data to read (or space to write); if you read only part of the buffer, the next `epoll_wait` still reports it ready, simpler and forgiving. **Edge-triggered (ET)** reports readiness only on the *transition* from not-ready to ready (the edge); after one notification you must drain the fd fully (read until EAGAIN) or you will miss data until the next edge. ET produces fewer wakeups (efficient for high fan-out) but is unforgiving and easy to get wrong. The **Go netpoller uses edge-triggered** epoll (with `EPOLLET`) because it fits the runtime's model: when an fd becomes ready, the netpoller wakes the parked goroutine, which then reads until EAGAIN and re-registers interest. Edge-triggering minimizes redundant `epoll_wait` reports across potentially hundreds of thousands of fds, reducing syscall and wakeup overhead. The runtime handles the must-fully-drain requirement internally so application code never sees the subtlety.
+
+**Key points**
+- Level-triggered: ready reported while data remains; forgiving, more wakeups
+- Edge-triggered: ready reported only on transition; must drain to EAGAIN; fewer wakeups
+- Go netpoller uses edge-triggered (EPOLLET) for efficiency at high fd counts
+- Runtime handles draining/re-registration so app code stays simple
+
+**Follow-ups**
+- What bug appears if edge-triggered code forgets to drain the fd?
+- How does the netpoller decide which goroutine to wake on readiness?
+
+---
+
+#### 22. What are file descriptors, and how do you diagnose and fix "too many open files"?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `file-descriptors`, `ulimit`, `emfile`, `fd-leak`
+
+A **file descriptor (fd)** is a small integer index into the kernel's per-process open-file table, referencing sockets, files, pipes, epoll instances, etc. Each process has a limit on open fds: a soft limit (`ulimit -n`, often 1024 by default) and a hard limit, plus a system-wide cap (`/proc/sys/fs/file-max`). A high-concurrency Go server (one fd per connection, plus listeners, plus the epoll fd) easily exhausts the default soft limit, surfacing as `accept: too many open files` (EMFILE) and dropped connections. Common root causes: leaking fds by **not closing response bodies / connections**, or a connection pool without limits. Diagnose with `lsof -p <pid> | wc -l`, `ls /proc/<pid>/fd | wc -l`, and check the limit via `cat /proc/<pid>/limits`. Fixes: raise `ulimit -n` (and the systemd `LimitNOFILE=`), fix fd leaks (always `defer resp.Body.Close()`, close idle connections), and bound pools. Note Go also consumes fds internally (the netpoller's epoll fd, pipes for the runtime). Raising the limit treats the symptom; finding the leak is the cure.
+
+**Key points**
+- fd = index into the kernel open-file table; sockets/files/pipes/epoll all consume fds
+- Limits: soft (ulimit -n, often 1024), hard, and system-wide fs.file-max
+- EMFILE 'too many open files' from default limits or fd leaks (unclosed bodies/conns)
+- Diagnose via /proc/<pid>/fd, lsof, /proc/<pid>/limits; fix leaks + raise LimitNOFILE
+
+
+```go
+// The most common Go fd leak: not closing the HTTP response body.
+resp, err := http.Get(url)
+if err != nil {
+    return err
+}
+defer resp.Body.Close()        // REQUIRED, else the connection's fd leaks
+io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
+
+// Check limits at runtime:
+//   cat /proc/$PID/limits | grep 'open files'
+//   ls /proc/$PID/fd | wc -l
+```
+
+**Follow-ups**
+- Why does draining the body (not just closing) matter for connection reuse?
+- How do you raise the fd limit for a systemd-managed Go service?
+
+---
+
+#### 23. What are the C10K and C10M problems, and how does Go's model address them?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `c10k`, `c10m`, `scalability`, `netpoller`
+
+**C10K** (Dan Kegel, ~1999) is the challenge of handling 10,000 concurrent connections on one server. The thread-per-connection model fails here: 10k threads means 10k large stacks (~tens of GB of reserved memory) and crushing context-switch overhead. The solution was **I/O multiplexing** (epoll/kqueue) with a small number of threads running event loops. **C10M** (Robert Graham, ~2013) raises the bar to 10 *million* connections, exposing that even the kernel network stack and per-fd overhead become bottlenecks, pushing toward kernel-bypass (DPDK), userspace networking, and careful memory/NUMA tuning. Go addresses C10K elegantly: its netpoller gives you epoll-grade multiplexing while you write simple synchronous `conn.Read`/`Write` code, and goroutines (~2 KB stacks) make a goroutine-per-connection design viable, so 100k+ connections are routine. Go does *not* by itself solve C10M, that regime needs kernel-bypass and specialized stacks beyond the standard runtime, but for the overwhelmingly common C10K-to-C100K range, Go's goroutine + netpoller model is close to ideal.
+
+**Key points**
+- C10K: 10k concurrent connections; thread-per-connection fails on memory + context switches
+- Solved by epoll/kqueue multiplexing with few event-loop threads
+- C10M: 10M connections; kernel stack itself bottlenecks -> kernel-bypass (DPDK), userspace nets
+- Go nails C10K-C100K via netpoller + cheap goroutines; C10M needs beyond-runtime techniques
+
+**Follow-ups**
+- What kernel-level costs dominate once you reach C10M?
+- Why is goroutine-per-connection acceptable in Go but thread-per-connection is not?
+
+---
+
+## Linux Performance Debugging
+
+#### 24. A Go service shows high CPU. Walk through your Linux + Go diagnosis methodology.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `high-cpu`, `pprof`, `perf`, `debugging`
+
+First **confirm and localize** with system tools: `top`/`htop` to see whether the Go process is actually the CPU consumer and whether it is user or system (`%us` vs `%sy`) time, high `%sy` points to syscalls/GC/scheduling, high `%us` to application compute. `pidstat -t -p <pid> 1` breaks CPU down per thread. Then go **inside the process**: the Go **pprof CPU profile** (`go tool pprof http://host/debug/pprof/profile?seconds=30`) gives a flame graph of where Go code burns cycles, the single most useful tool. Cross-check with `perf top -p <pid>` to see hot functions including runtime/GC and kernel symbols, and `perf record/report` for a system-wide flame graph. Look for: GC pressure (high alloc rate, visible in `runtime.gcBgMarkWorker` / mallocgc, confirmed by `GODEBUG=gctrace=1`), lock contention (`runtime.lock`, mutex profile), busy-spinning, or unexpected hot paths. Don't forget GOMAXPROCS vs CFS quota: a container being CPU-throttled looks like high CPU while actually being throttled (`/sys/fs/cgroup/.../cpu.stat` nr_throttled). Methodology: top -> per-thread (pidstat) -> in-process pprof -> perf for kernel/runtime -> check GC and cgroup throttling.
+
+**Key points**
+- top/htop: confirm the process; split user (%us=compute) vs system (%sy=syscalls/GC/sched)
+- pidstat -t per-thread CPU; perf top/record for hot functions incl. kernel/runtime
+- Go pprof CPU profile is the primary tool: flame graph of hot Go code
+- Check GC (GODEBUG=gctrace=1, mutex profile) and cgroup CPU throttling (cpu.stat nr_throttled)
+
+
+```
+// Capture a 30s CPU profile from a running service (net/http/pprof imported):
+//   go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile?seconds=30
+
+// See GC behavior:
+//   GODEBUG=gctrace=1 ./server   // logs each GC: heap sizes, pause, CPU%
+
+// Detect container CPU throttling (the 'fake high CPU'):
+//   cat /sys/fs/cgroup/cpu.stat   // look at nr_throttled / throttled_usec
+```
+
+**Follow-ups**
+- How would you tell GC overhead apart from application compute in pprof?
+- What does high nr_throttled imply about your GOMAXPROCS setting?
+
+---
+
+#### 25. CPU is low but latency is high. How is diagnosing high latency different from high CPU?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `high-latency`, `block-profile`, `trace`, `debugging`
+
+Low CPU with high latency means the work is **waiting, not computing**, so CPU profilers (which sample on-CPU time) under-report the problem. You need to find where goroutines **block**. Likely culprits: I/O waits (slow downstream DB/HTTP), lock contention, channel/semaphore queuing, GC stop-the-world pauses, disk stalls, or scheduling delays. Tooling shifts toward **off-CPU and blocking analysis**: Go's **block profile** (`runtime.SetBlockProfileRate` + `/debug/pprof/block`) and **mutex profile** show where goroutines wait on synchronization; a **goroutine dump** (`/debug/pprof/goroutine?debug=2`) reveals many goroutines stuck in the same `Read`/`Lock`/`chan receive`, pointing at the bottleneck. **Execution tracer** (`runtime/trace`) visualizes goroutine scheduling, GC pauses, and network blocking on a timeline, ideal for latency. System side: `iostat -x` for disk await, `vmstat` for run-queue/swap, `ss -ti` for TCP retransmits/RTT, and check downstream service latency. Also verify GC pauses via `gctrace`. The mental shift: high CPU -> on-CPU profiling; high latency -> off-CPU/blocking profiling, goroutine dumps, and the execution tracer.
+
+**Key points**
+- Low CPU + high latency = waiting, not computing; CPU profiler under-reports it
+- Use block profile, mutex profile, and goroutine dumps to find where goroutines block
+- runtime/trace timeline reveals scheduling, GC pauses, network blocking
+- System side: iostat (disk await), vmstat (run queue/swap), ss -ti (RTT/retransmits), downstream latency
+
+
+```
+// Enable blocking and mutex profiling to find waits:
+import "runtime"
+runtime.SetBlockProfileRate(1)     // sample blocking events
+runtime.SetMutexProfileFraction(1) // sample mutex contention
+// then: go tool pprof http://host/debug/pprof/block
+//       go tool pprof http://host/debug/pprof/mutex
+
+// Dump all goroutine stacks (find many stuck in the same place):
+//   curl 'http://host/debug/pprof/goroutine?debug=2'
+
+// Timeline view of scheduling + GC + net blocking:
+//   curl http://host/debug/pprof/trace?seconds=5 > trace.out && go tool trace trace.out
+```
+
+**Follow-ups**
+- How do you distinguish GC-pause latency from downstream-I/O latency?
+- Why is a goroutine dump often faster than a profiler for finding a deadlock-like stall?
+
+---
+
+#### 26. What does the Linux load average actually mean, and why can a load of 8 be fine or terrible?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `load-average`, `vmstat`, `iowait`, `debugging`
+
+Load average (the three numbers from `uptime`/`top`, over 1/5/15 minutes) is the **exponentially-weighted moving average of the number of tasks that are runnable OR in uninterruptible sleep** (state R + state D). Crucially, on Linux it includes processes blocked in **uninterruptible I/O wait** (D state), not just CPU-runnable ones, so load is *not* purely a CPU metric. To interpret it you must compare against **core count**: a load of 8 on an 8-core box means roughly fully utilized (~1.0 per core), which can be perfectly healthy; the same load of 8 on a 2-core box means heavy oversubscription and queuing (latency). A rising load with low CPU usually indicates I/O wait (D-state) or lock contention, not compute. For a Go service, a high load with low pprof CPU often means goroutines' Ms are blocked in syscalls/I/O. Always normalize: `load / nproc`. Pair load with `vmstat` (the `r` and `b` columns separate run-queue from blocked) and per-CPU `%iowait` to know whether you are CPU-bound or I/O-bound.
+
+**Key points**
+- Load = EWMA of tasks in R (runnable) + D (uninterruptible I/O sleep), over 1/5/15 min
+- Linux includes I/O-wait tasks, so load is not a pure CPU metric
+- Interpret only relative to core count: load/nproc ~1.0 is full utilization
+- Rising load + low CPU usually means I/O wait or contention; check vmstat r/b and %iowait
+
+
+```
+// Normalize load to cores and separate runnable vs blocked:
+//   nproc                     // core count
+//   uptime                    // 1/5/15-min load averages
+//   vmstat 1                  // 'r' = run queue, 'b' = uninterruptible (D) tasks
+//   mpstat -P ALL 1           // per-CPU %usr, %sys, %iowait
+```
+
+**Follow-ups**
+- Why can a stuck NFS mount spike load average with zero CPU usage?
+- Which vmstat columns tell you it is I/O-bound rather than CPU-bound?
+
+---
+
+#### 27. When and how would you use strace, and what is its cost on a production Go service?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `strace`, `ptrace`, `ebpf`, `debugging`
+
+`strace` traces the **syscalls** a process makes by attaching via `ptrace`. It is invaluable for answering what is the process actually asking the kernel to do: diagnosing `too many open files` (watch `openat`/`accept` returning EMFILE), permission errors (EACCES), where a hung process is stuck (`strace -p <pid>` shows it parked in `read`/`futex`/`epoll_wait`), or unexpected syscall storms. Useful flags: `-f` (follow threads, essential for Go's many Ms), `-c` (summary count + time per syscall, great for spotting a syscall hot spot), `-e trace=network`/`openat`, `-T` (time per call), `-tt` (timestamps). The **cost is severe**: ptrace stops the tracee on *every* syscall (two context switches per syscall), so a syscall-heavy Go server can slow down 10-100x, distorting timing and risking timeouts, never leave it running on a hot path in production. Prefer lower-overhead tools for production: `perf trace`, eBPF tools (`bpftrace`, `execsnoop`, `opensnoop`), or Go's own pprof/trace. Use strace for short, targeted captures or on a canary, not continuously.
+
+**Key points**
+- strace uses ptrace to trace syscalls; shows EMFILE/EACCES, where a process is stuck, syscall storms
+- Key flags: -f (follow threads, vital for Go Ms), -c (summary), -e, -T, -tt
+- Cost is severe: stops tracee on every syscall, 10-100x slowdown; can cause timeouts
+- In production prefer perf trace / eBPF (bpftrace, opensnoop) or Go pprof/trace
+
+
+```
+// Where is a hung Go process stuck? (attach briefly, follow threads)
+//   strace -f -p $PID            // often shows epoll_wait / futex / read
+
+// Which syscalls dominate, and their time? (short capture)
+//   strace -f -c -p $PID         // Ctrl-C after a few seconds for the summary
+
+// Lower-overhead production alternatives:
+//   perf trace -p $PID
+//   opensnoop / execsnoop  (bcc/eBPF)
+```
+
+**Follow-ups**
+- Why is strace -f mandatory for a Go process specifically?
+- What eBPF tool would you reach for instead on a busy production box?
+
+---
+
+#### 28. What is /proc, and which entries are most useful for debugging a Go process?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `proc`, `rss`, `fd-leak`, `debugging`
+
+`/proc` is a **virtual filesystem** the kernel exposes; reading its files returns live kernel/process state (no disk involved). System-wide entries: `/proc/cpuinfo`, `/proc/meminfo`, `/proc/loadavg`, `/proc/stat`, `/proc/sys/...` (tunables like `fs.file-max`, `vm.swappiness`). Per-process under `/proc/<pid>/`: **`status`** (VmRSS, VmSwap, Threads, voluntary/involuntary context switches), **`stat`** (min_flt/maj_flt page faults, utime/stime), **`limits`** (the effective ulimits including max open files, key for fd debugging), **`fd/`** (one symlink per open fd, count it to find leaks), **`smaps`/`smaps_rollup`** (detailed memory mapping, useful to see Go's mmap'd arenas and actual RSS), **`io`** (bytes read/written), **`sched`** and **`wchan`** (where a thread is sleeping), and **`environ`/`cmdline`**. For a Go process these answer real questions: is RSS growing (status VmRSS), are we leaking fds (ls fd | wc -l vs limits), are we taking major faults / swapping (stat maj_flt, status VmSwap), and how many OS threads (Threads, reflecting M growth from blocking syscalls). Most higher-level tools (top, ps, pidstat) are just formatted readers of /proc.
+
+**Key points**
+- /proc is a virtual FS exposing live kernel/process state, no disk I/O
+- Per-pid: status (VmRSS/VmSwap/Threads/ctxt switches), stat (page faults, cpu time), limits (ulimits)
+- fd/ (count for leaks), smaps_rollup (real RSS + mmap arenas), io, wchan (where it sleeps)
+- Answers Go questions: RSS growth, fd leaks, swapping/major faults, M-thread count
+
+
+```
+// Quick Go-process health snapshot from /proc:
+//   grep -E 'VmRSS|VmSwap|Threads|ctxt' /proc/$PID/status
+//   grep 'open files' /proc/$PID/limits
+//   ls /proc/$PID/fd | wc -l            // fd count vs the limit above
+//   awk '/min_flt|maj_flt/' /proc/$PID/stat   // fields 10/12: minor/major faults
+//   cat /proc/$PID/smaps_rollup         // accurate RSS / Pss including mmap arenas
+```
+
+**Follow-ups**
+- How does a rising Threads count in /proc/<pid>/status relate to blocking syscalls?
+- Why is smaps_rollup more accurate than VmRSS for Go memory accounting?
+
+---
+
+#### 29. How do you use vmstat and iostat together to decide whether a slow Go service is CPU-, memory-, or disk-bound?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `vmstat`, `iostat`, `io-bound`, `debugging`
+
+Run `vmstat 1` and read columns as a system-wide picture: **`r`** (run-queue length: if persistently > cores, you are CPU-bound/oversubscribed), **`b`** (processes in uninterruptible sleep: usually disk/I/O wait), **`si`/`so`** (swap in/out: any nonzero means swapping = memory pressure, a red flag for a GC-heavy Go service), **`us`/`sy`/`id`/`wa`** (CPU split: high `wa` = waiting on I/O, high `sy` = kernel/syscall/GC overhead, high `id` with slow service = blocked elsewhere). If `si/so` are nonzero, fix memory first (swapping wrecks GC). If `wa` and `b` are high, move to `iostat -x 1` and inspect per-device: **`%util`** (near 100% = device saturated), **`await`** (avg I/O latency in ms: high await = slow disk), **`aqu-sz`/`avgqu-sz`** (queue depth), and r/s, w/s throughput. So the decision tree: vmstat first to classify (CPU via `r`/`us`, memory via `si`/`so`, I/O via `wa`/`b`), then iostat to pinpoint the saturated device, then correlate with the Go pprof/trace to find which code path drives it. For a Go service, nonzero swap or high await almost always explains tail-latency better than the CPU profile does.
+
+**Key points**
+- vmstat: r (run queue vs cores=CPU-bound), b (I/O wait), si/so (swapping=memory pressure)
+- CPU split us/sy/id/wa: high wa=I/O wait, high sy=kernel/GC, high id+slow=blocked elsewhere
+- iostat -x: %util (saturation), await (I/O latency ms), queue size, throughput per device
+- Decision tree: vmstat classifies (CPU/mem/IO) -> iostat pinpoints device -> correlate with pprof/trace
+
+
+```
+// Classify the bottleneck:
+//   vmstat 1
+//     r high (> nproc)        -> CPU-bound / oversubscribed
+//     si/so > 0               -> SWAPPING (fix memory; wrecks GC)
+//     wa high, b high         -> I/O-bound -> go to iostat
+//
+//   iostat -x 1
+//     %util ~100, await high  -> that disk is the bottleneck
+```
+
+**Follow-ups**
+- Why does any nonzero si/so deserve immediate attention for a GC-heavy service?
+- How would you connect a high-await disk back to a specific Go code path?
+
+---
+
+#### 30. How does perf complement Go's pprof, and what extra visibility does it give?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `perf`, `pprof`, `hardware-counters`, `debugging`
+
+Go **pprof** profiles from *inside* the runtime: it knows goroutines, Go stack frames, allocations, blocking, and mutex contention, ideal for application-level hot spots and Go-specific overhead. But pprof is largely blind to **kernel time, hardware events, and non-Go code**. `perf` (Linux perf_events) samples the whole stack including **kernel symbols, syscalls, and CPU hardware counters**, giving visibility pprof lacks: `perf stat` reports **cache-misses, branch-misses, instructions-per-cycle (IPC), context-switches, page-faults**, so you can prove a hot loop is memory-bound (low IPC, high cache-misses) or branch-bound (high branch-misses) rather than just hot. `perf top`/`perf record -g` show where time goes across user+kernel, catching cases where the cost is in the kernel (e.g., heavy `futex`, `memcpy`, TLS, GC assist in syscalls) that pprof attributes vaguely. With Go's frame-pointer support and tools like `perf script` + FlameGraph you get mixed Go+kernel flame graphs. Practical workflow: pprof to find the hot Go path, then `perf stat` on that workload to learn *why* it is slow at the microarchitecture level (cache/branch/IPC), and `perf record` to confirm kernel involvement. They are complementary, not competing.
+
+**Key points**
+- pprof: in-runtime, knows goroutines/Go frames/alloc/block/mutex; blind to kernel + hardware
+- perf: whole-stack incl. kernel symbols and HW counters (cache-misses, branch-misses, IPC, faults)
+- perf stat proves memory-bound (low IPC, high cache-miss) vs branch-bound vs compute
+- Workflow: pprof finds the hot path, perf stat/record explains the microarchitectural why
+
+
+```
+// Microarchitectural 'why is it slow' on a workload:
+//   perf stat -p $PID -- sleep 10
+//     -> instructions, IPC, cache-misses, branch-misses, context-switches, page-faults
+
+// Mixed user+kernel flame graph:
+//   perf record -F 99 -g -p $PID -- sleep 20
+//   perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg
+```
+
+**Follow-ups**
+- What IPC and cache-miss numbers would convince you a loop is memory-bound?
+- How do frame pointers (GOFLAGS) improve perf stacks for Go binaries?
+
+---
+
+#### 31. A Go container periodically freezes for ~50-100 ms with low average CPU. What OS-level causes do you investigate?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `cfs-throttling`, `gc-pause`, `containers`, `debugging`
+
+Periodic short freezes with low average CPU scream **scheduling or runtime stalls**, not steady compute. Prime suspects, in order: (1) **cgroup CPU throttling**, the container hit its CFS quota and was paused until the next period (default 100 ms), producing exactly this 50-100 ms pattern; confirm via `/sys/fs/cgroup/cpu.stat` (`nr_throttled`, `throttled_usec`) and fix by raising the limit or setting GOMAXPROCS to the quota (automaxprocs). (2) **GC stop-the-world** assist/mark-termination pauses, confirm with `GODEBUG=gctrace=1` (look at pause times) and reduce by lowering allocation rate or tuning GOGC/GOMEMLIMIT. (3) **Major page faults / swapping**, the periodic GC heap scan pulling swapped pages back (check VmSwap, `vmstat` si/so, maj_flt). (4) **Lock convoy / global contention**, a hot mutex periodically serializing all goroutines (block/mutex profile, goroutine dump). (5) **Async-preemption or sysmon anomalies**, rare. The methodology: capture a `runtime/trace` during a freeze to see whether it's GC, scheduler, or net blocking on the timeline; simultaneously check cgroup throttling and swap. In containerized Go, CFS throttling and GC are the two most common answers, and they are easy to confuse with each other.
+
+**Key points**
+- Short periodic freezes + low avg CPU = scheduling/runtime stalls, not compute
+- #1 suspect: cgroup CFS throttling (100 ms periods) -> check cpu.stat nr_throttled; set GOMAXPROCS to quota
+- Also: GC STW pauses (gctrace), swapping/major faults (vmstat si/so, maj_flt), mutex convoys
+- Capture runtime/trace during a freeze to classify GC vs scheduler vs net; check throttling + swap simultaneously
+
+
+```
+// Confirm CFS throttling (cgroup v2):
+//   cat /sys/fs/cgroup/cpu.stat
+//     nr_throttled / throttled_usec rising == quota throttling
+
+// Confirm GC pauses:
+//   GODEBUG=gctrace=1 ./server   // watch the pause column
+
+// Capture a trace during the freeze and inspect the timeline:
+//   curl http://host/debug/pprof/trace?seconds=5 > t.out && go tool trace t.out
+```
+
+**Follow-ups**
+- Why does the 100 ms CFS period produce exactly this freeze signature?
+- How do you distinguish throttling-induced pauses from GC pauses in a trace?
+
+---
+
+#### 32. How would you measure whether a hot Go function is memory-bound or compute-bound, and what would you do about each?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `memory-bound`, `ipc`, `perf`, `optimization`
+
+Measure with hardware counters via **`perf stat`** on the workload: the key metric is **IPC (instructions per cycle)**. A healthy compute-bound loop runs ~2-4 IPC; a memory-bound loop stalls waiting on RAM and shows **low IPC (often < 1)** alongside **high cache-misses** and **high LLC (last-level cache) miss rate**. Also watch **branch-misses** (branch-bound) and **stalled-cycles-frontend/backend**. Complement with `perf record` to see if time sits in the loop vs in `memcpy`/GC, and Go's `pprof -alloc_space` to see if allocation pressure is feeding the misses. **If memory-bound**: improve locality, switch `[]*T` to `[]T`, shrink/pack structs to fit more per cache line, use contiguous arrays over maps/pointer structures, block/tile the algorithm to reuse cache, reduce allocations (pool, reuse buffers) so the GC scans less and cache stays warm, and consider huge pages for large heaps. **If compute-bound**: reduce instruction count (better algorithm, hoist work out of the loop), make branches predictable (sort, branchless), or push hot kernels to SIMD assembly. The discipline: never guess, let IPC and cache-miss counters tell you which wall you are hitting before optimizing.
+
+**Key points**
+- perf stat IPC is the tell: ~2-4 = compute-bound; <1 with high cache-misses = memory-bound
+- Also check branch-misses (branch-bound) and frontend/backend stalled cycles
+- Memory-bound fixes: locality ([]T over []*T), pack structs, contiguous data, fewer allocs, huge pages
+- Compute-bound fixes: fewer instructions, predictable/branchless code, SIMD; measure, don't guess
+
+
+```
+// Is the hot path memory-bound or compute-bound?
+//   perf stat -e cycles,instructions,cache-misses,branch-misses,LLC-load-misses \
+//       -p $PID -- sleep 10
+//   -> IPC = instructions/cycles
+//      IPC < 1 + high cache/LLC misses  => memory-bound
+//      high IPC + high branch-misses    => branch-bound
+
+// Allocation pressure feeding cache misses:
+//   go tool pprof -alloc_space http://host/debug/pprof/heap
+```
+
+**Follow-ups**
+- What IPC threshold do you treat as 'clearly memory-bound' and why is it CPU-dependent?
+- How does reducing allocations help cache behavior beyond just GC time?
+
+---

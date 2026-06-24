@@ -1,0 +1,740 @@
+# NoSQL — MongoDB
+
+> Senior-level Go backend interview questions on MongoDB covering data modeling, indexing, consistency, replication, sharding, aggregation, transactions, and query diagnosis with their trade-offs and failure modes.
+
+**24 questions** across **9 topics** · Level: senior
+
+## Topics
+
+- [Choosing MongoDB vs Relational](#choosing-mongodb-vs-relational) (2)
+- [Data Modeling](#data-modeling) (3)
+- [Indexing](#indexing) (4)
+- [Consistency](#consistency) (3)
+- [Replication](#replication) (3)
+- [Sharding](#sharding) (2)
+- [Aggregation Pipeline](#aggregation-pipeline) (3)
+- [Transactions](#transactions) (2)
+- [Query Diagnosis](#query-diagnosis) (2)
+
+---
+
+## Choosing MongoDB vs Relational
+
+#### 1. When does MongoDB beat PostgreSQL for a service, and when is choosing it a mistake?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `modeling`, `tradeoffs`, `postgres`
+
+MongoDB wins when your access pattern is **document-shaped**: you read/write whole aggregates (a user with embedded profile, settings, recent activity) by key, your schema is genuinely heterogeneous or fast-evolving, and you need horizontal write scaling via sharding without application-level partitioning. It's also good for high-ingest, flexible-shape data (events, catalogs).
+
+It's a mistake when your data is **highly relational** — many-to-many joins, ad-hoc analytical queries across entities, or strong multi-entity invariants enforced by constraints (FKs, unique across tables, CHECK). MongoDB has `$lookup` and transactions, but both are second-class and costly compared to a relational engine. Teams often pick Mongo for "flexibility," then rebuild joins, referential integrity, and migrations by hand. Rule of thumb: model the access patterns first; if they map to single-document reads/writes, Mongo fits; if they're query-shaped and relational, Postgres (with JSONB for the flexible parts) usually wins.
+
+**Key points**
+- Mongo fits when you read/write whole aggregates by key
+- Sharding gives horizontal write scaling without app-level partitioning
+- Relational invariants and ad-hoc joins are weak spots
+- Postgres + JSONB often covers the 'we need flexibility' case
+- Decide from access patterns, not from schema-flexibility hype
+
+**Follow-ups**
+- How does Postgres JSONB change this calculus?
+- Give an example where 'flexibility' turned into hidden tech debt.
+
+---
+
+#### 2. Contrast the NoSQL families (document, key-value, wide-column, graph). When does each fit?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `nosql`, `families`, `architecture`
+
+**Document** (MongoDB, Couchbase): stores rich JSON-like aggregates, supports secondary indexes and queries on fields. Fits content, catalogs, user profiles — anything read as a whole object with some query flexibility.
+
+**Key-value** (Redis, DynamoDB in KV mode): O(1) get/put by key, minimal query ability. Fits caches, sessions, feature flags, rate-limit counters — raw speed and simplicity.
+
+**Wide-column** (Cassandra, Bigtable, ScyllaDB): rows keyed by partition+clustering keys, columns sparse and wide. Fits massive write throughput and time-series/event data where you query by known key ranges. You design tables per query.
+
+**Graph** (Neo4j, JanusGraph): nodes and edges with traversal-first queries. Fits relationship-heavy domains — social graphs, fraud rings, recommendations, dependency graphs — where multi-hop traversals would be painful joins in SQL.
+
+The trade-off axis is query flexibility vs scale/latency: KV and wide-column give scale by forcing you to query by key; document and graph give richer querying at the cost of harder horizontal scaling.
+
+**Key points**
+- Document: rich aggregates with field queries (MongoDB)
+- Key-value: O(1) by key, caches/sessions (Redis)
+- Wide-column: write-heavy, query-by-key-range (Cassandra)
+- Graph: multi-hop traversals (Neo4j)
+- Axis: query flexibility vs scale/latency
+
+**Follow-ups**
+- Why is Cassandra bad at ad-hoc queries by design?
+- When would you put a graph DB next to your Mongo store?
+
+---
+
+## Data Modeling
+
+#### 3. How do you decide between embedding and referencing in MongoDB?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `modeling`, `embedding`, `referencing`
+
+Embed when the child data is **owned by and read with** the parent, is bounded in size, and changes together: order line-items, address on a user, comments only ever shown with their post. Embedding gives single-read locality and atomic single-document updates — Mongo's biggest strength.
+
+Reference when the related data is **large, unbounded, shared, or queried independently**: a post referencing an author (many posts per author), or comments that can number in the thousands. Referencing avoids document bloat and the 16MB limit, and lets you update the entity in one place.
+
+The deciding questions: (1) Will the embedded array grow without bound? If yes, reference or use the outlier/bucket pattern. (2) Is the child read on its own or always with the parent? (3) How often does the child change vs the parent? High-churn children duplicated by embedding cause fan-out updates. Mongo's guidance is 'data that is accessed together should be stored together' — but only if it stays bounded.
+
+**Key points**
+- Embed: owned, bounded, read together, atomic single-doc updates
+- Reference: large, shared, unbounded, independently queried
+- Unbounded arrays are the #1 anti-pattern — they eventually hit 16MB
+- Embedding duplicates data → fan-out updates if it churns
+- 'Stored together if accessed together' — but only when bounded
+
+**Follow-ups**
+- What's the bucket pattern and when do you reach for it?
+- How would you model a one-to-millions relationship?
+
+---
+
+#### 4. Why does the 16MB document limit matter for design, and how does unbounded array growth bite you?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `modeling`, `16mb-limit`, `arrays`, `antipattern`
+
+Every BSON document is capped at **16MB**. The limit isn't just about hitting a wall — long before 16MB, large documents hurt: the WiredTiger cache pulls the entire document into memory on every read/write, updates rewrite the whole document, and replication ships the full doc in the oplog.
+
+Unbounded arrays are the classic failure: `{ user, events: [...] }` where you `$push` forever. The document grows, in-place updates become moves, working set bloats, and one day a write fails with a 16MB error in production — usually for your most active users (worst-case customers). Indexes on the array (multikey) also grow with it.
+
+Fixes: (1) **Bucketing** — store N events per document, e.g. one doc per user per day/hour, capping array size. (2) **Referencing** into a separate collection. (3) The **outlier pattern** — most docs embed, hot docs spill to a side collection. (4) `$slice` on push to keep a bounded 'recent N'. Design arrays so their max size is provably bounded, not 'probably small'.
+
+**Key points**
+- 16MB hard cap; performance degrades well before it
+- Whole doc is read/written/replicated as a unit
+- Unbounded $push fails first for your most active users
+- Fix: bucketing, referencing, outlier pattern, $slice cap
+- Bound array size by design, not by hope
+
+
+```go
+// Cap a 'recent activity' array to last 50 entries
+filter := bson.M{"_id": userID}
+update := bson.M{
+    "$push": bson.M{
+        "recent": bson.M{
+            "$each":  []any{event},
+            "$slice": -50, // keep last 50
+        },
+    },
+}
+_, err := coll.UpdateOne(ctx, filter, update)
+```
+
+**Follow-ups**
+- How does $slice with $sort help maintain a leaderboard array?
+- What signs in metrics tell you a collection has bloated docs?
+
+---
+
+#### 5. What does 'model for access patterns' mean in practice, and how is it different from relational design?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `modeling`, `access-patterns`, `denormalization`
+
+In relational design you normalize first (model the entities and relationships), then queries follow. In MongoDB you invert it: **start from the queries and writes your service actually issues**, then shape documents so the hot reads are single-document or single-collection lookups.
+
+Concretely: list the top read/write operations and their frequency and latency targets. For each hot read, ask 'can this be one document fetch?' If a screen shows a post with its author name and top comments, you might embed author name (denormalized) and top-3 comments so the screen is one query. You accept controlled duplication and the cost of keeping it consistent, because reads vastly outnumber writes.
+
+The trade-off is duplication vs join cost. Denormalize the fields that are read-hot and change-rarely (author display name); reference the rest. This is why two services with the same entities can have completely different Mongo schemas — the schema encodes the workload, not just the domain.
+
+**Key points**
+- Relational: normalize then query; Mongo: query then shape documents
+- Optimize hot reads to single-document/single-collection
+- Denormalize read-hot, change-rarely fields; reference the rest
+- Accept controlled duplication to avoid joins at read time
+- Schema encodes the workload, not just the domain
+
+**Follow-ups**
+- How do you keep a denormalized author name in sync across posts?
+- When does the duplication cost exceed the join cost you avoided?
+
+---
+
+## Indexing
+
+#### 6. Explain single-field vs compound indexes, and how the prefix rule affects which queries an index serves.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `indexing`, `compound`, `prefix-rule`
+
+A single-field index covers queries and sorts on that one field. A compound index `{a:1, b:1, c:1}` is a B-tree ordered by `a`, then `b`, then `c`. Crucially, it can serve any query that uses a **left-prefix** of those fields: `{a}`, `{a,b}`, `{a,b,c}` — but **not** `{b}` or `{b,c}` alone, because the index isn't ordered by `b` at the top level.
+
+Sort direction matters for multi-field sorts: an index can satisfy a sort if the requested sort is the index order or its exact reverse. `{a:1,b:-1}` serves `sort({a:1,b:-1})` and `sort({a:-1,b:1})`, but not `sort({a:1,b:1})`.
+
+Practical implication: order compound index fields deliberately and avoid creating many overlapping indexes — each index costs write amplification and RAM in the working set. One well-ordered compound index often replaces several single-field ones via the prefix rule.
+
+**Key points**
+- Compound index = B-tree ordered left-to-right
+- Serves any left-prefix of its fields, not arbitrary subsets
+- Sort served only if it matches index order or its exact reverse
+- Each index costs write amplification + RAM
+- One good compound index can replace several single-field ones
+
+**Follow-ups**
+- Why can't {a:1,b:1} serve a sort on {a:1,b:1} but {a:1,b:-1} can't either for that?
+- How do you decide field order in a compound index?
+
+---
+
+#### 7. What is the ESR rule for ordering compound index fields, and why that order?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `indexing`, `ESR`, `compound`
+
+**ESR = Equality, Sort, Range.** When building a compound index for a query, order fields as: equality-match fields first, then the sort field(s), then range fields last.
+
+Why: equality fields narrow the B-tree to a contiguous block, so putting them first maximizes selectivity and lets later fields stay contiguous. The sort field comes next so the index already returns documents in the requested order — no in-memory SORT stage. Range fields go last because a range matches a contiguous span; if a range field came before the sort field, the matching documents would no longer be in sort order within the index, forcing a blocking sort.
+
+Example: query `status == 'active'` (equality), `sort by createdAt` (sort), `age > 18` (range) → index `{status:1, createdAt:1, age:1}`. Putting `age` before `createdAt` would break the sort. ESR is the single most useful indexing heuristic in MongoDB; getting it wrong is the most common cause of unexpected in-memory sorts and rejected covered queries.
+
+**Key points**
+- Equality → Sort → Range field order
+- Equality first: maximum selectivity, contiguous range
+- Sort next: avoids blocking in-memory SORT stage
+- Range last: a range before sort destroys index sort order
+- Wrong order → unexpected SORT stage and slow queries
+
+
+```
+// Query: status == active, age > 18, sort by createdAt desc
+// ESR index:
+coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+    Keys: bson.D{
+        {Key: "status", Value: 1},     // Equality
+        {Key: "createdAt", Value: -1},  // Sort
+        {Key: "age", Value: 1},         // Range
+    },
+})
+```
+
+**Follow-ups**
+- What if you have two equality fields and one range — does order among the equalities matter?
+- How does ESR interact with covered queries?
+
+---
+
+#### 8. What is a multikey index, and what are its limitations and gotchas?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `indexing`, `multikey`, `arrays`
+
+A multikey index is what MongoDB automatically creates when you index a field that holds an **array** — it stores one index entry per array element, so `tags: ['go','db']` produces two entries pointing to the same document. This makes array-membership queries (`tags: 'go'`) fast.
+
+Gotchas: (1) You **cannot have a compound index with more than one array field** — Mongo can't represent the Cartesian product, so it rejects it. (2) Multikey indexes can't support **covered queries** when the multikey field is returned, because the index doesn't store the full array shape. (3) Index size grows with array cardinality — large arrays inflate the index and the working set. (4) Bounds on multikey compound indexes are looser, so the planner may scan more than you expect; `explain` can show wider index bounds than the equivalent scalar query. (5) The flag is per-index and sticky: once any document inserts an array value, the index is marked multikey permanently for that key.
+
+**Key points**
+- One index entry per array element
+- At most one array field per compound index — Cartesian product banned
+- Multikey fields can't be covered
+- Index size scales with array length → working-set pressure
+- Looser bounds → planner may over-scan
+
+**Follow-ups**
+- Why does indexing two array fields together get rejected?
+- How would you index a query on two different arrays?
+
+---
+
+#### 9. What is a covered query, and what conditions must hold for one?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `indexing`, `covered-query`, `performance`
+
+A covered query is one MongoDB answers **entirely from the index**, never touching the documents. It's the fastest read path because it skips the FETCH stage. In `explain` you'll see `IXSCAN` directly producing results with `totalDocsExamined: 0`.
+
+Conditions: (1) all fields in the query filter are part of a single index; (2) all fields the query **returns** (projection) are in that same index; (3) you must **explicitly exclude `_id`** in the projection unless `_id` is in the index, since `_id` is returned by default; (4) the index field can't be multikey for a returned array field; (5) no embedded-document equality on the indexed field in some versions.
+
+Example: index `{status:1, name:1}`, query `find({status:'active'}, {name:1, _id:0})` is covered. Add `email` to the projection and it's no longer covered — a FETCH appears. Covered queries are how you serve high-QPS lookups without the document I/O, but they're fragile: any projection change can silently de-cover them, so verify with `explain`.
+
+**Key points**
+- Answered from index only — no FETCH, totalDocsExamined: 0
+- Filter fields AND projected fields all in one index
+- Must exclude _id unless it's in the index
+- Returned multikey/array field breaks coverage
+- Fragile: projection changes silently de-cover; verify with explain
+
+
+```go
+// Covered: both filtered and projected fields are in the index
+// db.users.createIndex({status:1, name:1})
+opts := options.FindOne().SetProjection(bson.M{"name": 1, "_id": 0})
+res := coll.FindOne(ctx, bson.M{"status": "active"}, opts)
+// explain -> IXSCAN with no FETCH, totalDocsExamined: 0
+```
+
+**Follow-ups**
+- Why must _id be explicitly excluded?
+- How do covered queries interact with the ESR rule?
+
+---
+
+## Consistency
+
+#### 10. Explain write concern, read concern, and read preference, and how they combine.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `consistency`, `write-concern`, `read-concern`
+
+These three knobs control durability, visibility, and routing independently.
+
+**Write concern** (`w`, `j`, `wtimeout`): how many replica-set members must acknowledge a write before it returns. `w:1` = primary only (can be lost on failover), `w:'majority'` = a majority acknowledged (survives failover), `j:true` = flushed to the journal on disk.
+
+**Read concern**: what visibility/durability guarantee a read gives. `local` = latest data on the node (may roll back), `majority` = only data acknowledged by a majority (won't roll back), `linearizable` = strongest, reflects all prior majority writes, `snapshot` = consistent snapshot for transactions.
+
+**Read preference**: which member to route reads to — `primary`, `secondary`, `nearest`, etc. Reading from secondaries scales reads but exposes staleness (replication lag).
+
+They compose: `w:'majority'` + `readConcern:'majority'` + `readPreference:'primary'` gives strong, durable, non-rollback semantics. Reading from secondaries trades consistency for throughput. The common senior mistake is using `w:1` reads-from-secondary and being surprised by lost writes and stale reads after failover.
+
+**Key points**
+- Write concern = durability/acknowledgement (w, j)
+- Read concern = visibility/rollback guarantee (local/majority/linearizable/snapshot)
+- Read preference = routing (primary/secondary/nearest)
+- majority write + majority read = no rollback
+- Secondary reads scale throughput but expose replication lag
+
+
+```go
+wc := writeconcern.Majority()
+rc := readconcern.Majority()
+rp := readpref.Primary()
+opts := options.Client().ApplyURI(uri).
+    SetWriteConcern(wc).SetReadConcern(rc).SetReadPreference(rp)
+```
+
+**Follow-ups**
+- When is linearizable read concern actually needed and what does it cost?
+- How can w:1 lead to silent data loss?
+
+---
+
+#### 11. What is causal consistency and when do you need it?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `consistency`, `causal`, `sessions`
+
+Causal consistency guarantees that operations which are causally related are seen in order: 'read your own writes', 'monotonic reads', 'writes follow reads'. Without it, after writing to the primary you might read from a lagging secondary and not see your own write.
+
+MongoDB provides it via **client sessions** with cluster/operation times. Each operation returns a logical timestamp; the driver passes `afterClusterTime` on the next read so the chosen node waits until it has applied at least that point before answering. You get this by running causally-related operations inside the same session object.
+
+You need it when you read from secondaries (or across nodes) and the user must observe their own prior write — e.g. submit a form then immediately load the list. Without a causal session, secondary reads can show stale data and produce 'I just saved that, where did it go?' bugs. The cost is the read may block briefly waiting for the node to catch up, so it's not free — but it's far cheaper than forcing all reads to the primary.
+
+**Key points**
+- Guarantees read-your-writes and monotonic reads across nodes
+- Implemented via client sessions + cluster/operation timestamps
+- Driver sends afterClusterTime so the node waits to catch up
+- Needed for secondary reads that must reflect prior writes
+- Cost: read may block briefly, cheaper than primary-only reads
+
+
+```go
+sess, _ := client.StartSession()
+defer sess.EndSession(ctx)
+_ = mongo.WithSession(ctx, sess, func(sc mongo.SessionContext) error {
+    coll.InsertOne(sc, doc)                 // write
+    coll.FindOne(sc, bson.M{...})           // causally reads own write
+    return nil
+})
+```
+
+**Follow-ups**
+- How does causal consistency interact with read preference secondary?
+- What happens if the chosen secondary never catches up to afterClusterTime?
+
+---
+
+#### 12. Why are majority writes important, and what failure mode do they prevent?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `consistency`, `write-concern`, `rollback`, `durability`
+
+`w:'majority'` means a write isn't acknowledged to the client until a majority of the replica set has it. This matters because MongoDB can **roll back** writes that existed only on a primary that then failed.
+
+Failure mode without majority: primary accepts a `w:1` write, acknowledges to the client, then crashes before replicating. A secondary with a longer log wins the election and becomes the new primary. The old primary, when it rejoins, must roll back the un-replicated write to match the new primary's history. The client believes the write succeeded; it's silently gone (moved to a rollback file). This is the classic 'lost acknowledged write' problem.
+
+With `w:'majority'`, the write is on a majority, so any future primary (which must come from that majority) already has it — it can never be rolled back. The cost is latency: you wait for cross-node replication, and if a majority is unreachable the write blocks/fails. For money, identity, and ordering-critical data, majority writes (often with `j:true`) are mandatory; for high-volume telemetry where occasional loss is tolerable, `w:1` is a deliberate throughput trade-off.
+
+**Key points**
+- Write acked only after a majority has it
+- Prevents rollback of acknowledged-but-unreplicated writes
+- w:1 write on a failed primary = silent lost write (rollback file)
+- Any new primary comes from the majority, so it has the write
+- Cost: replication latency; blocks if majority unreachable
+
+**Follow-ups**
+- Where do rolled-back writes go and how would you recover them?
+- How does majority write concern interact with a 2-of-3 vs 1-of-3 partition?
+
+---
+
+## Replication
+
+#### 13. How does a MongoDB replica set work, and how does primary election happen?
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `replication`, `replica-set`, `election`, `raft`
+
+A replica set is a group of mongod nodes holding the same data: one **primary** that takes all writes, and **secondaries** that replicate from it asynchronously. Clients send writes to the primary; reads go to primary by default or to secondaries by read preference.
+
+Election uses a **Raft-like protocol** (since the 'protocol version 1' / pv1). Each node has a priority and votes. When the primary becomes unreachable (no heartbeat within the election timeout, default ~10s), eligible secondaries call an election. A candidate needs votes from a **majority** of voting members to win, which is why you need an odd number of voting members (or an arbiter) to avoid split-brain. The candidate with the most up-to-date oplog and acceptable priority typically wins.
+
+During an election (a few seconds) there's no primary, so writes fail or queue depending on driver retry settings. Majority voting guarantees at most one primary — a minority partition can't elect one, so the side without a majority goes read-only. This is the core availability/consistency trade-off of the set.
+
+**Key points**
+- One primary takes writes; secondaries replicate asynchronously
+- Raft-like election (pv1), majority of votes required to win
+- Odd voting count (or arbiter) avoids split-brain
+- Election takes seconds → brief write unavailability
+- Minority partition can't elect a primary → goes read-only
+
+**Follow-ups**
+- Why is an arbiter sometimes a bad idea?
+- What controls how fast failover happens?
+
+---
+
+#### 14. What is the oplog, and why is it central to replication and change streams?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `replication`, `oplog`, `change-streams`
+
+The oplog (operations log) is a special **capped collection** (`local.oplog.rs`) on each replica-set member that records every write as an **idempotent** operation. Secondaries tail the primary's oplog and replay it to stay in sync. Idempotency matters: an entry like 'set field x to 5' can be re-applied safely after a restart without corrupting state, unlike 'increment x'.
+
+Because it's capped, the oplog has a fixed window of history (the 'oplog window' — how far back in time it covers). If a secondary falls behind further than the window, it can no longer catch up by tailing and must do a full **initial sync** (resync). Sizing the oplog for your write volume and expected maintenance windows is an ops concern: too small, and a brief secondary outage forces a costly resync.
+
+The oplog also powers **change streams** and CDC tools, which read it (via a resumable cursor) to deliver ordered, post-image change events to applications. And `w:'majority'` durability is defined relative to oplog replication. So the oplog is simultaneously the replication mechanism, the recovery window, and the CDC source.
+
+**Key points**
+- Capped collection of idempotent write operations
+- Secondaries tail and replay it to stay in sync
+- Idempotent ops are safe to re-apply after restart
+- Fixed window: fall behind it → full initial resync
+- Powers change streams / CDC via resumable cursors
+
+**Follow-ups**
+- How do you size an oplog and monitor the oplog window?
+- Why are oplog entries rewritten to be idempotent (e.g. $inc)?
+
+---
+
+#### 15. What happens to your Go service during a failover, and how should it be written to survive one?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `replication`, `failover`, `go`, `resilience`
+
+During failover the old primary is gone and a new one isn't yet elected (seconds). Writes to the old primary fail; the driver detects the topology change via SDAM (Server Discovery and Monitoring) and re-discovers the new primary.
+
+MongoDB drivers support **retryable writes and reads** (`retryWrites=true`, on by default in modern drivers): the driver retries a failed write **once** against the new primary, using a transaction number so the operation isn't applied twice. This makes most single-document writes transparently survive a failover. Reads retry similarly.
+
+What the app must do: (1) set sane timeouts (`serverSelectionTimeout`, context deadlines) so requests fail fast instead of hanging through the election; (2) make multi-step logic idempotent or transactional — retryable writes cover one operation, not your whole handler; (3) handle the brief window where `mongo.IsTimeout`/network errors occur and propagate them as retryable 503s upstream; (4) avoid `w:1` if you can't tolerate the lost-write rollback. The failure mode to avoid is a handler that hangs forever waiting for a dead primary because no deadline was set.
+
+**Key points**
+- Failover = seconds of no primary; writes fail meanwhile
+- retryWrites retries once against new primary (idempotent via txn number)
+- Set serverSelectionTimeout + context deadlines to fail fast
+- Retryable writes cover one op, not your whole handler
+- Make multi-step logic idempotent/transactional
+
+
+```go
+client, _ := mongo.Connect(ctx, options.Client().
+    ApplyURI(uri).
+    SetRetryWrites(true).
+    SetServerSelectionTimeout(5*time.Second))
+// Always bound each op:
+opCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+defer cancel()
+_, err := coll.InsertOne(opCtx, doc)
+```
+
+**Follow-ups**
+- Why can retryable writes only retry once?
+- How does SDAM discover the new primary?
+
+---
+
+## Sharding
+
+#### 16. Describe MongoDB's sharding architecture: shard key, chunks, balancer, and mongos.
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `sharding`, `architecture`, `mongos`, `chunks`
+
+Sharding partitions a collection horizontally across multiple shards (each itself a replica set). The pieces:
+
+**Shard key** — the indexed field(s) used to partition data. Every document maps to a key range. The shard key is the single most important decision and is hard to change after the fact.
+
+**Chunks** — contiguous ranges of shard-key values. A collection's key space is divided into chunks (default target ~128MB); each chunk lives on one shard. As data grows, chunks split.
+
+**Balancer** — a background process that migrates chunks between shards to keep them evenly distributed by count, moving chunks off hot/full shards. Migrations consume I/O and briefly affect the source/target.
+
+**mongos** — the query router clients connect to. It holds the cluster metadata (from config servers) mapping chunks to shards, routes each query to the right shard(s), and merges results. A query with the shard key is **targeted** (one shard); a query without it is **scatter-gather** (all shards), which is far more expensive.
+
+The whole design lives or dies by the shard key: it determines whether queries are targeted, whether writes spread evenly, and whether the balancer can keep things even.
+
+**Key points**
+- Shard key partitions the collection; hardest decision to change
+- Chunks = contiguous key ranges, ~128MB, split as they grow
+- Balancer migrates chunks to even out shards (costs I/O)
+- mongos routes queries using config-server metadata
+- Query with shard key = targeted; without = scatter-gather
+
+**Follow-ups**
+- What do config servers store and why are they a replica set?
+- Why are scatter-gather queries a scaling problem?
+
+---
+
+#### 17. What makes a good vs bad shard key? Why does a monotonically increasing key create a hot shard?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `sharding`, `shard-key`, `hot-shard`, `antipattern`
+
+A good shard key has three properties: **high cardinality** (many distinct values, so chunks can split finely), **low frequency / even distribution** (no single value dominates), and **non-monotonic** write pattern (so inserts spread across shards). It should also match your dominant query so queries are targeted, not scatter-gather. These goals can conflict — the art is balancing query targeting against write distribution.
+
+The monotonic anti-pattern: using `_id` (ObjectId, time-ordered), an auto-increment, or a timestamp as the shard key. New inserts always have the **largest** key, so they all land in the single chunk holding the max range — which lives on one shard. That shard becomes a **hot shard**: it takes 100% of insert traffic while the others sit idle, and the balancer constantly migrates the overflowing top chunk, adding churn. You've sharded but gained no write scaling.
+
+Fixes: **hashed shard key** (`{_id: 'hashed'}`) spreads inserts randomly but kills range-query targeting; or a **compound key** that leads with a high-cardinality, well-distributed field (e.g. `{tenantId:1, createdAt:1}`) to spread writes while keeping per-tenant queries targeted.
+
+**Key points**
+- Good key: high cardinality, even frequency, non-monotonic, query-aligned
+- Monotonic key → all inserts hit the max-range chunk → hot shard
+- Hot shard = one shard does all writes; no write scaling
+- Hashed key spreads writes but breaks range targeting
+- Compound key (tenant + time) balances distribution vs targeting
+
+
+```
+// Hashed shard key spreads monotonic inserts but loses range targeting
+// sh.shardCollection("app.events", { _id: "hashed" })
+//
+// Compound key: distribute by tenant, still range-queryable per tenant
+// sh.shardCollection("app.events", { tenantId: 1, createdAt: 1 })
+```
+
+**Follow-ups**
+- Why does a hashed key prevent efficient range queries?
+- How would you reshard a collection that picked a bad key?
+
+---
+
+## Aggregation Pipeline
+
+#### 18. Walk through the core aggregation stages ($match, $group, $unwind, $lookup) and what each does.
+
+*Difficulty:* 🟡 medium  ·  *Tags:* `aggregation`, `pipeline`, `stages`
+
+The aggregation pipeline is an ordered sequence of stages, each transforming the document stream from the previous one.
+
+**$match** filters documents — like a `find` filter. Placed early, it uses indexes and shrinks the stream.
+
+**$group** groups documents by an `_id` expression and computes accumulators (`$sum`, `$avg`, `$push`, `$max`). This is the SQL `GROUP BY` analog and is typically a blocking, in-memory stage.
+
+**$unwind** deconstructs an array field, emitting one document per element. Used to flatten arrays before grouping or joining — e.g. unwind `items` to sum per-item, or to fan out before a lookup.
+
+**$lookup** performs a left outer join to another collection, attaching matched documents as an array field. It's the join you don't get in find().
+
+Other common stages: `$project`/`$addFields` reshape, `$sort`, `$limit`, `$facet` for multiple sub-pipelines. Pipelines run on the server and can spill to disk for large `$group`/`$sort` (with `allowDiskUse`). Stage order is a performance decision, not just semantics.
+
+**Key points**
+- $match: filter early to use indexes and shrink the stream
+- $group: GROUP BY with accumulators, usually blocking/in-memory
+- $unwind: explode arrays to one doc per element
+- $lookup: left outer join to another collection
+- Stage order materially affects performance
+
+**Follow-ups**
+- When would you $unwind before vs after a $lookup?
+- How does allowDiskUse change $group behavior?
+
+---
+
+#### 19. Why should $match (and $sort) usually come first, and how does the aggregation optimizer help?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `aggregation`, `optimization`, `match-first`, `indexes`
+
+Putting `$match` first is about **reducing the document stream before expensive stages** and, critically, **enabling index use**. A `$match` at the very start of the pipeline can use a collection index (turning into an IXSCAN); a `$match` placed after a `$group` or `$project` runs over computed in-memory documents and cannot use a stored index. Same logic for `$sort` — early it can use an index, late it becomes a blocking in-memory sort that may spill to disk.
+
+MongoDB's aggregation optimizer does some of this for you: it will **move `$match` earlier** when it's provably safe (filter doesn't depend on computed fields), coalesce adjacent `$sort`+`$limit`, and push predicates down. But it can't reorder past stages that transform the fields the match depends on. So you still write pipelines match-first deliberately.
+
+Failure mode: a pipeline that `$lookup`s or `$group`s millions of documents and only then `$match`es a handful — you've done all the work and thrown most of it away. Always filter to the smallest relevant set first, then join/group. Verify with `explain` that the leading `$match`/`$sort` actually hit an IXSCAN.
+
+**Key points**
+- Early $match can use indexes (IXSCAN); late $match runs over computed docs
+- Early $sort uses an index; late $sort is a blocking, disk-spilling sort
+- Optimizer moves $match earlier only when provably safe
+- Filter to smallest set before $lookup/$group
+- Verify leading stages hit indexes with explain
+
+
+```go
+pipeline := mongo.Pipeline{
+    {{"$match", bson.M{"status": "active"}}}, // index-using, shrinks stream
+    {{"$lookup", bson.M{"from": "orders", "localField": "_id",
+        "foreignField": "userId", "as": "orders"}}},
+    {{"$group", bson.M{"_id": "$region", "total": bson.M{"$sum": 1}}}},
+}
+// Wrong: $match after $group would scan everything first.
+```
+
+**Follow-ups**
+- What kinds of $match can the optimizer NOT push earlier?
+- How does $sort + $limit coalescing avoid sorting everything?
+
+---
+
+#### 20. What are the limitations of $lookup, and when should you avoid it?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `aggregation`, `lookup`, `joins`, `limitations`
+
+`$lookup` works but it's not a relational join engine. Limitations: (1) It's a **left outer join executed per input document** — for each incoming doc it queries the foreign collection. Without an index on the foreign join field, that's effectively N collection scans; with an index it's N index lookups, still potentially expensive at scale. (2) On **sharded clusters** the foreign collection historically had to be unsharded (this loosened in newer versions but still has restrictions and routing costs). (3) Results are accumulated into an **array field**, so a huge fan-out can push the document toward the 16MB limit. (4) The optimizer's ability to use indexes inside `$lookup` is limited compared to a real join planner; correlated `$lookup` with a sub-pipeline can be slow.
+
+When to avoid: high-frequency hot-path reads where you're effectively reimplementing joins Mongo isn't optimized for. The idiomatic fix is to **model so you don't need the join** — embed or denormalize the fields you read together. Reserve `$lookup` for analytical/reporting pipelines and occasional joins, not for your per-request critical path.
+
+**Key points**
+- Executes per input document — N lookups; needs an index on the foreign field
+- Sharded-collection lookups have restrictions and routing cost
+- Results pile into an array → can approach 16MB on big fan-out
+- Weaker index planning than a relational join engine
+- Prefer modeling (embed/denormalize) over hot-path $lookup
+
+**Follow-ups**
+- How do you make a $lookup use an index on the foreign collection?
+- When is a denormalized snapshot better than a $lookup?
+
+---
+
+## Transactions
+
+#### 21. How do multi-document transactions work in MongoDB, and what do they cost compared to a relational DB?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `transactions`, `acid`, `tradeoffs`, `go`
+
+Since 4.0 (replica sets) and 4.2 (sharded), MongoDB supports **multi-document ACID transactions** via client sessions, using snapshot isolation. You start a session, begin a transaction, do reads/writes, then commit or abort — all-or-nothing across multiple documents and collections.
+
+The cost vs relational is real. (1) **Performance**: transactions hold resources and use snapshot isolation; write conflicts cause one side to abort (`TransientTransactionError`), so you must retry. (2) **Time limits**: a transaction has a default 60s `transactionLifetimeLimitSeconds`; long transactions are killed. (3) **Distributed cost**: on sharded clusters a transaction spanning shards needs two-phase commit, which is expensive and increases latency and failure surface. (4) **Oplog/cache pressure**: large transactions can stress the system.
+
+The philosophical point: in MongoDB transactions are an **escape hatch, not the default tool**. Relational engines are built around them; Mongo is built around single-document atomicity. If you find yourself wrapping many operations in transactions routinely, your schema is probably wrong — you should remodel so the atomic unit is a single document. Use transactions for genuine cross-document invariants (transfer between two accounts), not as a crutch for a normalized schema.
+
+**Key points**
+- ACID multi-document txns via sessions, snapshot isolation (4.0/4.2+)
+- Write conflicts → TransientTransactionError → must retry
+- 60s default lifetime; long txns are killed
+- Cross-shard = two-phase commit, costly and slower
+- Escape hatch, not default — frequent need signals modeling mistake
+
+
+```go
+sess, _ := client.StartSession()
+defer sess.EndSession(ctx)
+// WithTransaction auto-retries on TransientTransactionError
+_, err := sess.WithTransaction(ctx, func(sc mongo.SessionContext) (any, error) {
+    if _, e := accounts.UpdateOne(sc, bson.M{"_id": from},
+        bson.M{"$inc": bson.M{"bal": -100}}); e != nil { return nil, e }
+    if _, e := accounts.UpdateOne(sc, bson.M{"_id": to},
+        bson.M{"$inc": bson.M{"bal": 100}}); e != nil { return nil, e }
+    return nil, nil
+})
+```
+
+**Follow-ups**
+- Why does WithTransaction need a retry loop?
+- Give a case where remodeling removes the need for a transaction entirely.
+
+---
+
+#### 22. What atomicity guarantees do you get WITHOUT a transaction, and how do you exploit them?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `transactions`, `atomicity`, `single-document`, `concurrency`
+
+MongoDB guarantees **single-document operations are atomic**, even when they touch multiple fields or embedded arrays. An `updateOne` that sets several fields, pushes to an array, and increments a counter is all-or-nothing — no other reader sees a half-applied state of that document. This is the foundation Mongo wants you to build on.
+
+You exploit it by **embedding the data that must change together into one document**, so the atomic unit matches the consistency boundary. An order with its line items, totals, and status in one document means 'add item and update total' is one atomic update — no transaction needed. Operators like `$inc`, `$push`/`$pull`, `$set`, and conditional updates with `$` positional/`arrayFilters` let you mutate complex shapes atomically.
+
+For concurrency you use **optimistic patterns**: `findOneAndUpdate` with a filter that includes the expected version/state, so a stale update simply doesn't match (compare-and-set). This handles most 'transaction-shaped' needs without the cost of real transactions. The senior instinct is: reach for single-document atomicity + embedding first; only escalate to multi-document transactions when the invariant genuinely spans documents.
+
+**Key points**
+- Single-document writes are fully atomic, even multi-field/array
+- Embed so the atomic unit == the consistency boundary
+- $inc/$push/$set/arrayFilters mutate complex shapes atomically
+- findOneAndUpdate with expected-state filter = compare-and-set
+- Escalate to transactions only for genuinely cross-document invariants
+
+
+```go
+// Atomic compare-and-set: only succeeds if version matches (no txn needed)
+filter := bson.M{"_id": id, "version": expectedVersion}
+update := bson.M{
+    "$set": bson.M{"status": "shipped"},
+    "$inc": bson.M{"version": 1},
+}
+res := coll.FindOneAndUpdate(ctx, filter, update)
+// res.Err() == ErrNoDocuments  => someone else updated; retry
+```
+
+**Follow-ups**
+- How does optimistic concurrency with a version field compare to a transaction?
+- When does embedding-for-atomicity conflict with the 16MB limit?
+
+---
+
+## Query Diagnosis
+
+#### 23. How do you use explain() to diagnose a slow query? What's the difference between COLLSCAN and IXSCAN?
+
+*Difficulty:* 🟠 hard  ·  *Tags:* `diagnosis`, `explain`, `collscan`, `ixscan`
+
+`explain('executionStats')` shows how MongoDB executed (or plans to execute) a query: the winning plan's stages, documents examined, keys examined, and time. You read the stage tree bottom-up.
+
+**COLLSCAN** = collection scan: MongoDB read every document because no usable index existed. Telltale signs: `totalDocsExamined` ≈ collection size, and `nReturned` ≪ examined. On anything but tiny collections this is the red flag for a missing or unused index.
+
+**IXSCAN** = index scan: MongoDB walked an index to find matches. Followed by a FETCH stage if it needs the full documents. The healthy signal is `totalKeysExamined` and `totalDocsExamined` close to `nReturned` — you examined roughly what you returned.
+
+Key ratios to judge efficiency: `nReturned / totalDocsExamined` (want close to 1) and the presence of a blocking `SORT` stage (means no index satisfied the sort — in-memory, possibly disk-spilling). Also check the `rejectedPlans` to see what the planner considered. The workflow: explain → spot COLLSCAN or a SORT stage or a bad examined:returned ratio → add or reorder an index (apply ESR) → re-explain to confirm IXSCAN with tight ratios.
+
+**Key points**
+- explain('executionStats') shows stages + keys/docs examined + time
+- COLLSCAN = no index used, scans whole collection (red flag)
+- IXSCAN = index walk; want docsExamined ≈ nReturned
+- A SORT stage = no index satisfied the sort (in-memory/spill)
+- Workflow: explain → fix index (ESR) → re-explain to confirm
+
+
+```go
+// Go: get execution stats
+var res bson.M
+cmd := bson.D{{"explain", bson.D{
+    {"find", "users"},
+    {"filter", bson.D{{"status", "active"}}},
+}}, {"verbosity", "executionStats"}}
+_ = db.RunCommand(ctx, cmd).Decode(&res)
+// Inspect: winningPlan.stage, totalDocsExamined, totalKeysExamined, nReturned
+```
+
+**Follow-ups**
+- What does a high totalKeysExamined but low nReturned tell you?
+- Why might the planner pick a COLLSCAN even when an index exists?
+
+---
+
+#### 24. You see IXSCAN but the query is still slow. What could be wrong?
+
+*Difficulty:* 🔴 staff  ·  *Tags:* `diagnosis`, `ixscan`, `performance`, `covered-query`
+
+IXSCAN means an index was used, but it doesn't mean it was used *well*. Things to check:
+
+(1) **Examined ≫ returned**: a low-selectivity index (e.g. on `status` with two values) scans huge key ranges and FETCHes most documents. The index is used but not selective. Fix with a more selective compound index following ESR.
+
+(2) **A SORT stage above the IXSCAN**: the index served the filter but not the sort, forcing an in-memory blocking sort that may spill to disk. Reorder the compound index so the sort field is positioned per ESR.
+
+(3) **Wide multikey bounds**: a multikey/array index produced looser bounds than expected, scanning more keys.
+
+(4) **FETCH dominating**: the query isn't covered, so every matched key requires a random document read — if those documents aren't in the WiredTiger cache, you're I/O-bound. Making the query covered (all projected fields in the index) can eliminate the FETCH.
+
+(5) **Wrong index chosen**: the planner's cached plan may be stale; check `rejectedPlans` and consider a hint or clearing the plan cache.
+
+The meta-lesson: judge by `totalKeysExamined`/`totalDocsExamined` vs `nReturned` and the presence of SORT/FETCH stages, not by the mere word IXSCAN.
+
+**Key points**
+- IXSCAN ≠ efficient — check examined vs returned ratio
+- Low-selectivity index scans wide ranges; need ESR compound index
+- SORT above IXSCAN = sort not index-served (in-memory/spill)
+- Uncovered query → FETCH random reads → I/O bound if not cached
+- Stale cached plan / wrong index → check rejectedPlans, consider hint
+
+**Follow-ups**
+- How would you turn this query into a covered query to drop the FETCH?
+- When is a query hint justified vs masking a planner problem?
+
+---
