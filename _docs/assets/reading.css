@@ -626,3 +626,59 @@ html[data-eink="1"] .sp-home-stats__sec-count {
 html[data-eink="1"] .sp-home-stats__total strong {
   color: #000;
 }
+
+/* ----------------------------------------------------------------
+   Reader-selectable reading font (panel: "Reading font")
+   The chosen typeface is published as --sp-reading-font-stack on
+   <html> by reading.js. Swaps the prose typeface only; code, pre and
+   kbd stay monospace. Default (no attribute) keeps Intel One Mono.
+   ---------------------------------------------------------------- */
+html[data-sp-font] body,
+html[data-sp-font] .md-typeset,
+html[data-sp-font] .md-typeset h1,
+html[data-sp-font] .md-typeset h2,
+html[data-sp-font] .md-typeset h3,
+html[data-sp-font] .md-typeset h4,
+html[data-sp-font] .md-typeset h5,
+html[data-sp-font] .md-typeset h6 {
+  font-family: var(--sp-reading-font-stack);
+  font-feature-settings: normal;
+}
+
+/* Code always stays monospace, whatever the reading font. */
+html[data-sp-font] .md-typeset code,
+html[data-sp-font] .md-typeset pre,
+html[data-sp-font] .md-typeset kbd,
+html[data-sp-font] code,
+html[data-sp-font] pre {
+  font-family: "Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Reading-font dropdown, styled to match the panel's button groups. */
+.sp-reader-panel__select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  padding: 5px 26px 5px 9px;
+  cursor: pointer;
+  font: inherit;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.sp-reader-panel__select:focus-visible {
+  outline: 2px solid var(--md-primary-fg-color);
+  outline-offset: 1px;
+}
+.sp-reader-panel__select option {
+  background: var(--md-default-bg-color, #15161a);
+  color: var(--md-default-fg-color, #d4d4d4);
+}
+[data-md-color-scheme="default"] .sp-reader-panel__select { border-color: #d8d8d2; }
+[data-md-color-scheme="senior-sepia"] .sp-reader-panel__select { border-color: #d8cdb2; }

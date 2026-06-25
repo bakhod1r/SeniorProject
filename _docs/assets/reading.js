@@ -20,8 +20,45 @@
     autohide:  "sp-autohide",
     readSet:   "sp-read-set",
     readWidth: "sp-read-width",
+    readFont:  "sp-reading-font",
     scroll:    "sp-scroll:",   // prefix
   };
+
+  // Selectable reading typefaces — the site's own Intel One Mono plus a
+  // curated "top 10" of popular reading faces. Google-hosted fonts are
+  // lazy-loaded only when the reader actually picks them, so the default
+  // experience stays request-free. Code/`pre` always stay monospace (CSS).
+  const MONO_STACK = '"Intel One Mono", ui-monospace, "SF Mono", Menlo, monospace';
+  const FONTS = [
+    { id: "mono",        label: "Mono · Intel One Mono", stack: MONO_STACK },
+    { id: "inter",       label: "Inter",        stack: '"Inter", system-ui, sans-serif',            google: "Inter:wght@400;500;700" },
+    { id: "roboto",      label: "Roboto",       stack: '"Roboto", system-ui, sans-serif',           google: "Roboto:wght@400;500;700" },
+    { id: "opensans",    label: "Open Sans",    stack: '"Open Sans", system-ui, sans-serif',        google: "Open+Sans:wght@400;600;700" },
+    { id: "lato",        label: "Lato",         stack: '"Lato", system-ui, sans-serif',             google: "Lato:wght@400;700" },
+    { id: "sourcesans",  label: "Source Sans",  stack: '"Source Sans 3", system-ui, sans-serif',    google: "Source+Sans+3:wght@400;600;700" },
+    { id: "nunito",      label: "Nunito Sans",  stack: '"Nunito Sans", system-ui, sans-serif',      google: "Nunito+Sans:wght@400;600;700" },
+    { id: "merriweather",label: "Merriweather", stack: '"Merriweather", Georgia, serif',            google: "Merriweather:wght@400;700" },
+    { id: "lora",        label: "Lora",         stack: '"Lora", Georgia, serif',                    google: "Lora:wght@400;600;700" },
+    { id: "georgia",     label: "Georgia",      stack: 'Georgia, "Times New Roman", serif' },
+    { id: "jetbrains",   label: "JetBrains Mono", stack: '"JetBrains Mono", ui-monospace, monospace', google: "JetBrains+Mono:wght@400;700" },
+  ];
+  const DEFAULT_FONT = "mono";
+
+  function fontById(id) {
+    for (let i = 0; i < FONTS.length; i++) if (FONTS[i].id === id) return FONTS[i];
+    return FONTS[0];
+  }
+
+  // Inject a Google Fonts <link> once per family, on demand.
+  const loadedFonts = {};
+  function ensureFontLoaded(font) {
+    if (!font || !font.google || loadedFonts[font.id]) return;
+    loadedFonts[font.id] = true;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=" + font.google + "&display=swap";
+    document.head.appendChild(link);
+  }
 
   function lsGet(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -340,6 +377,26 @@
     applyReadWidth(v);
   }
 
+  // ---------- Reading font (typeface switch) --------------------
+  function applyReadingFont(value) {
+    const font = fontById(value);
+    const html = document.documentElement;
+    if (font.id === DEFAULT_FONT) {
+      html.removeAttribute("data-sp-font");
+      html.style.removeProperty("--sp-reading-font-stack");
+    } else {
+      ensureFontLoaded(font);
+      html.setAttribute("data-sp-font", font.id);
+      html.style.setProperty("--sp-reading-font-stack", font.stack);
+    }
+    const sel = document.querySelector(".sp-reader-panel select[data-font-select]");
+    if (sel && sel.value !== font.id) sel.value = font.id;
+  }
+  function setReadingFont(v) {
+    lsSet(K.readFont, v);
+    applyReadingFont(v);
+  }
+
   // ---------- F9: Auto-hide header ------------------------------
   let lastScrollY = 0;
   let autoHideAttached = false;
@@ -516,6 +573,12 @@
 
   function buildReaderPanel() {
     if (panelToggleEl && document.body.contains(panelToggleEl)) return;
+
+    let fontOptions = "";
+    for (let i = 0; i < FONTS.length; i++) {
+      fontOptions += '<option value="' + FONTS[i].id + '">' + escapeHTML(FONTS[i].label) + '</option>';
+    }
+
     panelToggleEl = document.createElement("button");
     panelToggleEl.type = "button";
     panelToggleEl.className = "sp-reader-panel__toggle";
@@ -548,6 +611,12 @@
           '<button type="button" data-width="90ch" aria-pressed="false">90</button>' +
           '<button type="button" data-width="none" aria-pressed="false">∞</button>' +
         '</div>' +
+      '</section>' +
+      '<section>' +
+        '<span>Reading font</span>' +
+        '<select class="sp-reader-panel__select" data-font-select aria-label="Reading font">' +
+          fontOptions +
+        '</select>' +
       '</section>' +
       '<label><input type="checkbox" data-toggle="focus"> Focus mode (F)</label>' +
       '<label><input type="checkbox" data-toggle="bionic"> Bionic reading</label>' +
@@ -587,6 +656,13 @@
     for (let i = 0; i < widthBtns.length; i++) {
       widthBtns[i].addEventListener("click", function () {
         setReadWidth(this.getAttribute("data-width"));
+      });
+    }
+
+    const fontSelect = panelEl.querySelector("select[data-font-select]");
+    if (fontSelect) {
+      fontSelect.addEventListener("change", function () {
+        setReadingFont(this.value);
       });
     }
 
@@ -665,6 +741,9 @@
     // F8 — reading width (load + apply before anything else, prevents flicker)
     const storedWidth = lsGet(K.readWidth);
     applyReadWidth(storedWidth || "none");
+
+    // Reading font (load + apply early to prevent flicker)
+    applyReadingFont(lsGet(K.readFont) || DEFAULT_FONT);
 
     // F3 — focus
     applyFocus(lsGet(K.focus) === "on");
