@@ -211,8 +211,11 @@ body,
 /* Blockquote */
 .md-typeset blockquote {
   color: var(--md-default-fg-color--light);
+  background: #15161a;
   border-left: 2px solid var(--md-primary-fg-color);
-  padding-left: 0.85em;
+  border-radius: 0 4px 4px 0;
+  padding: 0.6em 0.95em;
+  margin-bottom: 1.4em;
   font-style: normal;
 }
 .md-typeset blockquote::before { content: ""; }

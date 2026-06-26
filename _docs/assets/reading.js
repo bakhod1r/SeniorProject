@@ -21,6 +21,7 @@
     readSet:   "sp-read-set",
     readWidth: "sp-read-width",
     readFont:  "sp-reading-font",
+    readBg:    "sp-reading-bg",
     scroll:    "sp-scroll:",   // prefix
   };
 
@@ -43,6 +44,17 @@
     { id: "jetbrains",   label: "JetBrains Mono", stack: '"JetBrains Mono", ui-monospace, monospace', google: "JetBrains+Mono:wght@400;700" },
   ];
   const DEFAULT_FONT = "mono";
+
+  // Selectable page backgrounds — stay within the dark family so the
+  // theme's element backgrounds (tables, code, blockquotes) keep working.
+  // Applied as `data-sp-bg` on <html>; CSS lives in reading.css.
+  const BACKGROUNDS = [
+    { id: "default", label: "Default", swatch: "#0a0a0c" },
+    { id: "black",   label: "Black",   swatch: "#000000" },
+    { id: "warm",    label: "Warm",    swatch: "#14120d" },
+    { id: "ocean",   label: "Ocean",   swatch: "#0b1622" },
+  ];
+  const DEFAULT_BG = "default";
 
   function fontById(id) {
     for (let i = 0; i < FONTS.length; i++) if (FONTS[i].id === id) return FONTS[i];
@@ -397,6 +409,23 @@
     applyReadingFont(v);
   }
 
+  // ---------- Reading background (page tint) --------------------
+  function applyReadingBg(value) {
+    const html = document.documentElement;
+    const id = (value && BACKGROUNDS.some(function (b) { return b.id === value; }))
+      ? value : DEFAULT_BG;
+    if (id === DEFAULT_BG) html.removeAttribute("data-sp-bg");
+    else html.setAttribute("data-sp-bg", id);
+    const btns = document.querySelectorAll(".sp-bg-swatches button[data-bg]");
+    for (let i = 0; i < btns.length; i++) {
+      btns[i].setAttribute("aria-pressed", btns[i].getAttribute("data-bg") === id ? "true" : "false");
+    }
+  }
+  function setReadingBg(v) {
+    lsSet(K.readBg, v);
+    applyReadingBg(v);
+  }
+
   // ---------- F9: Auto-hide header ------------------------------
   let lastScrollY = 0;
   let autoHideAttached = false;
@@ -579,6 +608,15 @@
       fontOptions += '<option value="' + FONTS[i].id + '">' + escapeHTML(FONTS[i].label) + '</option>';
     }
 
+    let bgButtons = "";
+    for (let i = 0; i < BACKGROUNDS.length; i++) {
+      const b = BACKGROUNDS[i];
+      bgButtons +=
+        '<button type="button" class="sp-bg-swatch" data-bg="' + b.id + '" ' +
+          'aria-pressed="false" title="' + escapeHTML(b.label) + '" aria-label="' + escapeHTML(b.label) + '" ' +
+          'style="background:' + b.swatch + '"></button>';
+    }
+
     panelToggleEl = document.createElement("button");
     panelToggleEl.type = "button";
     panelToggleEl.className = "sp-reader-panel__toggle";
@@ -617,6 +655,12 @@
         '<select class="sp-reader-panel__select" data-font-select aria-label="Reading font">' +
           fontOptions +
         '</select>' +
+      '</section>' +
+      '<section>' +
+        '<span>Background</span>' +
+        '<div class="sp-bg-swatches" role="group" aria-label="Page background">' +
+          bgButtons +
+        '</div>' +
       '</section>' +
       '<label><input type="checkbox" data-toggle="focus"> Focus mode (F)</label>' +
       '<label><input type="checkbox" data-toggle="bionic"> Bionic reading</label>' +
@@ -663,6 +707,13 @@
     if (fontSelect) {
       fontSelect.addEventListener("change", function () {
         setReadingFont(this.value);
+      });
+    }
+
+    const bgBtns = panelEl.querySelectorAll(".sp-bg-swatches button[data-bg]");
+    for (let i = 0; i < bgBtns.length; i++) {
+      bgBtns[i].addEventListener("click", function () {
+        setReadingBg(this.getAttribute("data-bg"));
       });
     }
 
@@ -744,6 +795,9 @@
 
     // Reading font (load + apply early to prevent flicker)
     applyReadingFont(lsGet(K.readFont) || DEFAULT_FONT);
+
+    // Reading background tint (load + apply early to prevent flicker)
+    applyReadingBg(lsGet(K.readBg) || DEFAULT_BG);
 
     // F3 — focus
     applyFocus(lsGet(K.focus) === "on");

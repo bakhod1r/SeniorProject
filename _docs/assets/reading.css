@@ -645,6 +645,44 @@ html[data-sp-font] .md-typeset h6 {
   font-feature-settings: normal;
 }
 
+/* ----------------------------------------------------------------
+   Reader-selectable page background (panel: "Background")
+   Tints the page within the dark family so element backgrounds keep
+   their contrast. Guarded with :not([data-eink]) so the high-contrast
+   e-ink mode always wins.
+   ---------------------------------------------------------------- */
+/* The scheme var lives on <body>, so re-declare it there to win. */
+html[data-sp-bg="black"]:not([data-eink]) body { --md-default-bg-color: #000000; }
+html[data-sp-bg="warm"]:not([data-eink])  body { --md-default-bg-color: #14120d; }
+html[data-sp-bg="ocean"]:not([data-eink]) body { --md-default-bg-color: #0b1622; }
+
+html[data-sp-bg]:not([data-eink]) body,
+html[data-sp-bg]:not([data-eink]) .md-main,
+html[data-sp-bg]:not([data-eink]) .md-container {
+  background-color: var(--md-default-bg-color);
+}
+
+/* Background swatch buttons (panel: "Background") */
+.sp-bg-swatches {
+  display: inline-flex;
+  gap: 6px;
+}
+.sp-bg-swatches button.sp-bg-swatch {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: none;
+}
+.sp-bg-swatches button.sp-bg-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--md-primary-fg-color);
+  outline-offset: 2px;
+  border-color: var(--md-primary-fg-color);
+}
+
 /* Code always stays monospace, whatever the reading font. */
 html[data-sp-font] .md-typeset code,
 html[data-sp-font] .md-typeset pre,
