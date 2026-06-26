@@ -54,7 +54,7 @@ The whole roadmap is a comparison: **Rust** (compile-time, type-checked macros),
 
 ## Status
 
-⏳ **Structure defined; 10 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
+✅ **Content-complete — all 10 topics written across the six-file set (junior / middle / senior / professional / interview / tasks).**
 
 ---
 
