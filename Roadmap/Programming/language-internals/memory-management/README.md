@@ -6,7 +6,7 @@ This roadmap is about **how programs use, share, and reclaim memory** — from t
 
 > Looking for the *operating-systems angle* (virtual memory, paging, kernel allocators)? See [Architecture → CS → OS → Memory Management](../../../Architecture/computer-science/01-operating-systems/02-memory-management/).
 >
-> Looking for *performance-tuning* of an existing program? See [Performance → Memory Optimization](../../quality-engineering/performance/05-memory-optimization/) and [Performance → Memory Profiling](../../quality-engineering/performance/01-profiling/02-memory-profiling/).
+> Looking for *performance-tuning* of an existing program? See [Performance → Memory & Allocation Profiling](../../quality-engineering/performance/05-memory-and-allocation-profiling/) and [Performance → Memory Profiling](../../quality-engineering/performance/01-profiling/02-memory-profiling/).
 >
 > Looking for *Go-specific* internals? See [Golang → Runtime → Memory Allocator](../../languages/golang/14-runtime-and-internals/04-memory-allocator/) and [Golang → Memory Management in Depth](../../languages/golang/11-advanced-topics/01-memory-management-in-depth/).
 
@@ -19,7 +19,7 @@ Each language tells you *how* it manages memory but rarely *why* its choices dif
 | Roadmap | Question it answers |
 |---|---|
 | [Performance](../../quality-engineering/performance/README.md) | Is my code fast? |
-| [Concurrency](../concurrency/README.md) | How do threads share state? |
+| [Concurrency](../concurrency-async-parallel/README.md) | How do threads share state? |
 | **Memory Management** (this) | Where does data live, who owns it, and when does it go away? |
 
 ---
@@ -56,7 +56,7 @@ Comparisons across **Go** (concurrent tri-color, escape analysis, `pprof`), **Ja
 
 ## Status
 
-⏳ **Structure defined; 17 sections scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
+✅ **Content-complete — all 17 topics written across the six-file set (junior / middle / senior / professional / interview / tasks).**
 
 ---
 
