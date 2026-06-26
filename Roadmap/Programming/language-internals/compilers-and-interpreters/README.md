@@ -57,7 +57,7 @@ The roadmap is meta-linguistic: examples in **Go** (writing a small interpreter,
 
 ## Status
 
-⏳ **Structure defined; 12 sub-folders scaffolded. Per-topic files (junior / middle / senior / professional / interview) pending.**
+✅ **Content-complete — all 12 topics written across the six-file set (junior / middle / senior / professional / interview / tasks).**
 
 ---
 
