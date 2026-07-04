@@ -128,6 +128,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 12.18 OLTP vs OLAP
 - 12.19 Polyglot Persistence
 - 12.20 Choosing a Database — decision framework
+- 12.21 Connection Pooling — PgBouncer, ProxySQL, pool sizing, transaction vs session pooling
 
 ### 13. Storage Systems
 *Low-level storage only — database data models live in §12.*
@@ -158,6 +159,10 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 15.6 Data Lake & Warehouse
 - 15.7 Change Data Capture
 - 15.8 ETL vs ELT
+- 15.9 Apache Flink — stateful stream processing, event time, watermarks, checkpointing
+- 15.10 Apache Pulsar — segmented storage, multi-tenancy, tiered storage
+- 15.11 Trino / Presto — distributed SQL query engine over lakes/federated sources
+- 15.12 Workflow Orchestration — Airflow, Dagster, DAG scheduling for data pipelines
 
 ## Async & Coordination
 
@@ -175,6 +180,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 17.2 Schedule-Driven
 - 17.3 Returning Results
 - 17.4 Retries & Idempotency — job re-runs (mechanics → §18.1)
+- 17.5 Durable Execution — Temporal, workflow-as-code, long-running sagas, replay
 
 ### 18. Concurrency & Coordination
 - 18.1 Idempotency Keys *(canonical: idempotency & exactly-once mechanics — referenced by §9.8 HTTP, §11.7 API, §17.4 jobs)*
@@ -262,6 +268,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 24.5 Metrics Pipelines
 - 24.6 Log Aggregation
 - 24.7 Alerting & On-Call
+- 24.8 OpenTelemetry — unified traces/metrics/logs, collector, semantic conventions, instrumentation
 
 ### 25. Chaos Engineering
 - 25.1 Failure Modes
@@ -280,6 +287,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 26.7 Disaster Recovery
 - 26.8 Autoscaling
 - 26.9 Cloud Network Architecture — VPC, subnets, security groups, NAT gateway, peering, PrivateLink
+- 26.10 GitOps — ArgoCD, Flux, declarative continuous delivery, drift detection
 
 ## Security & Governance
 
@@ -393,7 +401,6 @@ Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kaf
 - 39.4 Global Consistency
 - 39.5 Conflict Resolution
 - 39.6 Follow-the-Sun
-- 39.7 Internationalization & Localization — locale, UTC-storage vs local display, currency, translations, RTL
 
 ### 40. SRE & Reliability Engineering
 - 40.1 Error Budgets
