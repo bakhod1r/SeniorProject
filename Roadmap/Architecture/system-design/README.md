@@ -24,6 +24,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 2.1 CAP Theorem
 - 2.2 PACELC
 - 2.3 Consistency vs Availability — weak / eventual / strong, fail-over, replication
+- 2.4 Consistency Models — linearizable, sequential, causal, read-your-writes, monotonic, bounded staleness
 
 ### 3. Capacity Estimation
 - 3.1 QPS
@@ -190,6 +191,8 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 18.3 Exactly-Once Semantics
 - 18.4 Optimistic vs Pessimistic Locking
 - 18.5 Coordination Services — ZooKeeper, etcd, Consul
+- 18.6 Gossip Protocol — epidemic dissemination, membership, anti-entropy
+- 18.7 Atomic Commit — 2PC, 3PC, TCC (distributed transactions; saga → §20.7)
 
 ## Building Blocks
 
@@ -240,6 +243,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 21.11 Claim Check
 - 21.12 Competing Consumers
 - 21.13 Publisher/Subscriber — pattern (build a pub-sub system → §19.7)
+- 21.14 Transactional Outbox — dual-write problem, outbox/inbox, CDC-driven relay
 
 > Gateway routing/aggregation/offloading moved into §11.1; Backends-for-Frontend lives in §11.9.
 
@@ -306,6 +310,10 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 27.8 WAF & API Security
 - 27.9 Rate Limiting for Abuse — bot / DDoS / login-abuse angle (algorithms → §19.1)
 - 27.10 DevSecOps & Supply-Chain Security — shift-left, SAST/DAST in CI, container scanning, SBOM, dependency/supply-chain
+- 27.11 Zero Trust Architecture — never-trust-always-verify, identity-aware proxy, micro-segmentation, BeyondCorp
+- 27.12 PKI & Certificate Management — mTLS, cert rotation, ACME, internal CA, trust chains
+- 27.13 Threat Modeling — STRIDE, attack trees, security design reviews
+- 27.14 Envelope Encryption & KMS — data keys vs master keys, KMS, HSM, key rotation
 
 ### 28. Data Privacy & Compliance
 - 28.1 PII & Data Classification
@@ -397,6 +405,9 @@ Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kaf
 - 38.3 Efficiency as a Feature
 - 38.4 Hardware-Aware Design
 - 38.5 Performance Economics
+- 38.6 Cloud Cost Optimization — right-sizing, spot/reserved/savings-plans, commitment discounts
+- 38.7 Storage Tiering & Data Lifecycle — hot/warm/cold, S3 IA/Glacier, retention & TTL
+- 38.8 Data Transfer & Egress Costs — cross-AZ/region/egress, hidden cloud costs
 
 ### 39. Global / Multi-Region Architecture
 - 39.1 Active-Active Architecture
