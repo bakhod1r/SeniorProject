@@ -419,6 +419,14 @@ Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kaf
 - 41.5 Queueing Theory — Little's Law
 - 41.6 Universal Scalability Law
 - 41.7 Amdahl's Law
+- 41.8 Mechanical Sympathy — CPU cache lines, false sharing, NUMA-aware design
+- 41.9 Zero-Copy I/O — sendfile, splice, io_uring, page cache
+- 41.10 Async I/O & Event Loops — epoll, io_uring, reactor, C10K→C10M
+- 41.11 Thread-per-Core / Shared-Nothing — Seastar, ScyllaDB, Redpanda model
+- 41.12 Kernel-Bypass Networking — DPDK, AF_XDP, RDMA, user-space stacks
+- 41.13 Continuous Profiling & Flame Graphs — perf, eBPF, pprof, off-CPU analysis
+- 41.14 Zero-Copy Serialization — FlatBuffers, Cap'n Proto, Apache Arrow
+- 41.15 Batching & Vectorized Processing — throughput via amortization & SIMD
 
 ### 42. Data Governance & Contracts
 - 42.1 Schema Registry
