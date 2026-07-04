@@ -47,6 +47,9 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 5.6 Server-Sent Events
 - 5.7 Long-Polling & Streaming
 - 5.8 Network Proxies & NAT
+- 5.9 Congestion Control & TCP Tuning — BBR, Cubic, bufferbloat, window sizing
+- 5.10 Container & Overlay Networking — CNI, VXLAN, k8s networking, eBPF dataplane
+- 5.11 BGP & Internet Routing — anycast, route propagation, peering, transit
 
 ### 6. Domain Name System
 - 6.1 DNS Resolution Flow
@@ -166,6 +169,9 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 15.10 Apache Pulsar — segmented storage, multi-tenancy, tiered storage
 - 15.11 Trino / Presto — distributed SQL query engine over lakes/federated sources
 - 15.12 Workflow Orchestration — Airflow, Dagster, DAG scheduling for data pipelines
+- 15.13 Lakehouse & Table Formats — Iceberg vs Delta vs Hudi, ACID on object storage
+- 15.14 Dimensional Data Modeling — star/snowflake schema, Kimball/Inmon, slowly-changing dimensions
+- 15.15 Reverse ETL & Operational Analytics — warehouse → SaaS activation
 
 ## Async & Coordination
 
@@ -267,6 +273,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 23.5 Usage Monitoring
 - 23.6 Instrumentation
 - 23.7 Visualization & Alerts
+- 23.8 Synthetic Monitoring & RUM — blackbox probes, real-user monitoring, Core Web Vitals
 
 ### 24. Observability
 - 24.1 Logs, Metrics, Traces
@@ -277,6 +284,8 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 24.6 Log Aggregation
 - 24.7 Alerting & On-Call
 - 24.8 OpenTelemetry — unified traces/metrics/logs, collector, semantic conventions, instrumentation
+- 24.9 Cardinality & Metrics Cost — high-cardinality control, label discipline, TSDB cost
+- 24.10 Trace & Log Sampling — head vs tail sampling, adaptive, retention tiers
 
 ### 25. Chaos Engineering
 - 25.1 Failure Modes
@@ -450,6 +459,7 @@ Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kaf
 - 42.4 Data Quality
 - 42.5 Master Data Management
 - 42.6 Privacy by Design
+- 42.7 Data Mesh — decentralized domain-owned data products, federated governance
 
 ## Domain Deep-Dives
 
