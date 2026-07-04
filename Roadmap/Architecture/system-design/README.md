@@ -279,6 +279,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 26.6 Multi-Region Deployment
 - 26.7 Disaster Recovery
 - 26.8 Autoscaling
+- 26.9 Cloud Network Architecture — VPC, subnets, security groups, NAT gateway, peering, PrivateLink
 
 ## Security & Governance
 
@@ -292,6 +293,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 27.7 DDoS Mitigation
 - 27.8 WAF & API Security
 - 27.9 Rate Limiting for Abuse — bot / DDoS / login-abuse angle (algorithms → §19.1)
+- 27.10 DevSecOps & Supply-Chain Security — shift-left, SAST/DAST in CI, container scanning, SBOM, dependency/supply-chain
 
 ### 28. Data Privacy & Compliance
 - 28.1 PII & Data Classification
@@ -391,6 +393,7 @@ Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kaf
 - 39.4 Global Consistency
 - 39.5 Conflict Resolution
 - 39.6 Follow-the-Sun
+- 39.7 Internationalization & Localization — locale, UTC-storage vs local display, currency, translations, RTL
 
 ### 40. SRE & Reliability Engineering
 - 40.1 Error Budgets
