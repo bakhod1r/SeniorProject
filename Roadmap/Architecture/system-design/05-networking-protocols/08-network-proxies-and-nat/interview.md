@@ -387,4 +387,4 @@ A staged bank of interview questions on forward and reverse proxies, load balanc
 
 ---
 
-*Next step:* [DNS Resolution Flow](../../06-domain-name-system/01-dns-resolution-flow/junior.md)
+*Next step:* [Congestion Control & TCP Tuning — Junior](../09-congestion-control-and-tcp-tuning/junior.md)

@@ -699,4 +699,4 @@ and whether you understand the failure modes that bite in production.
 
 ---
 
-*Next step:* [Capacity Estimation — QPS](../../03-capacity-estimation/01-qps/junior.md)
+*Next step:* [Consistency Models — Junior](../04-consistency-models/junior.md)
