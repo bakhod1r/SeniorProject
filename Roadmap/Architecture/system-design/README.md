@@ -137,6 +137,7 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 13.4 LSM-Trees vs B-Trees — RocksDB, LevelDB
 - 13.5 Data Warehouse vs Data Lake
 - 13.6 File Formats — Parquet, ORC, Iceberg
+- 13.7 Erasure Coding & Durability — Reed-Solomon, replication vs parity
 
 ### 14. Caching
 - 14.1 Cache-Aside
@@ -166,6 +167,8 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 16.3 Back Pressure
 - 16.4 Dead-Letter Queues
 - 16.5 Delivery Guarantees
+- 16.6 RabbitMQ — AMQP broker, exchanges, routing
+- 16.7 NATS — lightweight pub/sub, JetStream
 
 ### 17. Background Jobs
 - 17.1 Event-Driven
@@ -313,18 +316,22 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 30.4 Proximity Search
 - 30.5 Map Tiling & Routing
 
-### 31. ML & Recommendation Systems
+### 31. ML, Recommendation & GenAI Systems
 - 31.1 Recommendation Architecture
 - 31.2 Feature Store
 - 31.3 Candidate Generation
 - 31.4 Ranking & Scoring
 - 31.5 Online vs Offline Inference
 - 31.6 A/B Testing & Feedback Loops
+- 31.7 LLM Inference & Serving — batching, KV cache, GPU, token streaming
+- 31.8 Retrieval-Augmented Generation (RAG) — embeddings, vector search, grounding
+- 31.9 LLM Application Architecture — prompt orchestration, guardrails, evaluation
+- 31.10 AI Agents & Orchestration — tool use, planning, multi-agent
 
 ## Capstone
 
 ### 32. Classic Problems
-URL shortener · Twitter timeline · WhatsApp/chat · YouTube/Netflix · Uber dispatch · Dropbox sync · Instagram feed · Stack Overflow · ad click counter · payment system · web crawler · recommendation engine · key-value store · Google Docs collab editor · proximity/Maps · Ticketmaster booking · notification system · live streaming · distributed job scheduler · stock exchange · S3 object storage · online judge · distributed analytics counter
+URL shortener · Twitter/news-feed timeline · WhatsApp/chat · YouTube/Netflix video · Uber dispatch · Dropbox/Drive sync · Instagram feed · Stack Overflow · ad click counter · payment system · digital wallet · hotel reservation · Gmail/email service · web crawler & search engine · recommendation engine · key-value store · Google Docs collab editor · proximity/Maps · Ticketmaster booking · notification system · live streaming · distributed job scheduler · stock exchange · S3 object storage · online judge · distributed analytics counter
 
 ### 33. Real-World Architectures
 Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kafka · Apache Cassandra · Redis internals · Discord realtime · Slack messaging · Uber/Lyft dispatch
@@ -410,3 +417,19 @@ Google Spanner · Facebook TAO · Amazon DynamoDB · Netflix stack · Apache Kaf
 - 42.4 Data Quality
 - 42.5 Master Data Management
 - 42.6 Privacy by Design
+
+## Domain Deep-Dives
+
+### 43. Payments & Fintech
+*Payment domain building-blocks — the "design a payment system / digital wallet" problems live in §32; this section is the underlying money-movement knowledge.*
+- 43.1 Payments Ecosystem & Rails — issuer, acquirer, network, PSP; how Visa/Mastercard clear & settle
+- 43.2 Card Payments & Networks — authorization/capture/settlement, swipe/tap flow
+- 43.3 Bank Transfers — ACH & Wire
+- 43.4 Digital Wallets & Mobile Pay — Apple/Google Pay, scan-to-pay, QR
+- 43.5 Real-Time Payments — UPI (India), FPS, instant rails
+- 43.6 Ledgers & Double-Entry Accounting — money movement, balance integrity
+- 43.7 Reconciliation — matching internal ledger vs external statements
+- 43.8 Idempotency & Exactly-Once Payments — avoiding double charges
+- 43.9 Hotspot Accounts & Contention — hot-account write contention
+- 43.10 Cross-Border & FX — SWIFT, multi-currency, foreign exchange
+- 43.11 Fraud, Risk & PCI Compliance — fraud detection, PCI-DSS
