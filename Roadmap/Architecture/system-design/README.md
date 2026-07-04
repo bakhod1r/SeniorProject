@@ -129,6 +129,8 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 12.19 Polyglot Persistence
 - 12.20 Choosing a Database — decision framework
 - 12.21 Connection Pooling — PgBouncer, ProxySQL, pool sizing, transaction vs session pooling
+- 12.22 Database HA & Failover — Patroni, Orchestrator, VIP/keepalived, automatic failover, replication-lag on promotion
+- 12.23 Backup, Restore & PITR — snapshots, WAL/binlog, point-in-time recovery, RPO/RTO for data
 
 ### 13. Storage Systems
 *Low-level storage only — database data models live in §12.*
@@ -221,6 +223,8 @@ A single, logically ordered learning path: **Foundations → Networking → Comp
 - 20.7 Compensating Transaction
 - 20.8 Deployment Stamps & Geodes
 - 20.9 Queue-Based Load Leveling
+- 20.10 Redundancy & Failure Domains — N+1/N+2, active-active vs active-passive, AZ/region, availability math (nines)
+- 20.11 Shuffle Sharding — blast-radius isolation, per-tenant virtual shards
 
 ### 21. Cloud Design Patterns
 - 21.1 Strangler Fig — pattern definition (org-scale application → §36.2)
