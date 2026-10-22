@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "highlight.js": "^11.9.0",
-    "markdown-it": "^14.1.0",
+    "markdown-it": "^14.3.3",
     "markdown-it-anchor": "^9.0.1",
     "mermaid": "^11.16.1",
     "puppeteer": "^23.0.0"
