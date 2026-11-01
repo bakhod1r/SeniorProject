@@ -12,6 +12,6 @@
     "markdown-it": "^14.1.0",
     "markdown-it-anchor": "^9.0.1",
     "mermaid": "^11.16.1",
-    "puppeteer": "^23.0.0"
+    "puppeteer": "^25.16.0"
   }
 }
